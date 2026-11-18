@@ -366,10 +366,11 @@ function canAddImpliedPath(view: View, draft: Draft, entry: { taskId: string; pa
 
 const conflictsOf = (draft: Draft): RequirementConflictV1[] => (draft.output !== null && "requirementConflicts" in draft.output ? draft.output.requirementConflicts ?? [] : []);
 
-function RequirementConflicts(props: { conflicts: RequirementConflictV1[] }): JSX.Element {
+/** Only the current (latest) draft's conflicts are announced; a superseded draft's are a note (same tone). */
+function RequirementConflicts(props: { conflicts: RequirementConflictV1[]; current: boolean }): JSX.Element {
   const { t } = useTranslation();
   return (
-    <div role="alert" data-tone="warn" data-requirement-conflicts>
+    <div role={props.current ? "alert" : "note"} data-tone="warn" data-requirement-conflicts>
       <p>{t("requirements.requirementConflictsTitle", { count: props.conflicts.length })}</p>
       <ul>{props.conflicts.map((entry, index) => <li key={index}>{t("requirements.requirementConflict", { criterion: entry.criterion, why: entry.why })}
         {entry.feedback !== undefined && <><br /><small>{t("requirements.requirementConflictFeedback", { feedback: entry.feedback })}</small></>}</li>)}</ul>
@@ -428,7 +429,7 @@ function DraftReview(props: { view: View; draft: Draft; current: boolean; onComm
       {/* Tester #345: a path a task's goal names that no task may write (the split adds only files the base commit lacks). */}
       {(draft.goalPathsOutsideTargets ?? []).map((entry) => <p role="note" data-goal-path key={`${entry.taskId}:${entry.path}`}>{t("requirements.goalPath", { task: entry.taskId, path: entry.path })}</p>)}
       {/* #351 addendum: the split's own report that this draft does not meet the requirement as written (code does not judge it). */}
-      {conflicts.length > 0 && <RequirementConflicts conflicts={conflicts} />}
+      {conflicts.length > 0 && <RequirementConflicts conflicts={conflicts} current={props.current} />}
       {draft.reasons.length > 0 && <><p>{t("requirements.handedBack")}</p><ul>{draft.reasons.map((reason) => { const words = explainSplitReason(reason); return <li key={reason}>{reason}{words !== null ? ` · ${words}` : ""}</li>; })}</ul></>}
       {!props.archived && draft.state === "awaiting-review" && (
         <>

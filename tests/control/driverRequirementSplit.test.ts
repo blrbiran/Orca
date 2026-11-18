@@ -20,7 +20,7 @@ describe("the split purpose on the single-call chain (N1 spec §8)", () => {
       expect(draft.draftHash).toBe(sha256Canonical(draft.plan));
       const sent = x.fake.calls.accept[0]!;
       // Ruling: 2026-11-17 #328, human approved necessary criterion rewrites; new single-repo calls carry V6's optional history proposal.
-      // Ruling: human 「这次批准改写所有必要的判据」 (Orca session 2026-11-18) — new single-repo calls carry V7's schema (V6 plus the optional requirementConflicts).
+      // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) — new single-repo calls carry V7's schema (V6 plus the optional requirementConflicts).
       expect(sent).toMatchObject({ claim: { workItemId: "draft-1" }, work: { kind: "single-call", responseSchema: SPLIT_JSON_SCHEMA_V7, maxOutputTokens: 64_000 } });
       expect(sent.work.kind === "single-call" && sent.work.prompt).toContain("<<<ORCA-DATA requirement-document ");
       expect(x.group()).toMatchObject({ used: { tokens: 777 }, reserved: { tokens: 0 } });

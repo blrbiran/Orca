@@ -93,7 +93,7 @@ describe("the split's parallel candidates (#284)", () => {
 
   // Ruling: 「这次批准改写所有必要的判据」 (human, session 9982cf01, 2026-11-17): #328 made the single-repository split
   // instruction version 6 (V5 plus the optional historyExpectation); the parallel rule must still ride the current call.
-  // Ruling: human 「这次批准改写所有必要的判据」 (Orca session 2026-11-18) — the #351 addendum made it version 7; the parallel rule must still ride the current call.
+  // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) — the #351 addendum made it version 7; the parallel rule must still ride the current call.
   it("the instruction tells the model to partition first and chain only on real need, in version 7", () => {
     const prompt = buildSplitPrompt({ document: "D.", overview: { canonicalJson: "{}", hash: "b".repeat(64) }, earlierDrafts: [] });
     const multi = buildSplitPrompt({ document: "D.", overview: { canonicalJson: "{}", hash: "b".repeat(64) }, earlierDrafts: [], multi: true });

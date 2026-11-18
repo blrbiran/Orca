@@ -79,14 +79,14 @@ describe("split instruction version 7 (D3)", () => {
 });
 
 describe("a v7 answer with a conflict, after feedback (harness)", () => {
-  it("is stored in draft.output, hashed as the same answer without it, and leaves the earlier draft's view as it was", async () => {
+  it("is stored in draft.output and hashed as the same answer without it; a draft without conflicts has no key, stored or viewed", async () => {
     const withConflict = { ...VALID_SPLIT, requirementConflicts: [CONFLICT] };
     const x = await requirementHarness({ answers: [{ purpose: "split", output: VALID_SPLIT }, { purpose: "split", output: withConflict }], startAt: "split" });
     try {
       await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
-      const draftOneView = () => JSON.stringify(readRequirementView(x.store, "e", "r").drafts.find((draft) => draft.draftNo === 1)!.output);
-      const before = draftOneView();
+      // mutation: default the key to [] -> both red (D4: a draft without conflicts stores and shows no key)
       expect(Object.hasOwn(readDraft(x.store, "r", 1).output!, "requirementConflicts")).toBe(false);
+      expect(JSON.stringify(readRequirementView(x.store, "e", "r").drafts.find((draft) => draft.draftNo === 1)!.output)).not.toContain("requirementConflicts");
       expect(x.service.requirementDraftFeedback(x.command("requirement-draft-feedback", { draftNo: 1, feedback: CONFLICT.feedback }))).toMatchObject({ result: { nextDraftNo: 2 } });
       await x.until(() => readDraft(x.store, "r", 2).state === "awaiting-review");
       const second = x.fake.calls.accept[1]!;
@@ -97,7 +97,26 @@ describe("a v7 answer with a conflict, after feedback (harness)", () => {
       expect((draft.output as { requirementConflicts?: unknown }).requirementConflicts).toEqual([CONFLICT]);
       // mutation: hash the output (or anything carrying the key) instead of the plan -> red
       expect(draft.draftHash).toBe(readDraft(x.store, "r", 1).draftHash);
-      expect(draftOneView()).toBe(before);
+    } finally { await x.dispose(); }
+  });
+});
+
+// Spec D6 (controller ruling): code cannot tell whether a person's edit resolved a conflict, so the edited draft keeps it.
+describe("a draft edit carries the conflicts over", () => {
+  it("apply-parallel on a draft with a conflict makes a next draft whose output still has them", async () => {
+    const base = VALID_SPLIT.tasks[0]!;
+    const task = (taskId: string, targetPaths: string[], dependsOn: string[]) => ({ ...base, taskId, title: taskId, targetPaths, checks: ["true"], dependsOn, traces: ["AC1", "AC2"] });
+    const chain = { tasks: [task("core", ["src/core.ts"], []), task("a", ["src/a.ts"], ["core"])], notes: "", requirementConflicts: [CONFLICT] };
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: chain }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      expect(readRequirementView(x.store, "e", "r").drafts[0]).toMatchObject({ parallelCandidates: [{ before: "core", after: "a" }] });
+      expect(await x.service.editRequirementDraft(x.command("requirement-draft-edit", { draftNo: 1, draftHash: readDraft(x.store, "r", 1).draftHash, edit: { kind: "apply-parallel-candidates" } })))
+        .toMatchObject({ result: { kind: "requirement-draft-edited", nextDraftNo: 2 } });
+      const next = readDraft(x.store, "r", 2);
+      expect(next.state).toBe("awaiting-review");
+      // mutation: drop the key in the edit path -> red
+      expect((next.output as { requirementConflicts?: unknown }).requirementConflicts).toEqual([CONFLICT]);
     } finally { await x.dispose(); }
   });
 });

@@ -45,6 +45,18 @@ describe("the split draft's requirement conflicts (#351 addendum)", () => {
     expect(zh?.textContent).toContain("由你的反馈引起：“make sla-breach depend on sla-clock”");
   });
 
+  it("announces only the current draft's conflicts; a superseded draft's are a note with the same tone", async () => {
+    await i18n.changeLanguage("en");
+    const view = withConflicts(CONFLICTS);
+    const older = { ...view.drafts[0]!, state: "rejected" as const, feedback: "x" };
+    const two = { ...view, drafts: [older, { ...view.drafts[0]!, draftNo: 2 }] };
+    const boxes = [...show(two).querySelectorAll("[data-requirement-conflicts]")];
+    // mutation: role="alert" on every draft -> the superseded one is an alert too, red
+    expect(boxes.map((box) => [box.closest("section")?.getAttribute("aria-label"), box.getAttribute("role"), box.getAttribute("data-tone")])).toEqual([
+      ["Split draft 2", "alert", "warn"], ["Split draft 1", "note", "warn"],
+    ]);
+  });
+
   it("shows nothing for a draft without the key", async () => {
     await i18n.changeLanguage("en");
     expect(show(withConflicts(undefined)).querySelector("[data-requirement-conflicts]")).toBeNull();
