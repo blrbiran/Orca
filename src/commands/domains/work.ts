@@ -149,6 +149,24 @@ const queuedFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) 
 } });
 
 /**
+ * Tester #369 (c): a pause stops new claims only; an attempt already running keeps going (stuck-runs spec: an accepted run
+ * is not held). The receipt says so for the runs the group view showed running just before the pause, and names the
+ * command that ends one now. Read in the payload step (as confirm's notes are), printed by the formatter.
+ */
+let pauseRunning: string[] = [];
+let pauseGroup = "";
+const runningRunIds = (view: unknown): string[] => ((view as { runs?: Array<{ runId: string; taskId: string | null; state?: string }> }).runs ?? [])
+  .filter((run) => run.state === "running" && run.taskId !== null).map((run) => run.runId);
+const pausedFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) => {
+  const result = (body as { result?: { kind?: unknown } } | null)?.result, running = pauseRunning;
+  pauseRunning = [];
+  if (result?.kind !== "paused") return row.format(body);
+  if (running.length === 0) return "paused: no new run is claimed";
+  return [`paused: no new run is claimed; ${running.length} ${running.length === 1 ? "run already running keeps going until it ends" : "runs already running keep going until they end"} (${running.join(", ")})`,
+    `to end one now: orca run abandon ${pauseGroup} --run <run> --note <why>`].join("\n");
+} });
+
+/**
  * Tester follow-up E §7 (#251): an answer that queued the next round says so and names --finish (the tester did not
  * know the round they answered was not the last); one that closed clarification says the split is next.
  */
@@ -511,7 +529,8 @@ export const WORK_ROWS: CommandDef[] = [
     // Session 3cfc2e73 D3: the confirm result carries no allocations; the lines come from the view the payload read.
     format: (body: unknown) => { const lines = confirmNote; confirmNote = []; return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`; } }),
   queuedFormat(empty("group", "start", "start a confirmed group (one confirmed with --hold); at the running-group cap it is queued", "start", "start")),
-  empty("group", "pause", "stop dispatching new runs (running ones finish)", "pause-dispatch", "pause-dispatch"),
+  pausedFormat(verb({ domain: "group", action: "pause", summary: "stop dispatching new runs (running ones finish)", verb: "pause-dispatch", positionals: [GROUP],
+    route: (c) => `groups/${group(c)}/pause-dispatch`, payload: async (c) => { pauseRunning = runningRunIds(await groupView(c)); pauseGroup = group(c); return {}; } })),
   queuedFormat(empty("group", "resume", "dispatch again after a pause", "resume-dispatch", "resume-dispatch")),
   verb({ domain: "group", action: "stop-handoff", summary: "stop: running tasks hand off and stop", verb: "handoff-stop", positionals: [GROUP],
     flags: [{ name: "deadline", type: "string", summary: "UTC YYYY-MM-DDTHH:mm:ss.sssZ" }],

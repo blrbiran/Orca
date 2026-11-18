@@ -10,7 +10,8 @@ import { applyWebCommand } from "./commandLedger.js";
 import { AGENT_SETTLE_NOTE, settlingPrincipalFor } from "./commandClient.js";
 import { ControlError } from "./errors.js";
 import { readGroup, readBudgetProposal, readWork, saveGroup, saveWork, type GroupRecord } from "./queries.js";
-import { ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readStopIntent, reserveCommitment, setAllocationStates, settleManuallyFailedRequestInTransaction, settleRecoveredRequestInTransaction } from "./stopIntent.js";
+import { abandonOf, abandonSettlementOf, RUN_ABANDONED } from "./abandonRun.js";
+import { ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readStopIntent, reserveCommitment, setAllocationStates, settleAbandonedRunInTransaction, settleManuallyFailedRequestInTransaction, settleRecoveredRequestInTransaction } from "./stopIntent.js";
 import { knownZeroProved, releasedSettlementCheckpoint, settlementProof, settlementSame, unmeteredChargeSchema, usageSettlementSchema, workerLostRun, type SettlementRun, type UsageSettlement } from "./usageSettlement.js";
 import { bookSettledUsage } from "./usageLedger.js";
 import type { AdmissionGate } from "./admissionGate.js";
@@ -213,6 +214,22 @@ export function finishUsageSettlement(store: ControlStore, input: {
     settleRecoveredRequestInTransaction(store, groupId, input.requestId!, marker);
   }
   recordActivity(store, { groupId, taskId: run.taskId, runId: run.runId, kind: "usage-settled", body: input.activity });
+  if (marker.method === "approximate-floor" || marker.method === "observed-floor") settleAbandonedAfterFloor(store, groupId, run.runId);
+}
+/**
+ * Tester #369 (b) (plan 2026-11-18 batch D, D4): an abandoned run ccloop stopped with its usage unknown was blocked at C
+ * (`usage-unknown`, executionDriver.ts settleAbandonedTerminal) until its usage is known. A lower-bound settle (Orca's
+ * approximate floor, or a person's observed floor) makes it known; the run is then settled abandoned in the same
+ * transaction, as settleAbandonedTerminal settles one whose usage is known -- after the floor is booked, which it leaves as is.
+ */
+function settleAbandonedAfterFloor(store: ControlStore, groupId: string, runId: string): void {
+  const current = readRun(store, runId) as unknown as SettlementRun & { abandon?: unknown; operatorSettlement?: unknown };
+  const request = abandonOf(current);
+  const drive = current.drive as { blockedAt?: string | null; outcome?: string | null } | undefined;
+  if (request === null || current.operatorSettlement !== undefined || current.state !== "blocked" || drive?.blockedAt !== "C" || drive.outcome === "succeeded") return;
+  if (current.unknown.work || current.unknown.handoff) return;
+  store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...current, drive: { ...current.drive, blockedReason: RUN_ABANDONED } }), runId);
+  settleAbandonedRunInTransaction(store, groupId, runId, abandonSettlementOf(request));
 }
 /** A run the owner's handoff stop ended while it was still working: no outcome, and only its usage kept it unrecoverable. */
 const stoppedWorking = (run: SettlementRun): boolean => run.drive?.outcome === null && run.state === "settled-unrecoverable";

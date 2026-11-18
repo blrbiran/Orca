@@ -59,7 +59,8 @@ const stopState = {
 } as const satisfies Record<NonNullable<GroupSummaryV1["stopState"]>, string>;
 // Issue-fixes spec §3.2 (4): the stop banner says how the group stopped and the one way out of each stop state.
 const stopBannerHow = {
-  pause: "Stopped: a person paused dispatch. No new run is claimed.",
+  // Tester #369 (c): a pause stops no run already running; Abandon this attempt (on the run) ends one now.
+  pause: "Stopped: a person paused dispatch. No new run is claimed; a run already running keeps going until it ends. To end one now, use Abandon this attempt on that run.",
   handoff: "Save progress and stop was requested. Active runs are frozen and hand off their work.",
   shutdown: "The panel shut down while runs were active. Those runs were frozen and hand off their work.",
 } as const satisfies Record<NonNullable<GroupSummaryV1["stopMode"]>, string>;
