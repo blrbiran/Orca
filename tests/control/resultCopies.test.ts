@@ -129,4 +129,66 @@ describe("removeResultCopies (change-sized runs §5.6)", { timeout: 30_000 }, ()
       expect(await readFile(join(outside, "tracked"), "utf8")).toBe("WORKTREE\n");
     } finally { await h.dispose(); }
   });
+
+  // P0 review M3. M4.7: read the oldest row (ORDER BY rowid ASC) -> the older complete row lets the copy go, red
+  it("keeps the copies when an older row is complete but the latest is partial", async () => {
+    const h = await archiveCase();
+    try {
+      expect((await archive(h)).missing).toEqual([]);
+      execFileSync("mkfifo", [join(h.sourceDir, "pipe")]);
+      expect((await archive(h)).missing).toContain("special:pipe");
+      expect(Number(h.store.db.prepare("SELECT count(*) AS n FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=?").get(h.claim.runId)!.n)).toBe(2);
+      setState(h, "settled-failed");
+      expect(await removeResultCopies(h.store, h.claim.runId, h.sourceDir, { extras: true })).toEqual({ removed: [], kept: "archive-partial" });
+      await copyIntact(h);
+    } finally { await h.dispose(); }
+  });
+
+  // P0 review M3: a source directory not named for the run is refused before anything is read in it. Dropping only the
+  // basename test leaves this green: the realpath test after it fails for the same path (archiveRun recorded a source
+  // named for the run), so the basename test is a fast path of it, not a separate guard. Dropping both -> the identity
+  // test refuses instead (cleanup-source-reused), so the assertion names the code.
+  it("throws cleanup-path-invalid for a source directory not named for the run, and removes nothing", async () => {
+    const h = await archiveCase();
+    try {
+      await archive(h);
+      setState(h, "settled");
+      const other = `${h.sourceDir}-other`;
+      await mkdir(join(other, "repo"), { recursive: true });
+      await writeFile(join(other, "repo", "someone-elses.txt"), "keep\n");
+      await expect(removeResultCopies(h.store, h.claim.runId, other, { extras: true })).rejects.toThrow("cleanup-path-invalid");
+      expect(await readFile(join(other, "repo", "someone-elses.txt"), "utf8")).toBe("keep\n");
+      await copyIntact(h);
+    } finally { await h.dispose(); }
+  });
+
+  // P0 review M3. M4.8: drop the not-a-directory check -> the file is removed, red
+  it("refuses a repo that is a regular file and leaves it alone", async () => {
+    const h = await archiveCase();
+    try {
+      await archive(h);
+      setState(h, "settled");
+      await rename(h.repoDir, join(h.root, "moved-repo"));
+      await writeFile(h.repoDir, "a file, not a copy\n");
+      await expect(removeResultCopies(h.store, h.claim.runId, h.sourceDir, { extras: false })).rejects.toThrow("cleanup-path-invalid");
+      expect(await readFile(h.repoDir, "utf8")).toBe("a file, not a copy\n");
+    } finally { await h.dispose(); }
+  });
+
+  // P0 review M3. M4.9: drop the symlink check -> the repos link is removed (and repo with it), red
+  it("refuses a repos that is a symlink, and removes neither it, its target nor repo", async () => {
+    const h = await archiveCase();
+    try {
+      await archive(h);
+      setState(h, "settled");
+      const outside = join(h.root, "outside-repos");
+      await mkdir(join(outside, "beta"), { recursive: true });
+      await writeFile(join(outside, "beta", "x.txt"), "extra\n");
+      await symlink(outside, join(h.sourceDir, "repos"));
+      await expect(removeResultCopies(h.store, h.claim.runId, h.sourceDir, { extras: true })).rejects.toThrow("cleanup-path-invalid");
+      expect(lstatSync(join(h.sourceDir, "repos")).isSymbolicLink()).toBe(true);
+      expect(await readFile(join(outside, "beta", "x.txt"), "utf8")).toBe("extra\n");
+      await copyIntact(h);
+    } finally { await h.dispose(); }
+  });
 });

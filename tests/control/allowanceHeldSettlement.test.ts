@@ -64,7 +64,9 @@ describe.skipIf(!realBinary)("parked allowance settlement in a held group (#213)
       // Change-sized runs spec 2026-11-19 §5.6 (P0-7): the allowance settle removed the result copy its complete archive
       // holds, and the continuation still exports from that archive alone. Mutation M6.6: drop the allowance removal, red.
       expect((JSON.parse(archiveRow.body) as { missing: string[] }).missing).toEqual([]);
-      expect(existsSync(join(sourceDir, "repo"))).toBe(false);
+      // P0 review I3: `settled-recoverable` commits before the settle's removal runs (dropResultCopyAfterSettle, after the
+      // transaction), so the absence is awaited, bounded -- with the removal dropped (M6.6) it times out, red.
+      await until(() => !existsSync(join(sourceDir, "repo")), 5_000, "the allowance settle removes the result copy");
       const checkpointId = String(runtime.store.db.prepare("SELECT id FROM checkpoints WHERE run_id=?").get(parked.runId)!.id);
       expect((await exportResumeBundle(runtime.store, { predecessorRunId: parked.runId, newSourceDir: join(sourceDir, "..", `${parked.runId}-continuation`) })).checkpointId).toBe(checkpointId);
     } finally { await world.teardown(); }
