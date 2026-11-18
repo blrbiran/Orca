@@ -32,6 +32,18 @@ describe("a domain's --help is its help page (#374a)", () => {
     }
   });
 
+  // Fix wave m-1: global flags around the domain's --help are read as they are by orca help <domain>.
+  it("global flags around a domain's --help: orca project --json --help is orca help project --json", async () => {
+    const help = await run(["help", "project", "--json"]);
+    expect(help.code).toBe(0);
+    // mutation: only recognise `<domain> --help` with nothing else -> null here, red.
+    expect(await run(["project", "--json", "--help"])).toEqual(help);
+    expect(await run(["project", "--help", "--json"])).toEqual(help);
+    expect(await run(["project", "--help", "--control-state-dir", "/nonexistent"])).toEqual(await run(["help", "project"]));
+    // A word that is not a global flag is not a domain's help page.
+    expect((await run(["project", "--bogus", "--help"])).code).toBeNull();
+  });
+
   it("an unknown domain with --help is still not a command: did-you-mean, exit 1", async () => {
     expect((await run(["projet", "--help"])).code).toBeNull();
     const err: string[] = [];

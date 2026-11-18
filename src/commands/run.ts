@@ -47,6 +47,18 @@ export function hoistGlobalFlags(argv: readonly string[], registry: readonly Com
   return [...words, ...leading];
 }
 
+/** Every word is a known global flag (`--x`, `--x=v`, or `--x v` for a flag that takes a value). */
+function onlyGlobalFlags(words: readonly string[]): boolean {
+  for (let i = 0; i < words.length; i += 1) {
+    const word = words[i]!;
+    const eq = word.indexOf("=");
+    const flag = word.startsWith("--") ? GLOBAL_FLAGS.find((known) => known.name === word.slice(2, eq === -1 ? undefined : eq)) : undefined;
+    if (flag === undefined) return false;
+    if (flag.type !== "boolean" && eq === -1) i += 1;
+  }
+  return true;
+}
+
 /**
  * CLI v2 spec §4, §11: run argv through the registry. null = no registered command matches, so the caller may still try
  * the `panel`, `user` and `mcp` arms (their own grammar) before answering with `unknownCommand`.
@@ -55,8 +67,11 @@ export async function runRegistered(typed: readonly string[], io: CommandIo, reg
   const argv = hoistGlobalFlags(typed, registry);
   const found = findCommand(argv, registry);
   if (!("def" in found)) {
-    // Tester #374a: `orca <domain> --help` (or `orca --help <domain>`) is `orca help <domain>`; an unknown domain still is not.
-    if (argv[1] === "--help" && domainsOf(registry).includes(argv[0]!)) { io.stdout(renderHelp([argv[0]!], registry)); return 0; }
+    // Tester #374a: `orca <domain> --help` (or `orca --help <domain>`) is `orca help <domain>`, with the other global flags
+    // around it (fix wave m-1); an unknown domain, or any other word, still is not.
+    if (domainsOf(registry).includes(argv[0]!) && onlyGlobalFlags(argv.slice(1)) && argv.includes("--help")) {
+      return runRegistered(["help", argv[0]!, ...argv.slice(1).filter((word) => word !== "--help")], io, registry);
+    }
     if (typed[0] === "--help") { io.stdout(renderHelp([], registry)); return 0; }
     return null;
   }
