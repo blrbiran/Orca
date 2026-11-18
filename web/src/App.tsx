@@ -595,7 +595,7 @@ export function App(): JSX.Element {
    * Send one intent. Whatever the ledger says afterwards is read, not inferred here. Answers the commandRevision a
    * success carries, or null when the command did not succeed (refused, or its outcome unknown).
    */
-  const sendControl = async (action: ControlAction): Promise<number | null> => {
+  const sendControl = async (action: ControlAction, sent?: { uncertain: boolean }): Promise<number | null> => {
     // N1 spec §11.2: a requirement's details come from its own view; a clarifying group has no group view (DR25).
     const owner = controlNow.current.groups[action.groupId];
     const requirementArchive = (action.verb === "archive-group" || action.verb === "unarchive-group" || action.verb === "close-group" || action.verb === "unclose-group") && owner?.requirement !== undefined;
@@ -616,6 +616,8 @@ export function App(): JSX.Element {
       // next tick looks it up. The page shows that the outcome is unknown.
       dispatchControl({ type: "refusal", place, groupId: action.groupId, value: answer.refusal });
       if (requirementVerb) setRequirementRefusal(answer.refusal);
+      // #355 review (minor 4): the caller that asks is told the null is an unknown outcome, not a refusal.
+      if (sent !== undefined) sent.uncertain = true;
       return null;
     }
     dispatchControl({ type: "command-resolved", value: command });
@@ -698,7 +700,9 @@ export function App(): JSX.Element {
         || controlNow.current.groups[groupId]?.repoId !== repoId) return "skipped";
       if (fresh.schema === "orca-requirement-view-v1") setRequirementViews((all) => ({ ...all, [groupId]: fresh }));
       else dispatchControl({ type: "group", value: fresh });
-      return await sendControl({ verb, groupId, expectedRevision: fresh.summary.commandRevision, payload: {} }) === null ? "refused" : "succeeded";
+      const sent = { uncertain: false };
+      const revision = await sendControl({ verb, groupId, expectedRevision: fresh.summary.commandRevision, payload: {} }, sent);
+      return revision !== null ? "succeeded" : sent.uncertain ? "uncertain" : "refused";
     } catch (err) {
       dispatchControl({ type: "refusal", place: "group", groupId, value: controlFailureFrom(err) });
       return "refused";
@@ -1904,7 +1908,7 @@ export function App(): JSX.Element {
           onGroupBulk={sendGroupCardAction}
           onOpenDispatch={(groupId) => { navigate({ kind: "group", section: "tasks", groupId, region: null, taskId: null }); const request = ++navigationSeq.current; setSelectedGroup(groupId); setOverviewFocus({ target: { kind: "group", groupId, region: "dispatch", taskId: null, runId: null }, request }); }}
           onDraft={(key, text) => dispatchControl({ type: "draft", key, text })}
-          onCommand={sendControl}
+          onCommand={(action) => sendControl(action)}
           onCommands={(actions) => {
             void sendControlSequence(actions);
           }}

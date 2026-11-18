@@ -51,6 +51,19 @@ describe("feedback requirement affordances", () => {
     fireEvent.click(screen.getByRole("button", { name: "Archived (1)" }));
     expect(within(list).getByRole("button", { name: "r · clarifying" })).toBeTruthy();
   });
+  // #355 review (I2): a closed requirement group (done, the closed kind of the terminal mark) is listed under Closed, not
+  // under Archived, and the open one is not kept in the live list.
+  it("lists a closed requirement group under Closed, not Archived or Finished", () => {
+    const view = requirementView("failed"); view.summary.state = "done"; view.summary.archived = true; view.summary.archiveKind = "closed"; mount(view);
+    const list = screen.getByRole("navigation", { name: "Requirement list" });
+    expect(within(list).queryByRole("button", { name: "r · done" })).toBeNull();
+    // mutation: partOf answers "archived" for both kinds -> Archived (1) and Closed (0), red here
+    expect(screen.getByRole("button", { name: "Archived (0)" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Finished (0)" }));
+    expect(within(list).queryByRole("button", { name: "r · done" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Closed (1)" }));
+    expect(within(list).getByRole("button", { name: "r · done" })).toBeTruthy();
+  });
   it("keeps an archived requirement readable without offering edits and allows unarchive", () => {
     const view = requirementView("awaiting-answers"); view.summary.archived = true;
     const send = mount(view);

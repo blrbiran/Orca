@@ -271,8 +271,9 @@ describe("two-project lists", () => {
   const controlNav = (): HTMLElement => screen.getByRole("navigation", { name: "Control groups" });
   const requirementNav = (): HTMLElement => screen.getByRole("navigation", { name: "Requirement list" });
   /** Every row's text in a nav: Task control's buttons and links, or Requirements' buttons. */
+  // Ruling (2026-11-19 #355 review): the card now sits in a positioned `.group-card-anchor` with its selection box (minor 1).
   const rows = (nav: HTMLElement): string[] =>
-    Array.from(nav.querySelectorAll(":scope > .group-card-row > .group-card, :scope > .group-card-row > button:first-child")).map((row) => row.textContent ?? "");
+    Array.from(nav.querySelectorAll(":scope > .group-card-row > .group-card-anchor > .group-card, :scope > .group-card-row > button:first-child")).map((row) => row.textContent ?? "");
   const rowIds = (nav: HTMLElement): string[] => rows(nav).map((text) => text.split(" · ")[0]!);
   const listsReady = async (): Promise<void> => {
     await ready();

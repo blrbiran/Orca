@@ -1013,9 +1013,11 @@ function refusalWords(refusal: ControlRefusal): string {
 }
 
 const LIST_NAME_MAX = 60;
-const REQUIREMENT_PARTS = ["active", "finished", "archived"] as const;
+// #355 review (I2): a closed group (the terminal mark's closed kind; `archived` is true for both kinds) has its own part.
+const REQUIREMENT_PARTS = ["active", "finished", "closed", "archived"] as const;
 type RequirementPart = (typeof REQUIREMENT_PARTS)[number];
-const partOf = (group: ControlSummaryV1["groups"][number]): RequirementPart => (group.archived === true ? "archived" : group.state === "clarifying" ? "active" : "finished");
+const partOf = (group: ControlSummaryV1["groups"][number]): RequirementPart => (group.archived === true ? group.archiveKind === "closed" ? "closed" : "archived"
+  : group.state === "clarifying" ? "active" : "finished");
 
 /**
  * Issues #75, #78: a listed requirement is named by its slug, else by the start of its idea on one line (the summary's
@@ -1067,7 +1069,8 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
   const listed = props.summary.groups.filter((group) => group.requirement !== undefined && (scope === undefined || inScope(scope, group.repoId)));
   // Tester #115: a requirement past clarifying needs no person here, so the list starts without it; the open one stays
   // listed, since a link can open it. Human ruling, session 663fb68e: one row of filters, not two overlapping boxes.
-  const shown = listed.filter((group) => partOf(group) === part || (group.groupId === props.selected && group.archived !== true));
+  // #355 review (I2): the open one is kept only while it is live -- a closed or archived one waits for its own part.
+  const shown = listed.filter((group) => partOf(group) === part || (group.groupId === props.selected && partOf(group) !== "closed" && partOf(group) !== "archived"));
   const view = props.selected === null ? undefined : props.views[props.selected];
   const refusal = props.refusal ?? null;
   return (

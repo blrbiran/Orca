@@ -6,7 +6,7 @@
  * Board): every chip says how many groups it holds; where the page can send card actions, each card has a selection box
  * beside its button, and a toolbar sends one command per selected group -- no server batch -- listing each one's outcome.
  */
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { GroupCardVerb } from "./controlApi.js";
 import { RefusalNotice } from "./RefusalNotice.js";
 import type { JSX } from "react";
@@ -22,7 +22,7 @@ import { groupStateText } from "./i18n.js";
 import { inScope, type GroupScope } from "./projectScope.js";
 import { hashFor } from "./sections.js";
 import { GroupActionsMenu } from "./GroupActionsMenu.js";
-import { groupBadge, groupBulk, groupCard, groupCardDetail, groupCardGoal, groupCardLead, groupCardName, groupChip, groupFilter, groupList, groupSelect } from "./ui/classes.js";
+import { groupBadge, groupBulk, groupCard, groupCardAnchor, groupCardDetail, groupCardGoal, groupCardLead, groupCardName, groupChip, groupFilter, groupList, groupSelect } from "./ui/classes.js";
 import type { ControlRefusal } from "./controlState.js";
 
 export interface GroupListProps {
@@ -45,13 +45,17 @@ export interface GroupListProps {
 }
 
 export type BulkVerb = "archive-group" | "close-group";
-export type BulkOutcome = "succeeded" | "refused" | "skipped";
+/** #355 review (minor 4): `uncertain` -- the command was sent and no answer came back, so it may or may not have happened. */
+export type BulkOutcome = "succeeded" | "refused" | "skipped" | "uncertain";
 /** Tester #357: close is offered for a selection only when the server could take it for every group: each one is done. */
 export function bulkCloseOpen(groups: readonly GroupSummaryV1[]): boolean {
   return groups.length > 0 && groups.every((group) => group.state === "done" && group.archiveKind !== "closed");
 }
 
-/** Tester #357: a card's selection box, a sibling of the card's button or link (one cannot hold the other). */
+/**
+ * Tester #357: a card's selection box, a sibling of the card's button or link (one cannot hold the other). #355 review
+ * (minor 1): both sit in one positioned wrapper, so the box is placed on the card, never on a refusal notice under it.
+ */
 function SelectBox(props: { groupId: string; checked: boolean; onChange: (checked: boolean) => void }): JSX.Element {
   const { t } = useTranslation();
   return <label className={groupSelect}>
@@ -91,7 +95,7 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
   const category = groupCategory(group);
   const stop = stopLabel(group);
   const updated = group.updatedAt === undefined || group.updatedAt === null ? null : Math.max(0, Math.floor((props.now - group.updatedAt) / 60_000));
-  return <GroupActionsMenu group={group} onOpen={props.onSelect} onAction={props.onAction} refusal={props.selected ? null : props.refusal} onOpenDispatch={props.onOpenDispatch}>{(onContextMenu) => (<>
+  return <GroupActionsMenu group={group} onOpen={props.onSelect} onAction={props.onAction} refusal={props.selected ? null : props.refusal} onOpenDispatch={props.onOpenDispatch}>{(onContextMenu) => (<span className={`group-card-anchor ${groupCardAnchor}`}>
     <button
       type="button"
       className={`group-card ${groupCard}`}
@@ -126,7 +130,7 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
       {props.repoText !== "" && <span id={`${base}-repo`}>{props.repoText}</span>}
     </button>
     {props.selectBox}
-  </>)}</GroupActionsMenu>;
+  </span>)}</GroupActionsMenu>;
 }
 
 export function GroupList(props: GroupListProps): JSX.Element {
@@ -144,6 +148,11 @@ export function GroupList(props: GroupListProps): JSX.Element {
   const [outcomes, setOutcomes] = useState<ReadonlyArray<{ groupId: string; verb: BulkVerb; outcome: BulkOutcome }>>([]);
   const [busy, setBusy] = useState(false);
   const choose = (next: GroupFilter): void => { setFilter(next); writeGroupFilter(groupFilterStorage(), next); setPicked(new Set()); setOutcomes([]); };
+  // #355 review (minor 2): another project scope starts a new selection too, and its outcomes go with the old one.
+  const scopeKey = scope === undefined ? "" : JSON.stringify(scope);
+  const scopeNow = useRef(scopeKey);
+  scopeNow.current = scopeKey;
+  useEffect(() => { setPicked(new Set()); setOutcomes([]); }, [scopeKey]);
   const bulk = props.onBulkAction;
   const selection = shown.filter((group) => picked.has(group.groupId));
   const pick = (groupId: string) => (checked: boolean): void => setPicked((all) => {
@@ -158,6 +167,7 @@ export function GroupList(props: GroupListProps): JSX.Element {
   const run = async (verb: BulkVerb): Promise<void> => {
     if (bulk === undefined || busy) return;
     setBusy(true);
+    const scopeAtRun = scopeNow.current;
     const done: Array<{ groupId: string; verb: BulkVerb; outcome: BulkOutcome }> = [];
     try {
       for (const group of selection) {
@@ -166,12 +176,17 @@ export function GroupList(props: GroupListProps): JSX.Element {
         done.push({ groupId: group.groupId, verb, outcome });
       }
     } finally {
-      setOutcomes(done);
-      setPicked(new Set(done.filter((row) => row.outcome === "refused").map((row) => row.groupId)));
+      // A run that ends after the scope changed leaves the new scope's empty selection alone.
+      if (scopeNow.current === scopeAtRun) {
+        setOutcomes(done);
+        setPicked(new Set(done.filter((row) => row.outcome === "refused").map((row) => row.groupId)));
+      }
       setBusy(false);
     }
   };
   const closeOpen = bulkCloseOpen(selection);
+  // #355 review (minor 3): archive is offered while some selected group is not archived already (a closed one converts).
+  const archiveOpen = selection.some((group) => !(group.archived === true && (group.archiveKind ?? "archived") === "archived"));
   return (
     <>
       <div role="group" aria-label={t("control.groupFilter.region")} className={`group-filter ${groupFilter}`}>
@@ -187,7 +202,7 @@ export function GroupList(props: GroupListProps): JSX.Element {
         <div role="group" aria-label={t("control.groupBulk.region")} className={groupBulk} aria-busy={busy}>
           {selection.length > 0 && <>
             <span>{t("control.groupBulk.selected", { n: selection.length })}</span>
-            <button type="button" disabled={busy} onClick={() => { void run("archive-group"); }}>{t("control.groupBulk.archive")}</button>
+            {archiveOpen && <button type="button" disabled={busy} onClick={() => { void run("archive-group"); }}>{t("control.groupBulk.archive")}</button>}
             <button type="button" disabled={busy || !closeOpen} aria-describedby={closeOpen ? undefined : "group-bulk-close-reason"}
               onClick={() => { void run("close-group"); }}>{t("control.groupBulk.close")}</button>
             {!closeOpen && <small id="group-bulk-close-reason">{t("control.groupBulk.closeNeedsDone")}</small>}
@@ -214,12 +229,12 @@ export function GroupList(props: GroupListProps): JSX.Element {
         {shown.map((group) => group.state === "clarifying" ? (
           // N1 spec §11.2: a clarifying group has no group view (DR25); it is operated in Requirements until accept.
           <GroupActionsMenu key={group.groupId} group={group} onOpen={() => props.onSelectRequirement?.(group.groupId)} onAction={props.onAction} refusal={props.refusals?.[group.groupId]}>{(onContextMenu) => (
-            <><a className={`group-card ${groupCard}`} href={hashFor("requirements")} onClick={() => props.onSelectRequirement?.(group.groupId)} onContextMenu={onContextMenu}
+            <span className={`group-card-anchor ${groupCardAnchor}`}><a className={`group-card ${groupCard}`} href={hashFor("requirements")} onClick={() => props.onSelectRequirement?.(group.groupId)} onContextMenu={onContextMenu}
               aria-labelledby={`req-name-${group.groupId}`} aria-describedby={`req-goal-${group.groupId}`}>
               {/* Task 11 acceptance (session ffec7b28): the card names its requirement the way every other card does; tester #17: first. */}
               <span id={`req-goal-${group.groupId}`} className={`group-card-lead ${groupCardLead}`}><CardGoal group={group} className={`group-card-goal ${groupCardGoal}`} /></span>
               <span id={`req-name-${group.groupId}`} className={`group-card-name ${groupCardName}`}><span className="led" data-led={groupLed(group)} aria-hidden="true" />{group.groupId} · {groupStateText(group)} · {t("control.requirementBadge")}{label(group.repoId)}</span>
-            </a>{selectBox(group.groupId)}</>
+            </a>{selectBox(group.groupId)}</span>
           )}</GroupActionsMenu>
         ) : (
           <GroupCard key={group.groupId} group={group} selected={group.groupId === props.selected} repoText={label(group.repoId)} now={now} onSelect={() => props.onSelect(group.groupId)} onAction={props.onAction} refusal={props.refusals?.[group.groupId]} onOpenDispatch={props.onOpenDispatch && (() => props.onOpenDispatch!(group.groupId))} selectBox={selectBox(group.groupId)} />

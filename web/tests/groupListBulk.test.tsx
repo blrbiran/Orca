@@ -27,7 +27,8 @@ const GROUPS = [
   doneOf("c1", { archived: true, archiveKind: "closed" }), g("x1", { archived: true, archiveKind: "archived" }), g("x2", { archived: true }),
 ];
 const nav = () => screen.getByRole("navigation", { name: "Control groups" });
-const ids = () => [...nav().querySelectorAll(":scope > .group-card-row > .group-card")].map((card) => (card.textContent ?? "").split(" · ")[0]);
+// Ruling (2026-11-19 #355 review): the card now sits in a positioned `.group-card-anchor` with its selection box (minor 1).
+const ids = () => [...nav().querySelectorAll(":scope > .group-card-row > .group-card-anchor > .group-card")].map((card) => (card.textContent ?? "").split(" · ")[0]);
 const chips = () => within(screen.getByRole("group", { name: "Show groups" }));
 const chip = (name: string) => chips().getByRole("button", { name: new RegExp(`^${name} \\(\\d+\\)$`) });
 const toolbar = () => screen.getByRole("group", { name: "Selected groups" });
@@ -146,6 +147,61 @@ describe("multi-select and the bulk toolbar (#357)", () => {
     fireEvent.click(within(toolbar()).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.getByTestId("bulk-outcome-d2").textContent).toBe("d2: closed"));
     expect(calls).toEqual([["d1", "close-group"], ["d2", "close-group"]]);
+  });
+});
+
+describe("the bulk toolbar after the #355 review", () => {
+  const box = (groupId: string) => screen.getByRole("checkbox", { name: `Select ${groupId}` });
+
+  // Minor 1: the box was placed on the card row, which also holds a refused card's notice, so it landed on the notice.
+  it("anchors each selection box to its card, never to the refusal notice under it", async () => {
+    const refusal: ControlRefusal = { status: 409, code: "archive-run-active", message: "archive-run-active:run-1", commandRevision: 1 };
+    render(<Owner groups={GROUPS} calls={[]} answer={(groupId) => groupId === "r1" ? refusal : "succeeded"} />);
+    fireEvent.click(box("r1"));
+    fireEvent.click(within(toolbar()).getByRole("button", { name: "Archive" }));
+    await waitFor(() => expect(screen.getByTestId("bulk-outcome-r1")).toBeTruthy());
+    const card = screen.getByRole("button", { name: /^r1 · / });
+    const anchor = card.closest(".group-card-anchor")!;
+    // mutation: render the box beside the anchor, on the row again -> its positioned parent is the row, red here
+    expect(box("r1").closest(".group-card-anchor")).toBe(anchor);
+    const notice = card.closest(".group-card-row")!.querySelector(".refusal")!;
+    expect(notice).toBeTruthy();
+    expect(anchor.contains(notice)).toBe(false);
+  });
+
+  // Minor 2: a selection belongs to the project scope it was made in.
+  it("drops the selection and the outcomes when the project scope changes", async () => {
+    const onBulkAction = vi.fn(async (): Promise<BulkOutcome> => "succeeded");
+    const { rerender } = render(<GroupList groups={GROUPS} selected={null} onSelect={vi.fn()} now={0} onBulkAction={onBulkAction} scope={{ kind: "all" }} />);
+    fireEvent.click(box("d1"));
+    fireEvent.click(within(toolbar()).getByRole("button", { name: "Archive" }));
+    await waitFor(() => expect(screen.getByTestId("bulk-outcome-d1")).toBeTruthy());
+    fireEvent.click(box("d2"));
+    rerender(<GroupList groups={GROUPS} selected={null} onSelect={vi.fn()} now={0} onBulkAction={onBulkAction} scope={{ kind: "project", repoId: "orca" }} />);
+    // mutation: drop the scope effect -> d2 stays selected and d1's outcome stays listed, red here
+    expect(screen.queryByRole("group", { name: "Selected groups" })).toBeNull();
+    expect((box("d2") as HTMLInputElement).checked).toBe(false);
+  });
+
+  // Minor 3: archive has nothing to do when every selected group is archived already; a closed one converts.
+  it("offers Archive only while some selected group is not archived already", () => {
+    render(<Owner groups={GROUPS} answer={() => "succeeded"} calls={[]} />);
+    fireEvent.click(chip("Archived"));
+    fireEvent.click(box("x1"));
+    fireEvent.click(box("x2"));
+    // mutation: archiveOpen answers true for any selection -> Archive shown, red here
+    expect(within(toolbar()).queryByRole("button", { name: "Archive" })).toBeNull();
+    fireEvent.click(chip("Closed"));
+    fireEvent.click(box("c1"));
+    expect(within(toolbar()).getByRole("button", { name: "Archive" })).toBeTruthy();
+  });
+
+  // Minor 4: a command sent with no answer may have happened; it is not said as refused.
+  it("labels an outcome with no answer as unknown, not as not archived", async () => {
+    render(<Owner groups={GROUPS} calls={[]} answer={() => "uncertain"} />);
+    fireEvent.click(box("d1"));
+    fireEvent.click(within(toolbar()).getByRole("button", { name: "Archive" }));
+    await waitFor(() => expect(screen.getByTestId("bulk-outcome-d1").textContent).toBe("d1: no answer -- it may or may not be archived; check the group"));
   });
 });
 

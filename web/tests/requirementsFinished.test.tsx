@@ -28,7 +28,8 @@ describe("one row of filters on the requirement list", () => {
   it("starts on those still clarifying, with the others counted", () => {
     panel([group("open", "clarifying"), group("done", "done"), group("ready", "ready"), { ...group("gone", "done"), archived: true }]);
     expect(pressed()).toEqual(["In progress (1)"]);
-    expect(filter().getAllByRole("button").map((button) => button.textContent)).toEqual(["In progress (1)", "Finished (2)", "Archived (1)"]);
+    // Ruling (2026-11-19 #355 review): a closed requirement group has its own Closed part, between Finished and Archived.
+    expect(filter().getAllByRole("button").map((button) => button.textContent)).toEqual(["In progress (1)", "Finished (2)", "Closed (0)", "Archived (1)"]);
     expect(names()).toEqual(["open · clarifying"]);
   });
 
@@ -64,7 +65,8 @@ describe("one row of filters on the requirement list", () => {
   // mutation: a part with nothing in it drops its button -> the row jumps as requirements finish -> red
   it("keeps all three filters when a part is empty", () => {
     panel([group("open", "clarifying")]);
-    expect(filter().getAllByRole("button").map((button) => button.textContent)).toEqual(["In progress (1)", "Finished (0)", "Archived (0)"]);
+    // Ruling (2026-11-19 #355 review): a closed requirement group has its own Closed part, between Finished and Archived.
+    expect(filter().getAllByRole("button").map((button) => button.textContent)).toEqual(["In progress (1)", "Finished (0)", "Closed (0)", "Archived (0)"]);
   });
 
   // mutation: the empty note keeps saying there are none at all -> the person thinks their finished ones are gone -> red
@@ -79,9 +81,10 @@ describe("one row of filters on the requirement list", () => {
     const { default: i18n } = await import("../src/i18n.js");
     await i18n.changeLanguage("zh");
     try {
+  // Ruling (2026-11-19 #355 review): a closed requirement group has its own Closed part, between Finished and Archived.
       panel([group("done", "done")]);
       const row = within(screen.getByRole("group", { name: "要列出哪些需求" }));
-      expect(row.getAllByRole("button").map((button) => button.textContent)).toEqual(["进行中（0）", "已完成（1）", "已归档（0）"]);
+      expect(row.getAllByRole("button").map((button) => button.textContent)).toEqual(["进行中（0）", "已完成（1）", "已关闭（0）", "已归档（0）"]);
     } finally { await i18n.changeLanguage("en"); }
   });
 });
