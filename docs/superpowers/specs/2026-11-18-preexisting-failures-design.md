@@ -267,3 +267,23 @@ are unchanged.
 - The same wave fixed, in code: an unanswerable row no longer counts on the Problems tab or in the Results conclusion;
   the view's base for the base-check source follows `baseCheckScopeOf` (no base past an unreadable earlier run body, none
   for a dir flow group); and `TARGET_HEAD_TIMEOUT_MS` (item 14) now sits after the import block.
+
+## Correction 2 (2026-11-18, tester batch D review, #321 C1)
+
+Who / when / base: fix-wave implementer subagent (Claude Opus 5.5) of the Orca session running plan
+`docs/superpowers/plans/2026-11-18-tester-batch-d.md`, 2026-11-18, on branch `fix/batchd-d` after `e276ca35` (review of
+task D2, findings I1 and I2). §3's "Step C writes a `pending` row for a work run that ended `required-check-failed`" stays
+as written; it is corrected here.
+
+1. **Which command.** ccloop puts a rejection in `recentFailures` (Orca's `lastFailure`) only when it retries after it
+   (`runLoop.ts`, the `retryable` branch), so the final attempt's rejection is never there: a one-attempt run has no
+   `lastFailure`, and a longer one has an earlier attempt's. A run whose cause is a verification rejection
+   (`required-check-failed` / `verifier-rejected`, phase `verify`) is now remembered by the collector's stored rejected
+   verification of the attempt the stored page names as current (`finalRejectionOf`); `lastFailure` only when that cannot
+   be read. The next run's prior failure and the base check both use it.
+2. **Where it is asked.** Step C still asks with `lastFailure` when there is one (unchanged, and it may name an earlier
+   attempt's command). It never waits for the collector, which stores the final attempt's verification after C. A fresh
+   run's A2, where its prior failures are built, asks for the newest failed run of its task with the rule of item 1 (the
+   asker is that failed run); a red answer reaches the new run while it works as §6's live note. Continuations, saved-result
+   verifies and recovery runs ask nothing there. A failed run that is never followed by another gets no base check for its
+   final attempt's command; one followed before the collector stored that verification gets `lastFailure`'s (or none).

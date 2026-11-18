@@ -284,11 +284,16 @@ describe("priorFailures.ts: what an earlier failed run contributes (priorFailure
       const other = await writeArtifact(store, "verify-other", verification(["src/b.js"], ["from another fingerprint"]));
       const manifest = (attempt: number, ref: { artifactId: string; hash: string }) => ({ manifestRef: ref, manifest: { attempt, stage: "verification", verificationRef: ref }, verification: "failed" });
       const save = (status: string, observations: unknown[]) => saveTaskResultState(store, "run-x", "g", { schema: "orca-task-result-store-v1", identity: { runId: "run-x" } as never, revision: 1, sourceRevision: 1, currentAttempt: 2, observations: observations as never, status: status as never, reason: null });
-      const run = { runId: "run-x", drive: { failureCause: CAUSE, lastFailure: LAST } as never };
+      // Ruling (2026-11-18 tester batch D review): 「这次批准改写所有必要的判据」 -- review I1: a run that ended on a
+      // verification rejection is told its final attempt's stored rejection (attempt 2 here, currentAttempt 2), not
+      // lastFailure (ccloop keeps an earlier attempt's there). The fingerprint rule is lastFailure's, so it is measured on a
+      // run that ended outside verification; the verify-ended run's answer is measured beside it.
+      const run = { runId: "run-x", drive: { failureCause: { cause: "unknown", phase: "execute", retries: 0, detail: null }, lastFailure: LAST } as never };
       // The latest attempt does not match; an earlier one does.
       save("available", [manifest(1, match), manifest(2, other)]);
       // mutation: drop the fingerprint test -> attempt 2's copy taken; mutation: keep empty entries -> ["stdout=boom", ""], red
       expect((await priorFailureOf(store, run)).evidence).toEqual(["stdout=boom"]);
+      expect((await priorFailureOf(store, { runId: "run-x", drive: { failureCause: CAUSE, lastFailure: LAST } as never })).evidence).toEqual(["from another fingerprint"]);
       save("stale", [manifest(1, match)]);
       // mutation: ignore the collector's status -> evidence taken, red
       expect((await priorFailureOf(store, run)).evidence).toBeNull();

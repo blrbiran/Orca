@@ -38,7 +38,7 @@ import { publishPending } from "./projection.js";
 import { readBudgetProposal, readGroup, readWork } from "./queries.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import { toSingleCallEnvelope, toStartEnvelope } from "./startEnvelope.js";
-import { endedOnVerificationRejection, finalRejectionOf, priorFailuresAtPrepare } from "./priorFailures.js";
+import { latestPriorRejection, priorFailuresAtPrepare } from "./priorFailures.js";
 import { requestBaseCheck } from "./baseCheckRecord.js";
 import { recordPreexistingFailures } from "./preexistingFailure.js";
 import type { BaseCheckRun } from "./baseCheck.js";
@@ -532,6 +532,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   // ccloop priorFailures spec 2026-10-21 §3 (kanban spec §6 level 1): built once here, frozen in the envelope below. A
   // continuation copies its predecessor's entries; a saved-result recovery carries none (ccloop refuses them there).
   const priorFailures = await priorFailuresAtPrepare(store, { groupId: run.groupId, taskId: run.taskId, runId }, { recovery: recovery !== null, predecessorRunId: continued?.predecessorRunId ?? null });
+  if (recovery === null && continued === null && run.mode === undefined && run.recoveryOf === undefined) await requestPriorBaseCheck(deps, run.groupId, run.taskId, runId);
   const packageRecord=recovery?{...materializeRecoveryPackage(store,drive.sourceDir,recovery),recoveryOf:recovery.recoveryOf}:undefined;
   // Tester follow-up G Part 4 / §10.2: every run's handoff directories (§10.5: every group), filled from the dependency
   // edges; a saved-result recovery builds no prompt, so it carries none (ccloop refuses them beside `mode`).
@@ -629,6 +630,7 @@ async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: Fro
   if ("blocked" in prepared) { blockRun(deps, runId, "A2", prepared.blocked); return true; }
   const contract = prepared.runtime, skills = prepared.skills;
   const priorFailures = await priorFailuresAtPrepare(store, { groupId: run.groupId, taskId, runId }, { recovery: false, predecessorRunId: null });
+  await requestPriorBaseCheck(deps, run.groupId, taskId, runId);
   const additionalRepos = preparedDirs.slice(1).map(({ key, targetRepo, base }) => ({ key, targetRepo, base }));
   // Tester follow-up G Part 4: as stepA2 (a multi run is never a recovery).
   const handoff = prepareRunHandoff(store, run.groupId, taskId, runId);
@@ -1025,23 +1027,20 @@ async function rateLimitedCatalogMiss(deps: ExecutionDriverDeps, run: DriverRun)
   } catch { return {}; }
 }
 
-/** #321 C1: how long step C waits for the collector to store a run's final verification before it reads it. */
-export const FINAL_REJECTION_WAIT_MS = 5000;
-
 /**
- * #321 C1: the final attempt's stored rejection for step C's base-check request. The collector was scheduled by this
- * collect; it is flushed, for at most FINAL_REJECTION_WAIT_MS, so the pass is never held longer. Undefined when it is not
- * there (or cannot be read): the request is then not made, as before.
+ * Pre-existing failures spec L3 (#341), #321 C1 (review of D2, I2): a fresh run's A2, where its prior failures are built,
+ * asks for the base run of the check that failed its task's newest failed run (latestPriorRejection: the final attempt's
+ * stored rejection, else lastFailure). Step C asks only with lastFailure and never waits for the collector, which stores
+ * the final attempt's verification after C. A red answer reaches this run while it works as the #341 live note
+ * (baseCheck.ts). The asker is the failed run, so a saved-result verification or a recovery run asks nothing
+ * (requestBaseCheck); a request that cannot be made is logged and never blocks the prepare.
  */
-async function finalRejectionAtC(deps: ExecutionDriverDeps, runId: string): Promise<{ rejectCategory: string; failingCommand: string | null } | undefined> {
-  let timer: NodeJS.Timeout | undefined;
+async function requestPriorBaseCheck(deps: ExecutionDriverDeps, groupId: string, taskId: string, runId: string): Promise<void> {
   try {
-    const flushed = deps.taskResults?.flush(runId).catch(() => undefined);
-    if (flushed !== undefined) await Promise.race([flushed, new Promise<void>((resolve) => { timer = setTimeout(resolve, FINAL_REJECTION_WAIT_MS); })]);
-    const final = await finalRejectionOf(deps.store, runId);
-    return final === null ? undefined : { rejectCategory: final.rejectCategory, failingCommand: final.failingCommand };
-  } catch { return undefined; }
-  finally { if (timer !== undefined) clearTimeout(timer); }
+    const prior = await latestPriorRejection(deps.store, groupId, taskId, runId);
+    if (prior === null) return;
+    write(deps, () => requestBaseCheck(deps.store, { groupId, taskId, runId: prior.run.runId, mode: prior.run.mode, recoveryOf: prior.run.recoveryOf }, prior.rejection));
+  } catch (error) { process.stderr.write(`orca-driver: ${runId}: base check not asked for: ${logError(error)}\n`); }
 }
 
 export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: DriverContext): Promise<boolean> {
@@ -1127,11 +1126,11 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     // Pre-existing failures spec L3 (#341): a task run that failed its required check asks for that command's run at the
     // group's base (once per repository, base and command; baseCheck.ts runs it off the round). Never blocks the settle.
     // A saved-result verification or a recovery run asks nothing (requestBaseCheck says why).
-    // #321 C1 (plan 2026-11-18 batch D, D2): a run whose final attempt was its rejection has no lastFailure; the rejection
-    // ccloop stored for that attempt names the command. The collector is given a bounded wait to store it first.
-    const asked = report.terminal.lastFailure ?? (endedOnVerificationRejection(report.terminal.failureCause) ? await finalRejectionAtC(deps, runId) : undefined);
-    if (asked !== undefined) {
-      try { write(deps, () => requestBaseCheck(store, { groupId: run.groupId, taskId: run.taskId!, runId, mode: run.mode, recoveryOf: run.recoveryOf }, asked)); }
+    // #321 C1 (review of D2): the rejection that ended the run's final attempt is not in lastFailure (ccloop keeps one there
+    // only when it retries after it) and its stored copy arrives later, from the collector; C never waits for it. The next
+    // run's A2 asks for it where its prior failure is built (requestPriorBaseCheck).
+    if (report.terminal.lastFailure !== undefined) {
+      try { write(deps, () => requestBaseCheck(store, { groupId: run.groupId, taskId: run.taskId!, runId, mode: run.mode, recoveryOf: run.recoveryOf }, report.terminal!.lastFailure)); }
       catch (error) { process.stderr.write(`orca-driver: ${runId}: base check not asked for: ${logError(error)}\n`); }
     }
     if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)await retainSavedInterruption(deps,runId);
