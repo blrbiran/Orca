@@ -36,9 +36,11 @@ const ids = (context: WriteContext, name: string): string => context.ids[name]!;
  * lines, since its row (two commands) is longer than the generic one-line item, which is cut at 160 characters.
  */
 function recoveryList(body: unknown): string {
-  const { heldTasks, unresolvedRuns, ...rest } = (body ?? {}) as { heldTasks?: Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }>;
-    unresolvedRuns?: Array<{ groupId: string; taskId: string; runId: string; code: string; next: string[] }> };
+  const { heldTasks, unresolvedRuns, finishedHidden, ...rest } = (body ?? {}) as { heldTasks?: Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }>;
+    unresolvedRuns?: Array<{ groupId: string; taskId: string; runId: string; code: string; next: string[] }>; finishedHidden?: number };
   const lines = [text(rest)];
+  // Tester #372: the finished handoff rows the default read leaves out.
+  if (finishedHidden !== undefined) lines.push(`${finishedHidden} finished handoff row${finishedHidden === 1 ? "" : "s"} hidden (orca recovery list --all shows them)`);
   if (heldTasks !== undefined) {
     lines.push("heldTasks:");
     for (const row of heldTasks) {
@@ -711,7 +713,8 @@ export const READ_ROWS: CommandDef[] = [
       return [`usage?${query.join("&")}`];
     } }),
   read({ domain: "orchestration", action: "show", summary: "how many groups run at once, and how many hold a slot now", paths: () => ["orchestration"] }),
-  read({ domain: "recovery", action: "list", summary: "what blocks dispatch: global, group and run blockers, tasks held for a person, and runs a stop could not end", paths: () => ["recovery"], format: recoveryList }),
+  read({ domain: "recovery", action: "list", summary: "what blocks dispatch: global, group and run blockers, tasks held for a person, and runs a stop could not end", paths: (c) => [c.args.flags.all === true ? "recovery?all=1" : "recovery"],
+    flags: [{ name: "all", type: "boolean", summary: "also list the handoff rows whose request is finished" }], format: recoveryList }),
   read({ domain: "command", action: "show", summary: "a command's retained result, looked up under its scope",
     positionals: [{ name: "commandId", summary: "the id the CLI printed (cli-<uuid>)", required: true }],
     flags: [

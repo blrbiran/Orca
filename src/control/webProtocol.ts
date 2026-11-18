@@ -2544,6 +2544,8 @@ export const recoveryViewSchema = z
     blockedCalls: z.array(z.object({ groupId: idSchema, runId: idSchema, purpose: nonemptyString, blockedAt: nonemptyString, reason: z.string().nullable(), next: nonemptyString }).strict()).optional(),
     // Tester #170: an outbox bit alone cannot tell whether a handoff is queued, finished, or a service record.
     handoffOutbox: z.array(z.object({ outboxId: nonemptyString, requestId: nonemptyString.nullable(), requestState: nonemptyString.nullable(), delivery: z.enum(["open-request", "in-progress", "finished", "service-record", "unknown"]) }).strict()).optional(),
+    // Tester #372: the finished handoff rows the default read leaves out of handoffOutbox (`?all=1` lists them). Absent when none.
+    finishedHidden: positiveSafeInteger.optional(),
     // Tester follow-up K: a group a spend cap stopped, waiting for the cap to be raised, with the command that raises it. Absent when none.
     capBlocked: z.array(z.object({ groupId: idSchema, scope: nonemptyString, period: nonemptyString, capTokens: z.number().int().nonnegative(), grantTokens: z.number().int().nonnegative().nullable(), next: nonemptyString }).strict()).optional(),
     // Stuck-runs spec 2026-11-17 S4: a task held behind a run a handoff stopped, outside any stop, with the commands that move it. Absent when none.

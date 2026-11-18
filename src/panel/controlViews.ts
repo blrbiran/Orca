@@ -1910,16 +1910,22 @@ function undeliveredHandoffRows(store: ControlStore): Array<{ outboxId: string; 
   });
 }
 
-export function readControlRecovery(store: ControlStore, epoch: string): RecoveryViewV1 {
+/**
+ * Tester #372 (human ruling: a read-side filter only, #170 stays open): by default the handoff outbox lists only rows whose
+ * request is not finished, and `finishedHidden` counts the finished ones left out; `all` lists every row. No row is written.
+ */
+export function readControlRecovery(store: ControlStore, epoch: string, options: { all?: boolean } = {}): RecoveryViewV1 {
   const terminalRuns = terminalRunRows(store);
   const deferredWakes = deferredWakeRows(store);
   const blockedRuns = blockedRunRows(store);
   const blockedCalls = blockedCallRows(store);
   const capBlocked = capBlockedRows(store);
-  const handoffOutbox = undeliveredHandoffRows(store);
+  const outboxRows = undeliveredHandoffRows(store);
+  const handoffOutbox = options.all === true ? outboxRows : outboxRows.filter((row) => row.delivery !== "finished");
+  const finishedHidden = outboxRows.length - handoffOutbox.length;
   const heldTasks = heldTaskRows(store);
   const unresolvedRuns = unresolvedRunRows(store);
-  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }), ...(capBlocked.length === 0 ? {} : { capBlocked }), ...(handoffOutbox.length === 0 ? {} : { handoffOutbox }), ...(heldTasks.length === 0 ? {} : { heldTasks }), ...(unresolvedRuns.length === 0 ? {} : { unresolvedRuns }) };
+  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }), ...(capBlocked.length === 0 ? {} : { capBlocked }), ...(handoffOutbox.length === 0 ? {} : { handoffOutbox }), ...(finishedHidden === 0 ? {} : { finishedHidden }), ...(heldTasks.length === 0 ? {} : { heldTasks }), ...(unresolvedRuns.length === 0 ? {} : { unresolvedRuns }) };
   const parsed = recoveryViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`recovery-view:${parsed.error.issues[0]?.message ?? "invalid"}`);
   return parsed.data;

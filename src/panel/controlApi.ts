@@ -469,8 +469,9 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     } catch (error) { next(error); }
   });
 
-  app.get("/api/control/recovery", (_req, res) => {
-    res.json(readControlRecovery(deps.store, deps.epoch));
+  app.get("/api/control/recovery", (req, res) => {
+    // Tester #372: `?all=1` lists the finished handoff rows too.
+    res.json(readControlRecovery(deps.store, deps.epoch, { all: req.query.all === "1" }));
   });
 
   app.get("/api/control/repositories/:repoId/workspace", (req, res) => {

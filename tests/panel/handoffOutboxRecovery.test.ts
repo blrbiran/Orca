@@ -23,7 +23,9 @@ it("#170: recovery distinguishes an open handoff request from a settled request 
     add("handoff-request:r", "h-service", "request-pending", { workItemId: "w", request: { requestId: "h-service", runId: "r" } });
     add("handoff-stop:g:3:r", "h-delivered", "latched", { groupId: "g", requestId: "h-delivered", runId: "r", origin: "handoff" }, 1);
 
-    expect(readControlRecovery(store, "epoch-test").handoffOutbox).toEqual([
+    // Ruling (2026-11-18 tester batch D): #372 -- the default read now leaves finished rows out (counted in finishedHidden);
+    // the classification this pins is read with `all`, which lists every row as before.
+    expect(readControlRecovery(store, "epoch-test", { all: true }).handoffOutbox).toEqual([
       { outboxId: "handoff-stop:g:1:r", requestId: "h-open", requestState: "request-pending", delivery: "open-request" },
       { outboxId: "handoff-stop:g:2:r", requestId: "h-done", requestState: "settled-recoverable", delivery: "finished" },
       { outboxId: "handoff-request:r", requestId: "h-service", requestState: "request-pending", delivery: "service-record" },
