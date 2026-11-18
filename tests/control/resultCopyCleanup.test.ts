@@ -1,4 +1,5 @@
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { createExecutionDriver, DriverCrash, stepC, stepCleanupFailed } from "../../src/control/executionDriver.js";
@@ -75,6 +76,34 @@ describe("a failed run's cleanup removes the result copy, resumably (change-size
       expect(await stepCleanupFailed(t.deps, id)).toBe(true);
       expect(t.body(id)).toMatchObject({ state: "settled-failed", drive: { outcome: "failed", cleanedUp: true, cleanupError: null } });
       expect(archiveRows(t, id)).toHaveLength(archived);
+      expect(existsSync(repoOf(t, id))).toBe(false);
+    } finally { await driver.stop(); await t.h.dispose(); }
+  }, 30000);
+
+  // P0 review M2. M5.6: skip the archive whenever any row exists (the review-I1 test) -> the partial row stays the latest,
+  // the copy is kept and no row is added, red
+  it("a failed run whose latest archive row is partial is archived again, and the complete row lets the copy go", async () => {
+    // A special file in the source directory when C archives makes that archive partial (`special:pipe`); it is gone
+    // before the cleanup, so archiving again yields a complete row.
+    let pipe: string | null = null;
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "failed", wrapPort: (port) => ({ ...port, collect: async (input, afterSeq) => {
+      const report = await port.collect(input, afterSeq);
+      if (pipe === null) { pipe = join(input.work.sourceDir, "pipe"); execFileSync("mkfifo", [pipe]); }
+      return report;
+    } }) });
+    const driver = t.driver(); try {
+      const id = await t.claim();
+      await t.until(driver, () => t.body(id).state === "blocked");
+      expect(archiveRows(t, id).at(-1)!.missing).toContain("special:pipe");
+      expect(existsSync(repoOf(t, id))).toBe(true);
+      rmSync(pipe!);
+      const archived = archiveRows(t, id).length;
+      expect(t.service.retryTask(t.h.command("retry-task", { taskId: "a" }))).not.toHaveProperty("error");
+      expect(await stepCleanupFailed(t.deps, id)).toBe(true);
+      const rows = archiveRows(t, id);
+      expect(rows).toHaveLength(archived + 1);
+      expect(rows.at(-1)!.missing).toEqual([]);
+      expect(t.body(id).drive).toMatchObject({ cleanedUp: true, cleanupError: null });
       expect(existsSync(repoOf(t, id))).toBe(false);
     } finally { await driver.stop(); await t.h.dispose(); }
   }, 30000);

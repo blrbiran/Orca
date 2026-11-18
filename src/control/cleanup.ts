@@ -36,9 +36,16 @@ export async function cleanupCommittedRun(store:ControlStore,runId:string,source
  await (deps.admit?deps.admit(finish):finish());return {removed:true};
 }
 
-/** Change-sized runs spec 2026-11-19 §5.6 (review I1): whether any archive row records the run. */
-export function hasArchiveRow(store:ControlStore,runId:string):boolean {
- return store.db.prepare("SELECT 1 FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=? LIMIT 1").get(runId)!==undefined;
+/**
+ * Change-sized runs spec 2026-11-19 §5.6 (review I1; P0 review M2): whether the run's latest archive row is complete
+ * (`missing: []` and a snapshot) -- the one case removeResultCopies deletes the copy, so the one case archiving again
+ * could find it gone. A partial latest row keeps the copy, so archiving again is safe and may produce a complete row.
+ */
+export function latestArchiveComplete(store:ControlStore,runId:string):boolean {
+ const row=store.db.prepare("SELECT body FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=? ORDER BY rowid DESC LIMIT 1").get(runId);
+ if(row===undefined) return false;
+ const archive=JSON.parse(String(row.body)) as {snapshot:unknown;missing:string[]};
+ return archive.missing.length===0 && archive.snapshot!==null && archive.snapshot!==undefined;
 }
 /**
  * Change-sized runs spec 2026-11-19 §5.6 (P0): the one way a run's result copy (`<sourceDir>/repo`, and with `extras`

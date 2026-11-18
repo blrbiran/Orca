@@ -24,7 +24,7 @@ import { existsSync } from "node:fs";
 import { z } from "zod";
 import { join } from "node:path";
 import { archiveRun, readArtifact, writeArtifact } from "./archive.js";
-import { hasArchiveRow, removeResultCopies } from "./cleanup.js";
+import { latestArchiveComplete, removeResultCopies } from "./cleanup.js";
 import { isTerminalRunState, readRun, saveRun } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { commitCandidate, readCommittedCheckpoint, readUncommittedCheckpoint } from "./checkpoints.js";
@@ -1760,9 +1760,10 @@ export async function stepCleanupFailed(deps: ExecutionDriverDeps, runId: string
   if (run.state !== "settled-failed" || run.drive === undefined || run.drive.cleanedUp) return false;
   const drive = run.drive;
   // Change-sized runs spec 2026-11-19 §5.6 (review I1): a failed terminal was archived at C; archiving again after the
-  // result copy below is gone would fail every later round (archiveRun reads <sourceDir>/repo), so a run that already has
-  // an archive row is not archived again on any branch below (Track D's three branches kept as they were).
-  const archived = hasArchiveRow(store, runId);
+  // result copy below is gone would fail every later round (archiveRun reads <sourceDir>/repo), so a run whose latest
+  // archive row is complete is not archived again on any branch below (Track D's three branches kept as they were). A run
+  // with no row, or whose latest row is partial (P0 review M2: removeResultCopies keeps its copy), is archived again.
+  const archived = latestArchiveComplete(store, runId);
   if (store.db.prepare("SELECT 1 FROM outbox WHERE id=? AND kind='report'").get(`report:${runId}`) !== undefined) {
     if (!archived) {
       const report = await savedReport(store, runId);
