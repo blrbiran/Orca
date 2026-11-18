@@ -1980,20 +1980,22 @@ export function readControlRecovery(store: ControlStore, epoch: string, options:
  * caller's table is the one condition this read cannot see; it is not guessed at. `scheduler_wakes` has no timestamp, so
  * there is no age here: adding one is a migration, not a read.
  */
-function deferredWakeRows(store: ControlStore): Array<{ groupId: string; kind: string; reason: "dispatch-blocked" | "group-blocker" | "group-archived"; waitsOn?: "unarchive-then-resume" }> {
-  const out: Array<{ groupId: string; kind: string; reason: "dispatch-blocked" | "group-blocker" | "group-archived"; waitsOn?: "unarchive-then-resume" }> = [];
+function deferredWakeRows(store: ControlStore): Array<{ groupId: string; kind: string; reason: "dispatch-blocked" | "group-blocker" | "group-archived"; waitsOn?: "unarchive-then-resume" | "unclose-then-resume" }> {
+  const out: Array<{ groupId: string; kind: string; reason: "dispatch-blocked" | "group-blocker" | "group-archived"; waitsOn?: "unarchive-then-resume" | "unclose-then-resume" }> = [];
   const rows = store.db.prepare("SELECT group_id,kind FROM scheduler_wakes WHERE delivered=0 ORDER BY rowid").all();
   for (const row of rows) {
     const groupId = String(row.group_id), kind = String(row.kind);
     if (!["start", "no-start", "resume", "continuation"].includes(kind)) continue;
     const group = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
-    const archived = group !== undefined && archivedMarkOf(JSON.parse(String(group.body))) !== null;
+    const mark = group === undefined ? null : terminalKindOf(JSON.parse(String(group.body)));
+    const archived = mark !== null;
     // Tester #370 (correction 2026-11-18): an archived group's queued start (a start, or its no-start re-arm) does not
     // start it on unarchive -- the unarchive pauses the group -- so it is not a start waiting on the archive here.
     if (archived && (kind === "start" || kind === "no-start")) continue;
     // #370 review 2: its resume wake is delivered only once the group is unarchived and then resumed (the unarchive pauses
     // a group with a queued resume wake), whichever condition defers it now.
-    const waitsOn = archived && kind === "resume" ? { waitsOn: "unarchive-then-resume" as const } : {};
+    // #355 review (minor 6): a closed group's waits on its unclose instead.
+    const waitsOn = archived && kind === "resume" ? { waitsOn: mark === "closed" ? "unclose-then-resume" as const : "unarchive-then-resume" as const } : {};
     if (store.dispatchBlocked) out.push({ groupId, kind, reason: "dispatch-blocked", ...waitsOn });
     else if (store.db.prepare("SELECT id FROM recovery_blockers WHERE group_id=? AND scope='group'").get(groupId) !== undefined) out.push({ groupId, kind, reason: "group-blocker", ...waitsOn });
     else if (archived) out.push({ groupId, kind, reason: "group-archived", ...waitsOn });

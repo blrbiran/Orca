@@ -153,6 +153,9 @@ export const durableCommandErrorStatuses = {
   // closes.
   "group-closed": 409,
   "group-not-done": 409,
+  // #355 review (I1): a done group whose delivery is still owed (pushing, backing off, a conflict, a draft pull request
+  // not yet ready) is not closed -- the integration pass skips a closed group, so the delivery would be frozen silently.
+  "close-delivery-pending": 409,
   "group-graph-conflict": 409,
   "group-project-conflict": 409,
   "handoff-identity-conflict": 409,

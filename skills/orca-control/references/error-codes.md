@@ -63,6 +63,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `cli-login-expired` | 409 |
 | `cli-login-unknown` | 404 |
 | `close-argument-conflict` | 400 |
+| `close-delivery-pending` | 409 |
 | `closing-row-refused` | 400 |
 | `command-id-conflict` | 409 |
 | `command-result-not-found` | 404 |

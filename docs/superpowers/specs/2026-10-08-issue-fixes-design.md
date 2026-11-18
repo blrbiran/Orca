@@ -623,3 +623,24 @@ commit `3ae0381e`). The sections above are kept as written; this one extends §6
 - **§6.5 — the group page.** A closed group shows a "Closed" status line with Unclose (`unclose-group`); a done group
   offers Close beside Archive, under the same guards as Archive. The card menu offers Archive or Unarchive by the mark's
   kind, and Close (a done group) or Unclose (a closed one).
+
+## Correction 2026-11-19 — #355 review: close refused while delivery is owed; Closed requirements; the bulk toolbar
+
+Recorded by the #355 fix-wave implementer (Orca session subagent, branch `feat/f-closed` over `3a8c97cb`). The section above
+is kept as written; this one corrects it where they differ.
+
+- **§6.3 — close and owed delivery (review I1, controller decision).** A delivery other than `local` lets a group reach
+  done before it is delivered (`prerequisiteDone`), and the integration pass skips a marked group, so a close then froze
+  the delivery silently. `close-group` (and the conversion of an archived done group) is now refused
+  `close-delivery-pending` (409; detail: `blocked`/`conflict`/`resolving`, `pending`, `backoff`, `pr-draft` or
+  `not-delivered`) while the frozen integration record shows owed delivery: not idle, a write-ahead `pending`, a backoff
+  (`retryAfter`), a draft pull request not yet ready, or -- once a task landed -- the accepted work-branch tip
+  (`acceptance.tip`) not equal to `lastIntegrated` (no acceptance record yet: `lastIntegrated` null). Read from the DB only
+  (`archiveGroup.ts owedDelivery`). Archive stays available. Known gap: work a person merged into the target by hand is not
+  seen without git and reads as owed; such a group is archived.
+- **§6.3 — `recovery list`.** A closed group's deferred resume wake says `waitsOn: "unclose-then-resume"`.
+- **Requirements list.** A closed requirement group is listed under its own Closed part (not Archived).
+- **§6.4 — the bulk toolbar.** The selection box sits in a positioned wrapper with the card (`.group-card-anchor`), so it
+  is never drawn over a refused card's notice. A project-scope change clears the selection and the outcomes. Archive is
+  offered only while some selected group is not archived already. A command sent with no answer is listed as unknown
+  ("no answer -- it may or may not be archived; check the group"), not as refused.

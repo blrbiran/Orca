@@ -717,19 +717,75 @@ describe("an archived group is not integrated (issue-fixes spec §6.3)", { timeo
     } finally { await w.dispose(); }
   });
 
-  // Tester #355: a closed group is frozen alike -- its landed work waits until it is unclosed.
-  it("skips a closed group's landed work, and integrates it once unclosed", async () => {
+  /**
+   * A finished group as the driver leaves it: its one task's run landed `tip` (a run row whose drive names the commit; the
+   * fields landedTaskCount reads), the acceptance pass recorded that tip (single landing, nothing to run), status done.
+   */
+  const finished = (w: Awaited<ReturnType<typeof world>>, tip: string) => {
+    w.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('run-a','g','a',1,0,?)")
+      .run(JSON.stringify({ runId: "run-a", groupId: "g", workItemId: "a", taskId: "a", phase: "work", state: "settled", drive: { landedCommit: tip } }));
+    writeGroupBody(w.store, { ...groupBody(w.store), status: "done",
+      acceptance: { tip, result: "not-needed", why: "single-landing", commands: [], at: w.clock(), fullSuite: { command: null, suggestion: null, exits: [], flaky: false } } });
+  };
+
+  // Ruling (2026-11-19 #355 review): this case was "skips a closed group's landed work, and integrates it once unclosed".
+  // A push delivery lets a group reach done before its work is delivered, and the pass skips a closed group, so closing
+  // it then froze the owed delivery silently. Close is now refused while the delivery is owed (close-delivery-pending),
+  // admitted once delivered; a closed group is still never integrated.
+  it("refuses to close a done group whose landed work is not delivered yet; closes it once delivered, and integrates nothing for it", async () => {
     const w = await world(PB); try {
       const tip = w.land({ "a.txt": "a\n" });
-      writeGroupBody(w.store, { ...groupBody(w.store), status: "done" });
-      const closed = w.service.closeGroup(w.command("close-group", {}));
-      if ("error" in closed) throw new Error(JSON.stringify(closed));
-      // mutation: integrationPass skips only a mark without kind -> the closed group integrates, red here
-      expect(await w.pass()).toBe(false);
-      expect(w.remote("orca/g")).toBeNull();
-      w.service.uncloseGroup(w.command("unclose-group", {}));
+      finished(w, tip);
+      const before = JSON.stringify(groupBody(w.store));
+      // mutation: drop the owedDelivery check from applyCloseGroup -> the group closes with its push owed, red here
+      expect(w.service.closeGroup(w.command("close-group", {}))).toMatchObject({ error: { code: "close-delivery-pending" } });
+      expect(JSON.stringify(groupBody(w.store))).toBe(before);
       expect(await w.pass()).toBe(true);
       expect(w.remote("orca/g")).toBe(tip);
+      const closed = w.service.closeGroup(w.command("close-group", {}));
+      if ("error" in closed) throw new Error(JSON.stringify(closed));
+      // The branch moved by hand after the close (Orca lands nothing on a closed group): the pass carries nothing for it.
+      const later = w.land({ "b.txt": "b\n" });
+      expect(await w.pass()).toBe(false);
+      expect(w.remote("orca/g")).toBe(tip);
+      w.service.uncloseGroup(w.command("unclose-group", {}));
+      expect(await w.pass()).toBe(true);
+      expect(w.remote("orca/g")).toBe(later);
+    } finally { await w.dispose(); }
+  });
+
+  it("refuses to close a done group whose push is backing off, and an archived one converting to closed; closes it once the push lands", async () => {
+    vi.stubEnv("ORCA_INTEGRATION_TIMEOUT_MS", "500");
+    const w = await world(PB); try {
+      const tip = w.land({ "a.txt": "a\n" });
+      finished(w, tip);
+      const url = g(w.repo, ["config", "--get", "remote.origin.url"]);
+      g(w.repo, ["config", "protocol.ext.allow", "always"]);
+      g(w.repo, ["config", "remote.origin.url", "ext::sh -c sleep% 5"]);
+      expect(await w.pass()).toBe(false);
+      const backingOff = w.record();
+      expect(backingOff).toMatchObject({ state: "idle", transient: 1 });
+      expect(backingOff.retryAfter).not.toBeNull();
+      expect(w.service.closeGroup(w.command("close-group", {}))).toMatchObject({ error: { code: "close-delivery-pending" } });
+      // Pinned on the backoff alone: a later tip's transient failure before its write-ahead (no `pending`) with the earlier
+      // tip delivered -- here the accepted tip is marked delivered, so only `retryAfter` says the delivery is owed.
+      setRecord(w.store, { ...backingOff, pending: null, lastIntegrated: tip });
+      // mutation: drop the retryAfter clause from owedDelivery -> the group closes during the backoff, red here
+      expect(w.service.closeGroup(w.command("close-group", {}))).toMatchObject({ error: { code: "close-delivery-pending" } });
+      setRecord(w.store, backingOff);
+      // The conversion: an archived done group takes close-group, and is refused the same way, staying archived.
+      const archived = w.service.archiveGroup(w.command("archive-group", {}));
+      if ("error" in archived) throw new Error(JSON.stringify(archived));
+      expect(w.service.closeGroup(w.command("close-group", {}))).toMatchObject({ error: { code: "close-delivery-pending" } });
+      expect(groupBody(w.store).archived).toEqual({ at: archived.result.kind === "archived" ? archived.result.at : -1, actor: "human" });
+      w.service.unarchiveGroup(w.command("unarchive-group", {}));
+      g(w.repo, ["config", "remote.origin.url", url]);
+      w.setClock(w.record().retryAfter! + 1);
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ lastIntegrated: tip, retryAfter: null });
+      const closed = w.service.closeGroup(w.command("close-group", {}));
+      if ("error" in closed) throw new Error(JSON.stringify(closed));
+      expect(groupBody(w.store).archived).toMatchObject({ kind: "closed" });
     } finally { await w.dispose(); }
   });
 });

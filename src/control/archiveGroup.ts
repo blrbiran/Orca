@@ -3,6 +3,9 @@ import { terminalKindOf } from "./archivedMark.js";
 import { applyWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { ArchiveRunActiveError, ControlError, type ActiveRunRef } from "./errors.js";
 import { recoveryRetryCommand, resumableBlockedRun } from "./driveRecord.js";
+import { dirWorkspaceOf } from "./dirGroup.js";
+import { acceptanceOf, landedTaskCount } from "./groupAcceptanceRecord.js";
+import { multiDirOf } from "./multiGroup.js";
 import { readGroupIntegration } from "./integrationScheme.js";
 import { pendingRequirementCall, type RequirementTarget } from "./requirementCalls.js";
 import { readDraft, readRound, writeDraft, writeRound } from "./requirementRecords.js";
@@ -160,7 +163,8 @@ function wouldRunOnUnarchive(store: ControlStore, groupId: string, group: Record
 
 /**
  * Tester #355: marks a done group `archived: { at, actor, kind: "closed" }` and writes a `closed` activity row. Only a done
- * group closes (group-not-done otherwise); the archive refusals apply as well, so a closed group has nothing in motion.
+ * group closes (group-not-done otherwise); the archive refusals apply as well, so a closed group has nothing in motion, and
+ * one whose delivery is still owed is refused close-delivery-pending (#355 review I1: owedDelivery).
  * On an archived done group (the ledger admits close-group there) it converts the mark to closed.
  */
 export function applyCloseGroup(deps: { store: ControlStore }, command: CloseGroupCommand): CommandSuccessV1 | CommandErrorBodyV1 {
@@ -172,6 +176,8 @@ export function applyCloseGroup(deps: { store: ControlStore }, command: CloseGro
       const group = groupBody(deps.store, groupId);
       if (group.status !== "done") throw new ControlError("group-not-done", String(group.status));
       refuseArchive(deps.store, groupId, group);
+      const owed = owedDelivery(deps.store, groupId, group);
+      if (owed !== null) throw new ControlError("close-delivery-pending", owed);
       const at = deps.store.now();
       group.archived = { at, actor: context.rawCommand.actorId, kind: "closed" };
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
@@ -179,6 +185,32 @@ export function applyCloseGroup(deps: { store: ControlStore }, command: CloseGro
       return success(context, { kind: "closed", groupId, at });
     },
   }).body;
+}
+
+/**
+ * #355 review (I1): what a done group still owes its delivery, null when nothing. A delivery other than `local` lets the
+ * group reach done before it is delivered (groupEdges.ts prerequisiteDone), and the integration pass skips a closed group,
+ * so closing it then would freeze the owed delivery silently; close is refused instead (archive stays available). Read
+ * from the DB only (a command applies in one transaction, no git child): a frozen record that is not idle (blocked,
+ * conflict, resolving), a write-ahead `pending`, a backoff (`retryAfter`), a draft pull request not yet marked ready, or
+ * the accepted work-branch tip (the acceptance pass records it for every finished group) not the last one delivered. A
+ * group none of whose tasks landed owes nothing (its branch is its base, never carried). Known gap: work a person merged
+ * into the target by hand is not seen without git and reads as owed; such a group is archived.
+ */
+function owedDelivery(store: ControlStore, groupId: string, group: Record<string, unknown>): string | null {
+  // A folder or multi-directory group delivers by placement or the multi landing, which its done gate already waits on.
+  if (dirWorkspaceOf(group) !== null || multiDirOf(group) !== null) return null;
+  const integration = readGroupIntegration(group);
+  // keep (no record), or a scheme never confirmed: the integration pass carries nothing for it.
+  if (integration === null || !integration.frozen) return null;
+  if (integration.state !== "idle") return integration.state;
+  if (integration.pending !== null) return "pending";
+  if (integration.retryAfter !== null) return "backoff";
+  if (integration.pr !== null && !integration.pr.ready) return "pr-draft";
+  if (landedTaskCount(store, groupId) === 0) return null;
+  const tip = acceptanceOf(group)?.tip ?? null;
+  if (tip !== null ? tip !== integration.lastIntegrated : integration.lastIntegrated === null) return "not-delivered";
+  return null;
 }
 
 /**

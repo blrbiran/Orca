@@ -51,6 +51,16 @@ describe("the recovery read names a start wake that never delivers (#171)", () =
     } finally { await dispose(); }
   }, 20000);
 
+  // #355 review (minor 6): a closed group (the mark's closed kind, on a done group) is unclosed, not unarchived, before its
+  // queued resume can deliver -- the row says so.
+  it("says a closed group's resume wake waits on its unclose and a resume", async () => {
+    const { store, dispose } = await storeWith([group("g-closed", JSON.stringify({ groupId: "g-closed", status: "done", archived: { at: 1_760_000_000_000, actor: "person", kind: "closed" } })), wake("w5", "g-closed", "resume")]);
+    try {
+      // mutation: waitsOn names unarchive-then-resume for both kinds -> red here
+      expect(readControlRecovery(store, "epoch-test").deferredWakes).toEqual([{ groupId: "g-closed", kind: "resume", reason: "group-archived", waitsOn: "unclose-then-resume" }]);
+    } finally { await dispose(); }
+  }, 20000);
+
   it("names a group stopped at a spend cap and the command that raises it (tester follow-up K)", async () => {
     // Only the Overview read the spend-cap block, so `recovery list` said nothing while the group waited for a top-up.
     const block = JSON.stringify({ code: "spend-cap-reached", scope: "repo:r1", period: "week", capTokens: 500000, grantTokens: 120000, claim: "start" });

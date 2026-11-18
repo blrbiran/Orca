@@ -13,10 +13,12 @@ const NEXT: Readonly<Record<string, string>> = {
   "requirement-not-split": "the requirement is not split into tasks yet; orca requirement show <group> shows the open round",
   "group-state-invalid": "the group is not in a state this command accepts; orca group brief <group> shows its state",
   "no-op-command": "nothing to change: it is already as this command would set it",
-  "group-archived": "the group is archived and refuses every command but unarchive; orca group unarchive <group> first",
+  // #355 review (minor 5): an archived group also takes close (a done one converts to closed).
+  "group-archived": "the group is archived and refuses every command but unarchive and close (which converts a done one); orca group unarchive <group> first",
   // Tester #355: a closed group takes unclose (and archive, which converts it); only a done group closes.
   "group-closed": "the group is closed and refuses every command but unclose and archive; orca group unclose <group> first",
   "group-not-done": "only a done group closes; to set aside a group that is not done, orca group archive <group>",
+  "close-delivery-pending": "the group's delivery is still owed (being pushed, backing off, in conflict or blocked, or a draft pull request not yet ready); orca group brief <group> shows it -- close works once it is delivered, and orca group archive <group> sets it aside now",
 };
 
 /** Fix wave m-6: `<group>` is the group's id when the CLI knows it. */

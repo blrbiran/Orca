@@ -18,6 +18,7 @@ Hand-written. Find the code (`body.error.code` under `--json`, or the `orca: <co
 | `group-archived` | archived groups refuse everything but `group unarchive` (and `group close`, which converts a done one) | Unarchive only if the person wants it back. |
 | `group-closed` | closed groups (done, hidden) refuse everything but `group unclose` (and `group archive`, which converts) | Unclose only if the person wants it listed again. |
 | `group-not-done` | only a done group closes | Archive a group that will not be finished; `group close` waits until it is done. |
+| `close-delivery-pending` | the done group's delivery is still owed (pushing, backing off, a conflict or block, a draft PR not yet ready); the detail names which | `orca group brief <group>` shows the delivery; close once it is delivered, or archive now. |
 | `task-run-moved` (409) on `task retry` | the task's current run changed since your read | `orca task show`, then decide again. |
 | `run-terminal-failed`, `task-not-retryable` | which retry the failure takes | `orca run show` / `run eligibility`; see references/task.md. |
 | `ccloop-failed` (424) | ccloop refused; its own code is in the message | Fix what that code names before sending again; it is not uncertain. |

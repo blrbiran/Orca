@@ -7,8 +7,6 @@
 import { describe, expect, it } from "vitest";
 import { readGroupActivity } from "../../src/control/activity.js";
 import { isGroupArchived } from "../../src/control/archivedMark.js";
-import { deliverScheduledStart, nextClaimableTask } from "../../src/control/webDispatch.js";
-import { replenishStartWakes } from "../../src/control/executionDriver.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { readGroupSummary } from "../../src/panel/controlViews.js";
 import { profileSnapshot, webFixture } from "./fixtures/web.js";
@@ -18,14 +16,22 @@ const body = (h: H) => JSON.parse(String(h.store.db.prepare("SELECT body FROM gr
 const writeBody = (h: H, value: Record<string, unknown>) => h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(value));
 const lastSeq = (h: H) => Number(h.store.db.prepare("SELECT COALESCE(MAX(seq),0) AS n FROM activity").get()!.n);
 const kindsSince = (h: H, seq: number) => readGroupActivity(h.store, "g", 50).filter((entry) => entry.seq > seq).map((entry) => entry.kind);
-const dispatch = (h: H) => ({ store: h.store, profileRouter: h.deps.profileRouter, admissionGate: h.deps.admissionGate });
 
-/** A confirmed group "g" (ready, no run); `done` sets its stored status to done, as markGroupsDone would. */
+/**
+ * A confirmed group "g" (ready, no run); `done` marks its task done and its stored status done, as markGroupsDone would
+ * (#355 review: the task too, so the group is done as the done pass leaves one, not a done status over open work).
+ */
 async function group(options: { done?: boolean } = {}) {
   const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]);
   const service = new WebControlService(h.deps);
   await service.confirm(h.command("confirm", await h.confirmPayload()));
-  if (options.done === true) writeBody(h, { ...body(h), status: "done" });
+  if (options.done === true) {
+    for (const row of h.store.db.prepare("SELECT id, body FROM work_items WHERE group_id='g'").all()) {
+      const work = JSON.parse(String(row.body)) as Record<string, unknown>;
+      if (work.kind === "task") h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id=?").run(JSON.stringify({ ...work, status: "done" }), String(row.id));
+    }
+    writeBody(h, { ...body(h), status: "done" });
+  }
   return { h, service };
 }
 
@@ -121,41 +127,39 @@ describe("close-group and unclose-group (tester #355)", () => {
     } finally { await h.dispose(); }
   });
 
-  it("refuses to close while a run is active, as archive does (archive-run-active)", async () => {
-    const { h, service } = await group();
+  // Ruling (2026-11-19 #355 review): this case was "refuses to close while a run is active", on a done group with an
+  // active run -- a shape no done group has. The archive refusals close shares are pinned on a real one instead: a flow's
+  // child group that finished is its flow's to drive (refuseFlowChild), and close refuses it as archive does.
+  it("refuses to close a done flow child, as archive does (flow-child-managed)", async () => {
+    const { h, service } = await group({ done: true });
     try {
-      await service.start(h.command("start", {}));
-      const outcome = await deliverScheduledStart(dispatch(h), "g");
-      if (outcome.kind !== "claimed") throw new Error(JSON.stringify(outcome));
-      writeBody(h, { ...body(h), status: "done" });
-      // mutation: drop refuseArchive from applyCloseGroup -> the group closes with a run in motion, red here
-      expect(service.closeGroup(h.command("close-group", {}))).toMatchObject({ error: { code: "archive-run-active" } });
+      writeBody(h, { ...body(h), flow: { role: "child", flowRunId: "fr-1", parentGroupId: "flow-1", stepKey: "to-draft-box", seq: 1, baseCommit: "a".repeat(40), effectRecordId: "eff-1" } });
+      // mutation: drop refuseArchive from applyCloseGroup -> the flow child closes, red here
+      expect(service.closeGroup(h.command("close-group", {}))).toMatchObject({ error: { code: "flow-child-managed" } });
       expect(Object.hasOwn(body(h), "archived")).toBe(false);
     } finally { await h.dispose(); }
   });
 });
 
 describe("a closed group is frozen as an archived one (tester #355)", () => {
-  const pending = (h: H) => h.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id='g' AND kind='start' AND delivered=0").all().map((row) => String(row.id));
-
-  it("claims nothing from a pending start wake and offers no claimable task while closed; unclose pauses it (#370 rule)", async () => {
-    const { h, service } = await group();
+  // Ruling (2026-11-19 #355 review): this case was "claims nothing from a pending start wake ... unclose pauses it", on a
+  // done group with a start wake still queued -- a shape no done group has (and a done group has no claimable task, so the
+  // claim side said nothing about the mark). It now pins what a real closed group meets: a command of its own is refused by
+  // the gate as group-closed, and the unclose of a done group pauses nothing.
+  it("refuses a group command on a closed group (group-closed); the unclose pauses nothing", async () => {
+    const { h, service } = await group({ done: true });
     try {
-      await service.start(h.command("start", {}));
-      const wakes = pending(h);
-      expect(wakes).toHaveLength(1);
-      // A done group with a start wake still queued: unusual, but the freeze must not depend on the status.
-      writeBody(h, { ...body(h), status: "done" });
       service.closeGroup(h.command("close-group", {}));
-      // mutation: isGroupArchived answers only for a mark without kind -> the claim goes through, red here
-      expect(await deliverScheduledStart(dispatch(h), "g")).toEqual({ kind: "blocked", reason: "group-archived" });
-      expect(pending(h)).toEqual(wakes);
-      expect(nextClaimableTask(h.store, "g")).toBeNull();
-      expect(replenishStartWakes({ store: h.store, admissionGate: h.deps.admissionGate })).toEqual([]);
-      // The queued start would run on its own once unclosed, so the unclose pauses the group (wouldRunOnUnarchive).
-      // mutation: removeTerminalMark skips wouldRunOnUnarchive for closed -> no `paused`, red here
-      expect(service.uncloseGroup(h.command("unclose-group", {}))).toMatchObject({ result: { kind: "unclosed", paused: true } });
-      expect(pending(h)).toEqual(wakes);
+      const before = JSON.stringify(body(h));
+      // mutation: terminalGateRefusal answers group-archived for both kinds -> red here
+      expect(await service.pauseDispatch(h.command("pause-dispatch", {}))).toMatchObject({ error: { code: "group-closed" } });
+      expect(JSON.stringify(body(h))).toBe(before);
+      const unclosed = service.uncloseGroup(h.command("unclose-group", {}));
+      if ("error" in unclosed) throw new Error(JSON.stringify(unclosed));
+      // mutation: removeTerminalMark pauses whenever it unmarks -> `paused` present and a stop intent, red here
+      expect(unclosed.result).toEqual({ kind: "unclosed", groupId: "g" });
+      expect(h.store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id='g'").get()).toBeUndefined();
+      expect(body(h).stopped).not.toBe(true);
     } finally { await h.dispose(); }
   });
 });

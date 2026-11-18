@@ -74,7 +74,8 @@ describe("a common refusal with no verb hint says the next step (#373)", () => {
 
   it("names the group when the CLI knows it (fix wave m-6)", () => {
     // mutation: ignore the group id -> "<group>" stays, red here.
-    expect(nextForCode("group-archived", "g-alpha")).toBe("the group is archived and refuses every command but unarchive; orca group unarchive g-alpha first");
+    // Ruling (2026-11-19 #355 review): an archived group also takes close (a done one converts), so the text says so.
+    expect(nextForCode("group-archived", "g-alpha")).toBe("the group is archived and refuses every command but unarchive and close (which converts a done one); orca group unarchive g-alpha first");
     expect(printed("group-archived", "group-archived", undefined, { groupId: "g-alpha" })).toContain("orca group unarchive g-alpha first");
   });
 

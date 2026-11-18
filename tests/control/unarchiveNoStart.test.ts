@@ -220,6 +220,20 @@ describe("unarchiving a group never starts it (#370)", { timeout: 120_000 }, () 
     expect(out.stdout).toBe("unarchived g-alpha; paused so it does not run on its own -- let it run with: orca group resume g-alpha\n");
   });
 
+  // #355 review (minor 8): the receipt is shared with unclose (the panel's result kind names which). A done group's unclose
+  // pauses nothing today (archiveGroupClosed.test.ts); the receipt is pinned on the protocol's shape for the case it does.
+  it("the unclose receipt names orca group resume when the group was paused, and is plain otherwise", async () => {
+    const answer = (result: unknown) => ({ status: 200, body: { schema: "orca-command-success-v1", commandId: "c", actorId: "human", verb: "unclose-group",
+      target: { kind: "group", groupId: "g-alpha" }, commandRevision: 6, projectionSeq: 6, effectivePayloadHash: "h", authorityCommandHash: "h", result } });
+    const paused = await world({}, { "POST groups/g-alpha/unclose": answer({ kind: "unclosed", groupId: "g-alpha", paused: true }) });
+    const out = await cli(["group", "unclose", "g-alpha"], paused.dir);
+    expect(out.code, out.stderr).toBe(0);
+    // mutation: the receipt's paused branch for unarchived only -> the generic text, red here
+    expect(out.stdout).toBe("unclosed g-alpha; paused so it does not run on its own -- let it run with: orca group resume g-alpha\n");
+    const plain = await world({}, { "POST groups/g-alpha/unclose": answer({ kind: "unclosed", groupId: "g-alpha" }) });
+    expect((await cli(["group", "unclose", "g-alpha"], plain.dir)).stdout).not.toContain("paused");
+  });
+
   it("group list: an archived group reads archived (was <state>) and is listed last", async () => {
     const w = await world({}, {
       "GET summary": { status: 200, body: { schema: "orca-control-summary-v1", epoch: "e", changeSeq: 9, resetRequired: true, groups: [

@@ -19,6 +19,18 @@ describe("requirement writes on an archived group (#132)", () => {
     expect(w.posts()).toEqual([]);
   });
 
+  // #355 review (minor 8): on a closed group the panel's gate answers group-closed, so the CLI's own refusal names it too,
+  // with unclose (unarchive is refused on a closed group).
+  it("on a closed group the same writes answer group-closed and name unclose", async () => {
+    const w = await world({}, { "GET groups/g-alpha/requirement": { status: 200, body: { schema: "orca-requirement-view-v1",
+      summary: { groupId: "g-alpha", commandRevision: 5, state: "done", archived: true, archiveKind: "closed", requirement: { roundNo: null, draftNo: null } }, rounds: [], drafts: [] } } });
+    const out = await cli(["requirement", "accept", "g-alpha", "--json"], w.dir);
+    // mutation: missing() answers group-archived for either kind -> red here
+    expect([out.code, out.json().body.error.code]).toEqual([1, "group-closed"]);
+    expect(JSON.stringify(out.json().body.error)).toContain("orca group unclose g-alpha");
+    expect(w.posts()).toEqual([]);
+  });
+
   it("accept on an archived group whose draft has no output yet answers group-archived", async () => {
     const w = await world({}, view(true, { roundNo: 1, draftNo: 1 }, [{ draftNo: 1, state: "drafting", draftHash: null }]));
     const out = await cli(["requirement", "accept", "g-alpha", "--json"], w.dir);
