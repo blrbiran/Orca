@@ -6,6 +6,7 @@ import { RequirementsPanel } from "../src/RequirementsPanel.js";
 import type { ControlConfigV1, ControlSummaryV1, RequirementViewV1 } from "../src/controlTypes.js";
 import { config, requirementView, summaryWith } from "./fixtures/requirement.js";
 import i18n from "../src/i18n.js";
+import { EMPTY_DRAFTS, answerKey } from "../src/detailDrafts.js";
 
 // N1 spec §11.2: the round form (each question preset to "use recommended", switchable to free text, "accept all
 // recommended"), consensus with a second confirmation when open branches remain, and the draft's computed layers.
@@ -106,6 +107,28 @@ describe("the Requirements section (N1 spec §11.2)", () => {
       expect(onCommand).not.toHaveBeenCalled();
       fireEvent.click(within(screen.getByRole("dialog", { name: "The model still lists open branches" })).getByRole("button", { name: "Agree anyway" }));
       expect(onCommand).toHaveBeenCalledWith(FINISH);
+    });
+
+    // Batch D fix wave I-1: the person's Reject in the round form is honoured, and the answer draft is handed back so the
+    // App's store clears it once sent.
+    it("honours a Reject set in the round form", () => {
+      const onCommand = mount(zeroQuestions([]));
+      fireEvent.click(within(screen.getByRole("group", { name: /R1\.G1/ })).getByRole("radio", { name: "Reject" }));
+      fireEvent.click(screen.getByRole("button", { name: "We agree" }));
+      // mutation: always accept (ignore the stored decisions) -> red here.
+      expect(onCommand).toHaveBeenCalledWith({ ...FINISH, payload: { ...FINISH.payload, glossaryDecisions: [{ id: "R1.G1", accept: false }] } });
+    });
+
+    it("passes the round's answer draft with the command, so the App clears it", () => {
+      const view = zeroQuestions([]);
+      const key = answerKey(view.summary.repoId, view.summary.groupId, view.requirement.requirementId, 1);
+      const stored = { choice: {}, decisions: { "R1.ADR1": false } };
+      const onCommand = vi.fn();
+      render(<RequirementsPanel config={config as ControlConfigV1} summary={summaryWith(view) as ControlSummaryV1} views={{ r: view }} selected="r" agents={null} language="en"
+        onSelect={() => {}} onCommand={onCommand} drafts={{ ...EMPTY_DRAFTS, answer: { [key]: stored } }} onDraft={() => {}} />);
+      fireEvent.click(screen.getByRole("button", { name: "We agree" }));
+      // mutation: drop the submitted draft argument -> red here.
+      expect(onCommand).toHaveBeenCalledWith({ ...FINISH, payload: { ...FINISH.payload, adrDecisions: [{ id: "R1.ADR1", accept: false }] } }, { slot: "answer", key, value: stored });
     });
 
     it("with nothing to decide either, it is consensus as before", () => {

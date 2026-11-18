@@ -4,6 +4,7 @@ import { createExecutionProfileRouter, resolveProfile } from "../../src/control/
 import { latestRound, readDraft, readRequirementGroup, readRound, saveRequirementGroup, writeRound } from "../../src/control/requirementRecords.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { rawAuthorityCommandSchema } from "../../src/control/webProtocol.js";
+import { readRequirementView } from "../../src/panel/controlViews.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
 import { CLASSIFICATION, INVALID_SPLIT, ROUND_ONE, ROUND_TWO, VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 import { profileSnapshot } from "./fixtures/web.js";
@@ -141,6 +142,25 @@ describe("requirement-answer and requirement-consensus (N1 spec §11.1 items 2-3
       const split = x.fake.calls.accept[1]!;
       expect(split.work.kind === "single-call" && split.work.prompt).toContain("As links, relative to the note");
     } finally { await x.dispose(); }
+  });
+
+  // Tester #354 (batch D C3, fix wave I-1): on a round with no questions the Web's "We agree" now sends answer-finish with
+  // the round's decisions; that keeps an accepted glossary entry and ADR in the document, where consensus dropped them.
+  it("a round with no questions: answer-finish keeps the accepted glossary and ADR in the document; consensus drops them (#354)", async () => {
+    const zero = { ...ROUND_ONE, questions: [], frontierEmpty: true };
+    for (const how of ["finish", "consensus"] as const) {
+      const x = await requirementHarness({ answers: [{ purpose: "clarify", output: zero }, { purpose: "split", output: VALID_SPLIT }] });
+      try {
+        await x.until(() => x.round(1).state === "awaiting-answers");
+        const sent = how === "finish"
+          ? x.service.answerRequirement(x.command("requirement-answer", { roundNo: 1, answers: [], glossaryDecisions: [{ id: "R1.G1", accept: true }], adrDecisions: [{ id: "R1.ADR1", accept: true }], finish: true }))
+          : x.service.requirementConsensus(x.command("requirement-consensus", { roundNo: 1 }));
+        expect(sent, how).not.toHaveProperty("error");
+        const document = readRequirementView(x.store, "e", "r").document;
+        if (how === "finish") expect(document).toContain("One page of text a person wrote.");
+        else expect(document).not.toContain("One page of text a person wrote.");
+      } finally { await x.dispose(); }
+    }
   });
 
   it("refuses a partial answer, a stale round number and an unknown decision id, changing nothing", async () => {

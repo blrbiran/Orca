@@ -321,7 +321,7 @@ function RoundForm(props: { view: View; round: Round; onCommand: OnCommand } & E
   );
 }
 
-function Consensus(props: { view: View; round: Round; onCommand: (a: ControlAction) => void }): JSX.Element {
+function Consensus(props: { view: View; round: Round; onCommand: OnCommand } & EditableDrafts): JSX.Element {
   const { t } = useTranslation();
   const [asking, setAsking] = useState(false);
   const branches = props.view.rounds.filter((r) => r.result !== null).at(-1)?.result?.openBranches ?? [];
@@ -331,13 +331,19 @@ function Consensus(props: { view: View; round: Round; onCommand: (a: ControlActi
   const unanswered = props.round.state === "awaiting-answers" ? props.round.result?.questions.length ?? 0 : 0;
   const unansweredTitle = t("requirements.consensusUnansweredTitle", { count: unanswered, round: props.round.roundNo });
   // Tester #354: consensus writes no glossary or ADR decision, so a round with no questions would drop them from the
-  // document. Such a round is finished by answering it instead -- each accepted, as the round form's default.
+  // document. Such a round is finished by answering it instead -- with the round form's decisions (accept unless the
+  // person chose Reject there), and its answer draft handed back as submitted, as the form's own send does.
   const result = props.round.state === "awaiting-answers" ? props.round.result : null;
   const finishes = result != null && result.questions.length === 0 && result.glossary.length + result.adrs.length > 0;
-  const send = () => props.onCommand(finishes ? { verb: "requirement-answer", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: {
+  const owner = ownerOf(props.view);
+  const key = answerKey(owner.repoId, owner.groupId, owner.requirementId, props.round.roundNo);
+  const stored = props.drafts.answer[key];
+  const decisionOf = (id: string): boolean => stored?.decisions[id] ?? true;
+  const send = () => finishes ? props.onCommand({ verb: "requirement-answer", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: {
     finish: true, roundNo: props.round.roundNo, answers: [],
-    glossaryDecisions: result.glossary.map((entry) => ({ id: entry.id, accept: true })), adrDecisions: result.adrs.map((adr) => ({ id: adr.id, accept: true })),
-  } } : { verb: "requirement-consensus", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: { roundNo: props.round.roundNo } });
+    glossaryDecisions: result.glossary.map((entry) => ({ id: entry.id, accept: decisionOf(entry.id) })), adrDecisions: result.adrs.map((adr) => ({ id: adr.id, accept: decisionOf(adr.id) })),
+  } }, stored === undefined ? undefined : { slot: "answer", key, value: stored })
+    : props.onCommand({ verb: "requirement-consensus", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: { roundNo: props.round.roundNo } });
   return (
     <>
       <button type="button" onClick={() => (branches.length > 0 || unanswered > 0 ? setAsking(true) : send())}>{t("requirements.consensus")}</button>
@@ -964,7 +970,7 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
           <p role="note">{view.clarify?.stoppedAtCap === true ? t("requirements.stoppedAtCap", { n: round.roundNo }) : t("requirements.frontierEmpty")}{" "}
             <button type="button" onClick={() => props.onCommand({ verb: "requirement-clarify-more", groupId, expectedRevision: revisionOf(view), payload: { roundNo: round.roundNo } })}>{t("requirements.clarifyMore")}</button></p>
         )}
-        {!archived && view.requirement.consensus === null && round !== null && ["answered", "awaiting-answers", "failed", "interrupted"].includes(round.state) && valid.length > 0 && <Consensus view={view} round={round} onCommand={props.onCommand} />}
+        {!archived && view.requirement.consensus === null && round !== null && ["answered", "awaiting-answers", "failed", "interrupted"].includes(round.state) && valid.length > 0 && <Consensus view={view} round={round} onCommand={props.onCommand} {...editable} />}
       </section>
       <div id={overviewRegionId("requirement", groupId, "draft")} tabIndex={-1} data-overview-region="draft">
       {[...view.drafts].sort((a, b) => b.draftNo - a.draftNo).map((d, index) => <DraftReview key={d.draftNo} view={view} draft={d} current={index === 0} onCommand={props.onCommand} archived={archived} {...editable} />)}
