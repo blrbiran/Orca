@@ -130,15 +130,19 @@ describe("accept-attempt bounds a v4 attempt by its denylist", { timeout: 120_00
     while (!["landed", "refused"].includes(t.body(runId).operatorAcceptance?.state) && Date.now() < deadline) {
       await driver.round(); await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    return { t, intent: t.body(runId).operatorAcceptance };
+    return { t, runId, intent: t.body(runId).operatorAcceptance };
   }
 
   it("an off-plan file is accepted", async () => {
-    const { t, intent } = await accepted([{ taskId: "a" }, { taskId: "b" }], byTask({ a: { a: "a\n", "docs/new.md": "n\n" } }));
+    const { t, runId, intent } = await accepted([{ taskId: "a" }, { taskId: "b" }], byTask({ a: { a: "a\n", "docs/new.md": "n\n" } }));
     try {
       // mutation: accept-attempt keeps the targetPaths bound for v4 -> refused `out-of-bounds:docs/new.md`, red
       expect(intent).toMatchObject({ state: "landed", reason: null });
       expect(git(t.repo, "show", "refs/heads/orca/g:docs/new.md")).toBe("n");
+      // Spec W3 "when a run lands": an accepted attempt is a landing, recorded with it (fix round 1, item 1).
+      // mutation: finish writes no off-plan row -> [], red
+      const rows = t.h.store.db.prepare("SELECT body FROM activity WHERE group_id='g' AND kind='off-plan-write'").all().map((row) => JSON.parse(String(row.body)));
+      expect(rows).toEqual([{ taskId: "a", runId, paths: ["docs/new.md"], count: 1 }]);
     } finally { await t.h.dispose(); }
   });
 

@@ -26,6 +26,7 @@ import type { ArtifactRef } from "./types.js";
 import type { DecisionEvent } from "../ledger/schema.js";
 import { ORCA_IDENTITY, git } from "../scheduler/gitExec.js";
 import { boundedHarvest, primaryHarvestBound } from "./harvestBound.js";
+import { landingOffPlanWrite, recordOffPlanWrite, type OffPlanWriteBody } from "./offPlanWrites.js";
 import type { CcloopOutcome } from "../scheduler/ccloopRunner.js";
 
 /**
@@ -106,7 +107,7 @@ async function visit(deps: ExecutionDriverDeps, run: DriverRun, intent: Operator
   const tip = await revParse(targetRepo, ref);
   // A landing staged before its swap: the swap happened if the tip holds it (a death after the swap); finish it once.
   if (intent.staged !== null) {
-    if (await isAncestor(targetRepo, intent.staged.next, tip)) { finish(deps, runId); return true; }
+    if (await isAncestor(targetRepo, intent.staged.next, tip)) { finish(deps, runId, await acceptedOffPlan(deps, run, targetRepo, intent.staged)); return true; }
     write(deps, () => {
       const current = readDriverRun(store, runId), live = operatorAcceptanceOf(current);
       if (live?.state === "pending") { current.operatorAcceptance = { ...live, staged: null }; saveDriverRun(store, current); }
@@ -255,18 +256,30 @@ async function land(deps: ExecutionDriverDeps, run: DriverRun, intent: OperatorA
     return true;
   });
   if (!ok) return false;
+  // Read before the swap, while the incoming ref keeps the attempt reachable in targetRepo.
+  const offPlan = await acceptedOffPlan(deps, run, targetRepo, staged);
   await deps.beforeCas?.();
   // An already-landed attempt names the tip itself: nothing to swap, only the ledger write to finish.
-  if (checked.old === checked.next) { finish(deps, runId); return true; }
+  if (checked.old === checked.next) { finish(deps, runId, offPlan); return true; }
   // A moved tip only: the next visit finds the tip without the staged commit, forgets it and merges again.
   if (!(await compareAndSwap(targetRepo, workBranchRef(run.groupId), checked.next, checked.old))) return true;
   deps.crash?.("accept-after-cas");
-  finish(deps, runId);
+  finish(deps, runId, offPlan);
   return true;
 }
 
+/**
+ * Off-plan writes spec W3 (#346, fix round 1): an accepted attempt that lands is recorded as D's landing is -- its own
+ * range, base to attempt. An E-block acceptance (the staged commit is the tip itself) moved nothing: D recorded that
+ * landing already, so none is recorded again.
+ */
+async function acceptedOffPlan(deps: ExecutionDriverDeps, run: DriverRun, targetRepo: string, staged: { old: string; next: string; attemptSha: string }): Promise<OffPlanWriteBody | null> {
+  if (staged.old === staged.next) return null;
+  return landingOffPlanWrite(deps.store, run, targetRepo, run.drive!.base, staged.attemptSha);
+}
+
 /** After the swap: the acceptance, the refused entries, the task done (completeAcceptedAttempt) and the activity row, in one write. */
-function finish(deps: ExecutionDriverDeps, runId: string): void {
+function finish(deps: ExecutionDriverDeps, runId: string, offPlan: OffPlanWriteBody | null): void {
   const { store } = deps;
   const landed = write(deps, () => {
     const current = readDriverRun(store, runId), live = operatorAcceptanceOf(current);
@@ -281,6 +294,8 @@ function finish(deps: ExecutionDriverDeps, runId: string): void {
     saveDriverRun(store, current);
     completeAcceptedAttempt(store, runId);
     recordActivity(store, { groupId: current.groupId, taskId: current.taskId, runId, kind: "attempt-accepted", body: { commandId: live.commandId, principal: live.principal, attemptSha: staged.attemptSha, commit: staged.next } });
+    // With the acceptance, past its guard: a replayed finish records none again.
+    if (offPlan !== null) recordOffPlanWrite(store, current.groupId, offPlan);
     return current;
   });
   if (landed !== null) void dropIncomingRef(deps, landed);

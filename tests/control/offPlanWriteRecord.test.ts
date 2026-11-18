@@ -7,10 +7,13 @@
  * These tasks are v4-shaped (the fixture's contract has an empty allowlist), so Orca's harvest is bounded by the denylist
  * (Task 4b) and a write outside targetPaths lands for real.
  */
+import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { withCommandContext } from "../../src/control/commandClient.js";
+import { markLanded } from "../../src/control/driverLanding.js";
 import { DriverCrash, createExecutionDriver, type ExecutionDriver } from "../../src/control/executionDriver.js";
 import { OFF_PLAN_PATHS_MAX, offPlanPaths, offPlanWriteOf } from "../../src/control/offPlanWrites.js";
 import { reviewFacts } from "../../src/control/requirementReview.js";
@@ -126,6 +129,100 @@ describe("a landing records its off-plan writes with the landing (D)", () => {
       expect(rows.map((row) => row.runId)).toContain(checked[0]);
     } finally { await t.h.dispose(); }
   }, 60_000);
+
+  // Fix round 1, item 2: the range is the run's own base, never the tip it lands on.
+  it("a plain landing on a moved tip records only its own paths", async () => {
+    // A contract with no required checks is refused at confirm (contract-shape), so a plain D merge onto a moved tip is
+    // reached the one other way: the tip moved (after the run's base was taken, during collect) by a commit whose tree
+    // the attempt also has -- `same.txt`, byte for byte -- so the merged tree equals the attempt's (`tree-equal`).
+    let t: Awaited<ReturnType<typeof driverHarness>> | undefined;
+    const moveTip = async () => {
+      const old = git(t!.repo, "rev-parse", "refs/heads/orca/g");
+      const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], { cwd: t!.repo, input: "same\n", encoding: "utf8" }).trim();
+      const index = join(t!.repo, ".git", "orca-test-index");
+      const env = { ...process.env, GIT_INDEX_FILE: index };
+      execFileSync("git", ["read-tree", old], { cwd: t!.repo, env });
+      execFileSync("git", ["update-index", "--add", "--cacheinfo", `100644,${blob},same.txt`], { cwd: t!.repo, env });
+      const tree = execFileSync("git", ["write-tree"], { cwd: t!.repo, env, encoding: "utf8" }).trim();
+      git(t!.repo, "update-ref", "refs/heads/orca/g", git(t!.repo, "commit-tree", tree, "-p", old, "-m", "someone else"), old);
+    };
+    let moved = false;
+    t = await driverHarness([{ taskId: "a", targetPaths: ["a"] }], { files: () => ({ a: "a\n", "same.txt": "same\n" }),
+      duringCollect: async () => { if (!moved) { moved = true; await moveTip(); } } }); try {
+      const runId = await t.claim();
+      await t.until(t.driver(), () => LANDED.includes(t!.body(runId).state));
+      expect(t.body(runId).drive.postMergeCheck).toMatchObject({ result: "not-needed", why: "tree-equal" });
+      expect(t.body(runId).drive.postMergeCheck.oldTip).not.toBe(t.body(runId).drive.base);
+      // mutation: diff from the tip D merges onto (`old`) instead of the run's base -> `same.txt` is in both, no row, red
+      expect(offPlanRows(t).map((row) => row.body)).toEqual([{ taskId: "a", runId, paths: ["same.txt"], count: 1 }]);
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+
+  // Fix round 1, item 3: the row is written past markLanded's state guard, so a replayed landing write adds none.
+  it("a replayed landing write records no second row", async () => {
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["a"] }], { files: () => ({ a: "a\n", "notes.md": "n\n" }) }); try {
+      const runId = await t.claim();
+      await t.until(t.driver(), () => LANDED.includes(t.body(runId).state));
+      expect(offPlanRows(t)).toHaveLength(1);
+      const body = offPlanRows(t)[0]!.body;
+      markLanded(t.deps, runId, t.body(runId).drive.landedCommit, null, null, body);
+      // mutation: write the row before the state guard -> two rows, red
+      expect(offPlanRows(t)).toHaveLength(1);
+    } finally { await t.h.dispose(); }
+  }, 30_000);
+});
+
+// Fix round 1, item 1: an accepted attempt is a landing, recorded in the write that records the acceptance.
+describe("an accepted attempt's off-plan writes (accept-attempt)", { timeout: 120_000 }, () => {
+  const OWNER = { client: "web", principal: "user:owner" };
+  async function failedAndClosed(files: Record<string, string>) {
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["a"] }], { behaviour: () => "failed", sealedOwnerProof: true, files: () => files });
+    const runId = await t.claim(), driver = t.driver();
+    await t.until(driver, () => t.body(runId).state === "blocked");
+    const closed = t.service.closeRun(t.h.command("close-run", { runId }));
+    if ("error" in closed) throw new Error(JSON.stringify(closed));
+    await t.until(driver, () => t.body(runId).drive.cleanedUp === true);
+    const accept = async () => {
+      const command = t.h.command("accept-attempt", { taskId: "a", runId, note: "read the diff" }, "acc-1");
+      await withCommandContext(command.commandId, OWNER, () => t.service.acceptAttempt(command));
+    };
+    return { t, runId, accept };
+  }
+  const settled = (t: Awaited<ReturnType<typeof driverHarness>>, runId: string) => () => ["landed", "refused"].includes(t.body(runId).operatorAcceptance?.state);
+
+  it("a landing finished after a death past its swap is recorded once", async () => {
+    const { t, runId, accept } = await failedAndClosed({ a: "a\n", "notes.md": "n\n" }); try {
+      await accept();
+      const dying = createExecutionDriver({ ...t.deps, crash: (point) => { if (point === "accept-after-cas") throw new DriverCrash(point); } });
+      const deadline = Date.now() + 30_000;
+      while (dying.crashed === null && Date.now() < deadline) { await dying.round(); await new Promise((resolve) => setTimeout(resolve, 50)); }
+      expect(dying.crashed).toBe("accept-after-cas");
+      await dying.stop();
+      expect(offPlanRows(t)).toEqual([]);
+      await untilDeadline(t.driver(), settled(t, runId), 30_000);
+      expect(t.body(runId).operatorAcceptance.state).toBe("landed");
+      // mutation: the staged recovery finishes with no record -> no row, red
+      expect(offPlanRows(t).map((row) => row.body)).toEqual([{ taskId: "a", runId, paths: ["notes.md"], count: 1 }]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("an E-block attempt D already landed adds no row (D recorded it)", async () => {
+    const { t, runId, accept } = await failedAndClosed({ a: "a\n", "notes.md": "n\n" }); try {
+      // The E-block shape (acceptAttemptCompleted.test.ts): the run's work is on the tip already.
+      const tip = git(t.repo, "rev-parse", "refs/heads/orca/g");
+      t.h.store.transaction(() => {
+        const row = t.h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!;
+        const body = JSON.parse(String(row.body)) as { drive: Record<string, unknown> };
+        body.drive = { ...body.drive, landedCommit: tip };
+        t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), runId);
+      });
+      await accept();
+      await untilDeadline(t.driver(), settled(t, runId), 30_000);
+      expect(t.body(runId).operatorAcceptance).toMatchObject({ state: "landed", landedCommit: tip });
+      // mutation: record the attempt's range on an already-landed acceptance too -> one row, red
+      expect(offPlanRows(t)).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
 });
 
 // The reconciliation is a background process, so its progress is wall-clock time (dirGroupLandedTip.test.ts).
