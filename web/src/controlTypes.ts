@@ -772,6 +772,8 @@ export type AllowRequestV1 = { kind: "path"; runId: string } | { kind: "pending-
 export type LandingWatchV1 = {
   tip: string; at: number; commands: Array<CheckRunCommandV1 & { tail?: string }>;
   regressions: Array<{ command: string; landedTaskIds: string[]; tip: string; exit: string; tail?: string; since: number; problem: string }>;
+  /** Tester #371: the group acceptance has a result and decides the final tip; the regressions are no longer problems. */
+  supersededBy?: "acceptance";
 };
 /** Tester follow-up E §4 (#245): one command a check Orca ran itself, with its exit ("0" on a pass) and wall-clock time. */
 export type CheckRunCommandV1 = { command: string; exit: string; ms: number };

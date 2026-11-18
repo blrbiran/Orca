@@ -9,7 +9,8 @@ import type { LandingWatchV1 } from "./controlTypes.js";
  */
 export function LandingWatchProblem(props: { groupId: string; landingWatch: LandingWatchV1 | undefined }): JSX.Element | null {
   const { t } = useTranslation();
-  const regressions = props.landingWatch?.regressions ?? [];
+  // Tester #371: a watch the group acceptance took over is not a problem.
+  const regressions = props.landingWatch?.supersededBy === undefined ? props.landingWatch?.regressions ?? [] : [];
   if (regressions.length === 0) return null;
   return (
     <div data-problem-landing-watch={props.groupId}>

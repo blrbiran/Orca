@@ -868,6 +868,9 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(landingWatch === null ? {} : { landingWatch: {
       tip: landingWatch.tip, at: landingWatch.at, commands: landingWatch.commands,
       regressions: landingWatch.regressions.map((regression) => ({ ...regression, problem: `landing-regression:${regression.command}` })),
+      // Tester #371: once the group acceptance has a result it decides the final tip (follow-up G §6.2 A5) and the watch
+      // runs no more; its last record's regressions are then no longer the group's problems.
+      ...(acceptance !== null && acceptance.result !== "not-run" ? { supersededBy: "acceptance" as const } : {}),
     } }),
     ...(scheduleStart === null ? {} : { scheduleStart }),
     ...(multiSummary === null ? {} : { multiDir: multiSummary }),

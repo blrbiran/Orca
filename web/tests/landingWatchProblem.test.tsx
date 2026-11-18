@@ -45,6 +45,16 @@ describe("a landing regression in the group view (tester follow-up G §6.2)", ()
     expect(container.querySelector("[data-problem-landing-watch]")).toBeNull();
   });
 
+  // Tester #371 (plan 2026-11-18 batch D, V5): taken over by the group acceptance -- no row and no count.
+  it("a watch the group acceptance took over shows and counts nothing", () => {
+    const { container } = mount(withWatch({ ...WATCH, supersededBy: "acceptance" }));
+    // mutation: count superseded regressions in ControlGroupView's problemCount -> "1", red
+    expect(problemHint()).toBeNull();
+    openProblems();
+    // mutation: drop the supersededBy check in LandingWatchProblem -> the row renders, red
+    expect(container.querySelector("[data-problem-landing-watch]")).toBeNull();
+  });
+
   it("says it in Chinese", async () => {
     await i18n.changeLanguage("zh");
     mount(withWatch(WATCH));
