@@ -132,7 +132,9 @@ async function checkedOutAt(path: string, base: string): Promise<boolean> {
  * reads objects and refs in it and cuts attempt worktrees from its HEAD. So nothing is checked out (it holds only
  * `.git`, with an empty index: nothing may run `status` in it), and a clone's HEAD is set to `base`, detached, with
  * `update-ref` (a clone's HEAD is the target's current branch, and ccloop cuts an attempt from HEAD). A clone left by a
- * crash between the two commands has HEAD != base and is rebuilt by the reuse check.
+ * crash between the two commands is rebuilt by the reuse check when its HEAD is not base; when the target's current branch
+ * was at base, its HEAD (that branch, not detached) already resolves to base and it is reused as it is (P0 review M6) --
+ * which is what ccloop needs, since it cuts an attempt from HEAD's commit.
  */
 export async function ensureWorkspace(targetRepo: string, mode: WorkspaceMode, path: string, base: string, roots: WorkspaceRoots): Promise<void> {
   assertOwnPath(roots, path);
