@@ -150,3 +150,127 @@ The controller's recommendation stands, verbatim answer 「按建议走」: a ru
 claim (`parallel-claim`) is retried by Orca automatically, as `orca-auto`, once that sibling has landed -- the same
 amendment `--after <sibling>` makes (adds `dependsOn: <sibling>`, removes that sibling's claims from the task's denylist,
 re-validates the graph). A person may still run `orca task retry … --after <sibling>` themselves. Not built yet.
+
+## Correction 1 (plan 2026-11-18)
+
+Written 2026-11-18 by the Task 7 implementer (Claude Opus 5.5) of Orca session 2026-11-18 (the second of the day; plan
+`docs/superpowers/plans/2026-11-18-off-plan-writes.md`, ledger `.superpowers/sdd/2026-11-18-off-plan-writes/progress.md`),
+on branch `feat/off-plan-writes-346`, following commit `9209fa08` (`fix(control): the parallel-claim pass reads only
+orchestrated, running groups and waits for settled usage (#346 W4, fix round 1)`). The text above is kept verbatim; where
+it and this section differ, this section records what was built. Sources: the plan's "Decisions the plan makes", the
+ledger's `Ruling:` / "Parked" / "minor (deferred)" / "Deviation" lines, and the deviation sections of
+`task-1..6-report.md` in the ledger's directory. Each item: what, why, cost or limit.
+
+### The plan's three decisions (where the spec left room)
+
+1. **Where the claims live.** What: not in the archived plan or the recipe (both are hashed before confirm) but in a new
+   optional execution-snapshot key `offPlan` (`[{taskId, siblings: [{siblingId, claims: [{repoKey, path}]}]}]`), computed
+   in `prepareExecutionSnapshot` and read back by every `deriveContract` caller. A snapshot of a group with no v4 task
+   omits the key, so its bytes do not move. Why: this is "frozen with the contract" (W2), and it lets `--after` rewrite one
+   task's entry without re-deriving its siblings. Cost: one more snapshot key that the panel's snapshot check
+   (`controlViews.validateExecutionSnapshot`) must re-derive with.
+2. **"Adds dependsOn" (W4).** What: `--after <sibling>` appends the sibling to the *work item's* `dependsOn`, the only
+   field the dispatcher reads (`orchestration.ts` `dependencyReady`); the archived plan's `dependencyTaskIds` are not
+   touched. Why: the archived plan is hashed authority. Cost: two places now say what a task waits for (see item 9).
+3. **Overlapping unordered pairs (W1).** What: the spec's `off-plan-claims-overlap` refusal at confirm is not built. A
+   pair whose write sets intersect is never a parallel sibling (its claims would deny the task its own targets). Why:
+   plan-file import may not turn implicit edges into `dependsOn`, so such a pair is legal input, not a code bug. Cost:
+   see item 6 (such a pair's claims are not denied even if the dispatcher runs the two at once).
+
+### Deviations recorded while building
+
+4. **Repositories are keyed by directory; claims are receiver-relative (Task 2, fix round 1).** What: a repository is
+   `posix.resolve(repoPath)` (`context.repoPath` for the primary, `additionalRepos[].repoPath` for extras), lexical only.
+   A claim handed to task T is keyed `null` for T's primary directory, T's own extra key for one of T's extra
+   directories, and dropped when T has no entry for that directory. A sibling whose claims are all dropped is not frozen,
+   and a task left with no sibling has no entry. Why: in a multi-directory group two tasks' primaries can be different
+   directories, so keying by role (primary/extra) missed real siblings and put claims under the wrong key (reviewer probe).
+   Limit: two entries of one contract that resolve to the same directory are not handled (the later one wins); a relative
+   `repoPath` would resolve against the process cwd (every producer passes absolute paths).
+5. **The dependency graph includes implicit edges (Task 3, controller ruling on Task 2).** What: `frozenOffPlan` runs
+   `buildGraph` over directory-qualified write sets and adds each implicit edge to the task's dependencies before
+   computing siblings, so a pair ordered only through an implicit write-set edge is not parallel. Why: W1 names "the same
+   graph `layers` is built from". Cost: none beyond W1.
+6. **A plan-file import's implicit edges are not dispatcher edges (Task 3, concern 4).** What: the snapshot treats an
+   implicit edge as ordering a pair, but the dispatcher reads only `dependsOn`. Limit: a plan-file import whose tasks'
+   write sets intersect may run them at once, and their claims are not denied to each other. The denylist is then weaker
+   than the dispatcher's real parallelism; landing conflicts handle it, as before #346.
+7. **A confirmed `set-task-loop` (Task 3, fix round 1).** What: it keeps the task's frozen entry and refuses
+   `off-plan-claims-overlap` (409) when the task's new write set meets its own frozen sibling claims. So the code exists,
+   but for this case, not for item 3's. Siblings are not re-frozen: a path the amendment newly adds that no sibling
+   claims is allowed for the task and is **not** added to its siblings' denylists. Why: re-freezing would re-derive
+   other tasks' confirmed contracts. Limit: a sibling may write that new path without being stopped; a landing conflict
+   then handles it. A v3 task changed to v4 after confirm has no entry (no sibling denylist); a v4 task changed to v3
+   keeps its denylist (only stricter). A confirmed `set-task-loop` on a multi-directory loop task refuses
+   `execution-policy-unrepresentable` before this check (reachability not checked).
+8. **Orca's own harvest bound for v4 is the denylist (Task 4b, controller ruling).** What: the collect step
+   (`executionDriver` stepC) and accept-attempt bounded a run's writes by `targetPaths ∪ allowlistPaths`, so with an
+   empty allowlist every off-plan write blocked at C `out-of-bounds` and never landed -- no plan task covered it. Now
+   (`src/control/harvestBound.ts`) a repository whose `allowlistPaths` is an explicit empty array is bounded by its
+   denylist (protected paths ∪ frozen sibling claims), with ccloop's matcher (exact, `<dir>/**` prefix, `**`); a
+   non-empty allowlist keeps the old bound byte for byte, and an *absent* extra-repository allowlist keeps it too (ccloop
+   defaults it to that repository's targetPaths). Why: the spec's goal ("a task may write files its plan did not name")
+   was unreachable otherwise; Orca's check stays a second line behind ccloop's denylist. Cost and limits:
+   - "v4" here means "an empty allowlist", so any contract with an empty allowlist takes the denylist bound, including
+     hand-written ones and **debug tasks**: a debug task with no original, or whose original's allowlist is empty
+     (`debugPlan.ts` `debugContract`), and a system debug task (`systemDebug.ts`, `allowlistPaths: []`) are now bounded
+     by their denylist where Orca used to bound them by targetPaths.
+   - **`orca run` (`src/scheduler/run.ts`) keeps the old bound.** Its contracts have no frozen sibling claims, so a
+     denylist bound would drop its only collision check. Consequence: under `orca run` a v4 off-plan write still lands as
+     a `boundary` decision and the round exits 2; no `off-plan-write` row is written there.
+   - Two end-to-end pins were lost and are now covered only directly: the multi-directory `out-of-bounds:<key>:<paths>`
+     join, and the shas a blocked multi run keeps.
+   - An accepted attempt (accept-attempt) now records its off-plan writes too (Task 4 fix round 1); an E-block acceptance
+     that D already landed adds no second row.
+9. **Classification at block time (Task 5, fix round 1).** What: the `parallel-claim` diagnosis is decided once, when the
+   block is recorded, and stored as `drive.parallelClaim {path, repoKey, siblingIds}`; the view and the orca-auto pass
+   read only that. Runs blocked before this change are not backfilled (they keep their earlier diagnosis). Why: computed
+   per view from the *current* frozen entry, a run's cause flipped to `unknown` after `--after` rewrote the entry, and
+   each poll paid one confirmed-execution read per blocked run. An unreadable confirmed execution at block time stores no
+   claim (the block is still recorded). Limits: `parallel-claim` is decided only while the cause is otherwise `unknown`
+   and before `path-policy`; the stop reason's paths are split on `,` and `;` without escaping, so a path containing
+   them is read as pieces (a wrong positive needs a piece to match a claim).
+10. **`--after` and a live run (Task 6).** What: `after-task-has-live-run` refuses only a live run that is **not**
+    `blocked`. Why: the parallel-claim stop is itself an active run in state `blocked` -- the very run the retry settles
+    -- so refusing every active run would make `--after` impossible in the case it exists for. Other refusals:
+    `after-not-a-sibling`, `after-cycle` (Review Focus 1: two siblings stopped on each other -- the second retry is
+    refused and left to a person).
+11. **`afterDependsOn` on the work item; the panel's authority check accepts it (Task 6).** What: besides `dependsOn`,
+    the work item records what `--after` added (`afterDependsOn`, sorted, unique). The panel's work-item authority check,
+    which compared `dependsOn` with the archived plan's edges, now accepts plan edges ∪ `afterDependsOn` and validates
+    those ids (own id and unknown ids refused). Why: without it the whole group view blocked as `work-item-authority`
+    after any `--after`. Limit: the work-item view does not show `afterDependsOn`, so a waiting task does not say which
+    added dependency it waits for (deferred minor).
+12. **The orca-auto pass (Task 6, fix round 1).** What: `parallelClaimPass` (in `systemDebugPass`, after the worker-lost
+    pass, before the ladder) reads only groups Orca orchestrates -- orchestration mode `run`, not a flow child, not
+    archived, not paused or stopped -- the same filter as the worker-lost pass. It waits while usage events are past the
+    run's highWater or the run's usage is unknown, and passes over a run that already carries a `ladder-skipped` note.
+    A retry the task's budget cannot fund is not sent and is noted as `ladder-skipped`. One command per stopped run
+    (`orca-auto-parallel-claim-<task>-<run>`), applied or refused, is the record. Why: without the filter a paused or
+    archived group booked a durable refusal and was never retried after resume; without the waits a usage-pending run's
+    one retry was booked as refused. Limits: the pass orders the task after `siblingIds[0]` only; if the next run stops on
+    another sibling's claim, that run gets its own retry. The archived/flow-child filters are copied from the worker-lost
+    pass and not pinned by their own tests.
+13. **Saved-result recovery refuses an `--after`-amended task (Task 6, known limit).** What:
+    `src/control/savedResultRecovery.ts` compares `work.dependsOn` with the archived plan's edges, so a saved-result
+    verify on a task amended by `--after` is refused `saved-result-source-stale`. Not changed. Cost: it fails safe (a
+    refusal, no wrong landing); such a task's saved result cannot be recovered that way.
+
+### Parked limits
+
+14. **Activity retention.** The `off-plan-write` row is an activity row; a group keeps its newest 500
+    (`ACTIVITY_RETENTION`), so in a long group an early landing's row can be pruned before the requirement review reads
+    it, and its fact line and run-view field disappear. Keeping it durable would need a store change.
+15. **Multi-directory recording compares only the first written directory** (the one the contract is rooted at): an
+    extra directory's off-plan writes are not recorded.
+16. **A mixed v3 + v4 group's review fix task** gets a narrow allowlist (the union of the v3 tasks' lists), as Review
+    Focus 3 accepted; pinned by a test so a change is seen. A pure-v4 group's fix task has no allowlist.
+
+### Acceptance 3-5 as built
+
+`tests/control/offPlanWritesE2E.test.ts` (Task 7) drives acceptance 3, 4 and 5 through the real ccloop build
+(`ORCA_CCLOOP_BIN` = the ccloop source build's `dist/cli.js`) with its scripted fake codex; no provider is called.
+Acceptance 4 is exercised through the orca-auto pass (the W4 ruling), not a person's `--after`, which Task 6's own tests
+cover. The fake codex creates no directories, so a file in a subdirectory has its directory (an empty `.gitkeep`)
+committed in the base first; the off-plan files themselves are new. Without `ORCA_CCLOOP_BIN` the file is skipped, not
+passed.
