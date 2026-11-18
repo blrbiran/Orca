@@ -672,6 +672,19 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
   };
 }
 
+/**
+ * Tester #359: a requirement review that did not pass, as the group's own problem -- its code, why, and the commands that
+ * answer it (the ones `group show` prints, verbs.ts reviewLines). Null otherwise.
+ */
+function groupProblemOf(groupId: string, review: ReturnType<typeof reviewOf>): { code: string; why: string; next: string[] } | null {
+  const code = reviewProblem(review);
+  if (code === null) return null;
+  const rerun = `orca group review-rerun ${groupId} --note '<what to look at>'`, accept = `orca group review-accept ${groupId} --note '<why accept as is>'`;
+  // Tester #343: criteria no change to files can meet get no fix task.
+  const next = review!.why === "not-fixable-by-work" ? [accept, rerun] : [`orca group review-fix ${groupId} --goal '<what to fix>'`, rerun, accept];
+  return { code, why: review!.why ?? "?", next };
+}
+
 /** Absent when no task of the group has any of the three, so a quiet card keeps its bytes. */
 function budgetAlerts(snapshot: GroupReadSnapshot, taskIds: readonly string[]): { overExpectation: number; waitingDecision: number; groupCapReached: number } | null {
   const alerts = { overExpectation: 0, waitingDecision: 0, groupCapReached: 0 };
@@ -829,6 +842,9 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...((record, problem) => record === null ? {} : { deliveredAcceptance: { ...record, ...(problem === null ? {} : { problem }) } })(deliveredAcceptanceOf(body), deliveredAcceptanceProblem(body)),
     // Tester follow-up G spec §3.3: the requirement review; a review that did not pass is a problem named by why.
     ...(reviewOf(body) === null ? {} : { requirementReview: { ...reviewOf(body)!, ...(reviewProblem(reviewOf(body)) === null ? {} : { problem: reviewProblem(reviewOf(body))! }) } }),
+    // Tester #359 (#377 layer 4): the same problem as a group-level fact beside the card's firstFailure (which stays the
+    // tasks' own), so the brief, the card and `orca status` see a review that did not pass on a group whose tasks are done.
+    ...((problem) => problem === null ? {} : { groupProblem: problem })(groupProblemOf(groupId, reviewOf(body))),
     // Tester follow-up G §6.3 (#189): what this group lets through, with who, how, when and from which request.
     ...(allowancesOf(body).length === 0 ? {} : { allowances: allowancesOf(body) }),
     ...(landingWatch === null ? {} : { landingWatch: {

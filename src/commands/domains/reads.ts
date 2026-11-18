@@ -6,7 +6,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
-import { acceptanceLines, contextHandoffLines, emptyResultLines, keptLines, type KeptSummary, sessionCleanupLines, workerLostLines, formatWithUnestimated, fundingLines, historyLines, noChangeLines, proposalDocument, softCeilingLines, unestimatedLines, withFunding, type EmptyResultRun, type EstimateHistory, type NoChangeItem } from "./verbs.js";
+import { acceptanceLines, contextHandoffLines, emptyResultLines, keptLines, type KeptSummary, sessionCleanupLines, workerLostLines, formatWithUnestimated, fundingLines, historyLines, noChangeLines, proposalDocument, reviewLines, softCeilingLines, unestimatedLines, withFunding, type EmptyResultRun, type EstimateHistory, type NoChangeItem } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { MODEL_UNAVAILABLE_CAUSE, NARRATION_ONLY_CAUSE, recoveryRetryCommand } from "../../control/driveRecord.js";
@@ -509,6 +509,8 @@ export const READ_ROWS: CommandDef[] = [
       return [text(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf)),
         // Tester follow-up K, item 2: the acceptance line show prints, with its full-suite warning.
         ...(typeof groupId === "string" ? acceptanceLines(groupId, acceptance) : []),
+        // Tester #359: a review that did not pass, with what answers it, as group show prints it.
+        ...(typeof groupId === "string" ? reviewLines(groupId, field(body, "requirementReview") as Parameters<typeof reviewLines>[1]) : []),
         // Tester #321 part C: each task costing a multiple of the group median, or running long, in words.
         ...costs.map(taskCostLine),
         // Tester #348 review: each run the read schema cannot decode, with its task.
