@@ -151,7 +151,8 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
       {(group.requirementReview?.state === "reviewing" || group.requirementReview?.state === "not-passed") && (
         <p className="detail-note" data-tone={group.requirementReview.state === "not-passed" ? "danger" : "info"} data-testid="board-card-review">{t("control.review.board", { state: t(`control.review.state.${group.requirementReview.state}`) })}</p>
       )}
-      {group.acceptance?.result === "failed" && (
+      {/* #370 review 2 (M-e1): a failed acceptance is named once -- by the group problem line below, which carries its answer. */}
+      {group.acceptance?.result === "failed" && group.groupProblem?.why !== "group-acceptance-failed" && (
         <p className="detail-note" data-tone="danger" data-testid="board-card-acceptance">{t("control.groupAcceptance.boardFailed", { command: group.acceptance.commands.at(-1)?.command ?? "?" })}</p>
       )}
       {/* Tester #359 review (I3): the group's own problem, with the first command that answers it -- as firstFailure's below. */}

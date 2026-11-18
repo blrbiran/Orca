@@ -29,9 +29,17 @@ describe("a failed group acceptance needs you (tester follow-up E §5)", () => {
     }
   });
 
+  // Ruling (2026-11-18 tester batch D review 2): the summary sends a failed acceptance with the group problem it yields
+  // (controlViews.ts groupProblemOf); the card names the failing command once, on that line (M-e1). The acceptance note
+  // stays for a summary with no group problem.
   it("the Board card names the failing command; a passed one says nothing", () => {
     render(<BoardView groups={[g(FAILED)]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
     expect(screen.getByTestId("board-card-acceptance").textContent).toBe("Group acceptance failed: npm test");
+    cleanup();
+    const problem = { code: FAILED.problem!, why: "group-acceptance-failed", next: ["orca group recheck g", "orca group waive-acceptance g --note '<why>'"] };
+    render(<BoardView groups={[{ ...g(FAILED), groupProblem: problem }]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    expect(screen.queryByTestId("board-card-acceptance")).toBeNull();
+    expect(screen.getByTestId("board-card-group-problem").textContent).toContain("group-acceptance-failed:npm test");
     cleanup();
     render(<BoardView groups={[g({ ...FAILED, result: "passed", problem: undefined })]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
     expect(screen.queryByTestId("board-card-acceptance")).toBeNull();
