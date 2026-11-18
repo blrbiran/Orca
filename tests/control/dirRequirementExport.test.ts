@@ -8,7 +8,7 @@
  * absent blocks A2 as `dir-base-missing` and never creates one.
  */
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -202,7 +202,10 @@ describe("dispatch of a dir group (§6.5)", () => {
       const ws = (...args: string[]) => execFileSync("git", ["-C", drive.workspacePath, ...args], { encoding: "utf8" }).trim();
       expect(realpathSync(resolve(drive.workspacePath, ws("rev-parse", "--git-common-dir")))).toBe(realpathSync(vault));
       expect(ws("rev-parse", "HEAD")).toBe(drive.base);
-      expect(readFileSync(join(drive.workspacePath, "src", "export.ts"), "utf8")).toBe("export {};\n");
+      // Ruling (2026-11-19 change-sized runs P0): the workspace is no longer a checkout (spec §5.1), so the file is read
+      // from its HEAD, not from disk; intent kept: the agent starts from the exported work branch. Its entries are .git only.
+      expect(execFileSync("git", ["-C", drive.workspacePath, "show", "HEAD:src/export.ts"], { encoding: "utf8" })).toBe("export {};\n");
+      expect(readdirSync(drive.workspacePath)).toEqual([".git"]);
       expect(digestTree(x.folder)).toBe(before);
     } finally { await x.dispose(); }
   });

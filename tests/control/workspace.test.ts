@@ -1,6 +1,6 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -94,6 +94,64 @@ describe("the run workspace (execution driver §3.2)", () => {
     expect(statSync(join(path, ".git")).isDirectory()).toBe(true);
     expect(g(path, "rev-parse", "HEAD")).toBe(t.head);
     expect(g(t.repo, "worktree", "list", "--porcelain").split("\n")).not.toContain(`worktree ${path}`);
+  });
+
+  // Change-sized runs spec 2026-11-19 §5.1 (P0-1): the workspace is a git handle for ccloop, not a checkout.
+  const detached = (path: string) => spawnSync("git", ["symbolic-ref", "-q", "HEAD"], { cwd: path }).status !== 0;
+  async function later(t: Awaited<ReturnType<typeof target>>) {
+    await writeFile(join(t.repo, "shared.txt"), "later\n");
+    g(t.repo, "commit", "-qam", "later");
+    return g(t.repo, "rev-parse", "HEAD");
+  }
+
+  // M2.1: drop --no-checkout from the worktree add -> entries include shared.txt and ls-files is not empty, red
+  it("a worktree-mode workspace holds only .git, with an empty index, detached at base", async () => {
+    const t = await target();
+    const path = workspacePathOf(t.roots, "run-1");
+    await ensureWorkspace(t.repo, "worktree", path, t.head, t.roots);
+    expect(readdirSync(path)).toEqual([".git"]);
+    expect(g(path, "ls-files")).toBe("");
+    expect(g(path, "rev-parse", "HEAD")).toBe(t.head);
+    expect(detached(path)).toBe(true);
+  });
+
+  // M2.2: drop the update-ref -> HEAD is `later` on refs/heads/main, red; M2.3: `checkout --detach` instead -> entries
+  // include shared.txt, red
+  it("a clone-mode workspace holds only .git and is detached at base even when the target's HEAD has moved past base", async () => {
+    const t = await target();
+    const moved = await later(t);
+    const path = workspacePathOf(t.roots, "run-2");
+    await ensureWorkspace(t.repo, "clone", path, t.head, t.roots);
+    expect(readdirSync(path)).toEqual([".git"]);
+    expect(g(path, "rev-parse", "HEAD")).toBe(t.head);
+    expect(g(path, "rev-parse", "HEAD")).not.toBe(moved);
+    expect(detached(path)).toBe(true);
+  });
+
+  // The reason the HEAD fix exists: ccloop cuts an attempt with `worktree add --detach <attempt>` and no start point
+  // (worktreeManager.ts:27 at the pin dd491c1), so it starts from the workspace's HEAD. M2.2 -> `later`, red.
+  it("an attempt worktree cut from the workspace with no start point, as ccloop cuts it, holds base's tree, in both modes", async () => {
+    for (const mode of ["worktree", "clone"] as const) {
+      const t = await target();
+      await later(t);
+      const path = workspacePathOf(t.roots, `run-${mode}`);
+      await ensureWorkspace(t.repo, mode, path, t.head, t.roots);
+      const attempt = join(t.root, `attempt-${mode}`);
+      g(path, "worktree", "add", "--detach", attempt);
+      expect(g(attempt, "rev-parse", "HEAD"), mode).toBe(t.head);
+      expect(await readFile(join(attempt, "shared.txt"), "utf8"), mode).toBe("base\n");
+    }
+  });
+
+  it("a clone left by a crash before its HEAD was set is rebuilt", async () => {
+    const t = await target();
+    const moved = await later(t);
+    const path = workspacePathOf(t.roots, "run-3");
+    g(t.roots.workspacesRoot, "clone", "-q", "--local", "--no-checkout", t.repo, path);
+    expect(g(path, "rev-parse", "HEAD")).toBe(moved);
+    await ensureWorkspace(t.repo, "clone", path, t.head, t.roots);
+    expect(g(path, "rev-parse", "HEAD")).toBe(t.head);
+    expect(detached(path)).toBe(true);
   });
 
   it("refuses to touch a path it did not name, and removes nothing", async () => {

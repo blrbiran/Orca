@@ -126,7 +126,14 @@ async function checkedOutAt(path: string, base: string): Promise<boolean> {
   } catch { return false; }
 }
 
-/** spec §3.2 / step A2: reuse a workspace already at `base`, otherwise delete this driver's own path and rebuild it. */
+/**
+ * spec §3.2 / step A2: reuse a workspace already at `base`, otherwise delete this driver's own path and rebuild it.
+ * Change-sized runs spec 2026-11-19 §5.1 (P0): the workspace is a git handle for ccloop, never a checkout -- ccloop only
+ * reads objects and refs in it and cuts attempt worktrees from its HEAD. So nothing is checked out (it holds only
+ * `.git`, with an empty index: nothing may run `status` in it), and a clone's HEAD is set to `base`, detached, with
+ * `update-ref` (a clone's HEAD is the target's current branch, and ccloop cuts an attempt from HEAD). A clone left by a
+ * crash between the two commands has HEAD != base and is rebuilt by the reuse check.
+ */
 export async function ensureWorkspace(targetRepo: string, mode: WorkspaceMode, path: string, base: string, roots: WorkspaceRoots): Promise<void> {
   assertOwnPath(roots, path);
   if (existsSync(path)) {
@@ -134,11 +141,11 @@ export async function ensureWorkspace(targetRepo: string, mode: WorkspaceMode, p
     await removeOwnPath(targetRepo, roots, path);
   }
   if (mode === "worktree") {
-    await git(targetRepo, [...QUIET_GIT, "worktree", "add", "--detach", path, base]);
+    await git(targetRepo, [...QUIET_GIT, "worktree", "add", "--no-checkout", "--detach", path, base]);
     return;
   }
   await git(roots.workspacesRoot, [...QUIET_GIT, "clone", "--local", "--no-checkout", targetRepo, path]);
-  await git(path, [...QUIET_GIT, "checkout", "--detach", base]);
+  await git(path, [...QUIET_GIT, "update-ref", "--no-deref", "HEAD", await revParse(path, base)]);
 }
 
 /**
