@@ -272,3 +272,19 @@ describes.
 
 What is true: that behaviour landed in the commit whose subject is `feat(control): archive and clean a settled-failed
 run's workspace in the driver loop` (585fb72). The erratum's commit list is the four subjects it names plus this one.
+
+## Correction (2026-11-19, change-sized runs P0)
+
+Who/when: the change-sized runs P0 implementer (Claude Opus 5.5, a subagent of the Orca control session), 2026-11-19, on branch `feat/change-sized-p0` from `main` `9bc6e304`. The original text above is kept verbatim (Rule 13).
+
+- **§3.2 (the workspace).** The run workspace is no longer a checkout. `worktree` mode runs `git -C <targetRepo> worktree
+  add --no-checkout --detach <path> <base>`; `clone` mode runs `git clone --local --no-checkout <targetRepo> <path>`
+  then `git -C <path> update-ref --no-deref HEAD <base>` instead of `checkout --detach <base>` (a no-checkout clone's HEAD
+  is the target's current branch, and ccloop cuts each attempt from the workspace's HEAD). The workspace holds only
+  `.git`, with an empty index. Commit `24f593e3` (`fix(control): the run workspace is a git handle with no checkout, and
+  clone mode sets HEAD to base (#363 P0, O1)`). Design: `2026-11-19-change-sized-runs-design.md` §5.1.
+- **§3.5 (cleanup and residue).** `<runsRoot>/<runId>/repo` is no longer kept: it is removed by `removeResultCopies`
+  (`cleanup.ts`) once the run is terminal and its latest archive row is complete (`missing: []` and a snapshot), at step
+  E (with `repos/`, before the `cleanedUp` write), in a failed run's cleanup, at the recoverable settles (allowance,
+  ceiling, H-settle) and in `cleanupPredecessor`. A partial archive keeps it. Commits `019cc263`, `c55c1e44`, `e5d6460f`.
+  Design: §5.6 of the same spec.

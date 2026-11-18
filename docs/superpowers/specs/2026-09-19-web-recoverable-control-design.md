@@ -1825,3 +1825,12 @@ The text above is kept. Since ccloop `fix(runtime): the time budget charges only
 charges excludes, inside an agent-process window, the part of a gap longer than `IDLE_CHARGE_LIMIT_MS = 120 s` with no
 observed output and no tool open; setup, verifier checks and ccloop's own work are charged in full. The wire is
 unchanged; only what one `activeMs` means changed. Orca's labels already say "active time" and need no change.
+
+## Correction (2026-11-19, change-sized runs P0) — §6.3: the result copy goes at the recoverable settle
+
+Who/when: the change-sized runs P0 implementer (Claude Opus 5.5, a subagent of the Orca control session), 2026-11-19, on branch `feat/change-sized-p0` from `main` `9bc6e304`. The original text above is kept verbatim (Rule 13).
+
+A recoverable run's result copy `<sourceDir>/repo` is removed at its settle (allowance, ceiling and H-settle), once the
+settle's transaction committed and its complete archive holds the copy; `cleanupPredecessor` removes one left by a
+settle before P0 or by a failed removal. A continuation resumes from the archive alone. Commit `e5d6460f`. Design:
+`2026-11-19-change-sized-runs-design.md` §5.6 (review I2, O12).

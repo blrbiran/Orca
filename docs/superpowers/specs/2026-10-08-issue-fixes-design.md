@@ -569,3 +569,14 @@ Who / when / base: Track D implementer subagent (Claude Opus 5.5) of the Orca se
 3. An artifact publication's temp file in `<stateDir>/staging/` is removed when the publication fails (a copy, an open or
    an fsync that threw), not only when it is renamed into place (`archive.ts` `withTemp`). Start-up cleanup of entries
    left by a killed panel (#364 b) is not part of this correction.
+
+## Correction (2026-11-19, change-sized runs P0) — §4.2(2)
+
+Who/when: the change-sized runs P0 implementer (Claude Opus 5.5, a subagent of the Orca control session), 2026-11-19, on branch `feat/change-sized-p0` from `main` `9bc6e304`. The original text above is kept verbatim (Rule 13).
+
+`stepCleanupFailed` no longer archives unconditionally: it archives only when no archive row records the run (a failed
+terminal is archived at step C; a recovery-mode run is not, and is archived here). Then it removes the workspace and the
+extras' workspaces, then the result copy `<sourceDir>/repo` (`removeResultCopies`, `repos/` kept), and writes
+`cleanedUp: true` last, so a crash after the removal resumes without reading the removed copy. Commit `c55c1e44`
+(`fix(control): a settled run's result copy goes once its archive holds it, and a failed run's cleanup resumes without
+re-archiving (#363 #366 P0, review I1)`). Design: `2026-11-19-change-sized-runs-design.md` §5.6.

@@ -295,3 +295,13 @@ Orca 若把它读成「已解决」，就是改写对端观测，违反执行驱
 - **D-C7′ ⇒ 人裁 (α)**：C7 再加一条 —— 被 handoff deadline 中止的那个阶段（`events.jsonl` 有 `type:"handoff_interrupted"` 且 `detail` 点名该阶段与 attempt）不列 `missing`；工作树快照就是它留下的全部证据。13.1 C-2「进入过而文件不在的仍列」对这一种情形作废。
 - **执行方式 ⇒ 人裁「子代理逐 Task」**（`superpowers:subagent-driven-development`）。
 - **控制器裁定（按计划席建议，证据分得出胜负）**：D-SNAP、D-VIEW、D-LANDED、D-HASH（照上游规则不重算 contract 哈希；13.2 I-5 那句「重算」作废）、D-STOPINSPECT、D-TASKS、D-STALE（上游既有 bug，本片修）、D-SPAWNKEY（取已记账键号的 MAX，13.2 I-6「行数」作废）、D-SKIP、D-RESUME-SHUTDOWN —— 全部采纳，内容见计划 §0.1。
+
+## Correction (2026-11-19, change-sized runs P0) — the H-settle removes the result copy
+
+Who/when: the change-sized runs P0 implementer (Claude Opus 5.5, a subagent of the Orca control session), 2026-11-19, on branch `feat/change-sized-p0` from `main` `9bc6e304`. The original text above is kept verbatim (Rule 13).
+
+Once the H-settle's transaction has committed and the run reads terminal, `settleHandoffCheckpoint` removes
+`<sourceDir>/repo` through `removeResultCopies` (a partial archive keeps it). A failure is one stderr line
+(`orca-driver: <runId>: result copy kept: ...`) and never changes the settle's answer; `cleanupPredecessor` retries the
+removal when the run is continued. The continuation reads only the archive (`exportResumeBundle`), never the copy.
+Commit `e5d6460f`. Design: `2026-11-19-change-sized-runs-design.md` §5.6 (review I2, O12).

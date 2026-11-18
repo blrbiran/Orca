@@ -127,3 +127,13 @@ Independent Task4 review confirmed that an ordinary completed execution stopped 
 The existing optional manifest shape remains exact: stage is verification, verificationRef owns this strict attempt-bound subtype, and original execution/output snapshot refs are reused. The private observation kind distinguishes verification-not-run from started/completed records. Actual later started/completed observations supersede this historical boundary fact in revision order. Missing/damaged/mismatched evidence remains unavailable. Optional capture failure must preserve core handoff/usage/attempt/outcome semantics; no provider call or core protocol change is added. Existing structured partial-bypass policy remains narrow; error partials with changed files may still enter verification.
 
 Prove ordinary complete execution→actual handoff guard→zero verifier invocation→owned optional lifecycle/RPC not-run evidence separately from actual started verification interrupted without completion→unavailable. The Orca interpreter, admitted store and read models must mirror the subtype, preserve immutable snapshotRevision, and reject stale/foreign facts. Fixed package/default pin and later human publication/repin boundary are unchanged. Independent scoped spec and quality review of the producer-to-reader fix is required before Task4 closure.
+
+## Correction (2026-11-19, change-sized runs P0) — archive exclusions
+
+Who/when: the change-sized runs P0 implementer (Claude Opus 5.5, a subagent of the Orca control session), 2026-11-19, on branch `feat/change-sized-p0` from `main` `9bc6e304`. The original text above is kept verbatim (Rule 13).
+
+Beside `repo`, `repos` and the two task-result namespaces, `archiveRun`'s log capture now also excludes `run/worktrees`
+and `run/dirs`, where ccloop keeps or retains attempt worktrees (handoff boundary, allowance park, a failed removal).
+They are working trees, not logs; the attempt's content is in the snapshot. No manifest field is added. Commit
+`dfeae47d` (`fix(control): a run's archive no longer files its attempt worktrees as logs (#363 P0, O7)`). Design:
+`2026-11-19-change-sized-runs-design.md` §5.4.1.
