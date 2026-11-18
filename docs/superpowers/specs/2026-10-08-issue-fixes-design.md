@@ -547,13 +547,23 @@ Who / when / base: Track D implementer subagent (Claude Opus 5.5) of the Orca se
 "The execution driver's `driverRunIds` also visits `settled-failed` runs" stays as written; it is corrected here.
 
 1. "the saved terminal report is the stop proof" assumed every settled-failed run has a saved `report:<runId>`. It does
-   not: a run blocked before step C wrote one (A2, B, B′, or C's `candidate-without-terminal`) and then retried has none,
-   and the driver threw `control-terminal-pending` on it every round, for ever. Now, with no saved report:
-   - ccloop never accepted the run (`executionId === null`), or ccloop's collect answers a terminal or a stop proof ⇒ the
-     run is archived with `stopProof: null` (the archive records `missing: ["stop-unconfirmed"]`; skipped when ccloop left
-     no `<sourceDir>/repo`), its workspace is removed and `cleanedUp = true`;
+   not, and the driver threw `control-terminal-pending` on such a run every round, for ever. Which path produced the
+   tester's run is **unverified** (not reproduced from the tester's store). The likely producer: a held run -- stopped by
+   a handoff, holding a candidate but no terminal report -- retried by `task retry` (`retryTask.ts`, the
+   `saveRunBody(... "settled-failed" ...)` for a run neither released, closed nor abandoned). A run blocked at A2, B or B′
+   is not one: `task retry` refuses it (`blocked-at:`). Now, with no saved report:
+   - ccloop never accepted the run (`executionId === null`) ⇒ it is archived with `stopProof: null` (the archive records
+     `missing: ["stop-unconfirmed"]`; skipped when ccloop left no `<sourceDir>/repo`), its workspace is removed and
+     `cleanedUp = true`;
+   - ccloop accepted it ⇒ only a stop proof at collect whose `executionId` and `generation` are the run's proves it
+     stopped (a terminal alone does not: ccloop writes it before its worker is proved gone). With one, the proof's
+     artifact is stored and the run is archived with it, its workspace removed and `cleanedUp = true`; a missing
+     `<sourceDir>/repo` is then not skipped -- the archive fails and the round records it in `cleanupError`;
    - otherwise ccloop may still be running an agent in that workspace ⇒ the workspace is **kept**, `cleanupError` is set to
-     `cleanup-awaiting-stop`, one stderr line is written when it is first set, and the next round asks ccloop again.
+     `cleanup-awaiting-stop`, one stderr line is written when it is first set, and ccloop is asked again after
+     `CLEANUP_AWAITING_STOP_RECHECK_MS` (60 s; in memory, so a restarted driver asks at once).
+   (Revised by the batch-D review fix wave, 2026-11-18, before this branch merged; the first wording counted a terminal as
+   a stop, archived with `stopProof: null` in every case and blamed A2/B/B′ blocks.)
 2. "a failure is recorded in the existing `drive.cleanupError` and retried next round" stands; the stderr line for a
    settled or settled-failed run's step failure is now written only when its `cleanupError` changes.
 3. An artifact publication's temp file in `<stateDir>/staging/` is removed when the publication fails (a copy, an open or

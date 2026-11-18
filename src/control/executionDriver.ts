@@ -1708,13 +1708,23 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string, lane?: { w
 
 /** Tester #360: the `cleanupError` of a settled-failed run with no saved report that ccloop may still be running. */
 export const CLEANUP_AWAITING_STOP = "cleanup-awaiting-stop";
+/** Review of D1: how long a run under CLEANUP_AWAITING_STOP waits before ccloop is asked again whether it stopped. */
+export const CLEANUP_AWAITING_STOP_RECHECK_MS = 60_000;
+/** When each awaiting run may be collected again, per driver (its deps); kept in memory, so a restarted driver asks at once. */
+const awaitingStopNext = new WeakMap<ExecutionDriverDeps, Map<string, number>>();
+function awaitingStopChecks(deps: ExecutionDriverDeps): Map<string, number> {
+  let checks = awaitingStopNext.get(deps);
+  if (checks === undefined) { checks = new Map(); awaitingStopNext.set(deps, checks); }
+  return checks;
+}
 
 /**
  * Issue fixes spec §4.2(2): a run retry-task settled as failed keeps its evidence and loses its workspace. Its saved
  * terminal report is the stop proof (stepC wrote it before blocking). Like stepE's cleanup it never blocks: a failure is
  * recorded in `cleanupError` by the round and retried next round, and the task's new run has its own workspace.
  * Tester #360 (Correction to §4.2(2)): a run with no saved report is archived without a stop proof and cleaned when ccloop
- * never accepted it or proves it stopped; otherwise it keeps its workspace under `cleanup-awaiting-stop`.
+ * never accepted it, or with ccloop's stop proof once ccloop gives one; until then it keeps its workspace under
+ * `cleanup-awaiting-stop`.
  */
 export async function stepCleanupFailed(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
   const { store } = deps;
@@ -1724,29 +1734,40 @@ export async function stepCleanupFailed(deps: ExecutionDriverDeps, runId: string
   if (store.db.prepare("SELECT 1 FROM outbox WHERE id=? AND kind='report'").get(`report:${runId}`) !== undefined) {
     const report = await savedReport(store, runId);
     await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: report.candidate?.stopProof ?? null }, archiveAdmission(deps));
-  } else {
+  } else if (run.executionId === null) {
     // Tester #360 (plan 2026-11-18 batch D, D1): no saved report is a legal shape -- a run blocked before C wrote one, then
-    // retried. Its workspace goes only when no agent can still be writing into it: ccloop never accepted the run, or ccloop
-    // proves it stopped (a terminal or a stop proof at collect). Otherwise the workspace is kept and the wait is named once.
-    if (run.executionId !== null) {
-      const collected = await portFor(deps, run).collect(readStartEnvelope(store, run), run.highWater);
-      if (collected.terminal === null && !collected.candidate?.stopProof) {
-        if (drive.cleanupError !== CLEANUP_AWAITING_STOP) {
-          write(deps, () => {
-            const current = readDriverRun(store, runId);
-            if (current.state !== "settled-failed" || current.drive === undefined || current.drive.cleanedUp) return;
-            current.drive = { ...current.drive, cleanupError: CLEANUP_AWAITING_STOP };
-            saveDriverRun(store, current);
-          });
-          process.stderr.write(`orca-driver: ${runId}: ${CLEANUP_AWAITING_STOP} (no saved report; its workspace is kept until ccloop proves the run stopped)\n`);
-        }
-        return false;
-      }
-    }
-    // Archived without a stop proof (archiveRun records `stop-unconfirmed`). A run ccloop never accepted may have no result
-    // repository at all; there is nothing of ccloop's to archive then.
+    // retried. ccloop never accepted this one, so no agent writes into its workspace: archived without a stop proof
+    // (archiveRun records `stop-unconfirmed`), or not at all when ccloop left no result repository.
     if (existsSync(join(drive.sourceDir, "repo")))
       await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: null }, archiveAdmission(deps));
+  } else {
+    // Accepted by ccloop: its workspace goes only once ccloop proves the run stopped -- a stop proof of this execution and
+    // generation at collect (review of D1: a terminal alone is not one; the worker may still be writing). The proof is
+    // stored and archived with the run. Until then the workspace is kept, the wait named once, and ccloop asked again only
+    // after CLEANUP_AWAITING_STOP_RECHECK_MS. A missing result repository is not skipped here: archiveRun fails and the
+    // round records it (recordStepFailure), as any cleanup failure.
+    const checked = awaitingStopChecks(deps), now = (deps.now?.() ?? new Date()).getTime(), due = checked.get(runId);
+    if (due !== undefined && now < due) return false;
+    const port = portFor(deps, run);
+    const proof = (await port.collect(readStartEnvelope(store, run), run.highWater)).candidate?.stopProof ?? null;
+    if (proof === null || proof.isolated !== true || proof.executionId !== run.executionId || proof.generation !== run.generation) {
+      checked.set(runId, now + CLEANUP_AWAITING_STOP_RECHECK_MS);
+      if (drive.cleanupError !== CLEANUP_AWAITING_STOP) {
+        write(deps, () => {
+          const current = readDriverRun(store, runId);
+          if (current.state !== "settled-failed" || current.drive === undefined || current.drive.cleanedUp) return;
+          current.drive = { ...current.drive, cleanupError: CLEANUP_AWAITING_STOP };
+          saveDriverRun(store, current);
+        });
+        process.stderr.write(`orca-driver: ${runId}: ${CLEANUP_AWAITING_STOP} (no saved report; its workspace is kept until ccloop proves the run stopped)\n`);
+      }
+      return false;
+    }
+    checked.delete(runId);
+    const bytes = await port.readEvidence(proof.source);
+    if (createHash("sha256").update(bytes).digest("hex") !== proof.source.hash) throw new ControlError("artifact-hash-mismatch");
+    await writeArtifact(store, proof.source.artifactId, bytes, archiveAdmission(deps));
+    await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: proof }, archiveAdmission(deps));
   }
   await cleanupRunWorkspace(deps.resolveRepository(cleanupRepoIdOf(store, run)), deps.roots, runId, workspaceOf(drive));
   for (const dir of drive.dirs?.slice(1) ?? []) await cleanupExtraWorkspace(dir.targetRepo, deps.roots, runId, dir.key);
