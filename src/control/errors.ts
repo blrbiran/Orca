@@ -561,6 +561,10 @@ export const nonDurableControlErrorClassifications = {
   "query-invalid": "internal",
   "resume-bundle-hash-mismatch": "internal",
   "resume-bundle-unsafe-file": "internal",
+  // Change-sized runs spec 2026-11-19 §5.6 (P0): removeResultCopies' refusals -- no archive row holds the run's result
+  // copy (a broken call-site order), or the run can still get a ccloop control call that reads the copy.
+  "result-copy-run-active": "internal",
+  "result-copy-unarchived": "internal",
   "snapshot-head-mismatch": "internal",
   "snapshot-index-hash-mismatch": "internal",
   "start-outcome-unknown": "internal",
