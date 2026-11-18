@@ -437,7 +437,9 @@ export function readConfirmedTaskExecution(store: ControlStore, groupId: string,
       && ("names" in declared ? skillEntry.profile !== null || sha256Canonical(skillEntry.names) !== sha256Canonical(declared.names) : skillEntry.profile !== declared.profile)) throw new ControlError("recovery-blocked");
     const skills = skillEntry === undefined ? null : { profile: skillEntry.profile, names: [...skillEntry.names] };
     return { derivedContractHash: ref.derivedContractHash, contractCanonicalJson: expected.contractCanonicalJson,
-      contract: taskContractSchema.parse(JSON.parse(expected.contractCanonicalJson)), grant: { work: work.amount, handoff: amountSchema.parse(handoff.amount) }, agent: frozen, skills };
+      contract: taskContractSchema.parse(JSON.parse(expected.contractCanonicalJson)), grant: { work: work.amount, handoff: amountSchema.parse(handoff.amount) }, agent: frozen, skills,
+      // Off-plan writes W4 (plan Task 5): the frozen siblings the contract denies, so a stop on one can name it.
+      siblings: offPlanEntryOf(snapshot, taskId) };
   } catch (error) {
     if (error instanceof ControlError) throw error;
     throw new ControlError("recovery-blocked");

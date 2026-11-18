@@ -851,8 +851,8 @@ export const zh: Translation<typeof en> = {
       phaseLabel: "阶段：{{phase}}", stepLabel: "步骤：{{step}}", attempt: "第 {{attempt}} 次尝试", identity: "运行 {{runId}}",
       phase: { estimate: "估算", work: "工作", handoff: "交接", "single-call": "单次调用" },
       step: { planning: "规划", executing: "执行", verifying: "验证" },
-      cause: { "execution-format-invalid": "执行输出无法解码", "execution-format-ambiguous-or-hidden": "执行输出含糊或被隐藏", "usage-unsettled": "用量尚未结清", "path-policy": "运行改了任务允许路径以外的文件", unknown: "原因未知" },
-      next: { "execution-format-invalid": "查看下方已保存成果验证资格和证据", "execution-format-ambiguous-or-hidden": "查看下方已保存成果验证资格和证据", "usage-unsettled": "请所有者核对保守用量结清", "path-policy": "先核对它报告的路径，再重试任务、只放行这些路径（orca task retry --allow-observed-paths）", unknown: "先查看活动和证据，再使用可用的恢复操作" },
+      cause: { "execution-format-invalid": "执行输出无法解码", "execution-format-ambiguous-or-hidden": "执行输出含糊或被隐藏", "usage-unsettled": "用量尚未结清", "path-policy": "运行改了任务允许路径以外的文件", "parallel-claim": "运行写了本组另一个任务正在同时修改的文件", unknown: "原因未知" },
+      next: { "execution-format-invalid": "查看下方已保存成果验证资格和证据", "execution-format-ambiguous-or-hidden": "查看下方已保存成果验证资格和证据", "usage-unsettled": "请所有者核对保守用量结清", "path-policy": "先核对它报告的路径，再重试任务、只放行这些路径（orca task retry --allow-observed-paths）", "parallel-claim": "Orca 会在那个任务合入后重试它（orca task retry --after <task>）", unknown: "先查看活动和证据，再使用可用的恢复操作" },
     },
     // Tester #349：ccloop 没能删除的 Codex 会话；删除之前，它在私有文件里保留着这次运行的提示词。
     sessionCleanup: {
