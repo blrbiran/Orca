@@ -124,8 +124,10 @@ describe("the next run is told the check that failed its predecessor's last atte
       });
       const second = await w.next();
       expect.soft(w.priorFailures(second)).toEqual([expect.objectContaining({ runId: run, failingCommand: CHECK })]);
-      // Step C asked with lastFailure (lint, as before this fix); A2 asks for the final attempt's command.
-      expect.soft(w.asked()).toContainEqual([CHECK, run, "a"]);
+      // Ruling (2026-11-18 tester batch D review 3, M3): step C asked with lastFailure (lint, attempt 1's), which is not what
+      // ended the run; it now asks nothing for a run that ended on a verification rejection, and A2 asks the final command.
+      // mutation: let C ask with lastFailure again -> a LINT row too, red here.
+      expect.soft(w.asked()).toEqual([[CHECK, run, "a"]]);
     } finally { await t.h.dispose(); }
   });
 
@@ -160,6 +162,9 @@ describe("the next run is told the check that failed its predecessor's last atte
       const second = await w.next();
       // mutation: filter on the page's currentAttempt again -> told LINT, red here.
       expect.soft(w.priorFailures(second)).toEqual([expect.objectContaining({ runId: run, rejectCategory: "run-failed:required-check-failed", failingCommand: null })]);
+      // M3: no base check is asked for attempt 1's command -- not by C, not by A2.
+      // mutation: let C ask with lastFailure again -> [LINT], red here.
+      expect.soft(w.asked()).toEqual([]);
     } finally { await t.h.dispose(); }
   });
 

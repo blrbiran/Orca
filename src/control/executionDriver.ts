@@ -38,7 +38,7 @@ import { publishPending } from "./projection.js";
 import { readBudgetProposal, readGroup, readWork } from "./queries.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import { toSingleCallEnvelope, toStartEnvelope } from "./startEnvelope.js";
-import { latestPriorRejection, priorFailuresAtPrepare } from "./priorFailures.js";
+import { endedOnVerificationRejection, latestPriorRejection, priorFailuresAtPrepare } from "./priorFailures.js";
 import { requestBaseCheck } from "./baseCheckRecord.js";
 import { recordPreexistingFailures } from "./preexistingFailure.js";
 import type { BaseCheckRun } from "./baseCheck.js";
@@ -1129,7 +1129,9 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     // #321 C1 (review of D2): the rejection that ended the run's final attempt is not in lastFailure (ccloop keeps one there
     // only when it retries after it) and its stored copy arrives later, from the collector; C never waits for it. The next
     // run's A2 asks for it where its prior failure is built (requestPriorBaseCheck).
-    if (report.terminal.lastFailure !== undefined) {
+    // Ruling (2026-11-18 tester batch D review 3, M3): a run that ended on a verification rejection has, in lastFailure, an
+    // earlier attempt's rejection (or none), not the one that ended it; C asks nothing for it and A2 asks the right one.
+    if (report.terminal.lastFailure !== undefined && !endedOnVerificationRejection(report.terminal.failureCause)) {
       try { write(deps, () => requestBaseCheck(store, { groupId: run.groupId, taskId: run.taskId!, runId, mode: run.mode, recoveryOf: run.recoveryOf }, report.terminal!.lastFailure)); }
       catch (error) { process.stderr.write(`orca-driver: ${runId}: base check not asked for: ${logError(error)}\n`); }
     }

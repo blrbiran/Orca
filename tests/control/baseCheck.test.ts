@@ -23,7 +23,11 @@ import { driverHarness, git } from "./fixtures/driverHarness.js";
  * red answer reaches the task's running run as a live note (I-3).
  */
 
-const CAUSE = { cause: "required-check-failed", phase: "verify" as const, retries: 0, detail: null };
+// Ruling (2026-11-18 tester batch D review 3, M3): this world was a one-attempt run that ended on its required check with
+// that check as lastFailure -- a shape ccloop never reports (a rejection is in recentFailures only when it retries after
+// it), and step C no longer asks for a run that ended on a verification rejection (A2 asks the final attempt's). C's ask is
+// now played in ccloop's shape: attempt 1 was rejected on the check (lastFailure), attempt 2 ended on its budget.
+const CAUSE = { cause: "budget-exhausted", phase: "execute" as const, retries: 0, detail: null };
 const TAIL = "base.txt is here";
 const temps: string[] = [];
 afterAll(() => { for (const dir of temps) rmSync(dir, { recursive: true, force: true }); });
@@ -40,7 +44,7 @@ const pause = () => new Promise((resolve) => setTimeout(resolve, 20));
 async function world(check: string, options: { failingCommand?: string; setup?: string[]; behaviour?: () => FakeBehaviour } = {}) {
   const lastFailure = { rejectCategory: "required-check-failed", failingCommand: options.failingCommand ?? check, primaryTargetPaths: ["a"] };
   const t = await driverHarness([{ taskId: "a", requiredChecks: [check], ...(options.setup ? { contextExtra: { setupCommands: options.setup } } : {}) }],
-    { behaviour: options.behaviour ?? (() => "failed"), failure: () => ({ failureCause: CAUSE, lastFailure }) });
+    { behaviour: options.behaviour ?? (() => "failed"), workAttempts: () => 2, failure: () => ({ failureCause: CAUSE, lastFailure, currentAttempt: 2 }) });
   const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
   const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, attempts: limit.attempts + 10, sessions: limit.sessions + 10 } }));
   if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
