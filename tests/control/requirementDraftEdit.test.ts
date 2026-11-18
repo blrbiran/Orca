@@ -49,7 +49,10 @@ describe("a person applies a split draft's hint (tester follow-up K)", () => {
     } finally { await x.dispose(); }
   });
 
-  it("spec 2026-11-16: the split already added the named paths, so a manual add has nothing left to add", async () => {
+  // Ruling (2026-11-18 tester batch D): #353 (c) -- the split no longer adds the named paths, so they stay hints and the
+  // manual add is the way to give them. (Was: "the split already added the named paths, so a manual add has nothing left
+  // to add" -- draft 1 carried both paths and add-implied-path was refused draft-edit-not-an-implied-path.)
+  it("the named paths stay hints, and add-implied-path gives each one to the task in the next draft", async () => {
     const split = { tasks: [
       task("cli", ["src/cli.js"], [], { successCondition: "src/cli.js prints the history; README.md documents the history command and CHANGELOG.md notes it." }),
       task("docs", ["README.md", "CHANGELOG.md"], []),
@@ -58,15 +61,16 @@ describe("a person applies a split draft's hint (tester follow-up K)", () => {
     try {
       await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
       const draft = readDraft(x.store, "r", 1);
-      expect(draft).toMatchObject({ state: "awaiting-review", layers: [["cli"], ["docs"]], impliedPathsAdded: [
+      expect((draft.output as typeof split).tasks[0]!.targetPaths).toEqual(["src/cli.js"]);
+      expect(draft.implicitEdges ?? []).toEqual([]);
+      expect(readRequirementView(x.store, "e", "r").drafts[0]).toMatchObject({ impliedPathsOutsideTargets: [
         { taskId: "cli", path: "README.md", writers: ["docs"] }, { taskId: "cli", path: "CHANGELOG.md", writers: ["docs"] },
       ] });
-      expect((draft.output as typeof split).tasks[0]!.targetPaths).toEqual(["src/cli.js", "README.md", "CHANGELOG.md"]);
-      // The two write sets now intersect, so the re-validation orders them; no manual edit is needed.
-      expect(draft.implicitEdges?.map((edge) => [edge.from, edge.to])).toEqual([["cli", "docs"]]);
-      expect(readRequirementView(x.store, "e", "r").drafts[0]).toMatchObject({ impliedPathsOutsideTargets: [] });
-      expect(await edit(x, 1, { kind: "add-implied-path", taskId: "cli", path: "README.md" }))
-        .toMatchObject({ error: { code: "group-state-invalid", message: "group-state-invalid:draft-edit-not-an-implied-path:cli:README.md" } });
+      expect(await edit(x, 1, { kind: "add-implied-path", taskId: "cli", path: "README.md" })).toMatchObject({ result: { kind: "requirement-draft-edited", draftNo: 1, nextDraftNo: 2 } });
+      const next = readDraft(x.store, "r", 2);
+      expect((next.output as typeof split).tasks[0]!.targetPaths).toEqual(["src/cli.js", "README.md"]);
+      expect(next.implicitEdges?.map((edge) => [edge.from, edge.to])).toEqual([["cli", "docs"]]);
+      expect(readRequirementView(x.store, "e", "r").drafts.find((d) => d.draftNo === 2)).toMatchObject({ impliedPathsOutsideTargets: [{ taskId: "cli", path: "CHANGELOG.md", writers: ["docs"] }] });
     } finally { await x.dispose(); }
   });
 

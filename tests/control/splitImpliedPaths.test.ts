@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildSplitPrompt } from "../../src/control/requirementSplit.js";
 import { readDraft } from "../../src/control/requirementRecords.js";
 import { readWork } from "../../src/control/queries.js";
-import { applyImpliedPaths, impliedPathsOutsideTargets } from "../../src/control/splitImpliedPaths.js";
+import { impliedPathsOutsideTargets } from "../../src/control/splitImpliedPaths.js";
 import { readRequirementView } from "../../src/panel/controlViews.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
 import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
@@ -64,24 +64,27 @@ describe("a success condition naming a file only another task may write (#265)",
     ], notes: "" })).toEqual([]);
   });
 
-  it("spec 2026-11-16: the split adds the path to the task and the view says what it added", async () => {
+  // Ruling (2026-11-18 tester batch D): #353 (c), human ruling 「同意」 -- implied paths are a hint again (one-click
+  // add-implied-path kept); the split adds nothing. The three criteria that pinned the #265 auto-add (the split adds the
+  // path; the two writers are then serial; applyImpliedPaths, now removed) are rewritten to the hint.
+  it("the split leaves the path as a hint, with the view's add command, and adds nothing", async () => {
     const x = await requirementHarness({ answers: [{ purpose: "split", output: README_SPLIT }], startAt: "split" });
     try {
       await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
       const draft = readDraft(x.store, "r", 1);
-      expect(draft).toMatchObject({ state: "awaiting-review", reasons: [], impliedPathsAdded: [{ taskId: "cli", path: "README.md", writers: ["docs"] }] });
+      expect(draft).toMatchObject({ state: "awaiting-review", reasons: [] });
+      expect(draft.impliedPathsAdded ?? []).toEqual([]);
       const cli = (draft.output as { tasks: Array<{ taskId: string; targetPaths: string[] }> }).tasks.find((task) => task.taskId === "cli")!;
-      expect(cli.targetPaths).toContain("README.md");
-      // The hint is resolved; the view carries what the split added instead.
+      expect(cli.targetPaths).toEqual(["src/cli.js"]);
       expect(readRequirementView(x.store, "e", "r").drafts[0]).toMatchObject({
-        reasons: [], impliedPathsOutsideTargets: [], impliedPathsAdded: [{ taskId: "cli", path: "README.md", writers: ["docs"] }],
+        reasons: [], impliedPathsOutsideTargets: [{ taskId: "cli", path: "README.md", writers: ["docs"] }],
       });
       const accepted = await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: draft.draftHash }));
       expect(accepted).not.toHaveProperty("error");
     } finally { await x.dispose(); }
   });
 
-  it("spec 2026-11-16: two tasks that now share the added path are serial after acceptance", async () => {
+  it("two tasks whose only link is a path one's condition names stay parallel after acceptance", async () => {
     const parallel = { tasks: [
       task("cli", ["src/cli.js"], "README.md documents the history command."),
       task("docs", ["README.md"], "README.md documents every command."),
@@ -90,21 +93,11 @@ describe("a success condition naming a file only another task may write (#265)",
     try {
       await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
       const draft = readDraft(x.store, "r", 1);
-      expect(draft.implicitEdges).toHaveLength(1);
+      expect(draft.implicitEdges ?? []).toEqual([]);
       await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: draft.draftHash! }));
       const dependsOn = (taskId: string) => (readWork(x.store, "r", taskId) as unknown as { dependsOn: string[] }).dependsOn;
-      expect(dependsOn("cli").length + dependsOn("docs").length).toBe(1);
+      expect(dependsOn("cli").length + dependsOn("docs").length).toBe(0);
     } finally { await x.dispose(); }
-  });
-
-  it("applyImpliedPaths returns the same draft when nothing is named, and never duplicates a path", () => {
-    const clean = { tasks: [task("cli", ["src/cli.js"], "src/cli.js prints the history."), task("docs", ["README.md"], "README.md is complete.")], notes: "" };
-    expect(applyImpliedPaths(clean)).toEqual({ output: clean, added: [] });
-    const applied = applyImpliedPaths(README_SPLIT);
-    expect(applied.added).toEqual([{ taskId: "cli", path: "README.md", writers: ["docs"] }]);
-    expect(applied.output.tasks[0]!.targetPaths).toEqual(["src/cli.js", "README.md"]);
-    // The adjusted draft no longer has an unresolved hint.
-    expect(impliedPathsOutsideTargets(applied.output)).toEqual([]);
   });
 
   it("orca requirement show prints one line per entry, and one for an added path", async () => {

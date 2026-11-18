@@ -7,7 +7,7 @@ import { readDraft } from "../../src/control/requirementRecords.js";
 import { creatableAt } from "../../src/control/requirementOverview.js";
 import { draftBodySchema } from "../../src/control/requirementSchemas.js";
 import {
-  applyGoalPaths, applyImpliedPaths, GOAL_PATH_PROBE_LIMIT, goalPathsOutsideTargets, goalPathsToProbe,
+  applyGoalPaths, GOAL_PATH_PROBE_LIMIT, goalPathsOutsideTargets, goalPathsToProbe,
 } from "../../src/control/splitImpliedPaths.js";
 import { requirementViewSchema } from "../../src/control/webProtocol.js";
 import { readRequirementView } from "../../src/panel/controlViews.js";
@@ -173,9 +173,9 @@ describe("a goal naming a file no task may write (#345)", () => {
     const none = applyGoalPaths(split, new Set());
     expect(none.output).toBe(split);
     expect(none.added).toEqual([]);
-    // A success-condition addition (#265) has no source and keeps its shape.
-    expect(applyImpliedPaths({ tasks: [task("cli", ["src/cli.js"], "g", "README.md documents it."), task("docs", ["README.md"], "g")], notes: "" }).added)
-      .toEqual([{ taskId: "cli", path: "README.md", writers: ["docs"] }]);
+    // Ruling (2026-11-18 tester batch D): #353 (c) -- the split no longer adds success-condition paths (applyImpliedPaths is
+    // gone); the record shape such an addition had is still read for stored drafts (next criterion). (Was: applyImpliedPaths
+    // gave README.md to cli with writers ["docs"] and no source.)
   });
 
   it("the draft record takes a goal addition and still takes a success-condition one; a goal addition names no writer", () => {

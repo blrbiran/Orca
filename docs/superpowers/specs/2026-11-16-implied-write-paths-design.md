@@ -134,3 +134,26 @@ Tests: `tests/control/requirementOverview.test.ts`, `tests/control/requirementSp
 - **Known widening (review of #351).** Correction 1's auto-add now also takes a new path under a new directory, so a goal
   that names such a path only to say it is out of scope still gets it added (the same risk Correction 1 (e) already
   recorded for new files in existing directories). `.git` segments are refused everywhere (`targetShapeOk`).
+
+## Correction 3 -- implied paths are a hint again (#353 c, 2026-11-18)
+
+Who / when / base: Track D implementer subagent (Claude Opus 5.5) of the Orca session running plan
+`docs/superpowers/plans/2026-11-18-tester-batch-d.md` (task D6), 2026-11-18, on `5220b1c1`. **Authority:** human ruling
+this session on #353 (c), 「同意」 (`.superpowers/sdd/2026-11-18-tester-pm/progress.md`): implied paths go back to a hint
+only, the one-click `add-implied-path` kept; (a) and (b) of the triage are dropped. This reverses the Decision above; the
+text above stays as written.
+
+- **Why.** A success condition names a sibling's file as often to say it is *not* used as to say it is changed -- the
+  tester's deps-dogfood split, "does not import src/deps-report.js", gave that file to the task, the two write sets met,
+  and two independent tasks ran one after the other. Since #346 v4 `targetPaths` are a plan, not an allowlist, so the
+  `allowlist miss` the auto-add was made to prevent no longer happens for loop-built tasks.
+- **What changes.** `evaluateSplit` no longer adds `impliedPathsOutsideTargets` paths to `targetPaths` (`applyImpliedPaths`
+  is removed). The hint is computed and shown as before (`requirement show`: `implied-path-outside-targets: ...
+  (orca requirement add-implied-path <group> --task <t> --path <p>)`), and `add-implied-path` gives the task the file in
+  the next draft, where the write-set rule (#268) orders the two writers as before.
+- **What stays.** Correction 1's goal-path addition (`applyGoalPaths`, `source: "goal"`) is unchanged. A stored draft's
+  `impliedPathsAdded` entries of the #265 shape are still read and printed (`implied-path-added:`).
+- **Criteria rewritten (Ruling comments in place):** `tests/control/splitImpliedPaths.test.ts` (the split's addition, the
+  serialised pair, the `applyImpliedPaths` unit), `tests/control/requirementDraftEdit.test.ts` (the manual add now has
+  something to add), `tests/control/splitImpliedPathsGoal.test.ts` (the `applyImpliedPaths` shape assertion). New:
+  `tests/control/impliedPathHint.test.ts`.

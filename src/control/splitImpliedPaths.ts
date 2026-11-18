@@ -143,26 +143,3 @@ export function applyGoalPaths(output: SplitOutput, creatable: ReadonlySet<strin
   return { output: copy, added: hints.map((hint) => ({ taskId: hint.taskId, path: hint.path, writers: [], source: "goal" as const })) };
 }
 
-/**
- * Spec 2026-11-16 (#265): a task's success condition is part of its authority, so a path it names as a whole token is
- * added to its own targetPaths instead of being left as a hint the run can only discover by being blocked. The write-set
- * intersection then makes the two tasks serial through the existing graph (the #268 rule), and validation refuses the
- * adjusted draft if the added edge would make a cycle. Single-repository drafts only: a multi-directory write must name
- * its directory, so the hint stays there. Returns the same object when nothing is added.
- */
-export function applyImpliedPaths(output: SplitOutput): { output: SplitOutput; added: ImpliedPathAddition[] } {
-  const hints = impliedPathsOutsideTargets(output);
-  if (hints.length === 0) return { output, added: [] };
-  const copy = structuredClone(output);
-  const added: ImpliedPathAddition[] = [];
-  for (const hint of hints) {
-    const task = copy.tasks.find((candidate) => candidate.taskId === hint.taskId);
-    if (task === undefined) continue;
-    const own = task.targetPaths.map(normal);
-    if (own.some((target) => covers(target, hint.path))) continue;
-    if (task.targetPaths.includes(hint.path)) continue;
-    task.targetPaths = [...task.targetPaths, hint.path];
-    added.push({ taskId: hint.taskId, path: hint.path, writers: [...hint.writers] });
-  }
-  return { output: added.length === 0 ? output : copy, added };
-}

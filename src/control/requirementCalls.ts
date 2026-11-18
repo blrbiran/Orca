@@ -27,7 +27,7 @@ import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStop
 import { singleCallClaimRowOf } from "./singleCall.js";
 import type { SingleCallHandler, SingleCallPrepareDeps, SingleCallRecordFacts, SingleCallRequest, SingleCallRunRow } from "./singleCallPurposes.js";
 import { writeCanonicalRecord } from "./snapshot.js";
-import { applyGoalPaths, applyImpliedPaths, goalPathsOutsideTargets, goalPathsToProbe } from "./splitImpliedPaths.js";
+import { applyGoalPaths, goalPathsOutsideTargets, goalPathsToProbe } from "./splitImpliedPaths.js";
 import { clearSpendCapBlock, gateClaim } from "./spendCaps.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import { catalogMissText, SELECTOR_MISS_PREFIX, selectorMissOf } from "./estimatorCompatibility.js";
@@ -469,9 +469,9 @@ export async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCall
     const issue = parsed.error.issues[0];
     return { schemaValid: false, ok: false, output: null, plan: null, draftHash: null, reasons: [`schema:${issue?.path.join(".") ?? ""}:${issue?.message ?? "invalid"}`], layers: null, implicitEdges: null, impliedPathsAdded: null };
   }
-  // Spec 2026-11-16 (#265): a path a task's success condition names is part of its authority. Add it to
-  // that task's targetPaths before expanding and validating; the graph then serialises the two writers.
-  const adjusted = applyImpliedPaths(parsed.data);
+  // Tester #353 (c) (human ruling 2026-11-18, Correction 3 of the 2026-11-16 implied-write-paths spec): a path a task's
+  // success condition names is a hint (impliedPathsOutsideTargets in the view, with `add-implied-path`), never added here --
+  // a condition that names a sibling's file only to say it is not used serialised two independent tasks.
   const overview = (run as { overview?: RunOverview | null }).overview ?? null;
   if (overview === null || !("commit" in overview)) throw new ControlError("recovery-blocked", "requirement-overview-missing");
   const rounds = chainRounds(readRounds(deps.store, run.groupId));
@@ -482,9 +482,9 @@ export async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCall
   const repo = deps.resolveRepository(groupRepoId(deps.store, run.groupId));
   // Tester #345: then a file the task's goal names, that the base commit lacks and no task covers, is added the same way
   // (one git read per parent directory, at most GOAL_PATH_PROBE_LIMIT paths); a goal path the commit has stays a hint.
-  const probed = goalPathsToProbe(goalPathsOutsideTargets(adjusted.output));
-  const goal = applyGoalPaths(adjusted.output, probed.length === 0 ? new Set() : await creatableAt(repo, overview.commit, probed));
-  const output = goal.output, added = [...adjusted.added, ...goal.added];
+  const probed = goalPathsToProbe(goalPathsOutsideTargets(parsed.data));
+  const goal = applyGoalPaths(parsed.data, probed.length === 0 ? new Set() : await creatableAt(repo, overview.commit, probed));
+  const output = goal.output, added = goal.added;
   const plan = expandSplitDraft(output, { targetRepo: repo, ccloopBin: deps.ccloopBin, runsDir: deps.roots.runsRoot, groupId: run.groupId, statement: latest.statement, acceptanceCriteria: latest.acceptanceCriteria });
   const validated = await validateSplitDraft({ output, plan, repo, commit: overview.commit, criterionIds: latest.acceptanceCriteria.map((criterion) => criterion.id), adrIds });
   // DR12: the hash is of the expanded plan, the bytes the person reviews.
