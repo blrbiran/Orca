@@ -83,6 +83,34 @@ describe("a run Orca's own bound stopped can be seen, closed and retried (salvag
     } finally { await t.h.dispose(); }
   });
 
+  // Review I5: the exit is Orca's harvest bound's alone. A run blocked at C with outcome succeeded for another reason --
+  // executionDriver.ts step C's `multi-dir-writes-missing` (a multi-directory run with no directory record) -- keeps no exit.
+  it("a succeeded run blocked at C for another reason (multi-dir-writes-missing) is still refused by task retry and close-run", async () => {
+    const { t, runId } = await outsideWrite();
+    try {
+      const body = t.body(runId);
+      t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...body, drive: { ...body.drive, blockedReason: "multi-dir-writes-missing" } }), runId);
+      // mutation: drop the OUT_OF_BOUNDS_BLOCK prefix check from isBoundStoppedRun -> true, both accepted, red here.
+      expect.soft(isBoundStoppedRun(run(t, runId))).toBe(false);
+      expect.soft(t.service.retryTask(t.h.command("retry-task", { taskId: "a", runId }))).toMatchObject({ error: { code: "task-not-retryable" } });
+      expect.soft(t.service.closeRun(t.h.command("close-run", { runId }))).toMatchObject({ error: { code: "run-closure-not-terminal" } });
+      expect.soft(readControlRecovery(t.h.store, "e").terminalRuns ?? []).toEqual([]);
+      expect([active(t, runId), run(t, runId).state]).toEqual([1, "blocked"]);
+    } finally { await t.h.dispose(); }
+  });
+
+  // Minor (review of D5): a multi-directory run's reason is `out-of-bounds:<key>:<paths>;<key2>:<paths>` (step C); each path
+  // is listed with its directory, not split at the colon or the comma into bare fragments.
+  it("a multi-directory run's out-of-bounds paths keep their directory", async () => {
+    const { t, runId } = await outsideWrite();
+    try {
+      const body = t.body(runId);
+      t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...body, drive: { ...body.drive, blockedReason: "out-of-bounds:repo:a.txt,b.txt;extra:c.txt", dirs: [{ key: "repo" }, { key: "extra" }] } }), runId);
+      // mutation: split the reason at ";" and "," only -> ["repo:a.txt", "b.txt", "extra:c.txt"], red here.
+      expect(readControlRecovery(t.h.store, "e").terminalRuns).toEqual([expect.objectContaining({ runId, outOfBounds: ["repo:a.txt", "repo:b.txt", "extra:c.txt"] })]);
+    } finally { await t.h.dispose(); }
+  });
+
   it("the run's fallback next step names the two commands that end it, not \"an offered recovery action\"", () => {
     for (const text of [en.control.diagnosis.next.unknown, zh.control.diagnosis.next.unknown]) {
       expect(text).toContain("orca task retry");

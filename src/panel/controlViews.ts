@@ -47,7 +47,7 @@ import { readProjectionChanges, readProjectionState } from "../control/projectio
 import { effectiveTaskLabels, readTaskLabelState } from "../control/labels.js";
 import { choosePlanByLabels, loopPlanDefinition } from "../control/loopPlans.js";
 import { recipeExpandsTo } from "../control/loopRecipeCheck.js";
-import { decodeEstimateRecord, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../control/queries.js";
+import { decodeEstimateRecord, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, readWork } from "../control/queries.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
 import { clarifyLimits, hasRequirementBlock, latestDraft, latestRound, readDrafts, readRequirementGroup, readRounds, refuseClarifying } from "../control/requirementRecords.js";
 import { QUOTA_PROBE_MAX_OUTPUT_TOKENS, probeVerdictSchema, quotaProbeIdentitySchema } from "../control/quotaProbeCall.js";
@@ -377,16 +377,27 @@ function decodedValue(result: StoredJsonResult | undefined): unknown {
  * first the driver stored), or null -- none stored, or that sibling already waits on this task, so `--after` would be
  * refused after-cycle. Read from the summary's own snapshot (no extra body scan).
  * Final fix wave (Important 1): only ccloop's stop (`blocked_waiting_human`) is retried so. Orca's own harvest bound blocks
- * with outcome `succeeded`, which retry-task refuses (`task-not-retryable`) and the orca-auto pass never reads; that run
- * keeps what any out-of-bounds block offers.
+ * with outcome `succeeded`, which retry-task refused (`task-not-retryable`) and the orca-auto pass never reads.
+ * D5 (salvage narrow fix), review I5: retry-task now retries that run (isBoundStoppedRun), so a person is offered the same
+ * `--after` the recovery list names (terminalRunRows); the orca-auto pass still reads ccloop's stop only.
  */
-function retryAfterSibling(snapshot: GroupReadSnapshot, taskId: string, run: { state?: unknown; drive?: { outcome?: unknown; parallelClaim?: { siblingIds?: unknown } } } | null | undefined): string | null {
+function retryAfterSibling(snapshot: GroupReadSnapshot, taskId: string, run: { state?: unknown; drive?: { outcome?: unknown; blockedAt?: unknown; blockedReason?: unknown; parallelClaim?: { siblingIds?: unknown } } } | null | undefined): string | null {
   const ids = run?.drive?.parallelClaim?.siblingIds;
-  if (run?.state !== "blocked" || run.drive?.outcome !== "blocked_waiting_human" || !Array.isArray(ids) || typeof ids[0] !== "string") return null;
+  if (run?.state !== "blocked" || (run.drive?.outcome !== "blocked_waiting_human" && !boundStoppedBlock(run.drive)) || !Array.isArray(ids) || typeof ids[0] !== "string") return null;
   try {
-    const sibling = decodedValue(snapshot.decodeWork(ids[0])) as { dependsOn?: unknown } | null | undefined;
-    return Array.isArray(sibling?.dependsOn) && sibling.dependsOn.includes(taskId) ? null : ids[0];
+    return siblingWaitsOn(decodedValue(snapshot.decodeWork(ids[0])), taskId) ? null : ids[0];
   } catch { return null; }
+}
+
+/** A blocked run's drive record as Orca's own harvest bound left it at C (driveRecord.ts isBoundStoppedRun, the blocked half). */
+function boundStoppedBlock(drive: { outcome?: unknown; blockedAt?: unknown; blockedReason?: unknown } | undefined): boolean {
+  return drive?.blockedAt === "C" && drive.outcome === "succeeded" && typeof drive.blockedReason === "string" && drive.blockedReason.startsWith(OUT_OF_BOUNDS_BLOCK);
+}
+
+/** Fix round 1 (minor 4): a sibling that already waits on the task would close a cycle (`--after` refused after-cycle). */
+function siblingWaitsOn(sibling: unknown, taskId: string): boolean {
+  const dependsOn = (sibling as { dependsOn?: unknown } | null | undefined)?.dependsOn;
+  return Array.isArray(dependsOn) && dependsOn.includes(taskId);
 }
 
 function parseSnapshot<S extends z.ZodTypeAny>(schema: S, result: StoredJsonResult | undefined, detail: string): z.output<S> {
@@ -2094,19 +2105,36 @@ type TerminalRunRow = { groupId: string; taskId: string; runId: string; outcome:
  * D5 (salvage narrow fix): a run Orca's own bound stopped (outcome succeeded, `out-of-bounds:<paths>`) is listed too, with the
  * paths and, when they are a parallel sibling's frozen claim, the sibling a retry should wait for (`task retry --after`).
  */
+/**
+ * The paths of an `out-of-bounds:` reason (executionDriver.ts step C): `a,b` for one repository; for a multi-directory run
+ * `key:a,b;key2:c`, each path kept with its directory as `key:a`.
+ */
+function outOfBoundsPaths(listed: string, multi: boolean): string[] {
+  if (!multi) return listed.split(",").filter((path) => path !== "");
+  return listed.split(";").flatMap((entry) => {
+    const colon = entry.indexOf(":");
+    if (colon <= 0) return entry === "" ? [] : [entry];
+    const key = entry.slice(0, colon);
+    return entry.slice(colon + 1).split(",").filter((path) => path !== "").map((path) => `${key}:${path}`);
+  });
+}
+
 function terminalRunRows(store: ControlStore): TerminalRunRow[] {
   const out: TerminalRunRow[] = [];
   for (const row of store.db.prepare("SELECT id,body FROM runs WHERE active=1 ORDER BY rowid").all()) {
     const run = parseJson(row.body, `run-invalid:${String(row.id)}`) as { runId?: unknown; groupId?: unknown; taskId?: unknown; phase?: unknown; state?: unknown; unknown?: { work?: unknown; handoff?: unknown };
-      drive?: { blockedAt?: unknown; outcome?: unknown; blockedReason?: unknown; parallelClaim?: { siblingIds?: unknown } } };
+      drive?: { blockedAt?: unknown; outcome?: unknown; blockedReason?: unknown; dirs?: unknown; parallelClaim?: { siblingIds?: unknown } } };
     if (run.phase !== "work" || typeof run.runId !== "string" || run.runId !== String(row.id) || typeof run.groupId !== "string" || typeof run.taskId !== "string") continue;
     if (run.drive?.blockedAt !== "C" || typeof run.drive.outcome !== "string") continue;
-    const bound = run.state === "blocked" && run.drive.outcome === "succeeded" && typeof run.drive.blockedReason === "string" && run.drive.blockedReason.startsWith(OUT_OF_BOUNDS_BLOCK);
+    const bound = run.state === "blocked" && boundStoppedBlock(run.drive);
     if (run.drive.outcome === "succeeded" && !bound) continue;
     const next = run.unknown?.work === true || run.unknown?.handoff === true ? "settle-usage" : "close-run";
     if (!bound) { out.push({ groupId: run.groupId, taskId: run.taskId, runId: run.runId, outcome: run.drive.outcome, next }); continue; }
-    const paths = (run.drive.blockedReason as string).slice(OUT_OF_BOUNDS_BLOCK.length).split(/[;,]/).filter((path) => path !== "");
-    const sibling = Array.isArray(run.drive.parallelClaim?.siblingIds) && typeof run.drive.parallelClaim.siblingIds[0] === "string" ? run.drive.parallelClaim.siblingIds[0] : null;
+    const paths = outOfBoundsPaths((run.drive.blockedReason as string).slice(OUT_OF_BOUNDS_BLOCK.length), Array.isArray(run.drive.dirs));
+    // Review I5: the sibling the run view and the card name too (retryAfterSibling's rule, read from the store here).
+    const ids = run.drive.parallelClaim?.siblingIds;
+    let sibling = Array.isArray(ids) && typeof ids[0] === "string" ? ids[0] : null;
+    if (sibling !== null) { try { if (siblingWaitsOn(readWork(store, run.groupId, sibling), run.taskId)) sibling = null; } catch { sibling = null; } }
     out.push({ groupId: run.groupId, taskId: run.taskId, runId: run.runId, outcome: run.drive.outcome, next, outOfBounds: paths, ...(sibling === null ? {} : { retryAfter: sibling }) });
   }
   return out;

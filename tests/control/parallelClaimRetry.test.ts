@@ -16,7 +16,8 @@ import { readCanonicalRecord } from "../../src/control/snapshot.js";
 import { nextClaimableTask } from "../../src/control/webDispatch.js";
 import { executionSnapshotSchema } from "../../src/control/webProtocol.js";
 import { readWebGroup } from "../../src/control/webService.js";
-import { readControlGroup, readGroupSummary } from "../../src/panel/controlViews.js";
+import { readControlGroup, readControlRecovery, readGroupSummary } from "../../src/panel/controlViews.js";
+import { retryAfterCommand } from "../../src/control/driveRecord.js";
 import type { FakeBehaviour } from "./fixtures/driverPort.js";
 import { driverHarness, type HarnessOptions } from "./fixtures/driverHarness.js";
 
@@ -302,10 +303,12 @@ describe("no --after toward a sibling that already waits on the task", { timeout
 });
 
 // Final fix wave (Important 1, final whole-branch review 2026-11-18): Orca's own harvest bound blocks a write into a sibling's
-// claim with outcome `succeeded` -- retry-task refuses that run (`outcome:succeeded`) and the orca-auto pass never reads it
-// (it reads `blocked_waiting_human` only), so no step may point at `--after`.
+// claim with outcome `succeeded` -- retry-task refused that run (`outcome:succeeded`), so no step could point at `--after`.
+// Ruling (2026-11-18 tester batch D review): 「这次批准改写所有必要的判据」 -- D5 (human ruling on the #352 salvage narrow
+// fix) gave that run a retry exit, and review I5 made the card and the run view name the same `--after` the recovery list
+// does. The orca-auto pass still reads ccloop's stop (`blocked_waiting_human`) only. (Was: the card and run view offer none.)
 describe("a parallel-claim block recorded by Orca's own bound", { timeout: 120_000 }, () => {
-  it("offers no --after on the card or the run view, which retry-task would refuse", async () => {
+  it("offers --after on the card and the run view, as the recovery list does, and retry-task takes it", async () => {
     // The synthetic ccloop enforces no denylist, so a's write into b's claim reaches Orca's bound at collect.
     const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { files: (id): Record<string, string> => id === "a" ? { a: "a\n", b: "from a\n" } : { b: "b\n" } });
     try {
@@ -313,11 +316,10 @@ describe("a parallel-claim block recorded by Orca's own bound", { timeout: 120_0
       expect(t.body(runId).taskId).toBe("a");
       await t.until(t.driver(), () => t.body(runId).state === "blocked");
       expect(t.body(runId).drive).toMatchObject({ outcome: "succeeded", blockedReason: "out-of-bounds:b", parallelClaim: { path: "b", repoKey: null, siblingIds: ["b"] } });
-      // mutation: retryAfterSibling does not read the run's outcome -> the card names `--after b` and the run view offers it, red
-      expect(readGroupSummary(t.h.store, "g").card!.firstFailure).toEqual({ taskId: "a", cause: "out-of-bounds:b" });
-      expect(runView(t, runId).retryAfter).toBeUndefined();
-      // Ruling (2026-11-18 tester batch D): D5 / human ruling on #352 salvage -- this run now has a retry exit, `--after b`
-      // included (recovery list names it); the card and run view still do not offer it. (Was: refused task-not-retryable.)
+      // mutation: retryAfterSibling reads ccloop's stop only (as before review I5) -> no next, no retryAfter, red here.
+      expect(readGroupSummary(t.h.store, "g").card!.firstFailure).toEqual({ taskId: "a", cause: "out-of-bounds:b", next: retryAfterCommand("g", "a", "b") });
+      expect(runView(t, runId).retryAfter).toBe("b");
+      expect(readControlRecovery(t.h.store, "e").terminalRuns).toEqual([expect.objectContaining({ runId, retryAfter: "b" })]);
       expect(retry(t, { taskId: "a", runId, after: "b" }, "after-bound")).toMatchObject({ result: { kind: "task-retried", taskId: "a", fromRunId: runId } });
     } finally { await t.h.dispose(); }
   });
