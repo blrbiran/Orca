@@ -32,6 +32,26 @@ describe("independent evidence archive",{timeout:30000},()=>{
    expect(manifest.logs.some(entry=>entry.path==="repos"||entry.path.startsWith("repos/"))).toBe(false);
   }finally{await h.dispose();}
  });
+ // Change-sized runs spec 2026-11-19 §5.4.1 (P0-3, O7): a kept or retained attempt worktree lives under <sourceDir>/run;
+ // filing it as logs published a whole live tree file by file. Mutation M3.1: drop both exclusions -> logs under
+ // run/worktrees and run/dirs (and the .git file's linked worktree marker), red.
+ it("a kept or retained attempt worktree under run/ is not archived as logs",async()=>{
+  const h=await archiveCase();try{
+   const run=join(h.sourceDir,"run");
+   await mkdir(join(run,"worktrees","attempt-1"),{recursive:true});await mkdir(join(run,"dirs","attempt-1","k"),{recursive:true});
+   await writeFile(join(run,"state.json"),"{}\n");
+   await writeFile(join(run,"worktrees","attempt-1","big.txt"),"tree file\n");
+   await writeFile(join(run,"worktrees","attempt-1",".git"),"gitdir: /elsewhere/.git/worktrees/attempt-1\n");
+   await writeFile(join(run,"dirs","attempt-1","k","x.txt"),"extra tree file\n");
+   const archived=await archiveRun(h.store,{runId:h.claim.runId,sourceDir:h.sourceDir,repoDir:h.repoDir,stopProof:h.stopProof});
+   const manifestRef=archived.artifacts.find(ref=>ref.artifactId.startsWith("archive-"))!;
+   const manifest=JSON.parse((await readArtifact(h.store,manifestRef)).toString()) as {logs:Array<{path:string}>;missing:string[]};
+   const paths=manifest.logs.map(entry=>entry.path);
+   expect(paths).toContain("run/state.json");
+   expect(paths.filter(path=>path.startsWith("run/worktrees")||path.startsWith("run/dirs"))).toEqual([]);
+   expect(manifest.missing).toEqual([]);expect(archived.missing).toEqual([]);
+  }finally{await h.dispose();}
+ });
  it("rejects immutable ID conflict, forged hashes and traversal, with private archive files",async()=>{
   const h=await openTestStore();try{
    const ref=await writeArtifact(h.store,"sample",Buffer.from("first"));

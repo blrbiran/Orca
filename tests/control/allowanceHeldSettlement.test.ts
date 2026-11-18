@@ -1,8 +1,10 @@
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { join, resolve } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { readGroup, saveGroup, readWork } from "../../src/control/queries.js";
+import { readArtifact } from "../../src/control/archive.js";
+import type { ArtifactRef } from "../../src/control/types.js";
 import { latestRequestForRun, writeHandoffRequest } from "../../src/control/stopIntent.js";
 import type { ControlRuntime } from "../../src/panel/controlAssembly.js";
 import { ccloopWorlds, realBinary, startGroup, workRuns, until } from "./fixtures/ccloopWorld.js";
@@ -49,6 +51,15 @@ describe.skipIf(!realBinary)("parked allowance settlement in a held group (#213)
       expect(readWork(runtime.store, "g", "a").status).toBe("ready");
       expect(world.calls()).toEqual(["plan"]);
       expect(workRuns(runtime)).toHaveLength(1);
+      // Change-sized runs spec 2026-11-19 §5.4.1 (P0-3, O7): an allowance park keeps ccloop's attempt worktree under
+      // <sourceDir>/run/worktrees; the run's newest archive files none of it as logs. Mutation M3.1: drop the exclusion, red.
+      const parked = workRuns(runtime)[0]!;
+      const sourceDir = (parked.body.drive as { sourceDir: string }).sourceDir;
+      expect(readdirSync(join(sourceDir, "run", "worktrees")).length).toBeGreaterThan(0);
+      const archiveRow = runtime.store.db.prepare("SELECT body FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=? ORDER BY rowid DESC LIMIT 1").get(parked.runId) as { body: string };
+      const manifestRef = (JSON.parse(archiveRow.body) as { artifacts: ArtifactRef[] }).artifacts.find(ref => ref.artifactId.startsWith("archive-"))!;
+      const manifest = JSON.parse((await readArtifact(runtime.store, manifestRef)).toString()) as { logs: Array<{ path: string }> };
+      expect(manifest.logs.map(entry => entry.path).filter(path => path === "run/worktrees" || path.startsWith("run/worktrees/"))).toEqual([]);
     } finally { await world.teardown(); }
   }, 30_000);
 
