@@ -11,7 +11,8 @@ describe("group depend explains a started dependent (#186)", () => {
     const w = await world({}, { "POST groups/g-alpha/dependencies/add": started });
     const out = await cli(["group", "depend", "g-alpha", "--on", "g-beta"], w.dir);
     expect(out.code).toBe(2);
-    expect(out.stderr).toContain("orca: group-edge-dependent-started: group-edge-dependent-started\n");
+    // Ruling (2026-11-18 tester batch D): #373 prints a code-only refusal's code once; it pinned the doubled `code: code` line.
+    expect(out.stderr).toContain("orca: group-edge-dependent-started\n");
     expect(out.stderr).toContain("the dependent group already started; dependencies must be set before it starts");
     expect(out.stderr).toContain("orca group show <group>");
     expect(w.posts()).toHaveLength(1);

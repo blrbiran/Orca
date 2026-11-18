@@ -298,7 +298,8 @@ function refuseConfirmedProposal(proposal: BudgetProposalRecord): void {
   if (proposal.state === "confirmed") throw new ControlError("proposal-confirmed");
 }
 function prestart(group: Group): void {
-  if (group.status === "running" || group.status === "review" || group.status === "done") throw new ControlError("grant-amendment-unsupported");
+  // Tester #368a (batch D C1): the detail says why; the next step is the CLI's (task retry --agent), not a proposal change.
+  if (group.status === "running" || group.status === "review" || group.status === "done") throw new ControlError("grant-amendment-unsupported", "group-started");
   if (group.status !== "draft" && group.status !== "ready") throw new ControlError("group-state-invalid");
 }
 
@@ -402,7 +403,7 @@ export function applyObservedPathAmendment(store: ControlStore, groupId: string,
 function refuseAfterTaskStarted(store: ControlStore, id: string): void {
   for (const row of store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(id)) {
     const work = JSON.parse(String(row.body));
-    if (work.kind === "task" && work.status !== "draft" && work.status !== "ready") throw new ControlError("grant-amendment-unsupported");
+    if (work.kind === "task" && work.status !== "draft" && work.status !== "ready") throw new ControlError("grant-amendment-unsupported", "task-started");
   }
 }
 export function estimateCommitments(store: ControlStore, groupId: string): Array<{ ownerKind: "estimate"; ownerId: string; bucket: "work"; amount: Amount; fieldProvenance: ReturnType<typeof provenance> }> {

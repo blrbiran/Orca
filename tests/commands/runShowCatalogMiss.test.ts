@@ -43,6 +43,8 @@ describe("run show names a model the provider does not serve (#299)", () => {
     const hint = lines.find((line) => line.startsWith("hint: the provider does not serve model gpt-6-sol for codex"));
     expect(hint).toContain("orca task retry g-alpha t1 --agent <installation>");
     expect(hint).toContain("orca agent set-preferences");
+    // Tester #368a (batch D C1): a task's run means the group started, where proposal set-agent is always refused.
+    expect(hint).not.toContain("proposal set-agent");
     expect((await show(RUN)).join("\n")).not.toContain("does not serve model");
   });
 });

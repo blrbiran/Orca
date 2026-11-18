@@ -1,4 +1,5 @@
 import { exitCodeFor, type CliResponseV1 } from "../entry/envelope.js";
+import { nextForCode } from "./errorNext.js";
 
 /** Spec §14 R1(b): what was sent, so an uncertain outcome can be replayed byte-for-byte by `orca command retry`. */
 export interface SentRequest { route: string; expectedRevision: number; payload: unknown; commandId: string }
@@ -14,6 +15,16 @@ export function errorOf(body: unknown): { code: string; message: string } | null
   // The control routes answer {error:{code,message}}; the plans route answers {code,message} like the HTTP API.
   const error = (body as { error?: { code?: unknown; message?: unknown } } | null)?.error ?? body as { code?: unknown; message?: unknown } | null;
   return error && typeof error.code === "string" ? { code: error.code, message: typeof error.message === "string" ? error.message : "" } : null;
+}
+
+/**
+ * Tester #373: the panel's message is `code` or `code:detail` (ControlError.message, kept as stored in command results), so
+ * `code: message` named the code twice. The code once, then the whole detail (it may hold colons); any other message as is.
+ */
+function refusalLine(error: { code: string; message: string }): string {
+  if (error.message === error.code) return error.code;
+  if (error.message.startsWith(`${error.code}:`)) return `${error.code}: ${error.message.slice(error.code.length + 1)}`;
+  return `${error.code}: ${error.message}`;
 }
 
 /**
@@ -39,9 +50,11 @@ export function printResponse(
     return code;
   }
   const error = errorOf(response.body);
-  io.stderr(`orca: ${error === null ? `status ${response.status}` : `${error.code}: ${error.message}`}\n`);
+  io.stderr(`orca: ${error === null ? `status ${response.status}` : refusalLine(error)}\n`);
   const hint = error === null ? undefined : options.hint?.(error);
-  if (hint !== undefined) io.stderr(`orca: ${hint}\n`);
+  // Tester #373: a common refusal no verb explains says the next step from one table.
+  const shownHint = hint ?? (error === null ? null : nextForCode(error.code));
+  if (shownHint != null) io.stderr(`orca: ${shownHint}\n`);
   for (const command of options.next ?? []) io.stderr(`orca: next: ${command}\n`);
   if (response.commandId !== undefined) io.stderr(`orca: command id ${response.commandId}\n`);
   // Issue #149 (session 3cfc2e73): a reused --command-id naming other arguments, or another --if-revision, is a different

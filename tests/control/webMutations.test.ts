@@ -310,4 +310,19 @@ describe("proposal changes after a task has started (prestart)", () => {
       expect(bytes().work).toBe(before.work);
     } finally { await f.dispose(); }
   });
+
+  // Tester #368a (batch D C1): the refusal names why -- a claimed task (`task-started`) or a group past ready (`group-started`).
+  it("names task-started for a claimed task and group-started for a group past ready", async () => {
+    const { f, service, other } = await claimedGroup();
+    try {
+      const edit = () => service.editProposal(f.command("proposal-edit", { baseProposalVersion: readBudgetProposal(f.store, "g").proposalVersion,
+        operations: [{ target: { scope: "task", taskId: other.id, allocation: "work", dimension: "tokens" }, value: 1234, provenance: "human" }] }));
+      // mutation: drop the `task-started` detail in refuseAfterTaskStarted -> red here.
+      expect(edit()).toMatchObject({ error: { code: "grant-amendment-unsupported", message: "grant-amendment-unsupported:task-started" } });
+      const group = JSON.parse(String(row(f.store, "SELECT body AS v FROM groups WHERE id='g'").v));
+      f.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...group, status: "running" }));
+      // mutation: drop the `group-started` detail in prestart -> red here.
+      expect(edit()).toMatchObject({ error: { code: "grant-amendment-unsupported", message: "grant-amendment-unsupported:group-started" } });
+    } finally { await f.dispose(); }
+  });
 });
