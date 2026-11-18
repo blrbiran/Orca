@@ -52,7 +52,9 @@ describe("parallel-claim diagnosis", () => {
     expect(html).toContain("The run wrote a file another task of this group is changing at the same time");
     // mutation: the next step keys on the cause only -> "Orca retries it after that task lands (… --after b)", red
     expect(html).not.toContain("--after");
-    expect(html).toContain("Review activity and evidence, then use an offered recovery action");
+    // Ruling (2026-11-19 tester batch D gate): D5 made retry-task and close-run accept this run, and the fallback next step
+    // now names those two commands instead of "use an offered recovery action"; the automatic --after promise stays absent.
+    expect(html).toContain("Review activity and evidence, then retry the task (orca task retry) or close the run&#x27;s accounting (orca group close-run)");
     await i18n.changeLanguage("zh");
     expect(renderToStaticMarkup(<RunReason run={bound} />)).not.toContain("--after");
   });
