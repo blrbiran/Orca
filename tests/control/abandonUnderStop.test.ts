@@ -290,7 +290,7 @@ describe("an abandoned run moved to accepted by the other writers (Correction 3,
 });
 
 describe("an abandoned run whose usage is unknown at its terminal (Correction 2.3)", { timeout: 240_000 }, () => {
-  it("is blocked at C as a failed run is; settle-usage then close-run end it", async () => {
+  it("is blocked at C as a failed run is; settle-usage ends it as abandoned, with nothing left for close-run", async () => {
     const { t, knobs } = await world({ final: "failed-usage-unknown" });
     try {
       const runId = await t.claim();
@@ -311,8 +311,13 @@ describe("an abandoned run whose usage is unknown at its terminal (Correction 2.
         payload: { taskId: "a", runId, generation: run.generation, acknowledge: run.remaining.work.tokens === null ? "release-unmetered" : "charge-remaining-grant" },
       }));
       expect(settled).not.toHaveProperty("error");
-      expect(t.service.closeRun(t.h.command("close-run", { runId }))).toMatchObject({ result: { kind: "run-closed" } });
-      expect([active(t, runId), t.body(runId).state, readWork(t.h.store, "g", "a").status]).toEqual([0, "settled-failed", "blocked"]);
+      // Ruling (2026-11-19 tester batch D gate): D4 + review I4 settle an abandoned run blocked on unknown usage as abandoned
+      // once any usage settle makes its usage known (settleAbandonedOnceKnown), in the settle's own transaction. The run is
+      // then ended by settle-usage alone -- the abandon kept (run-abandoned, operatorSettlement abandoned) -- so close-run,
+      // which this criterion used to need, finds no terminal run to close. The intent (the run ends, no new run) is kept.
+      // mutation: settle only after a floor method again -> still blocked, active 1, red here.
+      expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+      expect(t.service.closeRun(t.h.command("close-run", { runId }))).toMatchObject({ error: { code: "run-closure-not-terminal" } });
       for (let i = 0; i < 5; i += 1) await driver.round();
       expect(runCount(t)).toBe(1);
     } finally { await t.h.dispose(); }
