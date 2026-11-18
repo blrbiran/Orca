@@ -274,3 +274,18 @@ Acceptance 4 is exercised through the orca-auto pass (the W4 ruling), not a pers
 cover. The fake codex creates no directories, so a file in a subdirectory has its directory (an empty `.gitkeep`)
 committed in the base first; the off-plan files themselves are new. Without `ORCA_CCLOOP_BIN` the file is skipped, not
 passed.
+
+### Added by the final fix wave
+
+Appended 2026-11-18 by the final-review fix agent (Claude Opus 5.5) of the same Orca session, on branch
+`feat/off-plan-writes-346` following commit `7149f4ca`; nothing above is edited.
+
+17. **Plan-file imports with an empty allowlist are v4 (final whole-branch review, Minor 3).** What: "v4" is decided by
+    the contract's shape (`allowlistPaths: []`), not by who wrote it, so a plan-file import whose hand-written contracts
+    have `allowlistPaths: []` gets frozen sibling claims at confirm and the denylist bound (item 8), as a generated v4
+    task does. Claim freezing applies only to groups confirmed after this change: an execution snapshot already stored is
+    never re-derived, so a group confirmed earlier has no `offPlan` entry and denies no sibling claims. (The harvest bound
+    of item 8 is read from the contract's shape at collect, so such an earlier group's empty-allowlist task is bounded by
+    its protected paths alone.) Why: one rule for one shape; telling an import apart would need a field the contract does
+    not carry. Cost: such an import's tasks may now write unlisted files (recorded as `off-plan-write`) where they used to
+    block `out-of-bounds`.

@@ -49,7 +49,10 @@ export function RunReason(props: { run: RunViewV1; ladderSkipped?: LadderSkipRea
   const phase = t(`control.diagnosis.phase.${diagnosis.phase}`);
   const cause = t(`control.diagnosis.cause.${diagnosis.cause}`);
   // Off-plan writes #346 W4: a parallel-claim stop names the first sibling in its retry command, so it can be copied.
-  const next = t(`control.diagnosis.next.${diagnosis.cause}`, { task: diagnosis.siblings?.[0] ?? "" });
+  // Final fix wave (Important 1): only ccloop's stop (`blocked_waiting_human`) is retried after the sibling; Orca's own bound
+  // blocks with outcome `succeeded`, which retry-task refuses, so it keeps the next step any out-of-bounds block has.
+  const nextCause = diagnosis.cause === "parallel-claim" && props.run.outcome !== "blocked_waiting_human" ? "unknown" : diagnosis.cause;
+  const next = t(`control.diagnosis.next.${nextCause}`, { task: diagnosis.siblings?.[0] ?? "" });
   // Tester #235 (follow-up K): ccloop's repeated-failure stop ends `exhausted` while attempts remain; it is not a budget running out.
   const text = raw === null ? null : raw === REPEATED_FAILURE_STOP ? t("control.repeatedFailureStop") : explainRunReason(reasonCode(raw));
   // ccloop's typed cause, when it stated one, with what to do next (en/zh); the raw reason stays beside it.

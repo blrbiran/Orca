@@ -43,6 +43,19 @@ describe("parallel-claim diagnosis", () => {
     await i18n.changeLanguage("zh");
     expect(renderToStaticMarkup(<RunReason run={claimed} />)).toContain("Orca 会在那个任务合入后重试它（orca task retry --after b）");
   });
+
+  // Final fix wave (Important 1, final whole-branch review 2026-11-18): Orca's own bound blocks with outcome `succeeded`;
+  // retry-task refuses that run and Orca never retries it, so its next step is the one any out-of-bounds block has.
+  it("promises no retry after the sibling when Orca's own bound stopped the run", async () => {
+    const bound = run({ runId: "run-o", state: "blocked", outcome: "succeeded", blockedReason: "out-of-bounds:b", diagnosis: { phase: "work", step: null, cause: "parallel-claim", siblings: ["b"], attempt: 1 } });
+    const html = renderToStaticMarkup(<RunReason run={bound} />);
+    expect(html).toContain("The run wrote a file another task of this group is changing at the same time");
+    // mutation: the next step keys on the cause only -> "Orca retries it after that task lands (… --after b)", red
+    expect(html).not.toContain("--after");
+    expect(html).toContain("Review activity and evidence, then use an offered recovery action");
+    await i18n.changeLanguage("zh");
+    expect(renderToStaticMarkup(<RunReason run={bound} />)).not.toContain("--after");
+  });
 });
 
 // Failure-cause spec 2026-10-21 §5: ccloop's typed cause is worded with what to do next, in the reader's language, before

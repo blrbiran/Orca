@@ -390,8 +390,9 @@ export function ladderCandidates(store: ControlStore): Array<{ groupId: string; 
 /**
  * Off-plan writes W4 (#346, Task 6 fix round 1): an orchestrated group's task (the groups the worker-lost pass reads: mode
  * `run`, not a flow child, not archived, not paused or stopped -- tester #61: a retry refused `stop-mode-conflict` would be
- * booked as the run's one automatic retry) whose current run ccloop or Orca's bound stopped for writing a parallel
- * sibling's claim, as the driver classified it when it recorded the block (`drive.parallelClaim`).
+ * booked as the run's one automatic retry) whose current run ccloop stopped (`blocked_waiting_human`) for writing a parallel
+ * sibling's claim, as the driver classified it when it recorded the block (`drive.parallelClaim`). Orca's own harvest bound
+ * blocks such a write with outcome `succeeded`, which retry-task refuses; that run is not a candidate (final fix wave).
  */
 export function parallelClaimCandidates(store: ControlStore): Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>> }> {
   const out: Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>> }> = [];

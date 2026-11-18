@@ -374,10 +374,13 @@ function decodedValue(result: StoredJsonResult | undefined): unknown {
  * Off-plan writes W4 (#346, Task 6 fix round 1): the sibling a blocked run stopped on a parallel claim is retried after (the
  * first the driver stored), or null -- none stored, or that sibling already waits on this task, so `--after` would be
  * refused after-cycle. Read from the summary's own snapshot (no extra body scan).
+ * Final fix wave (Important 1): only ccloop's stop (`blocked_waiting_human`) is retried so. Orca's own harvest bound blocks
+ * with outcome `succeeded`, which retry-task refuses (`task-not-retryable`) and the orca-auto pass never reads; that run
+ * keeps what any out-of-bounds block offers.
  */
-function retryAfterSibling(snapshot: GroupReadSnapshot, taskId: string, run: { state?: unknown; drive?: { parallelClaim?: { siblingIds?: unknown } } } | null | undefined): string | null {
+function retryAfterSibling(snapshot: GroupReadSnapshot, taskId: string, run: { state?: unknown; drive?: { outcome?: unknown; parallelClaim?: { siblingIds?: unknown } } } | null | undefined): string | null {
   const ids = run?.drive?.parallelClaim?.siblingIds;
-  if (run?.state !== "blocked" || !Array.isArray(ids) || typeof ids[0] !== "string") return null;
+  if (run?.state !== "blocked" || run.drive?.outcome !== "blocked_waiting_human" || !Array.isArray(ids) || typeof ids[0] !== "string") return null;
   try {
     const sibling = decodedValue(snapshot.decodeWork(ids[0])) as { dependsOn?: unknown } | null | undefined;
     return Array.isArray(sibling?.dependsOn) && sibling.dependsOn.includes(taskId) ? null : ids[0];

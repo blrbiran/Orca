@@ -272,11 +272,16 @@ export function deriveContract(task: ConfirmedProposal["tasks"][number], proposa
  * own directories, from the confirmed plan and each task's contract as confirmed. The order is dependsOn together with
  * the implicit write-set edges buildGraph derives (the graph `layers` is built from), so a pair ordered only through an
  * implicit edge is not parallel. A sibling with no such claim is not frozen, and a task left with none has no entry.
+ * Exported for its unit test.
  */
-function frozenOffPlan(plan: ControlPlanV1, tasks: ConfirmedProposal["tasks"]): Map<string, SiblingClaims[]> {
+export function frozenOffPlan(plan: ControlPlanV1, tasks: ConfirmedProposal["tasks"]): Map<string, SiblingClaims[]> {
   // Each contract is readable: verifyTaskSet matched it to the archived plan, whose reader (readArchivedPlan) refuses an
   // unreadable one. No fallback answer here (fix round 1): a plan read without its contracts would freeze no sibling.
-  const contracts = new Map(tasks.map(task => [task.taskId, taskContractSchema.parse(JSON.parse(task.originalContractCanonicalJson))]));
+  // Final fix wave (Minor 2): should one still be unreadable, it is refused as deriveContract refuses it, not as a ZodError.
+  const contracts = new Map(tasks.map(task => {
+    try { return [task.taskId, taskContractSchema.parse(JSON.parse(task.originalContractCanonicalJson))] as const; }
+    catch { throw new ControlError("execution-policy-unrepresentable"); }
+  }));
   const graph = buildGraph({ targetRepo: "", ccloopBin: "", runsDir: "", workBranch: "", policy: "local-merge", ledgerMode: "in-repo",
     tasks: plan.tasks.map(task => ({ taskId: task.taskId, contract: task.taskId, dependsOn: [...task.dependencyTaskIds] })) },
   new Map(), new Map(plan.tasks.map(task => [task.taskId, directoryQualifiedWriteSetOf(contracts.get(task.taskId)!)])));

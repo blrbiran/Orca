@@ -1141,8 +1141,9 @@ export class WebControlService {
     } catch (error) { process.stderr.write(`orca-control: worker-lost blockers: ${String(error)}\n`); }
   }
   /**
-   * Off-plan writes W4 (#346; human ruling on W4, 2026-11-17, 「按建议走」): a run ccloop or Orca's bound stopped for writing a
-   * parallel sibling's frozen claim -- classified once, when the block was recorded (`drive.parallelClaim`), never again
+   * Off-plan writes W4 (#346; human ruling on W4, 2026-11-17, 「按建议走」): a run ccloop stopped (`blocked_waiting_human`) for
+   * writing a parallel sibling's frozen claim (not one Orca's own bound blocked: retry-task refuses that run's outcome
+   * `succeeded`; final fix wave) -- classified once, when the block was recorded (`drive.parallelClaim`), never again
    * here -- is retried as orca-auto after the first of those siblings (`retry-task --after`: the task waits for it and
    * stops denying its claims), once per run: the command row, applied or refused, is the record. A refusal leaves the task
    * with the person (two siblings stopped on each other: the second is refused `after-cycle`). A retry the task's own budget

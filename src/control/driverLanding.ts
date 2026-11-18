@@ -226,6 +226,22 @@ export async function runLedgerInputs(deps: ExecutionDriverDeps, runId: string):
 }
 
 /**
+ * Off-plan writes spec W3 (#346; final fix wave, Minor 1): the record is information only and never fails or blocks a
+ * landing. Where a round may resume after the swap already happened (D's findLanding, a multi-directory landing's later
+ * round, a reconciliation), an unreadable record is logged and no row is written -- the tip already holds the landing,
+ * as acceptAttemptDriver's acceptedOffPlan does.
+ */
+async function guardedOffPlan(store: ExecutionDriverDeps["store"], run: { groupId: string; taskId: string | null; runId: string }, repo: string,
+  base: string | null | undefined, attempt: string | null | undefined): Promise<OffPlanWriteBody | null> {
+  try {
+    return await landingOffPlanWrite(store, run, repo, base, attempt);
+  } catch (error) {
+    process.stderr.write(`orca-driver: off-plan record skipped for landed ${run.runId}: ${error instanceof Error ? error.message : String(error)}\n`);
+    return null;
+  }
+}
+
+/**
  * Control run decisions: the run's refused decisions, replacing whatever an earlier landing attempt staged. Debug task
  * plan Task 9: a debug run's closing record is staged (and replaced) with them; every other landing stages none.
  */
@@ -374,7 +390,7 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string, context?: 
   }
   const already = await findLanding(targetRepo, drive.base!, old, drive.attemptSha!);
   // The attempt is an ancestor of the tip here, so its objects are in targetRepo.
-  if (already !== null) { markLanded(deps, runId, already, null, null, await landingOffPlanWrite(store, run, targetRepo, drive.base, drive.attemptSha)); return true; }
+  if (already !== null) { markLanded(deps, runId, already, null, null, await guardedOffPlan(store, run, targetRepo, drive.base, drive.attemptSha)); return true; }
   // Ruling R2 (#241): a merge whose check was started in an earlier round lands, or blocks, on that check's answer.
   const checks = postMergeChecksOf(context);
   const checked = checks.get(runId);
@@ -606,7 +622,7 @@ async function stepDMulti(deps: ExecutionDriverDeps, runId: string, run: DriverR
   // Off-plan writes spec W3: the task's own contract is its first written directory's, so only that directory's range is
   // compared (landingOffPlanWrite); its attempt is in that repository (fetched by produceMultiMerge, or already landed).
   const first = dirs[0]!;
-  const offPlan = await landingOffPlanWrite(store, run, first.targetRepo, first.base, first.attemptSha);
+  const offPlan = await guardedOffPlan(store, run, first.targetRepo, first.base, first.attemptSha);
   for (const [index, entry] of produced.entries()) {
     await deps.beforeCas?.();
     // A moved tip ends the round; the next round finds the dirs already swapped and produces only the rest.
@@ -1034,7 +1050,7 @@ async function finishReconcile(
   await git(record.copyPath, [...QUIET_GIT, "update-ref", `refs/orca/merged/${runId}`, merged]);
   // Off-plan writes spec W3: the run's own attempt against its base (not the reconciliation's), reachable in targetRepo
   // through the incoming ref D fetched before the conflict.
-  const offPlan = await landingOffPlanWrite(store, run, targetRepo, run.drive!.base, run.drive!.attemptSha);
+  const offPlan = await guardedOffPlan(store, run, targetRepo, run.drive!.base, run.drive!.attemptSha);
   const landed = await landOnTip(deps, targetRepo, runId, run.groupId, record.old, async (landing) => {
     // A bare sha is fetchable because refs/orca/merged/<runId> advertises it in the copy.
     await git(landing, [...QUIET_GIT, "fetch", "--no-tags", record.copyPath, merged]);

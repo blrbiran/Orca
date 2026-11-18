@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import {
-  deriveContract, offPlanEntryOf, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot, type ConfirmedProposal,
+  deriveContract, frozenOffPlan, offPlanEntryOf, prepareExecutionSnapshot, readConfirmedTaskExecution, replaceTaskInSnapshot, type ConfirmedProposal,
 } from "../../src/control/executionSnapshot.js";
 import { readWebGroup, WebControlService } from "../../src/control/webService.js";
 import { controlPlanSchema, executionSnapshotSchema } from "../../src/control/webProtocol.js";
@@ -343,5 +343,18 @@ describe("a confirmed group reads its frozen entries back (A2)", () => {
       // mutation: let the shared helper's own error through -> execution-policy-unrepresentable -> red
       expect(() => readControlGroup(h.store, "epoch", "g")).toThrow("recovery-blocked:derived-contract-forged");
     } finally { await h.dispose(); }
+  });
+});
+
+// Final fix wave (Minor 2, final whole-branch review 2026-11-18): a contract confirm cannot read surfaces as the snapshot's
+// own refusal, as deriveContract's does, not as a schema library's error. Unreachable through confirm today (the archived
+// plan's reader refuses such a contract first), so the function is driven directly.
+describe("frozenOffPlan on an unreadable contract", () => {
+  it("refuses execution-policy-unrepresentable", () => {
+    const tasks = [{ taskId: "a", originalContractCanonicalJson: "{}" }] as unknown as ConfirmedProposal["tasks"];
+    // mutation: the parse is not wrapped -> a ZodError (no `code`), red
+    let thrown: unknown;
+    try { frozenOffPlan({ tasks: [] } as never, tasks); } catch (error) { thrown = error; }
+    expect(thrown).toMatchObject({ code: "execution-policy-unrepresentable" });
   });
 });

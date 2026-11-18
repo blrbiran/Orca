@@ -301,6 +301,27 @@ describe("no --after toward a sibling that already waits on the task", { timeout
   });
 });
 
+// Final fix wave (Important 1, final whole-branch review 2026-11-18): Orca's own harvest bound blocks a write into a sibling's
+// claim with outcome `succeeded` -- retry-task refuses that run (`outcome:succeeded`) and the orca-auto pass never reads it
+// (it reads `blocked_waiting_human` only), so no step may point at `--after`.
+describe("a parallel-claim block recorded by Orca's own bound", { timeout: 120_000 }, () => {
+  it("offers no --after on the card or the run view, which retry-task would refuse", async () => {
+    // The synthetic ccloop enforces no denylist, so a's write into b's claim reaches Orca's bound at collect.
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { files: (id): Record<string, string> => id === "a" ? { a: "a\n", b: "from a\n" } : { b: "b\n" } });
+    try {
+      const runId = await t.claim();
+      expect(t.body(runId).taskId).toBe("a");
+      await t.until(t.driver(), () => t.body(runId).state === "blocked");
+      expect(t.body(runId).drive).toMatchObject({ outcome: "succeeded", blockedReason: "out-of-bounds:b", parallelClaim: { path: "b", repoKey: null, siblingIds: ["b"] } });
+      // mutation: retryAfterSibling does not read the run's outcome -> the card names `--after b` and the run view offers it, red
+      expect(readGroupSummary(t.h.store, "g").card!.firstFailure).toEqual({ taskId: "a", cause: "out-of-bounds:b" });
+      expect(runView(t, runId).retryAfter).toBeUndefined();
+      // The step the card used to name is refused: a dead end, not a way out.
+      expect(retry(t, { taskId: "a", runId, after: "b" }, "after-bound")).toMatchObject({ error: { code: "task-not-retryable" } });
+    } finally { await t.h.dispose(); }
+  });
+});
+
 // Fix round 1 (minor 3): the panel accepts an `--after` edge only as the retry writes it.
 describe("the panel's authority check on afterDependsOn", { timeout: 120_000 }, () => {
   const blocks = (t: Harness, taskId: string) => expect(() => readControlGroup(t.h.store, "e", "g")).toThrow(`work-item-authority:${taskId}`);
