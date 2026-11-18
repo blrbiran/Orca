@@ -7,6 +7,7 @@ import { createServer } from "node:http";
 import { promisify } from "node:util";
 import express from "express";
 import { describe, expect, it, vi } from "vitest";
+import { knownRedAtBase } from "../../src/control/knownRedAtBase.js";
 import { registerControlReadRoutes } from "../../src/panel/controlApi.js";
 import { profileSnapshot, webFixture } from "../control/fixtures/web.js";
 
@@ -110,7 +111,9 @@ describe("group brief names a check already known red at this group's base (#341
     } finally { await w.done(); }
   });
 
-  it("a task's base run (L3) answered red at this base is named with its task; one line per command, the earliest", async () => {
+  // Ruling (Task 4 review minor 6, controller, Orca session 2026-11-18): the latest record per command wins; this case
+  // first pinned the earliest, so its expectation moved from the acceptance's `npm test` to the later base run's.
+  it("a task's base run (L3) answered red at this base is named with its task; one line per command, the latest", async () => {
     const w = await world();
     try {
       workRunAt(w.h, BASE);
@@ -122,8 +125,8 @@ describe("group brief names a check already known red at this group's base (#341
       // mutation: drop `result='red'` from redBaseChecksAt -> build and e2e appear -> red
       // mutation: drop the dedupe by command -> `npm test` twice -> red
       expect((await w.brief()).knownRedAtBase).toEqual([
-        { command: "npm test", base: BASE, source: "acceptance", groupId: "old", at: DAY },
         { command: "npm run lint", base: BASE, source: "base-check", groupId: "sib", taskId: "t2", at: DAY + 1_000 },
+        { command: "npm test", base: BASE, source: "base-check", groupId: "sib", taskId: "t2", at: DAY + 2_000 },
       ]);
     } finally { await w.done(); }
   });
@@ -144,5 +147,49 @@ describe("group brief names a check already known red at this group's base (#341
         commands: [{ command: "npm test", exit: "1", ms: 1 }, { command: "npm test", exit: "0", ms: 1 }, { command: "npm run slow", exit: "timeout 60000 ms", ms: 1 }, { command: "nope", exit: "127", ms: 1 }] } });
       expect(JSON.stringify(await w.brief())).toBe(before);
     } finally { await w.done(); }
+  });
+
+  // Review fix round 1, minor 6: the latest record at (repository, base, command) wins -- a later green cancels an earlier red.
+  it("a later green at this base, from either source, cancels an earlier red", async () => {
+    const w = await world();
+    try {
+      workRunAt(w.h, BASE);
+      group(w.h, "old", { status: "done", plan: { repoId: "repo" }, acceptance: acceptance(BASE, EARLIER_BASE) });
+      baseCheck(w.h, "repo", BASE, "npm test", "green", DAY + 1_000);
+      baseCheck(w.h, "repo", BASE, "npm run lint", "red", DAY);
+      group(w.h, "later", { status: "done", plan: { repoId: "repo" }, acceptance: { tip: BASE, result: "passed", at: DAY + 2_000, commands: [{ command: "npm run lint", exit: "0", ms: 1 }] } });
+      // mutation: keep the earliest red per command (ignore greens) -> both lines -> red
+      expect(await w.brief()).not.toHaveProperty("knownRedAtBase");
+    } finally { await w.done(); }
+  });
+
+  // Review fix round 1, minor 3: an unreadable first run hides which run came first, so no later run's base is taken.
+  it("an unreadable run body before the first work run: the base is not known", async () => {
+    const w = await world();
+    try {
+      group(w.h, "old", { status: "done", plan: { repoId: "repo" }, acceptance: acceptance(BASE, EARLIER_BASE) });
+      w.h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES ('run-0','g','a',0,0,'broken')").run();
+      workRunAt(w.h, BASE);
+      // Read directly: a run body that does not parse already fails the brief's own summary (not this note's doing).
+      expect(knownRedAtBase(w.h.store, "g")).toEqual([]);
+      w.h.store.db.prepare("DELETE FROM runs WHERE id='run-0'").run();
+      // mutation: skip an invalid body and read on (the earlier rule) -> the line appears -> red
+      expect(knownRedAtBase(w.h.store, "g")).toEqual([{ command: "npm test", base: BASE, source: "acceptance", groupId: "old", at: DAY }]);
+    } finally { await w.done(); }
+  });
+
+  // Review fix round 1, minor 4: what is known at the base is a note; a failure to read it never fails the brief.
+  it("a failing read of what is known leaves the brief whole, without the key, and says so on stderr once", async () => {
+    const w = await world();
+    const writes = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      workRunAt(w.h, BASE);
+      w.h.store.db.exec("DROP TABLE base_check_results");
+      // mutation: drop the try/catch around knownRedAtBase in the brief route -> 500 -> red
+      expect(await w.brief()).not.toHaveProperty("knownRedAtBase");
+      expect(await w.brief()).not.toHaveProperty("knownRedAtBase");
+      // mutation: drop the once-guard -> two lines -> red
+      expect(writes.mock.calls.filter(([chunk]) => String(chunk).includes("known-red-at-base"))).toHaveLength(1);
+    } finally { writes.mockRestore(); await w.done(); }
   });
 });

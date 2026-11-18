@@ -552,7 +552,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
       {/* Tester follow-up K, item 2: no full-suite command adopted, one detected -- say what acceptance runs, offer Adopt. */}
       {!archived && editable && <ConfirmFullSuiteNote repoId={view.plan.repoId} />}
       {/* Pre-existing failures spec L4 (#341): a check already known red at this group's base, named before confirming. */}
-      {!archived && editable && <ConfirmKnownRedNote groupId={view.summary.groupId} />}
+      {!archived && editable && <ConfirmKnownRedNote groupId={view.summary.groupId} changeSeq={view.changeSeq} />}
       {!archived && editable && (autoEligible
         ? <p role="note" data-testid="auto-confirm-pending">{t("budget.autoConfirm.pending")}</p>
         : <p role="note" data-testid="confirm-starts-note">{t("budget.confirmStartsNote")}</p>)}

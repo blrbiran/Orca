@@ -1,5 +1,5 @@
 import type {PanelPartialSelectionV1, SavedResultEligibilityV1} from "./controlTypes.js";
-import type { AllowRequestV1, KnownRedAtBaseV1 } from "./controlTypes.js";
+import type { AllowRequestV1, ConfirmKnownRedV1 } from "./controlTypes.js";
 import { WEB_ACTIVITY_KINDS } from "./controlTypes.js";
 /**
  * Task 9: the browser's only door to the control plane.
@@ -149,9 +149,9 @@ export function fetchControlSummary(sinceChangeSeq?: number): Promise<ControlSum
 /** GET /api/control/groups/:groupId -- the canonical view of one group. */
 export const fetchControlGroup = (groupId: string): Promise<GroupViewV1> =>
   controlGet<GroupViewV1>(`/api/control/groups/${segment(groupId)}`);
-/** GET /api/control/groups/:groupId/brief -- the compact body; the confirm step reads its `knownRedAtBase` (#341 L4). */
-export const fetchGroupBrief = (groupId: string): Promise<{ knownRedAtBase?: KnownRedAtBaseV1[] }> =>
-  controlGet<{ knownRedAtBase?: KnownRedAtBaseV1[] }>(`/api/control/groups/${segment(groupId)}/brief`);
+/** GET /api/control/groups/:groupId/confirm-known-red -- the confirm step's own read (#341 L4, Task 4 review I-1). */
+export const fetchConfirmKnownRed = (groupId: string): Promise<ConfirmKnownRedV1> =>
+  controlGet<ConfirmKnownRedV1>(`/api/control/groups/${segment(groupId)}/confirm-known-red`);
 /** GET /api/control/groups/:groupId/requirement -- one requirement in full (N1 spec §11.2). */
 export const fetchRequirement = (groupId: string): Promise<RequirementViewV1> =>
   controlGet<RequirementViewV1>(`/api/control/groups/${segment(groupId)}/requirement`);

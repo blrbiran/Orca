@@ -2,8 +2,8 @@ import { useContext, useEffect, useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
-import { checksCommandPath, checksReadPath, controlGet, fetchGroupBrief, nextCommandId, refusalFromAnswer, sendControlCommand } from "./controlApi.js";
-import type { ChecksReadV1, GroupAcceptanceV1, KnownRedAtBaseV1 } from "./controlTypes.js";
+import { checksCommandPath, checksReadPath, controlGet, fetchConfirmKnownRed, nextCommandId, refusalFromAnswer, sendControlCommand } from "./controlApi.js";
+import type { ChecksReadV1, ConfirmKnownRedV1, GroupAcceptanceV1, KnownRedAtBaseV1 } from "./controlTypes.js";
 import type { PanelRefusal } from "./api.js";
 import { Refusal } from "./Refusal.js";
 
@@ -93,28 +93,33 @@ export function ConfirmFullSuiteNote(props: { repoId: string }): JSX.Element | n
 
 /**
  * Pre-existing failures spec 2026-11-18 L4 (#341): at confirm, each check Orca already knows was red at exactly this group's
- * base (an earlier group's acceptance, or a task's base run), read once from `group brief` -- nothing runs for it. Nothing
- * shows while the read is pending, when it fails, or when nothing is known.
+ * base (an earlier group's acceptance, or a task's base run) -- nothing runs for it. With no base known yet, the read may
+ * predict from the target's current HEAD (one `git rev-parse`, Task 4 review I-1), worded as such. Asked again when the view's
+ * change sequence moves (review minor 5). Nothing shows while the read is pending, when it fails, or when nothing is known.
  */
-export function ConfirmKnownRedNote(props: { groupId: string }): JSX.Element | null {
+export function ConfirmKnownRedNote(props: { groupId: string; changeSeq: number }): JSX.Element | null {
   const { t } = useTranslation();
-  const [known, setKnown] = useState<KnownRedAtBaseV1[]>([]);
+  const [read, setRead] = useState<ConfirmKnownRedV1 | null>(null);
   useEffect(() => {
     let live = true;
-    void fetchGroupBrief(props.groupId)
-      .then((brief) => { if (live) setKnown(Array.isArray(brief?.knownRedAtBase) ? brief.knownRedAtBase : []); })
+    void fetchConfirmKnownRed(props.groupId)
+      .then((answer) => { if (live) setRead(answer ?? null); })
       .catch(() => { /* no note: confirm does not depend on it */ });
     return () => { live = false; };
-  }, [props.groupId]);
-  if (known.length === 0) return null;
+  }, [props.groupId, props.changeSeq]);
+  const atBase = Array.isArray(read?.knownRedAtBase) ? read.knownRedAtBase : [];
+  const atHead = read?.atHead !== undefined && Array.isArray(read.atHead.known) ? read.atHead : null;
+  if (atBase.length === 0 && (atHead === null || atHead.known.length === 0)) return null;
+  const line = (entry: KnownRedAtBaseV1, where: "Base" | "Head"): string => {
+    const date = new Date(entry.at).toISOString().slice(0, 10);
+    const values = { command: entry.command, group: entry.groupId, task: entry.taskId ?? "?", date, head: atHead?.head.slice(0, 7) ?? "" };
+    return t(`control.groupAcceptance.knownRed${where}${entry.source === "acceptance" ? "Acceptance" : "BaseCheck"}`, values);
+  };
   return (
     <div role="note" data-tone="warn" data-testid="confirm-known-red">
-      {known.map((entry) => {
-        const date = new Date(entry.at).toISOString().slice(0, 10);
-        return <p key={entry.command}>{entry.source === "acceptance"
-          ? t("control.groupAcceptance.knownRedAcceptance", { command: entry.command, group: entry.groupId, date })
-          : t("control.groupAcceptance.knownRedBaseCheck", { command: entry.command, group: entry.groupId, task: entry.taskId ?? "?", date })}</p>;
-      })}
+      {atBase.length > 0
+        ? atBase.map((entry) => <p key={entry.command}>{line(entry, "Base")}</p>)
+        : atHead!.known.map((entry) => <p key={entry.command}>{line(entry, "Head")}</p>)}
     </div>
   );
 }

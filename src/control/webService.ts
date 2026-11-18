@@ -79,6 +79,9 @@ import { claimQuotaProbeInTransaction, probeStateOf, quotaProbeWorkItemId } from
 import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, quotaProbeCandidates, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, failoverCandidates, failoverCommandId, isFailoverGroup, SWITCHABLE_AGENT_SOURCES, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource, workerLostCandidates, parallelClaimCandidates, workerLostCommandId, WORKER_LOST_RESTARTS } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
+
+/** Task 4 review I-1: the confirm step's one HEAD read is bounded (a hung git never holds the read). */
+const TARGET_HEAD_TIMEOUT_MS = 10_000;
 import { applySetCriteriaReview, criteriaDecisionIdOf, criteriaReviewCandidates, criteriaReviewFacts, criteriaReviewVerdict, type SetCriteriaReviewCommand } from "./criteriaReview.js";
 import { flagDecision, ratifyFlag, readFlaggedDecision } from "./flaggedDecisions.js";
 import { join as joinPath } from "node:path";
@@ -2003,6 +2006,15 @@ export class WebControlService {
       if (repoId !== null) try { tip = await revParse(this.deps.resolveRepository(repoId), `${workBranchRef(groupId)}^{commit}`); } catch { tip = null; }
     }
     return this.mutate(() => applyIntegrateNow({ store: this.store }, command, tip)) as WebCommandResult;
+  }
+  /**
+   * Pre-existing failures spec L4, Task 4 review I-1: the target checkout's HEAD commit, for the confirm step's prediction
+   * only (one bounded `git rev-parse`); null when the repository cannot be resolved or read.
+   */
+  async targetHead(repoId: string): Promise<string | null> {
+    if (this.deps.resolveRepository === undefined) return null;
+    try { return (await git(this.deps.resolveRepository(repoId), [...QUIET_GIT, "rev-parse", "--verify", "HEAD^{commit}"], { timeoutMs: TARGET_HEAD_TIMEOUT_MS })).trim(); }
+    catch { return null; }
   }
   /** Tester follow-up E §5 (#241): a failed group acceptance, checked again on the same tip at the next round (no git child). */
   recheckAcceptance(command: RecheckAcceptanceCommand): WebCommandResult {

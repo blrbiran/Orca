@@ -736,6 +736,8 @@ export type GroupAcceptanceV1 = {
 };
 /** Pre-existing failures spec L4 (#341): a check already known red at a group's base, as `group brief` sends it. */
 export type KnownRedAtBaseV1 = { command: string; base: string; source: "acceptance" | "base-check"; groupId: string; taskId?: string; at: number };
+/** Task 4 review I-1: the confirm step's read -- at the base when one is known, else a prediction at the target's current HEAD. */
+export type ConfirmKnownRedV1 = { schema: "orca-confirm-known-red-v1"; knownRedAtBase?: KnownRedAtBaseV1[]; atHead?: { head: string; known: KnownRedAtBaseV1[] } };
 /** Tester follow-up G §6.3 (#189): the request an allowance was granted from or covers (src/control/groupAllowances.ts). */
 export type AllowanceRequestKindV1 =
   | { type: "path"; paths: Array<{ repoKey: string | null; path: string }> }

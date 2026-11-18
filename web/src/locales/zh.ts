@@ -717,8 +717,10 @@ export const zh: Translation<typeof en> = {
       adopt: "采纳 {{command}}",
       adopted: "已采纳：下一次验收会运行它。",
       confirmSuiteNotSet: "这个项目没有设置全量测试命令，所以组验收只会运行各任务自己的检查。",
-      knownRedAcceptance: "在这个组的基线上，{{command}} 已经是红的（组 {{group}} 的验收，{{date}}）。",
-      knownRedBaseCheck: "在这个组的基线上，{{command}} 已经是红的（组 {{group}} 的任务 {{task}}，在基线上运行，{{date}}）。",
+      knownRedBaseAcceptance: "在这个组的基线上，{{command}} 已经是红的（组 {{group}} 的验收，{{date}}）。",
+      knownRedBaseBaseCheck: "在这个组的基线上，{{command}} 已经是红的（组 {{group}} 的任务 {{task}}，在基线上运行，{{date}}）。",
+      knownRedHeadAcceptance: "在目标仓库当前的 HEAD（{{head}}）上，{{command}} 已经是红的（组 {{group}} 的验收，{{date}}）。",
+      knownRedHeadBaseCheck: "在目标仓库当前的 HEAD（{{head}}）上，{{command}} 已经是红的（组 {{group}} 的任务 {{task}}，在基线上运行，{{date}}）。",
       suiteFlaky: "全量测试 {{command}} 失败一次、重试通过（不稳定）。",
     },
     review: {

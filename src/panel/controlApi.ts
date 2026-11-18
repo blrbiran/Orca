@@ -51,7 +51,7 @@ import { registerTranscriptRoutes } from "../agentTranscript/routes.js";
 import { readControlGroup, readControlRecovery, readControlSummary, readGroupSummary, readRequirementView, readRunActivityView, readRunEvidence, readSelectionPreview, readUnreadableRuns, taskHandoffView } from "./controlViews.js";
 import { readStoredHandoff } from "../control/taskHandoffs.js";
 import { costOutliersOf, phaseEndUsageOf } from "../control/runUsageView.js";
-import { knownRedAtBase } from "../control/knownRedAtBase.js";
+import { confirmKnownRed, knownRedAtBase, type KnownRedAtBase } from "../control/knownRedAtBase.js";
 
 export interface ControlReadApiDeps {
   store: ControlStore;
@@ -64,6 +64,16 @@ export interface ControlReadApiDeps {
   folderListCaps?: Partial<FolderListCaps>;
   /** Agent selection spec §6.8 (W6-10): the reads that ask ccloop about agents. Absent, those routes 404. */
   port?: Pick<ExecutionPort, "listAgents" | "resolveAgent" | "listModels" | "refreshAgentVersions" | "readFeatures" | "agentsTableAbsent">;
+}
+
+let knownRedFailureLogged = false;
+/** Task 4 review minor 4: the brief's L4 note never fails the brief -- a failed read is no note, said on stderr once. */
+function knownRedNote(store: ControlStore, groupId: string): KnownRedAtBase[] {
+  try { return knownRedAtBase(store, groupId); }
+  catch (error) {
+    if (!knownRedFailureLogged) { knownRedFailureLogged = true; process.stderr.write(`orca-panel: known-red-at-base: not read: ${error instanceof Error ? error.message : String(error)}\n`); }
+    return [];
+  }
 }
 
 /** Agent version auto-refresh spec 2026-10-20 §3.3: the agents view probes the installed CLIs at most this often. */
@@ -303,7 +313,7 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       const unreadableRuns = readUnreadableRuns(deps.store, groupId);
       // Pre-existing failures spec L4 (#341): each check already known red at this group's base, from the store only
       // (nothing runs); absent when none. The web confirm step reads it here too.
-      const knownRed = knownRedAtBase(deps.store, groupId);
+      const knownRed = knownRedNote(deps.store, groupId);
       res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }), ...(warnings.length === 0 ? {} : { warnings }),
         ...(costOutliers === null ? {} : { costOutliers }), ...(unreadableRuns.length === 0 ? {} : { unreadableRuns }), ...(knownRed.length === 0 ? {} : { knownRedAtBase: knownRed }) }); }
     catch (error) {
@@ -314,6 +324,17 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       sendMappedControlError(res, error, readErrorContext(deps.store, groupId));
     }
   });
+
+  // Pre-existing failures spec L4, Task 4 review I-1: the confirm step's own read (never polled; the web asks it once per view
+  // change). What is known red at the group's base; with none known, it may read the target's HEAD once to predict it.
+  app.get("/api/control/groups/:groupId/confirm-known-red", asyncRoute(async (req, res) => {
+    const groupId = String(req.params.groupId);
+    try {
+      if (deps.store.db.prepare("SELECT 1 FROM groups WHERE id=?").get(groupId) === undefined) { sendControlError(res, 404, "group-not-found", "No control group was found."); return; }
+      const service = deps.service;
+      res.json({ schema: "orca-confirm-known-red-v1", ...(await confirmKnownRed(deps.store, groupId, service === undefined ? null : (repoId) => service.targetHead(repoId))) });
+    } catch (error) { sendMappedControlError(res, error, readErrorContext(deps.store, groupId)); }
+  }));
 
   app.get("/api/control/groups/:groupId", (req, res) => {
     const groupId = String(req.params.groupId);
