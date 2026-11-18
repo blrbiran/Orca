@@ -66,7 +66,11 @@ describe("group brief names a check already known red at this group's base (#341
     try {
       group(w.h, "old", { status: "done", plan: { repoId: "repo" }, acceptance: acceptance(BASE, EARLIER_BASE) });
       workRunAt(w.h, BASE);
+      // This group's own acceptance (its suite red at its own base) is not an earlier group's: its warning already says so.
+      // mutation: drop `id<>?` from the acceptance read -> group g's entry comes first -> red
+      w.h.store.db.prepare("UPDATE groups SET body=json_set(body,'$.acceptance',json(?)) WHERE id='g'").run(JSON.stringify({ ...acceptance(OTHER, BASE), at: DAY - 1 }));
       // mutation: drop `...(knownRed.length === 0 ? {} : { knownRedAtBase: knownRed })` from the brief route -> red
+      // mutation: drop the `setup: ` exclusion -> `npm ci` appears -> red
       // A setup that failed is not a check that was red; the green union command is not either: only `npm test`.
       expect((await w.brief()).knownRedAtBase).toEqual([{ command: "npm test", base: BASE, source: "acceptance", groupId: "old", at: DAY }]);
     } finally { await w.done(); }
@@ -93,6 +97,16 @@ describe("group brief names a check already known red at this group's base (#341
       w.h.store.db.prepare("UPDATE groups SET body=json_set(body,'$.status','running') WHERE id='old'").run();
       // mutation: drop `prerequisite?.status === "done"` -> the line stays -> red
       expect(await w.brief()).not.toHaveProperty("knownRedAtBase");
+    } finally { await w.done(); }
+  });
+
+  it("at confirm: a flow child's composition commit is its base", async () => {
+    const w = await world();
+    try {
+      group(w.h, "old", { status: "done", plan: { repoId: "repo" }, acceptance: acceptance(BASE, EARLIER_BASE) });
+      w.h.store.db.prepare("UPDATE groups SET body=json_set(body,'$.flow',json(?)) WHERE id='g'").run(JSON.stringify({ role: "child", flowRunId: "fr-1", baseCommit: BASE }));
+      // mutation: drop `if (!start.startsWith("refs/")) return start;` -> nothing -> red
+      expect((await w.brief()).knownRedAtBase).toEqual([{ command: "npm test", base: BASE, source: "acceptance", groupId: "old", at: DAY }]);
     } finally { await w.done(); }
   });
 
