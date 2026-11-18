@@ -3,7 +3,7 @@
 // waits for a top-up, which continues it; at its pause line it waits for a decision; at a person's hard cap it ends
 // exhausted as today. A lowered limit never lowers a running ceiling: the next claim is refused instead.
 import { describe, expect, it } from "vitest";
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readGroupActivity } from "../../src/control/activity.js";
 import { archiveAdmission, blockRun, collectInto, readStartEnvelope, stepC } from "../../src/control/executionDriver.js";
@@ -102,7 +102,11 @@ describe("a run stopped at its live ceiling (spec §2.1, §2.5)", { timeout: 300
       expect(await first).toBe(true);
       expect(t.body(runId).state).toBe("settled-recoverable");
       const usedAfterFirst = readGroup(t.h.store, "g").used.tokens;
-      writeFileSync(join(t.body(runId).drive.sourceDir, "repo", "late.txt"), "different snapshot\n");
+      // Ruling (2026-11-19 change-sized runs P0): the ceiling settle now removes <sourceDir>/repo (spec §5.6), so the late
+      // write goes into the source directory, whose logs a re-archive would capture differently; intent kept: a late C
+      // visit reuses the committed checkpoint and never re-archives.
+      expect(existsSync(join(t.body(runId).drive.sourceDir, "repo"))).toBe(false);
+      writeFileSync(join(t.body(runId).drive.sourceDir, "late.txt"), "different snapshot\n");
       releaseSecond();
       expect(await results).toEqual([{ status: "fulfilled", value: true }, { status: "fulfilled", value: true }]);
       expect(t.body(runId).state).toBe("settled-recoverable");

@@ -25,7 +25,7 @@ import { z } from "zod";
 import { join } from "node:path";
 import { archiveRun, readArtifact, writeArtifact } from "./archive.js";
 import { hasArchiveRow, removeResultCopies } from "./cleanup.js";
-import { readRun, saveRun } from "./budget.js";
+import { isTerminalRunState, readRun, saveRun } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { commitCandidate, readCommittedCheckpoint, readUncommittedCheckpoint } from "./checkpoints.js";
 import { hashPayload } from "./commands.js";
@@ -755,13 +755,30 @@ async function cleanupPredecessor(deps: ExecutionDriverDeps, targetRepo: string,
   const predecessor = readDriverRun(deps.store, predecessorRunId);
   if (predecessor.drive === undefined || predecessor.drive.cleanedUp) return;
   let cleanupError: string | null = null;
-  try { await cleanupRunWorkspace(targetRepo, deps.roots, predecessorRunId, workspaceOf(predecessor.drive)); }
+  try {
+    await cleanupRunWorkspace(targetRepo, deps.roots, predecessorRunId, workspaceOf(predecessor.drive));
+    // Change-sized runs spec 2026-11-19 §5.6 (P0): the backstop for a copy a recoverable settle kept (one settled before
+    // P0, or a removal that failed there); the continuation reads only the archive.
+    await removeResultCopies(deps.store, predecessorRunId, predecessor.drive.sourceDir, { extras: false });
+  }
   catch (error) { cleanupError = describeError(error); }
   write(deps, () => {
     const current = readDriverRun(deps.store, predecessorRunId);
     current.drive = { ...current.drive!, cleanedUp: cleanupError === null, cleanupError };
     saveDriverRun(deps.store, current);
   });
+}
+
+/**
+ * Change-sized runs spec 2026-11-19 §5.6 (P0, review I2, O12): a recoverable settle has committed, and no continuation
+ * reads `<sourceDir>/repo` (it continues from the archive), so the copy goes now. Only once the run reads terminal: a
+ * transaction that did not commit removes nothing. A failure never changes the settle's answer: it is named on stderr,
+ * and cleanupPredecessor retries the removal when the run is continued.
+ */
+export async function dropResultCopyAfterSettle(deps: ExecutionDriverDeps, runId: string, sourceDir: string): Promise<void> {
+  if (!isTerminalRunState(readDriverRun(deps.store, runId).state)) return;
+  try { await removeResultCopies(deps.store, runId, sourceDir, { extras: false }); }
+  catch (error) { process.stderr.write(`orca-driver: ${runId}: result copy kept: ${describeError(error)}\n`); }
 }
 
 /**
@@ -2383,6 +2400,7 @@ async function settleTokenAllowance(deps:ExecutionDriverDeps,runId:string,report
   work.status="ready";work.allowancePredecessorRunId=runId;Object.assign(work,{fundingReleased:true});saveAllowanceWork(store,run.groupId,work);
   const group=allowanceGroup(store,run.groupId);if(!group.stopped&&group.status!=="blocked")group.status="running";saveAllowanceGroup(store,group);
  }});
+ await dropResultCopyAfterSettle(deps,runId,run.drive!.sourceDir);
  return true;
 }
 
@@ -2518,6 +2536,7 @@ async function settleCeilingStopOnce(deps:ExecutionDriverDeps,runId:string,repor
     throw new ControlError("checkpoint-identity-conflict","uncommitted-ceiling");
   await verifySnapshot(store,orphan.snapshot);
   await commitCandidate(store,orphan,{...archiveAdmission(deps),onSettled});
+  await dropResultCopyAfterSettle(deps,runId,run.drive!.sourceDir);
   return true;
  }
  const archive=await archiveRun(store,{runId,sourceDir:run.drive!.sourceDir,repoDir:join(run.drive!.sourceDir,"repo"),stopProof:raw.stopProof},archiveAdmission(deps));
@@ -2525,6 +2544,7 @@ async function settleCeilingStopOnce(deps:ExecutionDriverDeps,runId:string,repor
  await verifySnapshot(store,archive.snapshot);
  const candidate:Candidate={...raw,checkpointId,artifacts:[...archive.artifacts,...raw.artifacts,raw.handoff],snapshot:archive.snapshot};
  await commitCandidate(store,candidate,{...archiveAdmission(deps),onSettled});
+ await dropResultCopyAfterSettle(deps,runId,run.drive!.sourceDir);
  return true;
 }
 

@@ -4,6 +4,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { readGroup, saveGroup, readWork } from "../../src/control/queries.js";
 import { readArtifact } from "../../src/control/archive.js";
+import { exportResumeBundle } from "../../src/control/resumeBundle.js";
 import type { ArtifactRef } from "../../src/control/types.js";
 import { latestRequestForRun, writeHandoffRequest } from "../../src/control/stopIntent.js";
 import type { ControlRuntime } from "../../src/panel/controlAssembly.js";
@@ -60,6 +61,12 @@ describe.skipIf(!realBinary)("parked allowance settlement in a held group (#213)
       const manifestRef = (JSON.parse(archiveRow.body) as { artifacts: ArtifactRef[] }).artifacts.find(ref => ref.artifactId.startsWith("archive-"))!;
       const manifest = JSON.parse((await readArtifact(runtime.store, manifestRef)).toString()) as { logs: Array<{ path: string }> };
       expect(manifest.logs.map(entry => entry.path).filter(path => path === "run/worktrees" || path.startsWith("run/worktrees/"))).toEqual([]);
+      // Change-sized runs spec 2026-11-19 §5.6 (P0-7): the allowance settle removed the result copy its complete archive
+      // holds, and the continuation still exports from that archive alone. Mutation M6.6: drop the allowance removal, red.
+      expect((JSON.parse(archiveRow.body) as { missing: string[] }).missing).toEqual([]);
+      expect(existsSync(join(sourceDir, "repo"))).toBe(false);
+      const checkpointId = String(runtime.store.db.prepare("SELECT id FROM checkpoints WHERE run_id=?").get(parked.runId)!.id);
+      expect((await exportResumeBundle(runtime.store, { predecessorRunId: parked.runId, newSourceDir: join(sourceDir, "..", `${parked.runId}-continuation`) })).checkpointId).toBe(checkpointId);
     } finally { await world.teardown(); }
   }, 30_000);
 

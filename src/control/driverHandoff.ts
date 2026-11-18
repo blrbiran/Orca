@@ -22,7 +22,7 @@ import { isMultiGroup, multiPrimaryRepoId } from "./multiGroup.js";
 import { findLanding } from "./driverLanding.js";
 import { landedAnywhere } from "./driveRecord.js";
 import {
-  DriverCrash, INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, blockRun, collectInto, describeError, laterError, driverRunIds, groupRepoId, newDrive, persistStatus, portFor, readDriverRun,
+  DriverCrash, INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, blockRun, collectInto, describeError, dropResultCopyAfterSettle, laterError, driverRunIds, groupRepoId, newDrive, persistStatus, portFor, readDriverRun,
   readStartEnvelope,savedRecoveryInspectionInput, saveDriverRun, savedReport, settleLostWorker, stepC, write, type DriverContext, type DriverRun, type ExecutionDriverDeps,
 } from "./executionDriver.js";
 import type { ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
@@ -562,7 +562,7 @@ export async function settleHandoffCheckpoint(deps: ExecutionDriverDeps, runId: 
   candidate.checkpointId = `settle-${runId}-${hashPayload(candidate).slice(0, 16)}`;
   await verifyCandidateArtifacts(store, candidate);
   const persisted = await persistCanonicalCheckpoint(store, candidate);
-  return write(deps, () => {
+  const settled = write(deps, () => {
     const request = readHandoffRequest(store, run.groupId, requestId).request;
     if (!ADOPTABLE_STATES.includes(request.state)) return false;
     const previous = store.db.prepare("SELECT hash FROM checkpoints WHERE id=?").get(persisted.checkpointId);
@@ -585,4 +585,8 @@ export async function settleHandoffCheckpoint(deps: ExecutionDriverDeps, runId: 
       reasons.length === 0 ? "settled-recoverable" : "settled-unrecoverable", reasons.length === 0 ? null : reasons.join(";"));
     return true;
   });
+  // Change-sized runs spec 2026-11-19 §5.6 (P0, review I2): the H-settle committed; the copy goes as at every recoverable
+  // settle (a partial archive keeps it).
+  if (settled) await dropResultCopyAfterSettle(deps, runId, run.drive.sourceDir);
+  return settled;
 }
