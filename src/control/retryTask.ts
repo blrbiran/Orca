@@ -23,6 +23,7 @@ import { validTerminalClosure } from "./terminalRunClosure.js";
 import { abandonedRun } from "./abandonRun.js";
 import { hasValidUsageSettlement, lineageWorkUsage, releasedSettlementCheckpoint, settlementSame } from "./usageSettlement.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
+import { applyRetryAfter, refuseRetryAfter } from "./retryAfter.js";
 import { recordActivity } from "./activity.js";
 import { add, groupUsageUnknown } from "./budget.js";
 import { applyWebCommand } from "./commandLedger.js";
@@ -225,6 +226,15 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           || !settlementSame(claim.grants, run.grant) || claim.ownerTokenHash !== createHash("sha256").update(String(run.ownerToken)).digest("hex")) {
           throw new ControlError("recovery-blocked", "retry-claim-identity");
         }
+        // Off-plan writes W4 (#346, plan Task 6): `--after <sibling>` orders the task after that sibling and drops its claims,
+        // in this transaction; a refusal below rolls it back with the command's savepoint.
+        const after = command.payload.after;
+        if (after !== undefined) {
+          refuseRetryAfter(store, groupId, taskId, after, run, live, command.payload.allowObservedPaths === true);
+          applyRetryAfter(store, groupId, taskId, after);
+          Object.assign(work, readWork(store, groupId, taskId));
+        }
+        const afterBody = after === undefined ? {} : { after };
         const allocations = readBudgetProposal(store, groupId).allocations.filter(a => a.ownerKind === "task" && a.ownerId === taskId);
         // Quota failover spec §8: the payload's installation must be the one resolved before this transaction.
         // `auto` (session 3cfc2e73): the service chose, or kept, the selection (webService.ts retryTaskOnAuto).
@@ -239,7 +249,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           if(incoming!==null)throw new ControlError("retry-top-up-unsupported","saved-result-no-dispatch");
           saveRunBody(store,{...run,state:"settled-failed",savedNoDispatchConsumedBy:command.commandId,drive:{...run.drive!,outcome:"not-started",stopReason:"saved-result-not-dispatched"}},false);
           Object.assign(work,{status:"ready",retryGrantSourceRunId:runId,pendingRunId:null});setAllocationStates(store,groupId,taskId,"retrying",run.grant);saveWork(store,groupId,work as never);
-          recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,reason:"saved-result-not-dispatched"}});deps.beforeCommit?.();return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId});
+          recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,reason:"saved-result-not-dispatched",...afterBody}});deps.beforeCommit?.();return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId});
         }
         const held = !live && run.state === "settled-recoverable" && run.recoverable === true && work.status === "held"
           && allocations.length === 2 && allocations.every(a => a.state === "held" && settlementSame(a.amount, run.remaining[a.bucket as "work" | "handoff"]))
@@ -376,7 +386,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           delete work.continuation;delete work.retryGrantSourceRunId;delete (work as {allowancePredecessorRunId?:string}).allowancePredecessorRunId;
           setAllocationStates(store,groupId,taskId,"confirmed");saveWork(store,groupId,work as never);
           const resumedGroup=readGroup(store,groupId);resumedGroup.status="running";saveGroup(store,resumedGroup);
-          recordSavedOrdinaryRetry(store,runId,command.commandId);recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,...(switched===null?{}:{agent:switched}),...(incoming===null?{}:{topUp:incoming}),...(freshStart===null?{}:{freshStart})}});
+          recordSavedOrdinaryRetry(store,runId,command.commandId);recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,...afterBody,...(switched===null?{}:{agent:switched}),...(incoming===null?{}:{topUp:incoming}),...(freshStart===null?{}:{freshStart})}});
           if (observed !== null && observed !== undefined) deps.applyObservedPaths!(store, groupId, taskId, runId, observed, command.commandId, command.payload.allowanceId !== undefined ? `allowance:${command.payload.allowanceId}` : commandPrincipalFor(command.commandId) ?? command.actorId);
           deps.beforeCommit?.();
           // The receipt says what the new run starts with when the fresh-start rule applied (the CLI prints it).
@@ -412,7 +422,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         // Session 3cfc2e73 D2 (triage #161): the retry lifts the over-grant block it answers, by set-limit's rule.
         if (overGrantBlocked) { const lifted = readGroup(store, groupId); lifted.status = unblockedStatus(store, groupId, deps.prerequisiteDone ?? (() => false)); saveGroup(store, lifted); }
         // Effect 4 (the command revision advances in applyWebCommand).
-        recordActivity(store, { groupId, taskId, runId, kind: "task-retried", body: { fromRunId: runId, ...(switched === null ? {} : { agent: switched }) } });
+        recordActivity(store, { groupId, taskId, runId, kind: "task-retried", body: { fromRunId: runId, ...afterBody, ...(switched === null ? {} : { agent: switched }) } });
         if (observed !== null && observed !== undefined) deps.applyObservedPaths!(store, groupId, taskId, runId, observed, command.commandId, command.payload.allowanceId !== undefined ? `allowance:${command.payload.allowanceId}` : commandPrincipalFor(command.commandId) ?? command.actorId);
         deps.beforeCommit?.();
         return commandSuccess(context, { kind: "task-retried", taskId, fromRunId: runId });

@@ -383,6 +383,12 @@ export const durableCommandErrorStatuses = {
   "observed-paths-conflict": 409,
   // Off-plan writes plan Task 3 fix round 1: a confirmed task's change whose own targets meet its frozen siblings' claims.
   "off-plan-claims-overlap": 409,
+  // Off-plan writes plan Task 6: `retry-task --after <sibling>` with observed paths, under a running attempt, after a task
+  // that is not a frozen sibling, or into a dependency cycle.
+  "after-with-observed-paths": 422,
+  "after-task-has-live-run": 409,
+  "after-not-a-sibling": 422,
+  "after-cycle": 409,
   "group-state-invalid": 422,
   // Issue #147 (session 3cfc2e73): an estimate asked for on a confirmed proposal, whose answer could never apply.
   "proposal-confirmed": 422,

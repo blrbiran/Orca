@@ -334,6 +334,11 @@ export function allowObservedPathsCommand(groupId: string, taskId: string): stri
   return `orca task retry ${groupId} ${taskId} --allow-observed-paths`;
 }
 
+/** Off-plan writes W4 (#346): a run stopped on a parallel sibling's claim is retried after that sibling. */
+export function retryAfterCommand(groupId: string, taskId: string, siblingId: string): string {
+  return `orca task retry ${groupId} ${taskId} --after ${siblingId}`;
+}
+
 /**
  * exportResumeBundle's precondition on a stopped run (resumeBundle.ts): a settled run with a complete checkpoint. A run
  * that fails it is not continued from; its task starts afresh (executionDriver.ts stepA2, tester follow-up I).

@@ -19,6 +19,10 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `accept-attempt-snapshot-partial` | 409 |
 | `accept-attempt-unsupported` | 409 |
 | `active-unbounded-budget-conflict` | 409 |
+| `after-cycle` | 409 |
+| `after-not-a-sibling` | 422 |
+| `after-task-has-live-run` | 409 |
+| `after-with-observed-paths` | 422 |
 | `agent-context-unsupported` | 422 |
 | `agent-group-cap-invalid` | 422 |
 | `agent-installation-missing` | 422 |
@@ -240,6 +244,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `observed-paths-invalid` | 422 |
 | `observed-paths-not-allowed` | 422 |
 | `observed-paths-unavailable` | 422 |
+| `off-plan-claims-overlap` | 409 |
 | `original-decision-not-found` | 404 |
 | `original-pending-decision-not-found` | 404 |
 | `owner-required` | 403 |

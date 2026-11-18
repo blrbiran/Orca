@@ -1140,6 +1140,40 @@ export class WebControlService {
       }));
     } catch (error) { process.stderr.write(`orca-control: worker-lost blockers: ${String(error)}\n`); }
   }
+  /**
+   * Off-plan writes W4 (#346; human ruling on W4, 2026-11-17, 「按建议走」): a run ccloop or Orca's bound stopped for writing a
+   * parallel sibling's frozen claim -- classified once, when the block was recorded (`drive.parallelClaim`), never again
+   * here -- is retried as orca-auto after the first of those siblings (`retry-task --after`: the task waits for it and
+   * stops denying its claims), once per run: the command row, applied or refused, is the record. A refusal leaves the task
+   * with the person (two siblings stopped on each other: the second is refused `after-cycle`). A retry the task's own budget
+   * cannot fund is not sent; it is noted on the run as the ladder notes its skips (`ladder-skipped`). One candidate's error
+   * never stops the pass.
+   */
+  private parallelClaimPass(out: { redispatched: string[] }): void {
+    const rows = this.store.db.prepare("SELECT id,group_id,body FROM runs WHERE active=1 AND json_valid(body) AND json_extract(body,'$.state')='blocked' AND json_type(body,'$.drive.parallelClaim')='object' ORDER BY rowid").all();
+    for (const row of rows) {
+      const groupId = String(row.group_id), runId = String(row.id);
+      try {
+        const run = JSON.parse(String(row.body)) as { taskId?: unknown; drive?: DriveRecord };
+        const drive = run.drive, taskId = run.taskId;
+        if (typeof taskId !== "string" || drive?.blockedAt !== "C" || drive.outcome !== "blocked_waiting_human" || drive.parallelClaim === undefined) continue;
+        const commandId = `orca-auto-parallel-claim-${taskId}-${runId}`;
+        if (this.store.db.prepare("SELECT 1 FROM commands WHERE group_id=? AND id=?").get(groupId, commandId) !== undefined) continue;
+        let funding: ReturnType<typeof autoRetryFundingRefusal>;
+        try { funding = autoRetryFundingRefusal(this.store, groupId, taskId, runId); }
+        catch (error) { if (!(error instanceof ControlError)) throw error; funding = "retry-funding-missing"; }
+        if (funding !== null) { this.noteLadderSkipped({ groupId, taskId, run: { runId, drive } }, funding); continue; }
+        const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)?.revision ?? 0);
+        const answer = this.retryTask({
+          schema: "orca-raw-command-v1", commandId, actorId: ORCHESTRATION_ACTOR, expectedRevision: revision, verb: "retry-task",
+          target: { kind: "group", groupId }, payload: { taskId, runId, after: drive.parallelClaim.siblingIds[0]! },
+        });
+        if (!("error" in answer)) out.redispatched.push(`${groupId}:${taskId}`);
+      } catch (error) {
+        process.stderr.write(`orca: parallel-claim retry ${groupId}/${runId}: ${error instanceof Error ? error.message : String(error)}\n`);
+      }
+    }
+  }
   /** A worker-lost run's recovery blocker (run scope), written once; answers its id. */
   private noteWorkerLost(groupId: string, runId: string, code: string): string {
     const id = `${code}:${runId}`;
@@ -1219,6 +1253,7 @@ export class WebControlService {
       });
     }
     await this.workerLostPass(out);
+    this.parallelClaimPass(out);
     for (const candidate of ladderCandidates(this.store)) {
       // Task setup and check retry spec 2026-11-04 §4.7: a run another try cannot fix is left out of both levels (this
       // includes a run that was itself the level-1 retry), and why is recorded once on the run for the task page.

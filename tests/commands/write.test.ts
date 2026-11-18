@@ -60,6 +60,8 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
   [["requirement", "classify", "g-alpha", "--scope", "medium", "--clarity", "fair"], "groups/g-alpha/requirement/classify", 5, { scope: "medium", clarity: "fair" }],
   [["task", "retry", "g-alpha", "t1"], "groups/g-alpha/retry-task", 5, { taskId: "t1", runId: "run-1" }],
   [["task", "retry", "g-alpha", "t1", "--allow-observed-paths"], "groups/g-alpha/retry-task", 5, { taskId: "t1", runId: "run-1", allowObservedPaths: true }],
+  // Off-plan writes W4 (#346, plan Task 6): the retry a parallel-claim stop names.
+  [["task", "retry", "g-alpha", "t1", "--after", "t2"], "groups/g-alpha/retry-task", 5, { taskId: "t1", runId: "run-1", after: "t2" }],
   [["task", "continue", "g-alpha", "t1"], "groups/g-alpha/tasks/t1/continue", 5, { predecessorRunId: "run-1", checkpointId: "cp-1" }],
   // #226 (ii): a note for the continued run; scope next-attempt unless --note-scope says otherwise.
   [["task", "continue", "g-alpha", "t1", "--note", "use the fixture in test/data"], "groups/g-alpha/tasks/t1/continue", 5,

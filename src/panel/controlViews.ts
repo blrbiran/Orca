@@ -15,7 +15,7 @@ import { denySiblingClaims, derivedPhaseTimeoutMs, frozenAllocationShape, offPla
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
 import { runAgentAgrees } from "../control/agentSwitch.js";
 import { installationRests, type InstallationRest } from "../control/quotaRest.js";
-import { allowObservedPathsCommand, continueRestartsFresh, isTerminallyFailedRun, MODEL_UNAVAILABLE_CAUSE, USAGE_PAUSE_FRESH_START, modelUnavailableCommand, recoveryRetryCommand, repairableCeilingBlock, requirementSetAgentCommand, resumableBlockedRun } from "../control/driveRecord.js";
+import { allowObservedPathsCommand, continueRestartsFresh, isTerminallyFailedRun, MODEL_UNAVAILABLE_CAUSE, USAGE_PAUSE_FRESH_START, modelUnavailableCommand, recoveryRetryCommand, repairableCeilingBlock, requirementSetAgentCommand, resumableBlockedRun, retryAfterCommand } from "../control/driveRecord.js";
 import { blockedOnRequirementAgent } from "../control/estimatorCompatibility.js";
 import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
@@ -164,6 +164,8 @@ const workBodySchema = z.object({
   loopVersion: safeInteger.optional(),
   // H12: set by the first set-task-loop that changed the task's contract, never cleared (webService.ts setTaskLoop).
   planChanged: z.literal(true).optional(),
+  // Off-plan writes W4 (#346): the siblings `retry-task --after` appended to dependsOn beyond the archived plan's edges.
+  afterDependsOn: z.array(idSchema).optional(),
 }).passthrough();
 
 const stopBodySchema = z.object({
@@ -605,7 +607,7 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
   let firstFailure: { taskId: string; cause: string; next?: string } | null = null;
   for (const taskId of taskIds) {
     // Over the summary's own snapshot: each body is decoded once, shared with the counts (controlPollPerformance).
-    let runId: unknown, run: { state?: unknown; phase?: unknown; failureCode?: unknown; drive?: { blockedAt?: unknown; blockedReason?: unknown; outcome?: unknown; failureCause?: { cause?: unknown }; pathPolicyMisses?: unknown } } | undefined, work: { currentRunId?: unknown; status?: unknown } | undefined;
+    let runId: unknown, run: { state?: unknown; phase?: unknown; failureCode?: unknown; drive?: { blockedAt?: unknown; blockedReason?: unknown; outcome?: unknown; failureCause?: { cause?: unknown }; pathPolicyMisses?: unknown; parallelClaim?: { siblingIds?: unknown } } } | undefined, work: { currentRunId?: unknown; status?: unknown } | undefined;
     try {
       work = decodedValue(snapshot.decodeWork(taskId)) as typeof work;
       runId = work?.currentRunId;
@@ -633,7 +635,9 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
     const pathPolicy = run?.state === "blocked" && Array.isArray(run.drive?.pathPolicyMisses) && run.drive.pathPolicyMisses.length > 0;
     // Tester follow-up J (#299): a model the provider does not serve is retried on another agent or model, by a person.
     const modelUnavailable = run?.drive?.failureCause?.cause === MODEL_UNAVAILABLE_CAUSE;
-    if (cause !== null) { firstFailure = { taskId, cause: cause.slice(0, 200), ...(resumable ? { next: recoveryRetryCommand(runId as string) } : pathPolicy ? { next: allowObservedPathsCommand(groupId, taskId) } : modelUnavailable ? { next: modelUnavailableCommand(groupId, taskId) } : {}) }; break; }
+    // Off-plan writes W4 (#346): a stop on a parallel sibling's claim (stored at block time) is retried after that sibling.
+    const sibling = run?.state === "blocked" && Array.isArray(run.drive?.parallelClaim?.siblingIds) && typeof run.drive.parallelClaim.siblingIds[0] === "string" ? run.drive.parallelClaim.siblingIds[0] : null;
+    if (cause !== null) { firstFailure = { taskId, cause: cause.slice(0, 200), ...(resumable ? { next: recoveryRetryCommand(runId as string) } : sibling !== null ? { next: retryAfterCommand(groupId, taskId, sibling) } : pathPolicy ? { next: allowObservedPathsCommand(groupId, taskId) } : modelUnavailable ? { next: modelUnavailableCommand(groupId, taskId) } : {}) }; break; }
   }
   const findings = listFlagsInvolving(store, groupId).filter((row) => row.state === "flagged");
   const major = findings.filter((row) => row.severity === "major").length;
@@ -1168,7 +1172,7 @@ function workViews(
       || body.originalContractHash !== task.originalContractHash
       || contract?.contentAddressedHash !== task.originalContractHash
       || (snapshot !== null && body.derivedContractHash !== derivedByTask.get(task.taskId))
-      || sortedUnique(body.dependsOn).join("\0") !== task.dependencyTaskIds.join("\0")) return blocked(`work-item-authority:${task.taskId}`);
+      || sortedUnique(body.dependsOn).join("\0") !== sortedUnique([...task.dependencyTaskIds, ...(body.afterDependsOn ?? [])]).join("\0")) return blocked(`work-item-authority:${task.taskId}`);
     const taskRuns = runs.filter(run => String(run.work_item_id) === task.taskId);
     const persistedRunIds = taskRuns.map(run => String(run.id));
     if (taskRuns.length > 0) {
