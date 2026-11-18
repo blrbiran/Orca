@@ -89,6 +89,8 @@ export function ResultsConclusion(props: ResultsConclusionProps): JSX.Element {
     : summary.state === "done" && scheme.delivery === "push-branch" ? t("control.results.mergePushed", { branch, target: scheme.target, remote: scheme.remote })
     : scheme.delivery === "github-pr" && pr !== null && pr.ready ? t("control.results.mergePr", { number: pr.number })
     : null;
+  // Tester #365(a): a kept delivery's files are on the work branch only; say so, and how to list and take them.
+  const kept = !folders && summary.state === "done" && scheme.delivery === "keep";
 
   return (
     <section aria-label={t("control.results.conclusion")} data-testid="results-conclusion" className="detail-block min-w-0 wrap-anywhere">
@@ -105,6 +107,10 @@ export function ResultsConclusion(props: ResultsConclusionProps): JSX.Element {
           <span data-conclusion="delivery-sentence">{delivery}</span>
           {pr !== null && <>{" · "}{PR_URL.test(pr.url) ? <a href={pr.url}>{prLabel}</a> : prLabel}</>}
           {merge !== null && <span className="block" data-conclusion="merge">{merge}</span>}
+          {kept && <>
+            <span className="block" data-conclusion="kept">{tip === null ? t("control.results.keptOn", { branch }) : t("control.results.keptOnTip", { branch, tip: short(tip) })}</span>
+            <span className="block" data-conclusion="kept-take">{t("control.results.keptTake", { branch })}</span>
+          </>}
         </dd>
         <dt>{t("control.results.waiting")}</dt>
         <dd data-conclusion="waiting">

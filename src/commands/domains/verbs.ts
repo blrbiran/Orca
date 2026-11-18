@@ -355,6 +355,19 @@ export function deliveryLines(groupId: string, delivered: DeliveredView | undefi
   return lines;
 }
 
+/**
+ * Tester #365(a): a done group delivered with `keep` has its files on orca/<group> only, not in the person's working tree;
+ * where they are (the tip when the view has one), the commands that list and take them, and local delivery as the other way.
+ */
+export function keptLines(groupId: string, b: { summary?: { state?: string; acceptance?: { tip?: string | null }; placement?: unknown; multiDir?: unknown }; integration?: { scheme?: { delivery?: string } } } | null): string[] {
+  const s = b?.summary;
+  if (s?.state !== "done" || b?.integration?.scheme?.delivery !== "keep" || s.placement !== undefined || s.multiDir !== undefined) return [];
+  const branch = `orca/${groupId}`, tip = s.acceptance?.tip ?? null;
+  return [`delivery: keep -- the files are on ${branch}${tip === null ? "" : ` (tip ${tip.slice(0, 12)})`}, not in your working tree`,
+    `  list them: git diff --name-only HEAD...${branch}`, `  take them: git checkout ${branch} -- <paths>`,
+    "  or: local delivery merges them into a local branch for groups confirmed after: orca project set-integration --delivery local --target <branch>"];
+}
+
 export function reviewLines(groupId: string, review: ReviewView | undefined): string[] {
   if (review === undefined) return [];
   const last = review.rounds.at(-1);
@@ -516,6 +529,7 @@ export function formatWithUnestimated(body: unknown): string {
     ...(typeof groupId === "string" ? acceptanceLines(groupId, b?.summary?.acceptance) : []),
     ...(typeof groupId === "string" ? deliveryLines(groupId, (b?.summary as { deliveredAcceptance?: DeliveredView } | undefined)?.deliveredAcceptance,
       (b as { integration?: { retryAfter?: number; transient?: number; transientReason?: string | null } } | null)?.integration) : []),
+    ...(typeof groupId === "string" ? keptLines(groupId, b as Parameters<typeof keptLines>[1]) : []),
     ...(typeof groupId === "string" ? reviewLines(groupId, (b?.summary as { requirementReview?: ReviewView } | undefined)?.requirementReview) : []),
     ...(typeof groupId === "string" ? landingWatchLines(groupId, b?.summary?.landingWatch) : []),
     ...allowanceLines(b?.summary?.allowances),

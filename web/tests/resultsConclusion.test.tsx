@@ -147,6 +147,25 @@ describe("the conclusion card (#319 proposal 1)", () => {
     expect(card().querySelector('[data-conclusion="merge"]')).toBeNull();
   });
 
+  // Tester #365(a) (batch D C4): a kept delivery's files are on the work branch, not in the person's working tree; the card
+  // says so, names the tip when the view carries one, gives the commands that list and take the files, and names local
+  // delivery as the alternative.
+  it("says where a kept delivery's files are and how to take them", () => {
+    show(done());
+    // mutation: drop the kept lines -> red here.
+    expect(line("kept").textContent).toBe("The files are on orca/g (tip abcdef012345), not in your working tree.");
+    expect(line("kept-take").textContent).toBe("List them: git diff --name-only HEAD...orca/g · take them: git checkout orca/g -- <paths> · or set local delivery and Orca merges them into a local branch");
+    cleanup();
+    const noTip = done(); delete noTip.summary.acceptance;
+    show(noTip);
+    // mutation: always print the tip clause -> red here.
+    expect(line("kept").textContent).toBe("The files are on orca/g, not in your working tree.");
+    cleanup();
+    const pushed = done(); pushed.integration = integration({ delivery: "push-branch", trigger: "task", target: "main", remote: "origin" });
+    show(pushed);
+    expect(card().querySelector('[data-conclusion="kept"]')).toBeNull();
+  });
+
   // Review fix 3: a done push-branch group and a github-pr group with a ready PR also leave the merge to the person.
   it("says the merge is the person's for a done push-branch group and a ready pull request, and not before", () => {
     const pushed = done(); pushed.integration = integration({ delivery: "push-branch", trigger: "task", target: "main", remote: "origin" });
