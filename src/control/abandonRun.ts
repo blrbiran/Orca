@@ -20,8 +20,8 @@ import { refuseFlowChild } from "../flow/groups.js";
  * `settled-failed` with `operatorSettlement {kind: "abandoned"}`, the task `blocked` (`run-abandoned`), nothing
  * dispatched until a person acts. Human ruling (2026-11-17, 「按你的建议走」): an abandoned run keeps no work for
  * `accept-attempt`. A run ccloop does not stop within the handoff grace is named `abandon-unresolved` (recovery list).
- * Tester #369 (b): one ccloop stopped with its usage unknown waits blocked at C (`usage-unknown`); the lower-bound settle
- * that books its floor then settles it abandoned the same way (settleUnknownUsage.ts settleAbandonedAfterFloor).
+ * Tester #369 (b): one ccloop stopped with its usage unknown waits blocked at C (`usage-unknown`); the usage settle that
+ * makes it known (any method) then settles it abandoned the same way (settleUnknownUsage.ts settleAbandonedOnceKnown).
  */
 export const RUN_ABANDONED = "run-abandoned";
 export const ABANDON_UNRESOLVED = "abandon-unresolved";

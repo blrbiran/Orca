@@ -59,4 +59,20 @@ describe("an abandoned run settled at its lower bound stays abandoned (#369 b)",
       expect(t.service.retryTask(t.h.command("retry-task", { taskId: "a", runId }))).toMatchObject({ result: { kind: "task-retried" } });
     } finally { await t.h.dispose(); }
   });
+
+  // Review of D4 (I4): a person's settle by another method makes the usage known as well; the run is settled abandoned too.
+  // An optional-v1 group's run has no finite token remainder, so its non-floor settle is the owner's unmetered release.
+  it("a person's unmetered release (not a floor) settles the run abandoned as well", async () => {
+    const { t, runId } = await abandonedUnknown();
+    try {
+      const c = t.h.command("settle-unknown-usage", { taskId: "a", runId, generation: 1, acknowledge: "release-unmetered" as never });
+      const settled = await withCommandContext(c.commandId, OWNER, () => (t.service as never as { settleUnknownUsage(c: unknown): Promise<unknown> }).settleUnknownUsage(c));
+      expect(settled).not.toHaveProperty("error");
+      const run = t.body(runId);
+      expect(run.usageSettlement).toMatchObject({ method: "owner-acknowledged-unmetered" });
+      // mutation: settle abandoned only after a floor method -> blocked, no operatorSettlement, task running; red here.
+      expect(run.operatorSettlement).toEqual({ kind: "abandoned", by: "user:owner", note: NOTE, at: run.abandon.at });
+      expect([run.state, run.failureCode, readWork(t.h.store, "g", "a").status]).toEqual(["settled-failed", "run-abandoned", "blocked"]);
+    } finally { await t.h.dispose(); }
+  });
 });

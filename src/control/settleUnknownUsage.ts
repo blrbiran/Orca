@@ -214,15 +214,16 @@ export function finishUsageSettlement(store: ControlStore, input: {
     settleRecoveredRequestInTransaction(store, groupId, input.requestId!, marker);
   }
   recordActivity(store, { groupId, taskId: run.taskId, runId: run.runId, kind: "usage-settled", body: input.activity });
-  if (marker.method === "approximate-floor" || marker.method === "observed-floor") settleAbandonedAfterFloor(store, groupId, run.runId);
+  settleAbandonedOnceKnown(store, groupId, run.runId);
 }
 /**
  * Tester #369 (b) (plan 2026-11-18 batch D, D4): an abandoned run ccloop stopped with its usage unknown was blocked at C
- * (`usage-unknown`, executionDriver.ts settleAbandonedTerminal) until its usage is known. A lower-bound settle (Orca's
- * approximate floor, or a person's observed floor) makes it known; the run is then settled abandoned in the same
- * transaction, as settleAbandonedTerminal settles one whose usage is known -- after the floor is booked, which it leaves as is.
+ * (`usage-unknown`, executionDriver.ts settleAbandonedTerminal) until its usage is known. Any usage settle makes it known --
+ * a lower bound (Orca's approximate floor, a person's observed floor) or, review of D4 (I4), a person's remaining-grant,
+ * known-zero or unmetered release; the run is then settled abandoned in the same transaction, as settleAbandonedTerminal
+ * settles one whose usage is known -- after the booking, which it leaves as is. Any other run is left alone.
  */
-function settleAbandonedAfterFloor(store: ControlStore, groupId: string, runId: string): void {
+function settleAbandonedOnceKnown(store: ControlStore, groupId: string, runId: string): void {
   const current = readRun(store, runId) as unknown as SettlementRun & { abandon?: unknown; operatorSettlement?: unknown };
   const request = abandonOf(current);
   const drive = current.drive as { blockedAt?: string | null; outcome?: string | null } | undefined;
