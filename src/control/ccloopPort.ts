@@ -251,7 +251,7 @@ export function createCcloopExecutionPort(options:{binary:string;agentsTablePath
   try{return await raw(method,payload,Math.min(options.timeoutMs,TASK_RESULT_RPC_TIMEOUT_MS));}
   catch(error){if(peerErrorCode(error)==='control-command-invalid'&&optionalIdentity()===identity){unsupportedIdentity=identity;throw new TaskResultUnsupportedError();}throw error;}
  };
- const featuresSchema=z.object({protocol:z.literal(1),tokenPolicy:z.literal("optional-v1").optional(),savedResultRecovery:z.literal("v1").optional(),agentInstallationUpdate:z.literal("v1").optional(),transcripts:z.literal("v1").optional()}).strict();
+ const featuresSchema=z.object({protocol:z.literal(1),tokenPolicy:z.literal("optional-v1").optional(),savedResultRecovery:z.literal("v1").optional(),agentInstallationUpdate:z.literal("v1").optional(),transcripts:z.literal("v1").optional(),attemptRef:z.literal("v1").optional()}).strict();
  let featuresCache:{identity:string;value:ControlFeatures}|null=null;
  const readFeatures=async():Promise<ControlFeatures>=>{
   const identity=optionalIdentity();if(featuresCache?.identity===identity)return {...featuresCache.value};
