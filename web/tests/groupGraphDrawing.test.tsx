@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { BoardView } from "../src/BoardView.js";
 import { goalSummary } from "../src/CardGoal.js";
 import type { GroupSummaryV1 } from "../src/controlTypes.js";
+import type { ControlAction } from "../src/controlApi.js";
 import { GroupGraph } from "../src/GroupGraph.js";
 
 afterEach(cleanup);
@@ -60,6 +61,52 @@ describe("the Board's group graph (#378)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Group graph" }));
     fireEvent.click(screen.getByRole("button", { name: "b · ready · 1/2 tasks done" }));
     fireEvent.keyDown(screen.getByRole("button", { name: "a · ready · 1/2 tasks done" }), { key: "Enter" });
-    expect(onOpen.mock.calls.map(([group]) => group.groupId)).toEqual(["b", "a"]);
+    // #378 review M-9. mutation: the node ignores Space -> only two opens -> red
+    fireEvent.keyDown(screen.getByRole("button", { name: "b · ready · 1/2 tasks done" }), { key: " " });
+    expect(onOpen.mock.calls.map(([group]) => group.groupId)).toEqual(["b", "a", "b"]);
+  });
+
+  // #378 review I-2. mutation: GroupGraph ignores layout.missing (no note, no listed line) -> red
+  it("names a dependency on a group it cannot draw (archived), lists it with its Remove, and never says there are none", () => {
+    const onCommand = vi.fn<(action: ControlAction) => void>();
+    render(<GroupGraph groups={[g({ groupId: "a", dependsOn: ["old"], commandRevision: 4 }), g({ groupId: "old", archived: true })]} onCommand={onCommand} onOpen={vi.fn()} />);
+    const figure = screen.getByRole("figure", { name: "Group graph" });
+    expect(within(figure).getByRole("note").textContent).toBe("1 dependency names a group that is archived or not on this board; it is not drawn");
+    expect(within(figure).queryByText(/^No dependencies/)).toBeNull();
+    const list = within(figure).getByRole("list", { name: "Dependencies" });
+    expect(within(list).getAllByRole("listitem").map((li) => li.firstChild?.textContent)).toEqual(["a waits for old (not drawn: archived or not on this board)"]);
+    fireEvent.click(within(list).getByRole("button", { name: "Remove" }));
+    expect(onCommand.mock.calls).toEqual([[{ verb: "remove-group-dependency", groupId: "a", expectedRevision: 4, payload: { dependsOn: "old" } }]]);
+  });
+
+  // #378 review I-2. mutation: GroupGraph ignores layout.cycleEdges -> no alert -> red
+  it("says when a dependency would close a cycle and is not drawn", () => {
+    render(<GroupGraph groups={[g({ groupId: "a", dependsOn: ["b"] }), g({ groupId: "b", dependsOn: ["a"] })]} onCommand={vi.fn()} onOpen={vi.fn()} />);
+    expect(within(screen.getByRole("figure", { name: "Group graph" })).getByRole("alert").textContent).toBe("1 dependency would close a cycle; it is not drawn");
+  });
+
+  // #378 review M-4. mutation: a done group keeps the idle fill (groupLed alone) -> red
+  it("has a legend in group meanings, and a done group is filled as done", () => {
+    render(<GroupGraph groups={[g({ groupId: "d", state: "done", completion: { done: 2, total: 2 } })]} onCommand={vi.fn()} onOpen={vi.fn()} />);
+    const figure = screen.getByRole("figure", { name: "Group graph" });
+    expect(within(within(figure).getByRole("list", { name: "Legend" })).getAllByRole("listitem").map((li) => li.textContent))
+      .toEqual(["not started", "queued or waiting", "running", "needs you", "done"]);
+    expect(figure.querySelector("g.dep-node")?.getAttribute("class")).toBe("dep-node dep-done");
+  });
+
+  // #378 review M-7. mutation: the summary says "Dependencies" again -> two things share one name -> red
+  it("names the folded text fallback and its list differently", () => {
+    render(<GroupGraph groups={[g({ groupId: "a" }), g({ groupId: "b", dependsOn: ["a"] })]} onCommand={vi.fn()} onOpen={vi.fn()} />);
+    const figure = screen.getByRole("figure", { name: "Group graph" });
+    expect(figure.querySelector("details > summary")?.textContent).toBe("Dependencies as text");
+    expect(within(figure).getByRole("list", { name: "Dependencies" })).toBeTruthy();
+  });
+
+  // #378 review M-8. mutation: the label is joined in code, not from board.graph.node -> the zh label keeps " · " -> red
+  it("words a node's accessible label from the locale", async () => {
+    const i18n = (await import("../src/i18n.js")).default;
+    await i18n.changeLanguage("zh");
+    render(<GroupGraph groups={[g({ groupId: "a" })]} onCommand={vi.fn()} onOpen={vi.fn()} />);
+    expect(document.querySelector("g.dep-node")?.getAttribute("aria-label")).toBe("a：就绪，已完成 1/2 个任务");
   });
 });

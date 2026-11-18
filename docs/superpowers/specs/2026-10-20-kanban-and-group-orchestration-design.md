@@ -394,3 +394,10 @@ unchanged in behaviour. The group graph (`web/src/GroupGraph.tsx`) fills it from
 A node opens its group (click, Enter or Space) through the Board's `onOpen`. The "A waits for B" list with its Remove
 buttons stays as a folded `<details>` text fallback under the drawing; the add/remove/replace command payloads do not
 change. The Board still has no batch actions or extra columns. Criteria: `web/tests/groupGraphDrawing.test.tsx`.
+
+Review fix (same day, #378 review): the group graph is laid out from live groups only, so a dependency on an archived
+group or one not on this board has no edge. It is now counted in a note and listed in the text fallback with its
+Remove (payload unchanged), and a dependency that would close a cycle is counted in an alert, as on the task graph;
+"No dependencies" is said only when there is none of any kind. A legend gives each fill its group meaning (not started,
+queued or waiting, running, needs you, done; a group in the Done column is filled as done). A node's accessible label
+comes from the locale (`board.graph.node` / `nodeProgress`).
