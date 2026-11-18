@@ -113,7 +113,10 @@ export type RunProgress=z.infer<typeof runProgressSchema>;
 // lists it. Strict, so an entry of the wrong shape refuses the whole answer.
 export const transcriptEntrySchema=z.object({attempt:safeInteger.positive(),phase:z.string().min(1),seq:safeInteger.positive(),path:z.string().min(1).nullable(),bytes:safeInteger,final:z.boolean(),truncatedAt:safeInteger.nullable(),
   // Tester #252 (spec 2026-11-12-tester-followup-f §6): the call's spawn time, from a ccloop that records one; absent before.
-  startedAt:z.string().datetime({offset:true}).optional()}).strict();
+  startedAt:z.string().datetime({offset:true}).optional(),
+  // ccloop omp launch isolation (Orca #369 a / #375, ccloop src/control/command.ts): the MCP readiness warnings omp printed
+  // for this call, 1-16 lines of at most 512 UTF-8 bytes each; absent when there were none.
+  warnings:z.array(z.string().min(1).refine(line=>new TextEncoder().encode(line).length<=512,"warning-too-long")).min(1).max(16).optional()}).strict();
 export type TranscriptEntry=z.infer<typeof transcriptEntrySchema>;
 // Live transcript spec §12.3 / plan D1: the last listing a collect answered, kept on the run body.
 export const transcriptListingSchema=z.object({sourceDir:z.string().min(1),entries:z.array(transcriptEntrySchema)}).strict();

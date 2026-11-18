@@ -104,3 +104,21 @@ describe("tester #252: the listing is served in start order within a fully timed
     } finally { await web.close(); await socket.close(); await t.h.dispose(); }
   });
 });
+
+// ccloop #369(a)/#375 (omp launch isolation): an omp call lists the MCP readiness warnings omp printed (1-16 lines, each at
+// most 512 bytes) as optional `warnings`; Orca's strict parse must accept it and refuse a malformed one.
+describe("collect's listing may carry an omp call's warnings (ccloop omp launch isolation)", () => {
+  // mutation: drop `warnings` from transcriptEntrySchema -> the strict entry refuses the newer listing, red
+  it("accepts and hands on a listing with warnings, and keeps one without", async () => {
+    const warned = [{ ...ENTRY, warnings: ['Warning: MCP server "rea" not ready after 2000ms'] }, { ...ENTRY, seq: 2 }];
+    const withIt = await fakeCcloop(warned);
+    expect((await withIt.port.collect(withIt.envelope, 0)).transcripts).toEqual(warned);
+  });
+  // mutation: warnings as z.array(z.string()) without bounds -> an empty list and a 513-byte line pass, red
+  it("refuses an empty warnings list and an over-long line", async () => {
+    for (const warnings of [[], ["x".repeat(513)], Array.from({ length: 17 }, () => "Warning: x")]) {
+      const bad = await fakeCcloop([{ ...ENTRY, warnings }]);
+      await expect(bad.port.collect(bad.envelope, 0)).rejects.toThrow();
+    }
+  });
+});

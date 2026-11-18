@@ -20,7 +20,9 @@ export const KNOWN_FAILURE_CAUSES = ["auth", "quota", "rate-limited", "provider-
   // message that is not JSON; JSON that is not the execute shape).
   "narration-only", "execution-not-json", "execution-shape",
   // Tester #349: ccloop's cause for a call that failed only in a cleanup step after its work (not retried in-phase).
-  "cleanup-failed", "unknown"] as const;
+  "cleanup-failed",
+  // ccloop omp launch isolation (#369 a): a non-retryable 4xx from the provider (HTTP status in the detail).
+  "provider-error", "unknown"] as const;
 export type KnownFailureCause = typeof KNOWN_FAILURE_CAUSES[number];
 export const knownCause = (cause: string): KnownFailureCause => (KNOWN_FAILURE_CAUSES as readonly string[]).includes(cause) ? cause as KnownFailureCause : "unknown";
 
