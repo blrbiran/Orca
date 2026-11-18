@@ -9,10 +9,11 @@
  * after confirmation (they are what the registry and the split freeze), before the first claim.
  */
 import { existsSync } from "node:fs";
-import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { stepA1, stepA2 } from "../../src/control/executionDriver.js";
+import { stepA1, stepA2, stepCleanupFailed } from "../../src/control/executionDriver.js";
+import { archiveRun } from "../../src/control/archive.js";
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import { flowVaultRepoId } from "../../src/flow/groups.js";
 import { readWorkClaimEnvelope } from "../../src/control/webDispatch.js";
@@ -59,6 +60,23 @@ const editRun = (t: Driver, runId: string, edit: (body: Record<string, unknown>)
   edit(body);
   t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), runId);
 };
+
+/** What ccloop leaves for an extra directory: its own result repository under <sourceDir>/repos/<key> (spec §11.6). */
+const EXTRA_RESULT = "alpha's result, the only copy (no v1 snapshot of an extra)\n";
+const extraResult = async (sourceDir: string): Promise<void> => {
+  await mkdir(join(sourceDir, "repos", "alpha"), { recursive: true });
+  await writeFile(join(sourceDir, "repos", "alpha", "result.txt"), EXTRA_RESULT);
+};
+const extraIntact = async (sourceDir: string): Promise<void> => {
+  expect(await readFile(join(sourceDir, "repos", "alpha", "result.txt"), "utf8")).toBe(EXTRA_RESULT);
+};
+/** A complete archive row for the run, from the copy the fake ccloop collected and a stop proof naming the run's execution. */
+async function completeArchive(t: Driver, runId: string): Promise<void> {
+  const run = t.body(runId);
+  const proof = { executionId: run.executionId, generation: run.generation, isolated: true as const, source: { artifactId: "unused", sha256: "0".repeat(64), bytes: 0 } };
+  const archived = await archiveRun(t.h.store, { runId, sourceDir: run.drive.sourceDir, repoDir: join(run.drive.sourceDir, "repo"), stopProof: proof as never });
+  expect(archived.missing).toEqual([]);
+}
 
 describe("A2 for a multi group's run (§7.1)", () => {
   it("gives only the written directories a workspace, in registered order, and names them everywhere", async () => {
@@ -175,7 +193,11 @@ describe("A2 for a multi group's run (§7.1)", () => {
     expect(sha256Canonical(rebuilt)).toBe(drive.envelopeHash);
   });
 
-  it("removes the flat extra workspace when the run's workspace is cleaned up", async () => {
+  // Ruling (2026-11-19 change-sized runs P0 review): step E removes the result copy (repo and, with extras, repos/) after
+  // the workspaces and before the `cleanedUp` write, only once a complete archive row holds it (spec §5.6). The synthetic
+  // settle below now seeds that row first (archiveRun on the copy the fake ccloop collected), so the criterion keeps "E
+  // cleans up" whole and also judges step E's `{extras:true}` call: repos/ goes with repo.
+  it("removes the flat extra workspace when the run's workspace is cleaned up, and the result copies with repos/", async () => {
     const t = await driverHarness([{ taskId: "a", targetPaths: ["**"], contextExtra: {
       repoKey: "main", additionalRepos: [{ key: "alpha", repoPath: "/unused/alpha", targetPaths: ["alpha/**"], allowlistPaths: [] }],
     } }], options());
@@ -184,19 +206,21 @@ describe("A2 for a multi group's run (§7.1)", () => {
     });
     const runId = await t.claim();
     const driver = t.driver();
-    await t.until(driver, () => t.body(runId).drive?.prepared === true, 10);
+    await t.until(driver, () => t.body(runId).drive?.prepared === true && existsSync(join(t.body(runId).drive.sourceDir, "repo")), 10);
     const drive = t.body(runId).drive;
     expect(existsSync(drive.workspacePath)).toBe(true);
     expect(existsSync(drive.dirs[1].workspacePath)).toBe(true);
+    await extraResult(drive.sourceDir);
     // A settled run is where stepE's cleanup acts; E is reached directly, without a landing this task does not implement.
+    await completeArchive(t, runId);
     editRun(t, runId, (body) => { body.state = "settled"; });
     await driver.round();
-    // Ruling (2026-11-19 change-sized runs P0): step E now removes the result copy after the workspaces and before the
-    // `cleanedUp` write, and only once an archive row holds it (spec §5.6). This synthetic settle has no archive, so the
-    // removal refuses by name and the run stays not cleaned up; intent kept: both workspaces are removed by E's cleanup.
-    expect(t.body(runId).drive).toMatchObject({ cleanedUp: false, cleanupError: expect.stringContaining("result-copy-unarchived") });
+    expect(t.body(runId).drive).toMatchObject({ cleanedUp: true, cleanupError: null });
     expect(existsSync(drive.workspacePath)).toBe(false);
     expect(existsSync(drive.dirs[1].workspacePath)).toBe(false);
+    // Mutation I1-E: step E's removeResultCopies with {extras:false} -> repos/ stays, red.
+    expect([existsSync(join(drive.sourceDir, "repo")), existsSync(join(drive.sourceDir, "repos"))]).toEqual([false, false]);
+    expect(existsSync(drive.sourceDir)).toBe(true);
   });
 
   it("blocks a multi run whose frozen writes name no directory, instead of failing on it", async () => {
@@ -245,5 +269,53 @@ describe("A2 for a multi group's run (§7.1)", () => {
     expect(t.body(runId).drive).toMatchObject({ cleanedUp: true, cleanupError: null });
     expect(existsSync(drive.workspacePath)).toBe(false);
     expect(existsSync(drive.dirs[1].workspacePath)).toBe(false);
+  });
+});
+
+/**
+ * Change-sized runs spec 2026-11-19 §5.6 (P0 review I1): a multi-directory run that did not land keeps repos/<key>, the
+ * only copy of an extra's result (the v1 archive has no snapshot of extras). A failed run's cleanup and a recoverable
+ * settle remove <sourceDir>/repo only; each criterion first proves its removal ran (repo gone), then that repos/ is intact.
+ */
+describe("a multi-directory run that did not land keeps repos/<key> (§5.6, P0 review I1)", { timeout: 60_000 }, () => {
+  const multi = async (behaviour: "failed" | "stoppable") => {
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["**"], contextExtra: {
+      repoKey: "main", additionalRepos: [{ key: "alpha", repoPath: "/unused/alpha", targetPaths: ["alpha/**"], allowlistPaths: [] }],
+    } }], options({ behaviour: () => behaviour }));
+    freeze(t, [{ key: "main", repoId: "repo" }, { key: "alpha", repoId: alphaKey }], {
+      a: [{ dir: "main", targetPaths: ["**"], checks: [] }, { dir: "alpha", targetPaths: ["alpha/**"], checks: [] }],
+    });
+    return t;
+  };
+
+  // Mutation I1-F: stepCleanupFailed's removeResultCopies with {extras:true} -> repos/alpha removed, red.
+  it("a failed run's cleanup (retry-task, then stepCleanupFailed) removes repo and leaves repos/alpha byte-intact", async () => {
+    const t = await multi("failed"); const driver = t.driver(); try {
+      const runId = await t.claim();
+      await t.until(driver, () => t.body(runId).state === "blocked");
+      const sourceDir = t.body(runId).drive.sourceDir;
+      await extraResult(sourceDir);
+      expect(t.service.retryTask(t.h.command("retry-task", { taskId: "a" }))).not.toHaveProperty("error");
+      expect(t.body(runId).state).toBe("settled-failed");
+      expect(await stepCleanupFailed(t.deps, runId)).toBe(true);
+      expect(t.body(runId).drive).toMatchObject({ cleanedUp: true, cleanupError: null });
+      expect(existsSync(join(sourceDir, "repo"))).toBe(false);
+      await extraIntact(sourceDir);
+    } finally { await driver.stop(); await t.h.dispose(); }
+  });
+
+  // Mutation I1-R: dropResultCopyAfterSettle's removeResultCopies with {extras:true} -> repos/alpha removed, red.
+  it("a recoverable (handoff) settle removes repo and leaves repos/alpha byte-intact", async () => {
+    const t = await multi("stoppable"); const driver = t.driver(); try {
+      const runId = await t.claim();
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      const sourceDir = t.body(runId).drive.sourceDir;
+      await extraResult(sourceDir);
+      const [request] = await stop(t);
+      await t.until(driver, () => requestState(t, request!) === "settled-recoverable");
+      expect(t.body(runId).state).toBe("settled-recoverable");
+      expect(existsSync(join(sourceDir, "repo"))).toBe(false);
+      await extraIntact(sourceDir);
+    } finally { await driver.stop(); await t.h.dispose(); }
   });
 });
