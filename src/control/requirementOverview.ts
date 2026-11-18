@@ -308,11 +308,13 @@ export async function buildRepositoryOverview(input: {
  * a new file in a new directory, or `<prefix>/**` for a directory the task creates -- and fails when that ancestor is a
  * file or a submodule (the path would go through it). The old rule (the parent must exist) forced a split to flatten
  * `src/sla/model.js` into `src/sla-model.js` against its requirement; git has no reason to refuse a new directory.
+ * A path with a `.git` segment is refused too (targetShapeOk). A target of a bad shape is therefore handed back twice --
+ * `expand:<task>:path-shape` from expansion and `path:<task>:<path>` from here -- each naming it in its own words.
  */
 export async function overviewPathExists(repo: string, commit: string, entry: string): Promise<boolean> {
   const typeOf = gitTypeOf(repo, commit);
   if (entry === "**") return true;
-  if (!pathShapeOk(entry)) return false;
+  if (!targetShapeOk(entry)) return false;
   const directory = entry.endsWith("/**");
   const path = directory ? entry.slice(0, -3) : entry;
   // An entry the commit has: an exact path passes whatever it names (as before #351); `<prefix>/**` needs a directory.
@@ -320,6 +322,12 @@ export async function overviewPathExists(repo: string, commit: string, entry: st
   if (type !== null) return directory ? type === "tree" : true;
   return nearestExistingIsTree(typeOf, path);
 }
+
+/**
+ * A write-set shape (loopPlans.ts pathShapeOk) with no `.git` segment, as historyExpectation.ts refuses one: a task never
+ * writes git's own files (fix round 1 of #351/#352, Minor 3).
+ */
+export const targetShapeOk = (path: string): boolean => pathShapeOk(path) && !path.split("/").includes(".git");
 
 /** The type git gives `path` at `commit` (`blob`, `tree`, `commit` for a submodule), null when it has none. */
 const gitTypeOf = (repo: string, commit: string) => async (path: string): Promise<string | null> => {
@@ -346,7 +354,7 @@ export async function creatableAt(repo: string, commit: string, paths: readonly 
   try { await run(repo, ["cat-file", "-e", `${commit}^{commit}`]); } catch { return out; }
   const typeOf = gitTypeOf(repo, commit);
   for (const path of new Set(paths)) {
-    if (path === "**" || path.endsWith("/**") || !pathShapeOk(path) || (await typeOf(path)) !== null) continue;
+    if (path === "**" || path.endsWith("/**") || !targetShapeOk(path) || (await typeOf(path)) !== null) continue;
     if (await nearestExistingIsTree(typeOf, path)) out.add(path);
   }
   return out;

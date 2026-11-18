@@ -18,8 +18,8 @@ import { readArchivedContract, readArchivedPlan } from "./queries.js";
 import { boundedGroupGrant, claimGroupSingleCallInTransaction, completeGroupSingleCallInTransaction, interruptGroupSingleCall, readGroupCallContract } from "./groupSingleCall.js";
 import { saveRun } from "./budget.js";
 import { closeSingleCall } from "./singleCallLedger.js";
-import { pathShapeOk } from "./loopPlans.js";
 import { isMultiGroup } from "./multiGroup.js";
+import { targetShapeOk } from "./requirementOverview.js";
 import { cutUtf8 } from "./noChange.js";
 import { planLayers, planOrderTasks } from "./planOrder.js";
 import { recordProjectionChange } from "./projectionJournal.js";
@@ -680,21 +680,26 @@ export function fixTaskPaths(unmet: ReadonlyArray<{ readonly evidence: ReadonlyA
 }
 
 /**
- * Tester #352: the repository-relative paths a finding's `missing` text names -- a token in backticks, or a bare token
- * holding a `/` that ends in a file extension or in `/` -- with leading brackets or quotes and trailing punctuation
- * stripped. A token ending in `/` names a directory and becomes `<directory>/**`. Each must have a write-set shape
- * (pathShapeOk: no leading `/`, no `*` but a trailing `/**`, no empty, `.` or `..` segment) and no whitespace; `**`
- * alone is refused, since a stray token must not open the whole repository. The review schema stays as it is.
+ * Tester #352: the repository-relative paths a finding's `missing` text names, in text order. A candidate is a backticked
+ * span, or (fix round 1, Important 1) outside backticks a maximal run of path characters `[A-Za-z0-9._/*-]` -- so a path
+ * glued to CJK text or wrapped in full-width or curly punctuation is found -- with sentence-ending dots stripped. A
+ * backticked span must consist of path characters only (Important 2: no `--json`, `breach()`, `src/a.ts:12`) and contain
+ * a `/` or end in a letter-led extension (`README.md`); a bare run must contain a `/` and end in such an extension or in
+ * `/`. A trailing `/` names a directory and becomes `<directory>/**`. Each must have a target shape (targetShapeOk: no
+ * leading `/`, no `*` but a trailing `/**`, no empty, `.`, `..` or `.git` segment), no segment starting with `-`, and not
+ * be `**` alone: a stray token must not open the whole repository. The review schema stays as it is.
  */
 function missingTextPaths(missing: string | null): string[] {
   if (missing === null) return [];
   const out: string[] = [];
-  for (const match of missing.matchAll(/`([^`]*)`|(\S+)/g)) {
+  const extension = /\.[A-Za-z][A-Za-z0-9]*$/;
+  for (const match of missing.matchAll(/`([^`]*)`|([A-Za-z0-9._/*-]+)/g)) {
     const quoted = match[1] !== undefined;
-    const token = quoted ? match[1]!.trim() : match[2]!.replace(/^[(["'<]+/, "").replace(/[.,;:!?)\]"'>]+$/, "");
-    if (!quoted && !(token.includes("/") && (/\.[A-Za-z][A-Za-z0-9]*$/.test(token) || token.endsWith("/")))) continue;
+    const token = quoted ? match[1]!.trim() : match[2]!.replace(/\.+$/, "");
+    if (quoted ? !/^[A-Za-z0-9._/*-]+$/.test(token) || !(token.includes("/") || extension.test(token))
+      : !(token.includes("/") && (extension.test(token) || token.endsWith("/")))) continue;
     const path = token.endsWith("/") ? `${token}**` : token;
-    if (path !== "**" && !/\s/.test(path) && pathShapeOk(path)) out.push(path);
+    if (path !== "**" && !path.split("/").some((segment) => segment.startsWith("-")) && targetShapeOk(path)) out.push(path);
   }
   return out;
 }

@@ -106,6 +106,8 @@ describe("a goal naming a file no task may write (#345)", () => {
       // mutation: skip the root (always ask an ancestor) -> CHANGELOG.md not creatable, red
       const got = await creatableAt(repo, commit, ["src/board/cli.js", "src/cli.js", "src/missing/x.js", "README.md", "README.md/x.js", "CHANGELOG.md", "src/board/render.js"]);
       expect([...got].sort()).toEqual(["CHANGELOG.md", "src/board/cli.js", "src/missing/x.js"]);
+      // Fix round 1 (Minor 3): a `.git` segment is never creatable. mutation: drop the .git refusal -> both creatable, red
+      expect([...await creatableAt(repo, commit, [".git/hooks/post-commit", "src/.git/x.js"])]).toEqual([]);
       // The field case end to end, in code: board-cli gets the file it must create, recorded as a goal addition.
       const applied = applyGoalPaths(FIELD_SPLIT, await creatableAt(repo, commit, goalPathsToProbe(goalPathsOutsideTargets(FIELD_SPLIT))));
       expect(applied.added).toEqual([{ taskId: "board-cli", path: "src/board/cli.js", writers: [], source: "goal" }]);

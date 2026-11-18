@@ -123,7 +123,8 @@ export const goalPathsToProbe = (entries: readonly GoalPathOutsideTargets[]): st
 /**
  * Tester #345 (controller design, session 4389b15f; reversible): a task's goal is part of its authority as its success
  * condition is, so a goal path no task covers and `creatable` holds -- a new file whose nearest existing ancestor in the
- * base commit is a directory (requirementOverview.ts creatableAt; #351 follow-up: the directory may be new) -- is added to that task's targetPaths and recorded with `source: "goal"`.
+ * base commit is a directory (requirementOverview.ts creatableAt; #351 follow-up: the directory may be new) -- is
+ * added to that task's targetPaths and recorded with `source: "goal"`.
  * A path the base commit already has is not added: a goal often names a file it only reads, and widening a write set
  * serialises tasks that could run in parallel. It stays a hint (goalPathsOutsideTargets in the requirement view), as
  * does a path through an existing file (validation would refuse that target path: `path:`). #345 review

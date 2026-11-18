@@ -243,7 +243,8 @@ describe("the repository overview (N1 spec §6)", () => {
     expect(await exists("top.md/**")).toBe(false);
     expect(await exists("top.md/sub/**")).toBe(false);
     // mutation: drop the shape check -> these red (each has a missing nearest part, so only the shape refuses it)
-    const bad = ["/abs/x.js", "src/*.js", "src/new/*/x.js", "src/../up/x.js", "src//x.js", "./new/x.js", "src/new/./x.js", "new/x.js/"];
+    // Fix round 1 (Minor 3): `.git` segments are refused as historyExpectation.ts refuses them -- mutation: drop it -> red
+    const bad = ["/abs/x.js", "src/*.js", "src/new/*/x.js", "src/../up/x.js", "src//x.js", "./new/x.js", "src/new/./x.js", "new/x.js/", ".git/hooks/x", ".git/**", "src/.git/x.js"];
     expect(Object.fromEntries(await Promise.all(bad.map(async (entry) => [entry, await exists(entry)])))).toEqual(Object.fromEntries(bad.map((entry) => [entry, false])));
   });
 });

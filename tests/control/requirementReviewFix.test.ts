@@ -409,10 +409,34 @@ describe("the fix task's write set takes the paths a finding says are missing (#
   it("takes a token ending in `/` as that directory's `/**`, and refuses tokens of an illegal shape", () => {
     // mutation: drop the trailing-slash branch -> src/sla/** missing, red
     expect(fixTaskPaths([unmet("Create src/sla/ for the modules.", [])])).toEqual(["src/sla/**"]);
-    // mutation: drop the shape check -> /abs/x.js, ../up/x.js, a//b.js, `npm test`, `**` and src/*.js taken, red
+    // mutation: drop the shape check (pathShapeOk) -> /abs/x.js, ../up/x.js, a//b.js, `**` and src/*.js taken, red
+    // (`npm test` is refused before the shape check: its space is outside a path's characters -- see the next test)
     expect(fixTaskPaths([unmet("Not /abs/x.js nor ../up/x.js nor a//b.js nor `npm test` nor `**` nor src/*.js nor https://example.com/x.js; a ratio 1/2.5 is no path.", [])])).toEqual([]);
     // Bare words without a slash or an extension are prose, not paths.
     expect(fixTaskPaths([unmet("The module is missing entirely.", [])])).toEqual([]);
+  });
+
+  // Fix round 1 (review of #352, Important 1): a path glued to CJK text, or wrapped in full-width or curly punctuation,
+  // was not found -- the tokens were whitespace-separated words.
+  it("finds a path glued to CJK text or wrapped in full-width or curly punctuation", () => {
+    // mutation: tokenise on whitespace again -> each red
+    expect(fixTaskPaths([unmet("缺少 src/sla/model.js，行为在 src/sla-model.js。", [])])).toEqual(["src/sla/model.js", "src/sla-model.js"]);
+    expect(fixTaskPaths([unmet("需要的模块路径src/sla/model.js不存在", [])])).toEqual(["src/sla/model.js"]);
+    expect(fixTaskPaths([unmet("（src/sla/model.js）缺失", [])])).toEqual(["src/sla/model.js"]);
+    expect(fixTaskPaths([unmet("“src/sla/model.js” is absent", [])])).toEqual(["src/sla/model.js"]);
+  });
+
+  // Fix round 1 (Important 2, controller ruling narrowing ruling 2): a backticked token is a path only when it looks like
+  // one, as a bare token must; Minors 3 and 4: no `.git` segment and no segment starting with `-`.
+  it("takes a backticked token only when it is path-like, and refuses `.git` and `-` segments", () => {
+    // mutation: accept any backticked token of a legal shape -> --json, breach(), parseConfig, test:sla, src/a.ts:12 taken, red
+    expect(fixTaskPaths([unmet("Run `--json`, call `breach()`, see `parseConfig`, `test:sla` and `src/a.ts:12`; write `README.md`.", [])])).toEqual(["README.md"]);
+    // mutation: drop the whitespace/character check -> `npm test` taken, red
+    expect(fixTaskPaths([unmet("Run `npm test` again.", [])])).toEqual([]);
+    // mutation: drop the .git refusal -> .git/hooks/pre-commit.sh and `.git/config.x` taken, red
+    expect(fixTaskPaths([unmet("Do not touch .git/hooks/pre-commit.sh or `.git/config.x`.", [])])).toEqual([]);
+    // mutation: drop the leading-dash refusal -> src/-x.js and `--out/x.js` taken, red
+    expect(fixTaskPaths([unmet("Not src/-x.js nor `--out/x.js`.", [])])).toEqual([]);
   });
 
   it("never writes `orca:` pseudo-evidence, and orders missing paths before evidence paths across criteria, deduplicated", () => {
@@ -441,6 +465,14 @@ describe("the fix task's write set takes the paths a finding says are missing (#
       expect(contract.context.targetPaths).toEqual(["src/sla/breach.js", "a"]);
       expect(contract.safetyPolicy.allowlistPaths).toEqual(["a", "b", "src/sla/breach.js"]);
       expect(fixTaskContract(w.t.h.store, "g", round, CRITERIA, "review-fix-1", "a", "g", ["notes/x.md"]).context.targetPaths).toEqual(["notes/x.md"]);
+      // Fix round 1 (Important 2): with every evidence entry `orca:` and no path in missing, the write set falls back to
+      // the tasks' targetPaths, as before #352 -- never to an empty one.
+      // mutation: drop the fallback to the tasks' union -> [], red
+      const recordsOnly = { ...round, criteria: [{ id: "AC1", verdict: "not-met" as const, evidence: [{ path: "orca:acceptance", line: null }, { path: "orca:delivery", line: null }],
+        missing: "the acceptance command still fails" }] };
+      const union = [...new Set(["a", "b"].flatMap((id) => readArchivedContract(w.t.h.store, "g", id).contract.context.targetPaths))];
+      expect(union.length).toBeGreaterThan(0);
+      expect(fixTaskContract(w.t.h.store, "g", recordsOnly, CRITERIA, "review-fix-1", "a").context.targetPaths).toEqual(union);
     } finally { await w.t.h.dispose(); }
   }, 180000);
 });
