@@ -43,7 +43,8 @@ const PINNED = {
   // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据」 -- #280 adds REGRESSION_CRITERIA_RULE (repository-wide regression criteria are group acceptance's); version stays 5; only this split-prompt hash changes.
   // Ruling (2026-11-12, tester follow-up H): #284 adds the partition-first rule (PARALLEL_RULE) to the split instruction; version stays 5; only this split-prompt hash changes (recomputed over both #280 and #284).
   // Ruling (2026-11-13, tester follow-up I): 「这次批准改写所有必要的判据」 -- #265 adds IMPLIED_PATH_RULE (give a task every file its successCondition requires it to change) to the split instruction; version stays 5; only this split-prompt hash changes.
-  splitPrompt: "8a2fb311e87c30f8d5a2500f75f40cdb04e4b1b98528237c090c4c1aa37e4f0a",
+  // Ruling (session 2026-11-18, tester #351): 「这次批准改写所有必要的判据」 -- PATH_SHAPES and the bugfix rule allow a new file or `<directory>/**` under directories that do not exist yet (never through an existing file); version stays 5; only this split-prompt hash changes.
+  splitPrompt: "9a943f1a0bf51ff2b46dff2d009819de02b49eab7ade004a0d1f4c1f5b045643",
   splitSchema: "257941d5d9103ffb4f6a1d31c79fa186f042832b8a99008f3a59a88a5de6349c",
 } as const;
 const FIXED_OVERVIEW = { canonicalJson: "{}", hash: "a".repeat(64) };
