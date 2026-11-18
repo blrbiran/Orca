@@ -1372,7 +1372,7 @@ export const en = {
     hardCap: "Hard cap (the amount typed becomes this task's ceiling)",
     hardCapValue: "hard cap {{value}}",
     staleEstimate: "This estimate predates a plan change; estimate again to update the suggestions",
-    olderInstruction: "Estimator profile {{profileId}} uses estimate instruction {{version}}; the newest is {{newest}}. Its estimates follow the older instruction; update the profile's estimatorPreflight.instructionVersion to use the newest.",
+    olderInstruction: "Estimator profile {{profileId}} uses estimate instruction {{version}}; the newest is {{newest}}. Its estimates follow the older instruction. To use the newest, load a copy of the profile with a new profileId and instructionVersion \"{{newest}}\" beside it and select it with --estimator-profile; never edit this profile in place while groups use it (they would be refused profile-changed). README: \"Moving to a newer estimate instruction\".",
     // Tester #173/#224/#266 (follow-up L): the group view's estimateHistory.
     history: {
       median: "Finished tasks of other groups in this repository used a median of {{median}} tokens each (n={{n}}, every run of a task).",

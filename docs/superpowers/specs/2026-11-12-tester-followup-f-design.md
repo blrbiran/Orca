@@ -114,7 +114,8 @@ estimate instruction a group's estimates used (#381)`.
    answers, so it was read once. `GET groups/<g>/brief` and `GET groups/<g>` (only-add) now carry
    `estimatorInstruction: { used, newest }` when the group's newest estimate request (the estimates table, newest
    `estimate_version` with a request) was made with a known instruction older than the newest (`estimateInstructionAge.ts`);
-   absent otherwise or when the estimates cannot be read. `orca group brief` and `orca group show` print one line from it.
+   absent otherwise, for a done group, or when the estimates cannot be read (a newest row with no request is passed over).
+   `orca group brief` and `orca group show` print one line from it.
    The fact is what the group's estimates used, not what the panel's profile names now: after a profile change it goes
    away with the group's next estimate. The Web budget editor's note (§4, from the config's profile) is unchanged.
 2. **No profile upgrade command.** The tester asked for a supported update of `estimatorPreflight.instructionVersion`
@@ -126,5 +127,7 @@ estimate instruction a group's estimates used (#381)`.
    refused `profile-changed` (spec 2026-09-19 §4 and §6: a changed post-start snapshot cannot be amended; a handoff becomes
    `settled-unrecoverable`). `schemaVersion` has one legal value (`budget-estimate-v1`), so it is not what changes. A
    safe update is a new profile under a new `profileId` beside the old one (the panel started with both `--profile`
-   files and `--estimator-profile <new id>`); that is a decision for the human, and §4's warning text ("update the
-   profile's estimatorPreflight.instructionVersion") gives the unsafe in-place advice -- left as written, reported.
+   files and `--estimator-profile <new id>`). §4's warning text ("update the profile's estimatorPreflight.instructionVersion")
+   gave the unsafe in-place advice; on the human's ruling for the #379-381 review it now names that safe route instead
+   (CLI warning, `--json` warnings and the Web budget note), pointing to README §3 "Moving to a newer estimate
+   instruction".

@@ -1097,9 +1097,11 @@ function validateExecutionSnapshot(
 /**
  * Tester #381: the estimate instruction the group's newest estimate request was made with, when it is older than the
  * newest this Orca holds (the warning `group confirm` printed once); null otherwise, and when the estimates cannot be
- * read -- a note never fails the read it rides on.
+ * read -- a note never fails the read it rides on. #379-381 review (M6): null for a done group (`state`, the summary's),
+ * whose budgets no longer change.
  */
-export function estimatorInstructionOf(store: ControlStore, groupId: string): { used: number; newest: number } | null {
+export function estimatorInstructionOf(store: ControlStore, groupId: string, state: string): { used: number; newest: number } | null {
+  if (state === "done") return null;
   try {
     for (const row of store.db.prepare("SELECT id FROM estimates WHERE group_id=? ORDER BY estimate_version DESC").all(groupId)) {
       const request = readEstimateRecord(store, groupId, String(row.id)).request;
@@ -1760,7 +1762,7 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     // Pre-existing failures spec L2 (#341): absent when none, so every other group's view is what it was.
     ...((rows) => rows.length === 0 ? {} : { preexistingFailures: rows })(preexistingFailuresView(store, groupId, body, readSnapshot)),
     // Tester #381: the older estimate instruction the group's estimates used, as the brief carries it; absent otherwise.
-    ...((fact) => fact === null ? {} : { estimatorInstruction: fact })(estimatorInstructionOf(store, groupId)),
+    ...((fact) => fact === null ? {} : { estimatorInstruction: fact })(estimatorInstructionOf(store, groupId, summary.state)),
   };
   // Tester #348 review: counted from the stored rows, so a run left out of `runs` as unreadable still counts; a readable
   // run's marker was already checked above (runViews refuses an invalid settlement). A body that is not JSON cannot say.

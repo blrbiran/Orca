@@ -324,7 +324,7 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       // integration record. An unreadable record says nothing here (the full view names it).
       // Batch D re-review: only a done group's, the one the kept lines read; a group still clarifying has no copy yet.
       const delivery = summary.state === "done" ? deliveryOf(deps.store, groupId) : null;
-      const estimatorInstruction = estimatorInstructionOf(deps.store, groupId);
+      const estimatorInstruction = estimatorInstructionOf(deps.store, groupId, summary.state);
       res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }), ...(warnings.length === 0 ? {} : { warnings }),
         ...(costOutliers === null ? {} : { costOutliers }), ...(unreadableRuns.length === 0 ? {} : { unreadableRuns }), ...(knownRed.length === 0 ? {} : { knownRedAtBase: knownRed }),
         ...(delivery === null ? {} : { delivery }), ...(estimatorInstruction === null ? {} : { estimatorInstruction }) }); }

@@ -21,6 +21,7 @@ Hand-written. Find the code (`body.error.code` under `--json`, or the `orca: <co
 | `ccloop-failed` (424) | ccloop refused; its own code is in the message | Fix what that code names before sending again; it is not uncertain. |
 | `spend-cap-reached`, `control-limit-over-cap-headroom` | a spend cap blocks the group or the import | Wait for the next period, or ask the person to raise the cap. |
 | `agent-version-drift` | an agent CLI changed under the table | Ask the person to review `orca agent init`'s draft; never edit or remove the table yourself. |
+| `warning: estimator profile … uses estimate instruction N; the newest is M` | estimates follow an older instruction | Tell the person; the fix is theirs: a copy of the profile file with a new `profileId` and the newest `instructionVersion`, loaded beside the old one and selected with `--estimator-profile` (README "Moving to a newer estimate instruction"). Never edit the old profile in place: every group bound to it is then refused `profile-changed`. |
 | `did you mean orca …?` (exit 1) | an unknown command | Use the suggested command; `orca help` lists them. |
 
 Every refusal code and its HTTP status: error-codes.md. Exit codes and the `--json` envelope: output-and-exit-codes.md.

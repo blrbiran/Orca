@@ -39,7 +39,10 @@ describe("an older estimate instruction in the budget editor (#173)", () => {
   it("names the estimator profile, its instruction and the newest", () => {
     render(<BudgetEditor view={view} config={config("1")} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
     expect(screen.getByTestId("budget-older-instruction").textContent)
-      .toBe(`Estimator profile est uses estimate instruction 1; the newest is ${NEWEST_ESTIMATE_INSTRUCTION}. Its estimates follow the older instruction; update the profile's estimatorPreflight.instructionVersion to use the newest.`);
+      // Ruling (2026-11-19 #379-381 review): I3 -- editing estimatorPreflight.instructionVersion in place changes the profile's
+      // hash, so every group bound to it is refused profile-changed; the note names the safe route, a new profile beside it.
+      // (Was: "...; update the profile's estimatorPreflight.instructionVersion to use the newest.")
+      .toBe(`Estimator profile est uses estimate instruction 1; the newest is ${NEWEST_ESTIMATE_INSTRUCTION}. Its estimates follow the older instruction. To use the newest, load a copy of the profile with a new profileId and instructionVersion "${NEWEST_ESTIMATE_INSTRUCTION}" beside it and select it with --estimator-profile; never edit this profile in place while groups use it (they would be refused profile-changed). README: "Moving to a newer estimate instruction".`);
   });
 
   it.each([["the newest", String(NEWEST_ESTIMATE_INSTRUCTION)], ["no preflight", null], ["an older panel", undefined]] as const)("says nothing under %s", (_label, version) => {

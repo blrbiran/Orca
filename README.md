@@ -221,6 +221,20 @@ window either does the estimate end in state **`blocked-capability`**: no model 
 starts from default budget allocations that you edit by hand in Task control. Use it with
 `--estimator-profile all --estimate-mode soft`. In `soft` mode an overrun is settled after the fact, not prevented.
 
+#### Moving to a newer estimate instruction
+
+`orca group estimate`, `group confirm` and the budget editor warn when the estimator profile uses an estimate
+instruction older than the newest Orca holds. Do **not** edit `estimatorPreflight.instructionVersion` in the profile
+file in place: every group bound to that profile froze its hash, and after the next panel start each of them is refused
+`profile-changed`. Instead copy the file, give the copy a new `profile.profileId` (for example `all-v4`) and the newest
+`instructionVersion`, and start the panel with both files, selecting the new one for estimates:
+
+```
+--profile all.json --profile all-v4.json --estimator-profile all-v4 --estimate-mode soft
+```
+
+Groups already bound to the old profile keep it; new estimates use the new one.
+
 ### 4. Repositories and where state lives
 
 - **Projects.** With no `--repo` and no `--root`, the panel runs in *file mode*: its projects are the list in

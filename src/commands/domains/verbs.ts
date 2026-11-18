@@ -106,7 +106,9 @@ export interface ConfigView {
 export function instructionLines(view: ConfigView, profileId: string | null | undefined): string[] {
   const version = olderEstimateInstruction(view.profiles.find((p) => p.profileId === profileId)?.estimatorInstructionVersion);
   if (version === null) return [];
-  return [`warning: estimator profile ${profileId} uses estimate instruction ${version}; the newest is ${NEWEST_ESTIMATE_INSTRUCTION}. Its estimates follow the older instruction; update the profile's estimatorPreflight.instructionVersion to use the newest`];
+  // #379-381 review (I3): the safe route is a new profile beside the old one; editing the old file in place changes its hash,
+  // so every group bound to it is refused profile-changed after the next panel start (profiles.ts resolve).
+  return [`warning: estimator profile ${profileId} uses estimate instruction ${version}; the newest is ${NEWEST_ESTIMATE_INSTRUCTION}. Its estimates follow the older instruction. To use the newest, load a copy with a new profileId and instructionVersion "${NEWEST_ESTIMATE_INSTRUCTION}" beside it (--profile <old> --profile <new> --estimator-profile <new id>); never edit this profile in place while groups use it (profile-changed). README: "Moving to a newer estimate instruction"`];
 }
 
 /**
@@ -116,7 +118,8 @@ export function instructionLines(view: ConfigView, profileId: string | null | un
 export function groupInstructionLines(fact: unknown): string[] {
   const f = fact as { used?: unknown; newest?: unknown } | null | undefined;
   if (typeof f?.used !== "number" || typeof f.newest !== "number") return [];
-  return [`warning: this group's estimates used estimate instruction ${f.used}; the newest is ${f.newest}. Its budgets follow the older instruction`];
+  // #379-381 review (M6): the fact is the newest estimate request's, not every estimate's.
+  return [`warning: this group's newest estimate request used estimate instruction ${f.used} (newest is ${f.newest}); its budget suggestions follow the older instruction`];
 }
 
 /** What the unestimated-default lines read: a group view, or `orca proposal show`'s document (no estimates in it). */
