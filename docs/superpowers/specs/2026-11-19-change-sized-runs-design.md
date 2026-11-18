@@ -990,3 +990,40 @@ Target: `d/a`, `b` (mode 755), `link` → `b`; commit `base`; then commit `later
    `<attempt> refs/orca/runs/r1`.
 10. `worktree remove --force ws` gives rc 0. The nested attempt worktree stays registered in the target until ccloop
     removes it, as today.
+
+## Correction (2026-11-19, change-sized runs P0 review)
+
+Appended by the P0 fix wave on branch `feat/change-sized-p0` (worktree `.wt-p0`, over `ebce5fa0`), after an independent
+review of the P0 commits; human approval for the rewrites: 「同意这样大改，并且同意改所有必要的判据」. The text above is
+unchanged; where it and this section differ, this section is what ships.
+
+**§5.6, call-site row `settleAbandonedUnderStop` (`driverHandoff.ts`).** The row says archive →
+`removeNeverStartedWorkspace` → `removeResultCopies({extras:false})` → the write that sets `cleanedUp:true`. As built in
+`e5d6460f` the removal was never called and the write set `cleanedUp:true`, so `stepCleanupFailed` (which acts only on
+`cleanedUp:false`) never visited the run and `<sourceDir>/repo` leaked for ever. Corrected order: archive →
+`removeNeverStartedWorkspace` → the settle's write sets **`cleanedUp:false`** (its `cleanupError` as before) → the next
+round's `stepCleanupFailed` finishes the run with the order of its own row (archive skipped, see below; the idempotent
+workspace cleanup; `removeResultCopies({extras:false})`; then `cleanedUp:true`). A crash anywhere between is finished by a
+later round. Criteria: `tests/control/abandonUnderStop.test.ts` "an abandoned run settled under a stop loses its result
+copy"; the earlier criterion there that read `cleanedUp:true` straight after the settle now reads it after that round.
+
+**§5.6, call-site row `stepCleanupFailed`.** "Skip `archiveRun` when an archive row for the run exists" becomes **skip it
+only when the run's latest archive row is complete** (`missing: []` and a snapshot; `latestArchiveComplete`,
+`cleanup.ts`). A partial latest row keeps the copy (`removeResultCopies` returns `archive-partial`), so archiving again
+reads it safely and may yield a complete row, which then lets the copy go. The crash case the original row guards (copy
+removed, `cleanedUp` not yet written) only follows a complete row, so it is still skipped there.
+
+**§5.6, "Why `repos/` only at step E" — now judged at each call site.** A multi-directory run that failed (retry-task, then
+`stepCleanupFailed`) and one settled recoverable (handoff) each keep `repos/<key>` byte-intact while `repo` goes; step E
+removes both (`tests/control/multiDirDispatch.test.ts`).
+
+**Known gaps (no backstop in P0; for P1/P2, no code in this wave).** `<sourceDir>/repo` can still outlive its run where
+nothing calls `removeResultCopies` again after a missed or failed removal:
+- a crash between a recoverable settle's commit and `dropResultCopyAfterSettle` (the run reads terminal, the copy stays);
+  only `cleanupPredecessor` retries it, and only if the run is continued;
+- a `settled-unrecoverable` handoff run: removed at the settle when its archive is complete, but a failed removal there is
+  never retried (it is never continued, so `cleanupPredecessor` never runs);
+- a recoverable run that is never continued — its group archived, the run superseded or closed — whose removal at the
+  settle was missed or failed;
+- a ceiling run moved to `settled-recoverable` by `repairCommittedCeilingBlock` (`stopIntent.ts`), which settles it inside
+  a command transaction and never reaches `dropResultCopyAfterSettle`.
