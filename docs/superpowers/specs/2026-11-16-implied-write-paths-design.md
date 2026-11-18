@@ -109,3 +109,25 @@ review rulings on that branch. The text above is kept as written; this section o
   created, or a typo'd path, is added if it is new and named by one task alone.
 
 Tests: `tests/control/splitImpliedPathsGoal.test.ts`, `web/tests/requirementGoalPathHint.test.tsx`.
+## Correction 2 -- a new path may sit under a new directory (#351, Orca session 2026-11-18)
+
+Written by the controller of the Orca session of 2026-11-18 (second of the day) on branch
+`fix/review-fix-paths-351-352`, after `fix(control): a goal's new path may sit under a new directory (#351 follow-up to #345)`.
+Correction 1's "new files in a directory the commit has" no longer holds. Tester #351: a requirement naming
+`src/sla/model.js` (with `src/` present, `src/sla/` absent) was refused by the split validator and the splitter
+flattened it to `src/sla-model.js`, which shipped against the requirement. Git has no reason to refuse a new directory.
+
+- **The rule now (validator and `creatableAt` alike).** A path the commit does not have is legal/creatable when its
+  shape passes `pathShapeOk` and its nearest existing ancestor in the commit is a directory (the repository root
+  counts). A path through an existing file or a submodule (gitlink) is not. An unreadable commit creates nothing.
+  `<dir>/**` naming an existing entry still needs that entry to be a directory.
+- **How it is asked.** `creatableAt` no longer lists each parent with `git ls-tree`; it shares `gitTypeOf`
+  (`git cat-file -t` per path) and `nearestExistingIsTree` with `overviewPathExists`
+  (`src/control/requirementOverview.ts`).
+- **What stays.** Correction 1's other conditions (exactly one task's goal names it, no other task covers it, the
+  hint for the rest) are unchanged. The hint now covers only a path through a file.
+- **Split prompt.** PATH_SHAPES / PATH_MEANING / the bugfix rule are reworded; the instruction version stays 5
+  (this repo's convention for rule wording), and the V5 prompt hash pin moved.
+
+Tests: `tests/control/requirementOverview.test.ts`, `tests/control/requirementSplit.test.ts`,
+`tests/control/multiDirSplit.test.ts`, `tests/control/splitImpliedPathsGoal.test.ts`, `tests/control/splitPromptV3.test.ts`.
