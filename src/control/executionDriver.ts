@@ -1502,7 +1502,7 @@ export async function savedReport(store: ControlStore, runId: string): Promise<E
  * own `publishError` (never `cleanupError`, and never cleared by a successful cleanup); cleanup still
  * runs regardless of whether publication succeeded, and is not gated on it.
  */
-export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
+export async function stepE(deps: ExecutionDriverDeps, runId: string, lane?: { waitMs: number }): Promise<boolean> {
   const { store } = deps;
   const run = readDriverRun(store, runId);
   if (run.drive === undefined) return false;
@@ -1510,14 +1510,16 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string): Promise<b
   let settledJustNow = false;
   // Issue #192: a settle that took minutes left the chain stalled with no line saying where. Marks are taken after each
   // await; one line is written when the settle is at least `settleSlowMs` (default 5 s, 0 for the tests).
+  // Tester #332: a settle on the lane also names its enqueue->start wait (appended, `lane wait N ms`), and the wait counts
+  // toward the bound, so a fast settle that queued long behind another is written too. A settle off the lane names none.
   const settleStarted = Date.now();
   const settleMarks: Array<[string, number]> = [];
   const mark = (label: string): void => { settleMarks.push([label, Date.now()]); };
   const reportSlowSettle = (): void => {
     const total = Date.now() - settleStarted;
-    if (total < (deps.settleSlowMs ?? 5_000)) return;
+    if (total + (lane?.waitMs ?? 0) < (deps.settleSlowMs ?? 5_000)) return;
     const parts = settleMarks.map(([label, at], index) => `${label} ${at - (index === 0 ? settleStarted : settleMarks[index - 1]![1])}`);
-    process.stderr.write(`orca-driver: ${runId}: settle took ${total} ms (${parts.join(", ")})\n`);
+    process.stderr.write(`orca-driver: ${runId}: settle took ${total} ms (${parts.join(", ")})${lane === undefined ? "" : `, lane wait ${lane.waitMs} ms`}\n`);
   };
   if (run.state === "landed") {
     const report = await savedReport(store, runId);
@@ -1978,11 +1980,14 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
    * one; a DriverCrash ends the driver as it does in a pass.
    */
   const startSettle = (runId: string): Promise<boolean> => {
+    // Tester #332: the wait behind earlier settles, on the monotonic clock, from enqueue to this settle's turn.
+    const enqueuedAt = performance.now();
     const lane = (context.settleLane ?? Promise.resolve()).then(async (): Promise<boolean> => {
       if (crashed !== null) return false;
+      const waitMs = Math.round(performance.now() - enqueuedAt);
       try {
         await deps.beforeSettle?.(runId);
-        const moved = await stepE(deps, runId);
+        const moved = await stepE(deps, runId, { waitMs });
         context.transientRetries?.delete(runId);
         return moved;
       } catch (error) {

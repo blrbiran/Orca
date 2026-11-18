@@ -54,6 +54,51 @@ describe("E: settle a landed run (spec §2.2, deviation D2)", () => {
     } finally { await t.h.dispose(); }
   }, 30000);
 
+  // Tester #332: a run held 316 s between landed and settled, and the timing line above cannot say whether it waited on the
+  // single settle lane (settles never overlap) or settled slowly. Ruling (brief 2026-11-18-tester-small Part 2): each lane
+  // settle measures its enqueue->start wait (monotonic) and appends it to the same line; a settle whose wait plus its own
+  // time reaches the bound is written even when the settle itself was fast, or the hypothesis could never be seen.
+  it("appends a queued settle's lane wait to its timing line, written even when the settle itself is fast (#332)", async () => {
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
+      const runs = [await t.claim(), await t.claim()];
+      // Whichever run reaches the lane first is held there; the other one is the run that queues behind it.
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => { release = resolve; });
+      let first: string | null = null;
+      t.deps.beforeSettle = async (id: string) => { if (first === null) { first = id; await held; } };
+      const lines: string[] = [];
+      const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: unknown) => { lines.push(String(chunk)); return true; });
+      const pending: Promise<boolean>[] = [];
+      try {
+        const driver = createExecutionDriver({ ...t.deps, settleSlowMs: 800 });
+        const delay = (ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); });
+        const other = (): string | null => first === null ? null : runs.find((id) => id !== first)!;
+        // Rounds (each given 300 ms, as a round waits for the settles it started) until one run holds the lane and the
+        // other has landed; one more round then puts the other's settle on the lane, if no earlier round already did.
+        for (let i = 0; i < 60 && !(other() !== null && t.body(other()!).state === "landed"); i += 1) {
+          const round = driver.round(); pending.push(round);
+          await Promise.race([round, delay(300)]);
+        }
+        const queued = other();
+        expect(queued).not.toBeNull();
+        const last = driver.round(); pending.push(last);
+        await Promise.race([last, delay(300)]);
+        expect(t.body(queued!).state).toBe("landed");
+        await delay(1500);
+        release();
+        await Promise.all(pending);
+        await t.until(driver, () => t.body(queued!).drive?.cleanedUp === true);
+        const line = lines.find((entry) => entry.includes(`${queued}: settle took`));
+        // mutation (threshold on the settle's own time only) -> red here when the queued settle itself took under 800 ms.
+        expect(line, lines.join("")).toBeDefined();
+        // Existing fields first, unchanged; the wait is appended after them.
+        expect(line).toMatch(/settle took \d+ ms \(archive \d+, acceptance \d+, commit \d+\), lane wait \d+ ms\n$/);
+        // mutation (wait measured from the lane slot's start, not the enqueue) -> red: ~0 ms.
+        expect(Number(/lane wait (\d+) ms/.exec(line!)![1])).toBeGreaterThanOrEqual(1500);
+      } finally { release(); spy.mockRestore(); }
+    } finally { await t.h.dispose(); }
+  }, 60000);
+
   it("cleans only the run's own workspace and incoming ref, keeps its source directory, and never touches orca/<group>", async () => {    const t = await driverHarness([{ taskId: "a" }]); try {
       const runId = await t.claim();
       await t.until(t.driver(), () => t.body(runId).drive?.cleanedUp === true);
