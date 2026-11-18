@@ -1,5 +1,6 @@
 /** Helpers every write row uses: the row builder, the reads pins come from, and argument conversions. */
 import { sessionCleanupCommand } from "../../control/sessionCleanupCommand.js";
+import { acceptanceAnswers, deliveredAcceptanceAnswers, leftToPerson, reviewAnswers, type LeftCriterion } from "../../control/groupProblemAnswers.js";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -308,8 +309,8 @@ export function acceptanceLines(groupId: string, a: AcceptanceView | undefined):
   return [
     `problem: group-acceptance-failed:${last?.command ?? "?"} (exited ${last?.exit ?? "?"} on orca/${groupId}${a.tip === null ? "" : ` at ${a.tip.slice(0, 12)}`})`,
     ...(a.tail ?? "").split("\n").filter((line) => line !== "").map((line) => `  ${line}`),
-    `next: orca group recheck ${groupId}  (a flaky check: run it again on this tip)`,
-    `  or: orca group waive-acceptance ${groupId} --note '<why>'  (a person accepts this tip anyway)`,
+    // Tester #359 review (M2): the commands are the summary's groupProblem.next (groupProblemAnswers.ts).
+    ...((next) => [`next: ${next[0]}  (a flaky check: run it again on this tip)`, `  or: ${next[1]}  (a person accepts this tip anyway)`])(acceptanceAnswers(groupId)),
   ];
 }
 
@@ -321,19 +322,19 @@ export interface ReviewView {
   accepted?: { by: string; note: string };
 }
 
-/** Tester #343: the not-met criteria no automatic fix covers, each with who can meet it (`plan` or `person`). */
-function leftToPerson(last: ReviewView["rounds"][number] | undefined): Array<{ id: string; by: string }> {
-  return (last?.leftToPerson ?? []).map((id) => ({ id, by: last!.criteria.find((c) => c.id === id)?.fixableBy ?? "person" }));
-}
+/** `next:` for the first command, `  or:` for each after it. */
+const answerLines = (commands: readonly string[], note: (command: string) => string = () => ""): string[] =>
+  commands.map((command, index) => `${index === 0 ? "next" : "  or"}: ${command}${note(command)}`);
 
-/** Tester #343: what answers a review whose not-met criteria no change to files can meet -- a new plan draft, or a person's call. */
-function notFixableLines(groupId: string, left: ReadonlyArray<{ id: string; by: string }>): string[] {
+/**
+ * Tester #343: what answers a review whose not-met criteria no change to files can meet -- a new plan draft, or a person's
+ * call. Tester #359 review (M2): the commands are the summary's groupProblem.next (groupProblemAnswers.ts).
+ */
+function notFixableLines(groupId: string, left: ReadonlyArray<LeftCriterion>): string[] {
   const plan = left.filter((c) => c.by === "plan").map((c) => c.id), person = left.filter((c) => c.by !== "plan").map((c) => c.id);
-  return [
-    ...(plan.length === 0 ? [] : [`next: orca requirement feedback ${groupId} --text '<what to change in the plan>'  (${plan.join(", ")}: a new draft of the plan)`]),
-    `${plan.length === 0 ? "next" : "  or"}: orca group review-accept ${groupId} --note '<why accept as is>'${person.length === 0 ? "" : `  (${person.join(", ")}: only a person can decide)`}`,
-    `  or: orca group review-rerun ${groupId} --note '<what to look at>'`,
-  ];
+  return answerLines(reviewAnswers(groupId, "not-fixable-by-work", left), (command) =>
+    command.startsWith("orca requirement feedback") ? `  (${plan.join(", ")}: a new draft of the plan)`
+      : command.startsWith("orca group review-accept") && person.length > 0 ? `  (${person.join(", ")}: only a person can decide)` : "");
 }
 
 /**
@@ -351,7 +352,7 @@ export function deliveryLines(groupId: string, delivered: DeliveredView | undefi
   else if (delivered.result === "waived") lines.push(`delivered acceptance: waived ${on} by ${delivered.waived?.by ?? "?"}: ${delivered.waived?.note ?? ""}`);
   else if (delivered.result !== "failed") lines.push(`delivered acceptance: ${delivered.result} ${on}`);
   else lines.push(`problem: ${delivered.problem ?? "delivered-acceptance-failed"} ${on}`, ...(delivered.tail ? [`  ${delivered.tail.split("\n").slice(-3).join(" | ")}`] : []),
-    `next: orca group recheck-acceptance ${groupId}   (a flaky check)`, `  or: orca group waive-acceptance ${groupId} --note '<why the delivered tree is accepted>'`);
+    ...answerLines(deliveredAcceptanceAnswers(groupId), (command) => command.startsWith("orca group recheck-acceptance") ? "   (a flaky check)" : ""));
   return lines;
 }
 
@@ -397,9 +398,7 @@ export function reviewLines(groupId: string, review: ReviewView | undefined): st
       `conflict: criterion ${last.checkConflict.criterionId}`, `  required check: ${last.checkConflict.requiredCheck}`, `  because: ${last.checkConflict.because}`,
       "  decide which one gives way: change the requirement or the check (review-fix with a goal), or accept as is"]),
     ...leftLine,
-    `next: orca group review-fix ${groupId} --goal '<what to fix>'`,
-    `  or: orca group review-rerun ${groupId} --note '<what to look at>'`,
-    `  or: orca group review-accept ${groupId} --note '<why accept as is>'`,
+    ...answerLines(reviewAnswers(groupId, review.why, left)),
   ];
 }
 

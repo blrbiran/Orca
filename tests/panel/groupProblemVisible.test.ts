@@ -3,9 +3,11 @@
 // firstFailure (tasks only), to `group brief`'s text and to `orca status`. The summary now carries a group-level problem
 // beside firstFailure -- never instead of a task's failure -- and the brief and status read it.
 import { describe, expect, it } from "vitest";
+import { reviewLines } from "../../src/commands/domains/verbs.js";
 import { workHealthCheck } from "../../src/commands/status.js";
+import { withNeedsYou } from "../../src/panel/controlOverview.js";
 import { groupSummarySchema } from "../../src/control/webProtocol.js";
-import { readGroupSummary } from "../../src/panel/controlViews.js";
+import { readControlRecovery, readControlSummary, readGroupSummary } from "../../src/panel/controlViews.js";
 import { cli, fakePanel, useFakePanels } from "../commands/fixtures/fakePanel.js";
 import { driverHarness } from "../control/fixtures/driverHarness.js";
 
@@ -50,6 +52,23 @@ describe("a not-passed requirement review is a group problem (#359)", { timeout:
     } finally { await t.h.dispose(); }
   });
 
+  // #359 review (M2): the summary's next and `group show`'s lines come from one place (groupProblemAnswers.ts). A review
+  // whose criteria no change to files can meet, one of them by the plan, is answered by a new plan draft first.
+  it("not fixable by work, one criterion the plan's: next leads with requirement feedback, as group show does", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      setWork(t.h.store, "a", "done");
+      const review = { state: "not-passed", why: "not-fixable-by-work", autoFixRounds: 0, rounds: [{ roundNo: 1, tip: "a".repeat(40), runId: null, at: 1, result: "not-met",
+        criteria: [{ id: "c1", verdict: "not-met", evidence: [], missing: "a plan step", fixableBy: "plan" }], summary: "the plan omits it", leftToPerson: ["c1"] }] };
+      setReview(t.h.store, review);
+      const summary = readGroupSummary(t.h.store, "g");
+      // mutation: groupProblemOf's own not-fixable list ([accept, rerun]) -> no requirement feedback first, red here
+      expect(summary.groupProblem?.next).toEqual(["orca requirement feedback g --text '<what to change in the plan>'",
+        "orca group review-accept g --note '<why accept as is>'", "orca group review-rerun g --note '<what to look at>'"]);
+      const shown = reviewLines("g", summary.requirementReview as Parameters<typeof reviewLines>[1]).filter((line) => /^(next|  or): /.test(line)).map((line) => line.replace(/^(next|  or): /, "").replace(/  \(.*\)$/, ""));
+      expect(shown).toEqual(summary.groupProblem?.next);
+    } finally { await t.h.dispose(); }
+  });
+
   it("a passed review, or none, is no group problem", async () => {
     const t = await driverHarness([{ taskId: "a" }]); try {
       expect(readGroupSummary(t.h.store, "g")).not.toHaveProperty("groupProblem");
@@ -81,8 +100,39 @@ describe("a not-passed requirement review is a group problem (#359)", { timeout:
       "GET recovery": { status: 200, body: { schema: "orca-control-recovery-v1", blockers: [] } },
     });
     const check = await workHealthCheck({ env: { PATH: process.env.PATH, HOME: p.dir }, stateDirFlag: p.dir, checkout: process.cwd() });
-    // mutation: drop the group-problem count from workHealthCheck -> red here (level ok)
+    // mutation: drop the group-problem fallback from workHealthCheck -> red here (level ok)
     expect(check).toMatchObject({ level: "warn", subject: "work" });
-    expect(check.fact).toContain("1 group problem");
+    // Ruling (2026-11-18 tester batch D review): #359 review I2 -- status counts the server's needs-you rule (groupProblem
+    // only where a panel sends no needsYou), so the fact names groups needing you, not group problems.
+    expect(check.fact).toContain("1 needing you");
+  });
+
+  // #359 review I2: every task done and the group acceptance failed on the final tip -- a person's (recheck or waive). The
+  // card's firstFailure is the tasks' and empty; `orca status` said ok. The check fails only in the acceptance worktree.
+  it("every task done and the group acceptance failed: the group problem names it, and orca status is not ok", async () => {
+    const check = `case "$PWD" in *group-acceptance-*) false ;; *) true ;; esac`;
+    // Two tasks: a one-task group's tip is its only task's checked merge, so its acceptance is not needed.
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { requiredChecks: [check] }); try {
+      await t.claim(); await t.claim();
+      const driver = t.driver();
+      const deadline = Date.now() + 30_000;
+      while (readGroupSummary(t.h.store, "g").acceptance?.result !== "failed" && Date.now() < deadline) { await driver.round(); await new Promise((r) => setTimeout(r, 50)); }
+      const summary = readGroupSummary(t.h.store, "g");
+      expect(summary.acceptance?.result).toBe("failed");
+      expect(summary.completion).toEqual({ done: 2, total: 2 });
+      expect(summary.card?.firstFailure).toBeNull();
+      // mutation: drop the acceptance branch of groupProblemOf -> red here
+      expect(summary.groupProblem).toEqual({ code: summary.acceptance!.problem, why: "group-acceptance-failed", next: ["orca group recheck g", "orca group waive-acceptance g --note '<why>'"] });
+      const read = readControlSummary(t.h.store, "e", null), groups = withNeedsYou(t.h.store, read.groups);
+      expect(groups[0]).toMatchObject({ groupId: "g", needsYou: true });
+      const status = async (body: unknown) => {
+        const p = await fakePanel({ "GET summary": { status: 200, body }, "GET recovery": { status: 200, body: readControlRecovery(t.h.store, "e") } });
+        return workHealthCheck({ env: { PATH: process.env.PATH, HOME: p.dir }, stateDirFlag: p.dir, checkout: process.cwd() });
+      };
+      expect(await status({ ...read, groups })).toMatchObject({ level: "warn", subject: "work" });
+      // A panel before #359 sends needsYou and no groupProblem: the needs-you rule alone makes it a warning.
+      // mutation: drop `needsYou` from workHealthCheck's count -> red here (level ok)
+      expect(await status({ ...read, groups: groups.map(({ groupProblem: _, ...group }) => group) })).toMatchObject({ level: "warn", subject: "work" });
+    } finally { await t.h.dispose(); }
   });
 });

@@ -1795,7 +1795,8 @@ export const groupSummarySchema = z
       rerun: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),
       problem: nonemptyString.optional(),
     }).strict().optional(),
-    // Tester #359 (plan 2026-11-18 batch D, V1): a group-level problem (today: a requirement review that did not pass),
+    // Tester #359 (plan 2026-11-18 batch D, V1): a group-level problem -- a failed group or delivered acceptance, or a
+    // requirement review that did not pass (#359 review I2) --
     // given beside card.firstFailure, which stays the tasks' own. Absent when there is none.
     groupProblem: z.object({ code: nonemptyString, why: nonemptyString, next: z.array(nonemptyString).min(1) }).strict().nullable().optional(),
     // Tester follow-up G §6.2 (#269): the landing watch's last record (landingWatchRecord.ts); each regression's `problem`

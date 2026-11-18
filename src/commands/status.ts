@@ -70,7 +70,7 @@ export async function panelSocketCheck(ctx: CheckContext): Promise<StatusCheck> 
 export async function workHealthCheck(ctx: CheckContext): Promise<StatusCheck> {
   const { discoverSocketPath } = await import("../entry/discovery.js");
   const { requestOverSocket } = await import("../entry/socketClient.js");
-  let groups: Array<{ groupId?: string; archived?: boolean; counts?: { blocked?: number }; stopState?: string | null; orchestration?: { refusal?: { persistent?: boolean } }; groupProblem?: unknown }> = [];
+  let groups: Array<{ groupId?: string; archived?: boolean; counts?: { blocked?: number }; stopState?: string | null; orchestration?: { refusal?: { persistent?: boolean } }; groupProblem?: unknown; needsYou?: boolean }> = [];
   let blockers = 0, dispatchBlocked = false;
   try {
     const socketPath = discoverSocketPath({ stateDirFlag: ctx.stateDirFlag, env: envOf(ctx) });
@@ -89,10 +89,12 @@ export async function workHealthCheck(ctx: CheckContext): Promise<StatusCheck> {
   const blocked = groups.reduce((sum, group) => sum + (group.counts?.blocked ?? 0), 0);
   const stopped = groups.filter((group) => group.stopState !== null && group.stopState !== undefined).length;
   const refused = groups.filter((group) => group.orchestration?.refusal?.persistent === true).length;
-  // Tester #359: a group problem (a requirement review that did not pass) waits on a person too.
-  const problems = groups.filter((group) => group.groupProblem !== undefined && group.groupProblem !== null).length;
-  const facts = [`${groups.length} group${groups.length === 1 ? "" : "s"}`, `${blocked} blocked task${blocked === 1 ? "" : "s"}`, `${stopped} stopped`, `${refused} refused persistently`, `${blockers} recovery blocker${blockers === 1 ? "" : "s"}`, `${problems} group problem${problems === 1 ? "" : "s"}`];
-  const needing = blocked > 0 || stopped > 0 || refused > 0 || blockers > 0 || problems > 0 || dispatchBlocked;
+  // Tester #359 review (I2): a group the server's needs-you rule names (controlOverview.ts withNeedsYou: a failed group or
+  // delivered acceptance, a review that did not pass, a blocked task ...) waits on a person. Where the panel could not
+  // read that rule for a group (no `needsYou`), its group-level problem stands in.
+  const needsYou = groups.filter((group) => group.needsYou ?? (group.groupProblem !== undefined && group.groupProblem !== null)).length;
+  const facts = [`${groups.length} group${groups.length === 1 ? "" : "s"}`, `${blocked} blocked task${blocked === 1 ? "" : "s"}`, `${stopped} stopped`, `${refused} refused persistently`, `${blockers} recovery blocker${blockers === 1 ? "" : "s"}`, `${needsYou} needing you`];
+  const needing = blocked > 0 || stopped > 0 || refused > 0 || blockers > 0 || needsYou > 0 || dispatchBlocked;
   if (!needing) return { level: "ok", subject: "work", fact: facts.join(", ") };
   return { level: "warn", subject: "work", fact: `${facts.join(", ")}${dispatchBlocked ? " (dispatch blocked)" : ""}: work is waiting on a person -- read: orca recovery list, orca group list` };
 }

@@ -1,4 +1,5 @@
 import { autoConfirmView } from "../control/autoConfirm.js";
+import { acceptanceAnswers, deliveredAcceptanceAnswers, leftToPerson, reviewAnswers } from "../control/groupProblemAnswers.js";
 import {validSavedNoDispatch} from "../control/savedResultNoDispatch.js";
 import { flowGroupOf, flowRoleSql } from "../flow/groups.js";
 import {savedDispatchSchema,recoveryOfSchema,savedRecoverySchema,savedSourceSchema} from "../control/savedResultProtocol.js";
@@ -686,16 +687,17 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
 }
 
 /**
- * Tester #359: a requirement review that did not pass, as the group's own problem -- its code, why, and the commands that
- * answer it (the ones `group show` prints, verbs.ts reviewLines). Null otherwise.
+ * Tester #359: the group's own problem -- its code, why, and the commands that answer it (groupProblemAnswers.ts, the ones
+ * `group show` prints). #359 review (I2): a failed group acceptance, then a failed delivered acceptance, then a requirement
+ * review that did not pass -- the same three the overview's needs-you rule counts (controlOverview.ts). Null otherwise.
  */
-function groupProblemOf(groupId: string, review: ReturnType<typeof reviewOf>): { code: string; why: string; next: string[] } | null {
-  const code = reviewProblem(review);
+function groupProblemOf(groupId: string, body: unknown, acceptanceProblemCode: string | null): { code: string; why: string; next: string[] } | null {
+  if (acceptanceProblemCode !== null) return { code: acceptanceProblemCode, why: "group-acceptance-failed", next: acceptanceAnswers(groupId) };
+  const delivered = deliveredAcceptanceProblem(body);
+  if (delivered !== null) return { code: delivered, why: "delivered-acceptance-failed", next: deliveredAcceptanceAnswers(groupId) };
+  const review = reviewOf(body), code = reviewProblem(review);
   if (code === null) return null;
-  const rerun = `orca group review-rerun ${groupId} --note '<what to look at>'`, accept = `orca group review-accept ${groupId} --note '<why accept as is>'`;
-  // Tester #343: criteria no change to files can meet get no fix task.
-  const next = review!.why === "not-fixable-by-work" ? [accept, rerun] : [`orca group review-fix ${groupId} --goal '<what to fix>'`, rerun, accept];
-  return { code, why: review!.why ?? "?", next };
+  return { code, why: review!.why ?? "?", next: reviewAnswers(groupId, review!.why, leftToPerson(review!.rounds.at(-1))) };
 }
 
 /** Absent when no task of the group has any of the three, so a quiet card keeps its bytes. */
@@ -862,7 +864,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(reviewOf(body) === null ? {} : { requirementReview: { ...reviewOf(body)!, ...(reviewProblem(reviewOf(body)) === null ? {} : { problem: reviewProblem(reviewOf(body))! }) } }),
     // Tester #359 (#377 layer 4): the same problem as a group-level fact beside the card's firstFailure (which stays the
     // tasks' own), so the brief, the card and `orca status` see a review that did not pass on a group whose tasks are done.
-    ...((problem) => problem === null ? {} : { groupProblem: problem })(groupProblemOf(groupId, reviewOf(body))),
+    ...((problem) => problem === null ? {} : { groupProblem: problem })(groupProblemOf(groupId, body, acceptanceProblemCode)),
     // Tester follow-up G §6.3 (#189): what this group lets through, with who, how, when and from which request.
     ...(allowancesOf(body).length === 0 ? {} : { allowances: allowancesOf(body) }),
     ...(landingWatch === null ? {} : { landingWatch: {
