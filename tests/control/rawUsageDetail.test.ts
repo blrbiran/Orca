@@ -212,8 +212,8 @@ describe("schema 23 -> 24: the ledger's detail columns", () => {
       raw.close();
       const store = await openControlStore({ stateDir: dir, now: () => 2000 });
       try {
-        expect(schemaVersion).toBe("24");
-        expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("24");
+        expect(schemaVersion).toBe("25"); // Ruling: human authorised necessary criteria rewrites for #341 (controller brief 2026-11-18), schema 24 -> 25 base_check_results; this 23 -> 24 store now ends at 25
+        expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("25"); // Ruling: human authorised necessary criteria rewrites for #341 (controller brief 2026-11-18), schema 24 -> 25 base_check_results; this 23 -> 24 store now ends at 25
         expect(store.db.prepare("SELECT * FROM usage_ledger").all()).toEqual([{ id: 1, applied_at: 5, group_id: "g", repo_id: "r", run_id: "run-1", source: "run-work", model: "opus", input: 1, output: 2,
           cache_read: 3, cache_write: 4, tokens: 10, quality: "reported", reasoning: null, cache_write_5m: null, cache_write_1h: null, requests: null, max_request_input: null,
           phase: null, task_id: null, agent_kind: null, installation_id: null, basis: null }]);

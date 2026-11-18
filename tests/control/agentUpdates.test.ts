@@ -255,7 +255,7 @@ describe("reviewed installation updates", () => {
     h.store.close();
     const reopened = await openControlStore({ stateDir });
     try {
-      expect(reopened.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()).toEqual({ value: "24" }); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail)
+      expect(reopened.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()).toEqual({ value: "25" }); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: human authorised necessary criteria rewrites for #341 (controller brief 2026-11-18), schema 24 -> 25 base_check_results
       expect(reopened.db.prepare("SELECT revision,doc_json FROM agent_preferences WHERE operator_id='human'").get()).toEqual(prefs);
       expect(reopened.db.prepare("SELECT payload_hash,result FROM commands WHERE id='older'").get()).toEqual(old);
       expect(reopened.db.prepare("SELECT name FROM sqlite_master WHERE name='agent_update_outbox'").get()).toBeDefined();

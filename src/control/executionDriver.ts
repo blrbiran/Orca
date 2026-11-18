@@ -38,6 +38,8 @@ import { readBudgetProposal, readGroup, readWork } from "./queries.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import { toSingleCallEnvelope, toStartEnvelope } from "./startEnvelope.js";
 import { priorFailuresAtPrepare } from "./priorFailures.js";
+import { requestBaseCheck } from "./baseCheckRecord.js";
+import type { BaseCheckRun } from "./baseCheck.js";
 import { exportResumeBundle, readExistingResumeBundle, type InputCheckpointV1 } from "./resumeBundle.js";
 import { recordActivity } from "./activity.js";
 import {artifactSchema,operatorNoteSchema,type OperatorNote,type RunProgress} from "./schema.js";
@@ -205,6 +207,8 @@ export interface DriverContext {
   acceptanceChecks?: Map<string, GroupAcceptanceCheck>;
   /** Tester follow-up G §6.2 (#269): landing watches in flight, by group; a restart watches the uncovered landings again. */
   landingWatches?: Map<string, LandingWatchCheck>;
+  /** Pre-existing failures spec L3 (#341): base runs in flight, by (repository, base, command); a restart runs a pending one again. */
+  baseChecks?: Map<string, BaseCheckRun>;
   /**
    * Tester #229/#230 (plan 2026-11-10 follow-up B, T1): transient step-E failures already retried, by run. In memory: a
    * restart grants at most TRANSIENT_E_RETRIES more, which is still bounded, and needs no drive-record field.
@@ -1095,6 +1099,12 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
       }
     }
     blockRun(deps, runId, "C", report.terminal.stopReason?.includes("codex-skills-") ? report.terminal.stopReason : `terminal:${outcome}`, { outcome, ...stopReason, ...failure, ...catalogMiss, ...claimed });
+    // Pre-existing failures spec L3 (#341): a task run that failed its required check asks for that command's run at the
+    // group's base (once per repository, base and command; baseCheck.ts runs it off the round). Never blocks the settle.
+    if (run.mode === undefined && run.recoveryOf === undefined && report.terminal.lastFailure !== undefined) {
+      try { write(deps, () => requestBaseCheck(store, { groupId: run.groupId, taskId: run.taskId!, runId }, report.terminal!.lastFailure)); }
+      catch (error) { process.stderr.write(`orca-driver: ${runId}: base check not asked for: ${logError(error)}\n`); }
+    }
     if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)await retainSavedInterruption(deps,runId);
     return true;
   }
@@ -2087,6 +2097,17 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
         write: (action) => write(deps, action), stopped: () => context.stopped,
       }, context.landingWatches ?? (context.landingWatches = new Map()))) progressed = true;
     } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
+    // Pre-existing failures spec L3 (#341): a failing check a settled run asked about is run once at the group's base, off
+    // the round (each command bounded by its task's per-attempt timeout). Loaded on first use (the import-cycle rule).
+    try {
+      const { checkBases } = await import("./baseCheck.js");
+      if (await checkBases({
+        store: deps.store, roots: deps.roots, resolveRepository: deps.resolveRepository, admissionGate: deps.admissionGate,
+        ...(deps.dispatchedPersonDir === undefined ? {} : { dispatchedPersonDir: deps.dispatchedPersonDir }),
+        ...(deps.beforeScratchRemoved === undefined ? {} : { beforeScratchRemoved: deps.beforeScratchRemoved }),
+        write: (action) => write(deps, action), stopped: () => context.stopped,
+      }, context.baseChecks ?? (context.baseChecks = new Map()))) progressed = true;
+    } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     // Integration spec §5: the integration pass, once per round after the exports (its git side effects are the driver's).
     try { if (await integratePendingGroups(integrationDepsOf(deps, context))) progressed = true; }
     catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
@@ -2181,6 +2202,7 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       for (const check of context.acceptChecks?.values() ?? []) check.controller.abort();
       for (const check of context.acceptanceChecks?.values() ?? []) check.controller.abort();
       for (const check of context.landingWatches?.values() ?? []) check.controller.abort();
+      for (const check of context.baseChecks?.values() ?? []) check.controller.abort();
       const stopping=taskResults.stop();
       if (inFlight !== null) await inFlight;
       // #192: a settle on the lane is finished, not cut: its run is written to settled before the store can go away.
@@ -2191,10 +2213,12 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       for (const check of context.acceptChecks?.values() ?? []) check.controller.abort();
       for (const check of context.acceptanceChecks?.values() ?? []) check.controller.abort();
       for (const check of context.landingWatches?.values() ?? []) check.controller.abort();
+      for (const check of context.baseChecks?.values() ?? []) check.controller.abort();
       // Tester follow-up E §5: an aborted group acceptance check is waited for until its scratch worktree is gone, so a
       // restart (or anything removing the state directory) never races its git or its commands. It records nothing.
       await Promise.all([...(context.acceptanceChecks?.values() ?? [])].map((check) => check.done));
       await Promise.all([...(context.landingWatches?.values() ?? [])].map((check) => check.done));
+      await Promise.all([...(context.baseChecks?.values() ?? [])].map((check) => check.done));
       await stopping;
     },
     get crashed() { return crashed; },

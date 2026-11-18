@@ -3,7 +3,7 @@ import { canonicalBytes } from "./canonicalJson.js";
 import { mirrorWebAuthority, reopenProposalBodies, type Body } from "./proposalReopen.js";
 import { overGrantBlockRuns } from "./overGrantBlock.js";
 
-export const schemaVersion = "24";
+export const schemaVersion = "25";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -258,6 +258,13 @@ const usageDetailColumns: ReadonlyArray<readonly [string, string]> = [
 ];
 export const schema23To24 = usageDetailColumns.map(([name, type]) => `ALTER TABLE usage_ledger ADD COLUMN ${name} ${type};\n`).join("");
 
+// Pre-existing failures spec 2026-11-18 L3 (#341): a task's failing required check, run once at its group's base, keyed by
+// (repository, base commit, command) across groups. `pending` until the base run ends; then red, green or unknown ("could
+// not tell": setup failed, timeout, the base could not be checked out). The task run that asked for it is kept beside the
+// answer (who, when), so a later reader can name it. Created empty; IF NOT EXISTS so a repeated step is harmless.
+export const schema24To25 = `CREATE TABLE IF NOT EXISTS base_check_results(repo_id TEXT NOT NULL, base TEXT NOT NULL, command TEXT NOT NULL, result TEXT NOT NULL CHECK(result IN ('pending','red','green','unknown')), tail TEXT, why TEXT, group_id TEXT NOT NULL, task_id TEXT NOT NULL, run_id TEXT NOT NULL, requested_at INTEGER NOT NULL, at INTEGER, PRIMARY KEY(repo_id, base, command)) STRICT;
+`;
+
 /** 23 → 24: idempotent per column (see usageDetailColumns). */
 function migrate23To24(store: DatabaseSync): void {
   const present = new Set(store.prepare("PRAGMA table_info(usage_ledger)").all().map((row) => String(row.name)));
@@ -277,7 +284,7 @@ function rekeyRequirementRounds(store: DatabaseSync): void {
 
 // A fresh store has no groups, so the pre-ledger insert adds nothing.
 export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15 + schema15To16
-  + requirementRoundsKeyed + schema16To17 + schema17To18 + schema19To20 + schema20To21 + schema22To23WorkTopUps + schema23To24;
+  + requirementRoundsKeyed + schema16To17 + schema17To18 + schema19To20 + schema20To21 + schema22To23WorkTopUps + schema23To24 + schema24To25;
 
 /**
  * Checks spec 2026-10-22 §4.1 "Migration (no aliases, P1)": each repository settings body's `integrationCheck
@@ -404,7 +411,7 @@ export function repairOverGrantUnlimitedGroups(store: DatabaseSync, now: () => n
   }
 }
 
-/** The steps every older version ends with: 15 → 16, 16 → 17, 17 → 18, 18 → 19, 19 → 20, 20 → 21, 21 → 22, 22 → 23, 23 → 24, then the version marker. */
+/** The steps every older version ends with: 15 → 16, 16 → 17, 17 → 18, 18 → 19, 19 → 20, 20 → 21, 21 → 22, 22 → 23, 23 → 24, 24 → 25, then the version marker. */
 function finishMigration(store: DatabaseSync, now: () => number): void {
   store.exec(schema15To16);
   migrateSettings15To16(store);
@@ -416,6 +423,7 @@ function finishMigration(store: DatabaseSync, now: () => number): void {
   repairOverGrantUnlimitedGroups(store, now);
   store.exec(schema22To23WorkTopUps);
   migrate23To24(store);
+  store.exec(schema24To25);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }
 
@@ -434,14 +442,21 @@ function migrate7To8(store: DatabaseSync): boolean {
 }
 
 export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () => number = Date.now): void {
+  if (fromVersion === "24") {
+    store.exec(schema24To25);
+    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    return;
+  }
   if (fromVersion === "23") {
     migrate23To24(store);
+    store.exec(schema24To25);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "22") {
     store.exec(schema22To23WorkTopUps);
     migrate23To24(store);
+    store.exec(schema24To25);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -449,6 +464,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     repairOverGrantUnlimitedGroups(store, now);
     store.exec(schema22To23WorkTopUps);
     migrate23To24(store);
+    store.exec(schema24To25);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -459,6 +475,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     repairOverGrantUnlimitedGroups(store, now);
     store.exec(schema22To23WorkTopUps);
     migrate23To24(store);
+    store.exec(schema24To25);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -468,6 +485,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     repairOverGrantUnlimitedGroups(store, now);
     store.exec(schema22To23WorkTopUps);
     migrate23To24(store);
+    store.exec(schema24To25);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -478,6 +496,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     repairOverGrantUnlimitedGroups(store, now);
     store.exec(schema22To23WorkTopUps);
     migrate23To24(store);
+    store.exec(schema24To25);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -489,6 +508,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     repairOverGrantUnlimitedGroups(store, now);
     store.exec(schema22To23WorkTopUps);
     migrate23To24(store);
+    store.exec(schema24To25);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -501,6 +521,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     repairOverGrantUnlimitedGroups(store, now);
     store.exec(schema22To23WorkTopUps);
     migrate23To24(store);
+    store.exec(schema24To25);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { readArtifact } from "./archive.js";
+import { baseCheckEvidence } from "./baseCheckRecord.js";
 import { isTerminallyFailedRun, NARRATION_ONLY_CAUSE, type DriveRecord } from "./driveRecord.js";
 import { PRIOR_FAILURE_BOUNDS, priorFailureSchema, type PriorFailure } from "./schema.js";
 import { readCanonicalRecord } from "./snapshot.js";
@@ -95,8 +96,12 @@ export function narrationOnlyEvidence(detail: string | null | undefined): string
   return `The previous attempt ended its turn after a message that was not the answer, ${observed}`;
 }
 
-/** One earlier failed run, as ccloop's PriorFailureV1 (§2.1), pre-cut to its bounds. */
-export async function priorFailureOf(store: ControlStore, run: { runId: string; drive?: DriveRecord }): Promise<PriorFailure> {
+/**
+ * One earlier failed run, as ccloop's PriorFailureV1 (§2.1), pre-cut to its bounds. With the run's group known, a
+ * `required-check-failed` whose command was red at the group's base (pre-existing failures spec L3, baseCheckRecord.ts)
+ * carries that as its first evidence line.
+ */
+export async function priorFailureOf(store: ControlStore, run: { runId: string; groupId?: string; drive?: DriveRecord }): Promise<PriorFailure> {
   const drive = run.drive;
   const cause = bounded(drive?.failureCause?.cause, PRIOR_FAILURE_BOUNDS.failureCause);
   const last = drive?.lastFailure;
@@ -112,6 +117,10 @@ export async function priorFailureOf(store: ControlStore, run: { runId: string; 
   if (cause !== null) entry.failureCause = cause;
   // Tester #347: the hint goes first; any stored evidence follows, within the entry count.
   if (cause === NARRATION_ONLY_CAUSE) entry.evidence = [narrationOnlyEvidence(drive?.failureCause?.detail), ...(entry.evidence ?? [])].slice(0, PRIOR_FAILURE_BOUNDS.evidenceEntries);
+  // Spec L3 (#341): red at the base goes first, so the entry bound never drops it.
+  const atBase = last?.rejectCategory === "required-check-failed" && typeof last.failingCommand === "string" && typeof run.groupId === "string"
+    ? bounded(baseCheckEvidence(store, run.groupId, last.failingCommand), PRIOR_FAILURE_BOUNDS.evidenceEntry) : null;
+  if (atBase !== null) entry.evidence = [atBase, ...(entry.evidence ?? [])].slice(0, PRIOR_FAILURE_BOUNDS.evidenceEntries);
   return priorFailureSchema.parse(entry);
 }
 
@@ -131,12 +140,12 @@ function endedFailed(run: { state: string; drive?: DriveRecord }): boolean {
  * .entries of them, oldest first. Undefined when there are none, so the envelope keeps its bytes.
  */
 export async function buildPriorFailures(store: ControlStore, groupId: string, taskId: string, runId: string): Promise<PriorFailure[] | undefined> {
-  const failed: Array<{ runId: string; drive?: DriveRecord }> = [];
+  const failed: Array<{ runId: string; groupId: string; drive?: DriveRecord }> = [];
   for (const row of store.db.prepare("SELECT id, body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)) {
     if (String(row.id) === runId) continue;
     let body: { runId: string; taskId?: unknown; state: string; drive?: DriveRecord };
     try { body = JSON.parse(String(row.body)); } catch { continue; }
-    if (body.taskId === taskId && endedFailed(body)) failed.push(body);
+    if (body.taskId === taskId && endedFailed(body)) failed.push({ ...body, groupId });
   }
   if (failed.length === 0) return undefined;
   const entries: PriorFailure[] = [];
