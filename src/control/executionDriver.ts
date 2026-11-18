@@ -24,6 +24,7 @@ import { existsSync } from "node:fs";
 import { z } from "zod";
 import { join } from "node:path";
 import { archiveRun, readArtifact, writeArtifact } from "./archive.js";
+import { hasArchiveRow, removeResultCopies } from "./cleanup.js";
 import { readRun, saveRun } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { commitCandidate, readCommittedCheckpoint, readUncommittedCheckpoint } from "./checkpoints.js";
@@ -108,6 +109,9 @@ export type CrashPoint = "A2-after-workspace" | "B-after-accept" | "C-after-term
   | "accept-after-cas"
   // Handoff delivery spec §9.2 R-H, §11 I5, §13.2 I-1.
   | "H-after-deliver" | "H-after-candidate" | "H-between-commit-and-settle" | "A2-after-bundle"
+  // Change-sized runs spec 2026-11-19 §5.6 (P0, review I1): around the result copy's removal at step E and in a failed
+  // run's cleanup, before the `cleanedUp` write that must stay last.
+  | "E-before-result-copies" | "cleanup-failed-after-result-copies"
   // Integration spec §6.1: the integration pass's outward actions (integrationPass.ts).
   | IntegrationCrashPoint
   // Dir-requirements spec §8.5 (D7): the placement pass's journal, folder writes and swap (dirPlacement.ts).
@@ -1700,6 +1704,11 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string, lane?: { w
   if (afterPublish.state !== "settled" || afterPublish.drive === undefined || afterPublish.drive.cleanedUp) return settledJustNow;
   await cleanupRunWorkspace(deps.resolveRepository(cleanupRepoIdOf(store, afterPublish)), deps.roots, runId, workspaceOf(afterPublish.drive));
   for (const dir of afterPublish.drive.dirs?.slice(1) ?? []) await cleanupExtraWorkspace(dir.targetRepo, deps.roots, runId, dir.key);
+  // Change-sized runs spec 2026-11-19 §5.6 (P0): the result copy goes once the archive above holds it; every extra's
+  // attempt is landed by now, so repos/ goes too. `cleanedUp` is written after it: written first, a crash would leave
+  // the copy for ever. A crash here repeats the idempotent steps above and finds nothing left to remove.
+  deps.crash?.("E-before-result-copies");
+  await removeResultCopies(store, runId, afterPublish.drive.sourceDir, { extras: true });
   write(deps, () => {
     const current = readDriverRun(store, runId);
     current.drive = { ...current.drive!, cleanedUp: true, cleanupError: null };
@@ -1733,14 +1742,20 @@ export async function stepCleanupFailed(deps: ExecutionDriverDeps, runId: string
   const run = readDriverRun(store, runId);
   if (run.state !== "settled-failed" || run.drive === undefined || run.drive.cleanedUp) return false;
   const drive = run.drive;
+  // Change-sized runs spec 2026-11-19 §5.6 (review I1): a failed terminal was archived at C; archiving again after the
+  // result copy below is gone would fail every later round (archiveRun reads <sourceDir>/repo), so a run that already has
+  // an archive row is not archived again on any branch below (Track D's three branches kept as they were).
+  const archived = hasArchiveRow(store, runId);
   if (store.db.prepare("SELECT 1 FROM outbox WHERE id=? AND kind='report'").get(`report:${runId}`) !== undefined) {
-    const report = await savedReport(store, runId);
-    await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: report.candidate?.stopProof ?? null }, archiveAdmission(deps));
+    if (!archived) {
+      const report = await savedReport(store, runId);
+      await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: report.candidate?.stopProof ?? null }, archiveAdmission(deps));
+    }
   } else if (run.executionId === null) {
     // Tester #360 (plan 2026-11-18 batch D, D1): no saved report is a legal shape -- a run blocked before C wrote one, then
     // retried. ccloop never accepted this one, so no agent writes into its workspace: archived without a stop proof
     // (archiveRun records `stop-unconfirmed`), or not at all when ccloop left no result repository.
-    if (existsSync(join(drive.sourceDir, "repo")))
+    if (!archived && existsSync(join(drive.sourceDir, "repo")))
       await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: null }, archiveAdmission(deps));
   } else {
     // Accepted by ccloop: its workspace goes only once ccloop proves the run stopped -- a stop proof of this execution and
@@ -1771,12 +1786,17 @@ export async function stepCleanupFailed(deps: ExecutionDriverDeps, runId: string
       const bytes = await port.readEvidence(proof.source);
       if (createHash("sha256").update(bytes).digest("hex") !== proof.source.hash) throw new ControlError("artifact-hash-mismatch");
       await writeArtifact(store, proof.source.artifactId, bytes, archiveAdmission(deps));
-      await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: proof }, archiveAdmission(deps));
+      if (!archived) await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: proof }, archiveAdmission(deps));
     } catch (error) { checked.set(runId, now + CLEANUP_AWAITING_STOP_RECHECK_MS); throw error; }
     checked.delete(runId);
   }
   await cleanupRunWorkspace(deps.resolveRepository(cleanupRepoIdOf(store, run)), deps.roots, runId, workspaceOf(drive));
   for (const dir of drive.dirs?.slice(1) ?? []) await cleanupExtraWorkspace(dir.targetRepo, deps.roots, runId, dir.key);
+  // repos/ stays: a failed multi run never landed its extras, and the v1 archive has no snapshot of them (§5.6).
+  // Merge with Track D (#360): a never-accepted run ccloop left no result repository for has no archive row and nothing to
+  // remove; removeResultCopies would refuse it (result-copy-unarchived) for ever, so it is asked only when a copy exists.
+  if (existsSync(join(drive.sourceDir, "repo"))) await removeResultCopies(store, runId, drive.sourceDir, { extras: false });
+  deps.crash?.("cleanup-failed-after-result-copies");
   write(deps, () => {
     const current = readDriverRun(store, runId);
     if (current.state !== "settled-failed" || current.drive === undefined) return;

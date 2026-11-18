@@ -191,7 +191,10 @@ describe("A2 for a multi group's run (§7.1)", () => {
     // A settled run is where stepE's cleanup acts; E is reached directly, without a landing this task does not implement.
     editRun(t, runId, (body) => { body.state = "settled"; });
     await driver.round();
-    expect(t.body(runId).drive.cleanedUp).toBe(true);
+    // Ruling (2026-11-19 change-sized runs P0): step E now removes the result copy after the workspaces and before the
+    // `cleanedUp` write, and only once an archive row holds it (spec §5.6). This synthetic settle has no archive, so the
+    // removal refuses by name and the run stays not cleaned up; intent kept: both workspaces are removed by E's cleanup.
+    expect(t.body(runId).drive).toMatchObject({ cleanedUp: false, cleanupError: expect.stringContaining("result-copy-unarchived") });
     expect(existsSync(drive.workspacePath)).toBe(false);
     expect(existsSync(drive.dirs[1].workspacePath)).toBe(false);
   });

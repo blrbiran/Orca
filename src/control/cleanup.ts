@@ -36,6 +36,10 @@ export async function cleanupCommittedRun(store:ControlStore,runId:string,source
  await (deps.admit?deps.admit(finish):finish());return {removed:true};
 }
 
+/** Change-sized runs spec 2026-11-19 §5.6 (review I1): whether any archive row records the run. */
+export function hasArchiveRow(store:ControlStore,runId:string):boolean {
+ return store.db.prepare("SELECT 1 FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=? LIMIT 1").get(runId)!==undefined;
+}
 /**
  * Change-sized runs spec 2026-11-19 §5.6 (P0): the one way a run's result copy (`<sourceDir>/repo`, and with `extras`
  * `<sourceDir>/repos`) is deleted. Only once the run's latest archive row is complete (`missing: []` and a snapshot: it

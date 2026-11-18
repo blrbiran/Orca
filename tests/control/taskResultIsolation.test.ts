@@ -90,12 +90,17 @@ describe('isolation in H-settle, failed cleanup and continuation closure', { tim
         try {
             const id = await t.claim();
             await t.until(driver, () => t.body(id).state === 'blocked');
+            // Ruling (2026-11-19 change-sized runs P0): the cleanup no longer re-archives a run step C archived (spec §5.6,
+            // review I1), so a poison made after C would reach no archive. The run's rows are deleted first, so the cleanup
+            // archives after the poison; intent kept: supplemental faults never make a failed run's evidence partial.
+            t.h.store.db.prepare("DELETE FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=?").run(id);
             await poison(t.body(id).drive.sourceDir);
             expect(t.service.retryTask(t.h.command('retry-task', { taskId: 'a' }))).not.toHaveProperty('error');
             expect(await stepCleanupFailed(t.deps, id)).toBe(true);
             expect(t.body(id)).toMatchObject({ state: 'settled-failed', highWater: 2, cumulative: { work: { tokens: 10 } }, drive: { outcome: 'failed', cleanedUp: true, cleanupError: null } });
-            const archive = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM outbox WHERE kind='archive'").get()!.body));
-            expect(archive.missing).toEqual([]);
+            const archives = t.h.store.db.prepare("SELECT body FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=?").all(id).map(row => JSON.parse(String(row.body)));
+            expect(archives).toHaveLength(1);
+            expect(archives[0].missing).toEqual([]);
         }
         finally {
             await driver.stop();

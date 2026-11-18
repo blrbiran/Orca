@@ -259,6 +259,8 @@ describe("the driver re-runs a modified check at base before landing (spec §7a.
       await land(t, runId, driver);
       expect(t.body(runId).drive.criteriaBase).toEqual({ result: "passed" });
       // Mutation I2-M4 (the driver's snapshot drops the setup commands) -> node_modules stays, red.
+      // Change-sized runs P0 (spec §11.1 hardening): the copy is still there before step E, so the check below is not vacuous.
+      expect(existsSync(join(t.body(runId).drive.sourceDir, "repo"))).toBe(true);
       expect(existsSync(join(t.body(runId).drive.sourceDir, "repo", "node_modules"))).toBe(false);
       await settle(driver, () => t.body(runId).state === "settled");
       const row = t.h.store.db.prepare("SELECT body FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=? ORDER BY rowid DESC").get(runId);

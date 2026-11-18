@@ -352,6 +352,8 @@ describe("stepC runs the check only for a debug group's run (plan Task 8)", () =
       await settle(driver, () => t.body(runId).state === "landed" || t.body(runId).state === "blocked");
       expect({ state: t.body(runId).state, reason: t.body(runId).drive.blockedReason }).toEqual({ state: "landed", reason: null });
       // Mutation I2-M6 (the driver's snapshot at the reproduce-first check drops the setup commands) -> true, red.
+      // Change-sized runs P0 (spec §11.1 hardening): the copy is still there before step E, so the check below is not vacuous.
+      expect(existsSync(join(t.body(runId).drive.sourceDir, "repo"))).toBe(true);
       expect(existsSync(join(t.body(runId).drive.sourceDir, "repo", "node_modules"))).toBe(false);
     } finally { await driver.stop(); await t.h.dispose(); }
   });
