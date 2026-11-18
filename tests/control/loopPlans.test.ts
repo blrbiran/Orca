@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { TASK_WORK } from "../../src/control/estimator.js";
 import {
-  LOOP_PLAN_IDS, OFF_PLAN_TARGETS_CONSTRAINT, choosePlanByLabels, currentLoopPlanVersion, expandLoopTask, expandRecipe, isLoopPlanId, loopPlanDefinition, type LoopPlanFileInput,
+  LOOP_PLAN_IDS, OFF_PLAN_TARGETS_CONSTRAINT, PREEXISTING_FAILURE_CONSTRAINT, choosePlanByLabels, currentLoopPlanVersion, expandLoopTask, expandRecipe, isLoopPlanId, loopPlanDefinition, type LoopPlanFileInput,
 } from "../../src/control/loopPlans.js";
 import { taskContractSchema } from "../../src/scheduler/planFile.js";
 
@@ -67,7 +67,8 @@ describe("the expansion is pure and pinned (criterion 1)", () => {
     const v3 = {...v2,executionPolicy:{...v2.executionPolicy,tokenBudget:null}};
     const v3Expanded=expandRecipe("fix-login",REPO,{...result.recipe,planVersion:3});
     expect(v3Expanded.ok&&JSON.parse(v3Expanded.canonicalJson)).toEqual(v3);
-    expect(JSON.parse(result.canonicalJson)).toEqual({...v3,context:{...v3.context,constraints:[...BUGFIX_CONSTRAINTS,OFF_PLAN_TARGETS_CONSTRAINT]},safetyPolicy:{...v3.safetyPolicy,allowlistPaths:[]}});
+    // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) -- #341 L2: the v4 expansion now ends with the pre-existing failure line; the v3 bytes above do not move.
+    expect(JSON.parse(result.canonicalJson)).toEqual({...v3,context:{...v3.context,constraints:[...BUGFIX_CONSTRAINTS,OFF_PLAN_TARGETS_CONSTRAINT,PREEXISTING_FAILURE_CONSTRAINT]},safetyPolicy:{...v3.safetyPolicy,allowlistPaths:[]}});
     expect(result.hash).toBe(sha256Canonical(JSON.parse(result.canonicalJson)));
     expect(result.recipe).toEqual({
       schema: "orca-loop-recipe-v1", planId: "bugfix", planVersion: 4, chosenBy: "explicit",
@@ -158,7 +159,8 @@ describe("each plan's rules land in the contract (criterion 2)", () => {
     it("verifierType", () => expect(contractOf(plan, givenFor(plan)).verification.verifierType).toBe(want.verifier));
     it("rejectOn", () => expect(contractOf(plan, givenFor(plan)).verification.rejectOn).toEqual(want.rejectOn));
     // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」)
-    it("constraints", () => expect(contractOf(plan, givenFor(plan)).context.constraints).toEqual([...want.constraints, OFF_PLAN_TARGETS_CONSTRAINT]));
+    // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) -- #341 L2: every v4 plan's constraints end with the pre-existing failure line.
+    it("constraints", () => expect(contractOf(plan, givenFor(plan)).context.constraints).toEqual([...want.constraints, OFF_PLAN_TARGETS_CONSTRAINT, PREEXISTING_FAILURE_CONSTRAINT]));
     it("checks are both the build/test commands and the required checks", () => {
       const contract = contractOf(plan, givenFor(plan));
       expect([contract.context.buildTestCommands, contract.verification.requiredChecks]).toEqual([["npm test"], want.required]);

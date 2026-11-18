@@ -53,6 +53,7 @@ import { applyAddLiveNote, writeRunLiveNotes, type AddLiveNoteCommand } from "./
 import { applySettleUnknownUsage, type SettleUnknownUsageCommand } from "./settleUnknownUsage.js";
 import { applyAcceptAttempt, prepareAcceptAttempt, type AcceptAttemptCommand } from "./acceptAttempt.js";
 import { applyAbandonRun, type AbandonRunCommand } from "./abandonRun.js";
+import { applyAnswerPreexistingFailure, type AnswerPreexistingFailureCommand } from "./preexistingFailure.js";
 import { applyRetryTask, autoRetryFundingRefusal, workerLostFundingRefusal, type RetryTaskCommand } from "./retryTask.js";
 import { overGrantBlockRuns, unblockedStatus } from "./overGrantBlock.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
@@ -2042,6 +2043,10 @@ export class WebControlService {
   /** Tester follow-up E §5 (#241): a person accepts a group whose acceptance failed on its tip, with why. */
   waiveAcceptance(command: WaiveAcceptanceCommand): WebCommandResult {
     return this.mutate(() => applyWaiveAcceptance({ store: this.store }, command)) as WebCommandResult;
+  }
+  /** Pre-existing failures spec L2 (#341): a person's answer to a check already red before a task changed anything. */
+  answerPreexistingFailure(command: AnswerPreexistingFailureCommand): WebCommandResult {
+    return this.mutate(() => applyAnswerPreexistingFailure({ store: this.store }, command)) as WebCommandResult;
   }
   /** Dir-requirements spec §9.2: the person's answer to a stopped folder change (no git child; the next round acts). */
   resolveFolderChange(command: ResolveFolderChangeCommand): WebCommandResult {

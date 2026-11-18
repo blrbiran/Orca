@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest";
 import {
-  expandLoopPlan, expandRecipe, LOOP_PLAN_IDS, LOOP_RECIPE_SCHEMA, OFF_PLAN_TARGETS_CONSTRAINT, offPlanWrites, currentLoopPlanVersion, SETUP_CONSTRAINT,
+  expandLoopPlan, expandRecipe, LOOP_PLAN_IDS, LOOP_RECIPE_SCHEMA, OFF_PLAN_TARGETS_CONSTRAINT, PREEXISTING_FAILURE_CONSTRAINT, offPlanWrites, currentLoopPlanVersion, SETUP_CONSTRAINT,
   type LoopInputs,
 } from "../../src/control/loopPlans.js";
 import { fixTaskAllowlist } from "../../src/control/requirementReview.js";
@@ -32,7 +32,8 @@ describe("loop plan version 4 (#346 W2)", () => {
     // The targetPaths stay: they are what the planner and executor are told to change.
     expect(contract.context.targetPaths).toEqual(inputs.targetPaths);
     // mutation: drop the constraint line -> red
-    expect(contract.context.constraints.at(-1)).toBe(OFF_PLAN_TARGETS_CONSTRAINT);
+    // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) -- #341 L2 appends the pre-existing failure line after it.
+    expect(contract.context.constraints.at(-2)).toBe(OFF_PLAN_TARGETS_CONSTRAINT);
     expect(OFF_PLAN_TARGETS_CONSTRAINT).toBe("targetPaths are the files this task is expected to change; change others when the work needs them.");
   });
 
@@ -40,7 +41,8 @@ describe("loop plan version 4 (#346 W2)", () => {
     const expanded = expandLoopPlan("t1", "/r", "refactor", { ...inputs, setup: ["npm ci"] });
     if (!expanded.ok) throw new Error(expanded.reason);
     expect((expanded.contract as Contract).context.constraints).toEqual([
-      "Change no observable behavior; every existing check must pass unchanged.", SETUP_CONSTRAINT, OFF_PLAN_TARGETS_CONSTRAINT,
+      // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) -- #341 L2's line follows the targetPaths line.
+      "Change no observable behavior; every existing check must pass unchanged.", SETUP_CONSTRAINT, OFF_PLAN_TARGETS_CONSTRAINT, PREEXISTING_FAILURE_CONSTRAINT,
     ]);
   });
 

@@ -632,7 +632,20 @@ export type GroupViewV1 = {
   estimateHistory?: EstimateHistoryV1;
   /** Tester #348: the runs the server could not decode -- left out of `runs` -- with their work item, task (or null) and why; absent when none. */
   unreadableRuns?: Array<{ runId: string; workItemId: string; taskId: string | null; reason: string }>;
+  /** Pre-existing failures spec L2 (#341): one row per check already red before a task changed anything; absent when none. */
+  preexistingFailures?: PreexistingFailureV1[];
 };
+
+/** src/control/preexistingFailure.ts PreexistingFailureRow. */
+export type PreexistingFailureAnswerV1 = "allow-fix" | "relative" | "edit-requirement";
+export interface PreexistingFailureV1 {
+  command: string;
+  reportedBy: Array<{ taskId: string; runId: string; chose: string }>;
+  sources: Array<"agent" | "base-check">;
+  baseCheck?: { taskId: string; runId: string; at: number };
+  answer: PreexistingFailureAnswerV1 | null;
+  answered?: { by: string; at: number };
+}
 
 /** src/control/estimateHistory.ts EstimateHistoryView. */
 export interface EstimateHistoryV1 {
@@ -780,6 +793,7 @@ export const WEB_ACTIVITY_KINDS = [
   "group-cap-reached", "usage-paused", "usage-pause-decided", "usage-over-expectation",
   "run-abandon-requested",
   "off-plan-write",
+  "preexisting-failure",
 ] as const;
 export type ActivityKindV1 = (typeof WEB_ACTIVITY_KINDS)[number];
 export type ActivityEntryV1 = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKindV1; body: Record<string, unknown> };
@@ -905,7 +919,7 @@ export type CommandSuccessV1 = {
   actorId: string;
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "add-live-note" | "usage-pause-decide" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "settle-approximate-usage" | "close-run" | "accept-attempt" | "abandon-run" | "reopen-task" | "accept-no-change" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-draft-edit" | "requirement-clarify-more" | "requirement-classify" | "requirement-revise" | "requirement-set-agent"
-    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "integrate-now" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "review-accept" | "review-rerun" | "review-fix"
+    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "integrate-now" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "answer-preexisting-failure" | "review-accept" | "review-rerun" | "review-fix"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "integrate-now" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "allow-request" | "revoke-allowance"
     | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
     | "correction-record" | "correction-close" | "correction-withdraw"
@@ -975,6 +989,7 @@ export type CommandSuccessV1 = {
     | { kind: "integration-resolution-started"; groupId: string }
     | { kind: "acceptance-recheck-requested"; groupId: string; tip: string }
     | { kind: "acceptance-waived"; groupId: string; tip: string }
+    | { kind: "preexisting-failure-answered"; groupId: string; command: string; answer: PreexistingFailureAnswerV1 }
     | { kind: "review-accepted"; groupId: string }
     | { kind: "review-rerun-requested"; groupId: string }
     | { kind: "review-fix-opened"; groupId: string; taskId: string }

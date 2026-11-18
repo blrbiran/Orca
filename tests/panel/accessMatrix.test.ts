@@ -106,6 +106,8 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "abandon-run", payload: { runId: "run-1", note: "cannot succeed" }, tier: "token", member: V },
   // Tester follow-up E §5 (#241): accepting a failed group acceptance is a person's act (socket tier token).
   { entry: "waive-acceptance", payload: { note: "known flake" }, tier: "token", member: V },
+  // Pre-existing failures spec L2 (#341): human-only, socket tier token, as waive-acceptance.
+  { entry: "answer-preexisting-failure", payload: { command: "npm test", answer: "relative" }, tier: "token", member: V },
   { entry: "apply-agent-update", payload: {}, tier: "token", member: V },
   // Scheduled flows and groups spec §11.1 (I-3): a new library entry copies Orca's own data (open); appending a version to
   // one, importing outside bytes, and a library import's token limit or scheme are token; archiving is open.

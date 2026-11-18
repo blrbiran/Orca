@@ -395,7 +395,8 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
     // Ruling (2026-11-17, delivery tail, session 0ae7510a): 「这次批准改写所有必要的判据」 — the activityKinds `integration-backoff`, `integration-requested` and `delivered-acceptance` (delivery tail spec D5, D6, D3) add three: 224 + 3.
     // Ruling: human 2026-11-17 (tester #344) -- 「这一轮允许改必要的判据」: the activityKind `run-abandon-requested` (stuck-runs spec S2) adds one: 227 + 1.
     // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」) -- the activityKind `off-plan-write` (off-plan writes spec W3, #346) adds one: 228 + 1.
-    expect(ENUM_VALUES.length).toBe(229);
+    // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) -- the activityKind `preexisting-failure` (pre-existing failures spec L2, #341) adds one: 229 + 1.
+    expect(ENUM_VALUES.length).toBe(230);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {

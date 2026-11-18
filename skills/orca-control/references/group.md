@@ -260,6 +260,20 @@ accept a group whose acceptance failed on its tip anyway (a person's act)
 orca group waive-acceptance g1 --note 'the red test is the known flaky one; tracked in #12'
 ```
 
+## `orca group preexisting-failure <group> --command <command> --answer <answer>`
+
+answer a check that already failed before the work: allow-fix, relative or edit-requirement (a person's act)
+
+- What it does: sends control verb `answer-preexisting-failure`.
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
+- `<group>`: a group id or a unique prefix
+- `--command <command>` (required): the check as the group's problem row names it (orca group show <group>: preexistingFailures)
+- `--answer <answer>` (required): allow-fix (the change that repaired it is allowed), relative (judge the check against the base) or edit-requirement (you change the requirement)
+
+```
+orca group preexisting-failure g1 --command 'npm test' --answer relative
+```
+
 ## `orca group folder-change <group> [--take-folder] [--recheck] [--withhold] [--dir <dir>]`
 
 answer a folder change that stopped placement: --take-folder, --recheck or --withhold

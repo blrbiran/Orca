@@ -252,6 +252,8 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "review-rerun": { call: (s, c) => s.reviewRerun(c), target: "group", payload: { note: "n" } },
   "review-fix": { call: (s, c) => s.reviewFix(c), target: "group", payload: { goal: "g" } },
   "waive-acceptance": { call: (s, c) => withCommandContext((c as { commandId: string }).commandId, { client: "web", principal: "user:owner" }, () => s.waiveAcceptance(c)), target: "group", payload: { note: "the red test is a known flake" } },
+  // Pre-existing failures spec L2 (#341): a person's answer to a problem row is group-targeted, so an archived group refuses it too.
+  "answer-preexisting-failure": { call: (s, c) => withCommandContext((c as { commandId: string }).commandId, { client: "web", principal: "user:owner" }, () => s.answerPreexistingFailure(c)), target: "group", payload: { command: "npm test", answer: "relative" } },
   "resolve-folder-change": { call: (s, c) => s.resolveFolderChange(c), target: "group", payload: { action: "recheck" } },
   "multi-dir-landing": { call: (s, c) => s.multiDirLanding(c), target: "group", payload: { action: "retry-rest" } },
   "set-task-labels": { call: (s, c) => s.setTaskLabels(c), target: "task", payload: { labels: null, baseLabelsVersion: 0 } },

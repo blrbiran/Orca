@@ -155,6 +155,16 @@ const answeredFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body
   const result = (body as { result?: { kind?: unknown; finished?: unknown } } | null)?.result;
   return result?.kind === "requirement-answered" && result.finished === true && answeredGroup !== null ? { ...(body as object), next: `orca requirement accept ${answeredGroup}` } : body;
 } });
+/**
+ * Pre-existing failures spec L2 (#341): `edit-requirement` is recorded like the other answers; the change itself is made
+ * where the requirement lives (no editor of its own), so the line after it names that place.
+ */
+const preexistingFailureFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) => {
+  const result = (body as { result?: { kind?: unknown; answer?: unknown; groupId?: unknown } } | null)?.result;
+  const printed = row.format(body);
+  return result?.kind === "preexisting-failure-answered" && result.answer === "edit-requirement" && typeof result.groupId === "string"
+    ? `${printed}\nnext: change the requirement where it lives: orca requirement show ${result.groupId}` : printed;
+} });
 /** Tester #272 (4): what follows `<code>:` in a refusal's message ("" when nothing does). */
 const refusalDetail = (error: { code: string; message: string }): string =>
   error.message.startsWith(`${error.code}:`) ? error.message.slice(error.code.length + 1) : "";
@@ -571,6 +581,20 @@ export const WORK_ROWS: CommandDef[] = [
     flags: [{ name: "note", type: "string", required: true, summary: "why you accept the failed tip; recorded with the waiver and in the group's activity" }],
     route: (c) => `groups/${group(c)}/acceptance/waive`, payload: (c) => ({ note: str(c, "note") }),
     examples: ["orca group waive-acceptance g1 --note 'the red test is the known flaky one; tracked in #12'"] }),
+  // Pre-existing failures spec L2 (#341): the person's answer to a check that was already red before a task changed anything.
+  preexistingFailureFormat(verb({ domain: "group", action: "preexisting-failure", summary: "answer a check that already failed before the work: allow-fix, relative or edit-requirement (a person's act)",
+    verb: "answer-preexisting-failure", positionals: [GROUP], access: "token",
+    flags: [
+      { name: "command", type: "string", required: true, summary: "the check as the group's problem row names it (orca group show <group>: preexistingFailures)" },
+      { name: "answer", type: "string", required: true, summary: "allow-fix (the change that repaired it is allowed), relative (judge the check against the base) or edit-requirement (you change the requirement)" },
+    ],
+    route: (c) => `groups/${group(c)}/preexisting-failure`,
+    payload: (c) => {
+      const answer = str(c, "answer");
+      if (answer !== "allow-fix" && answer !== "relative" && answer !== "edit-requirement") throw invalid("--answer wants allow-fix, relative or edit-requirement");
+      return { command: str(c, "command"), answer };
+    },
+    examples: ["orca group preexisting-failure g1 --command 'npm test' --answer relative"] })),
   // Dir-requirements spec §9.2: the person's answer to a folder change that stopped a dir group's placement.
   verb({ domain: "group", action: "folder-change", summary: "answer a folder change that stopped placement: --take-folder, --recheck or --withhold",
     verb: "resolve-folder-change", positionals: [GROUP], access: "token",

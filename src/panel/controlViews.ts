@@ -22,7 +22,7 @@ import { readAgentPreferences } from "../control/agentPreferences.js";
 import { liveUsageSchema, peerCode, sessionCleanupSchema } from "../control/ccloopPort.js";
 import { groupExecutionPending } from "../control/executionPending.js";
 import { readDebugMark } from "../control/debugGroup.js";
-import { dirWorkspaceOf, readPlacement } from "../control/dirGroup.js";
+import { dirWorkspaceOf, groupRepoId, readPlacement } from "../control/dirGroup.js";
 import { multiDirOf } from "../control/multiGroup.js";
 import { readMultiLanding } from "../control/multiLandingRecord.js";
 import { criteriaReviewsOf, escalationsOf, readSystemDebugMark } from "../control/systemDebug.js";
@@ -64,6 +64,7 @@ import { exportReasonOf } from "../control/requirementExport.js";
 import { readSpendCapBlock } from "../control/spendCaps.js";
 import { latestGroupActivityAt, readGroupActivity, readRunActivity, readLatestRunActivityByGroup } from "../control/activity.js";
 import { readOffPlanWritesByRun, type OffPlanWriteBody } from "../control/offPlanWrites.js";
+import { failedCheckOf, preexistingFailureRows, type FailedCheck } from "../control/preexistingFailure.js";
 import { readRunDiagnosis, savedFormatFailureEvidence } from "./runDiagnosis.js";
 import { attemptReviewOf, type AttemptReview } from "./attemptReview.js";
 import { readGroupIntegration } from "../control/integrationScheme.js";
@@ -1685,6 +1686,8 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     // Tester #348: the group's runs that do not decode -- left out of `runs` and `checkpoints`, each named here with its
     // work item, its task (null when the item is not a task: a probe, an estimate, a requirement call) and why. Absent when none.
     ...((unreadable) => unreadable.length === 0 ? {} : { unreadableRuns: unreadable })(unreadableRunsOf(readSnapshot)),
+    // Pre-existing failures spec L2 (#341): absent when none, so every other group's view is what it was.
+    ...((rows) => rows.length === 0 ? {} : { preexistingFailures: rows })(preexistingFailuresView(store, groupId, body, readSnapshot)),
   };
   // Tester #348 review: counted from the stored rows, so a run left out of `runs` as unreadable still counts; a readable
   // run's marker was already checked above (runViews refuses an invalid settlement). A body that is not JSON cannot say.
@@ -1696,6 +1699,31 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
   const parsed = groupViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`group-view:${parsed.error.issues[0]?.path.join(".")}:${parsed.error.issues[0]?.message}`);
   return parsed.data;
+}
+
+/**
+ * Pre-existing failures spec L2 (#341): the group's problem rows, from the runs this read already holds (their base and
+ * the checks they failed: no further run read) plus two indexed reads (preexistingFailure.ts). The base-check source has
+ * the scope L3 asks with (baseCheckScopeOf): none for a multi-directory or dir group, or before a work run has a base.
+ */
+function preexistingFailuresView(store: ControlStore, groupId: string, body: unknown, snapshot: GroupReadSnapshot) {
+  let base: string | null = null;
+  const failed: FailedCheck[] = [];
+  for (const row of snapshot.runsByRowid) {
+    // A run body that does not decode is named in unreadableRuns; it reports nothing here.
+    const decoded = snapshot.decodeRun(String(row.id));
+    if (decoded === undefined || !decoded.ok) continue;
+    const run = decoded.value;
+    const drive = (run as { phase?: unknown; drive?: { base?: unknown } } | null);
+    if (base === null && drive?.phase === "work" && typeof drive.drive?.base === "string") base = drive.drive.base;
+    const check = failedCheckOf(run);
+    if (check !== null) failed.push(check);
+  }
+  let scope: { repoId: string; base: string } | null = null;
+  if (base !== null && multiDirOf(body) === null && dirWorkspaceOf(body) === null) {
+    try { scope = { repoId: groupRepoId(store, groupId, body), base }; } catch { scope = null; }
+  }
+  return preexistingFailureRows(store, groupId, body, scope, failed);
 }
 
 /**

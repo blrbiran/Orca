@@ -10,7 +10,7 @@ import {
   setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema, setCriteriaReviewPayloadSchema,
   setCheckSettingsPayloadSchema, setScheduledCheckPayloadSchema, setCheckLocksPayloadSchema, checkKindPayloadSchema, setFlowSettingsPayloadSchema, setFlowLocksPayloadSchema, flowStartPayloadSchema, flowMessagePayloadSchema, flowPlanPayloadSchema, flowRerunPayloadSchema, flowAnswerPayloadSchema, flowEffectPayloadSchema, flowPoolPayloadSchema, flowPlanStepPayloadSchema,
   resolveFolderChangePayloadSchema, multiDirLandingPayloadSchema,
-  verifySavedResultPayloadSchema, closeRunPayloadSchema, acceptAttemptPayloadSchema, abandonRunPayloadSchema, reopenTaskPayloadSchema, acceptNoChangePayloadSchema, reviewNotePayloadSchema, reviewFixPayloadSchema, waiveAcceptancePayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, allowRequestPayloadSchema, revokeAllowancePayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
+  verifySavedResultPayloadSchema, closeRunPayloadSchema, acceptAttemptPayloadSchema, abandonRunPayloadSchema, answerPreexistingFailurePayloadSchema, reopenTaskPayloadSchema, acceptNoChangePayloadSchema, reviewNotePayloadSchema, reviewFixPayloadSchema, waiveAcceptancePayloadSchema, approvePendingDecisionPayloadSchema, rejectPendingDecisionPayloadSchema, ratifyFlaggedDecisionPayloadSchema, allowRequestPayloadSchema, revokeAllowancePayloadSchema, setOrchestrationSettingsPayloadSchema, groupDependencyPayloadSchema, correctionDebugOpenPayloadSchema,
   correctionRecordPayloadSchema, correctionClosePayloadSchema, correctionWithdrawPayloadSchema,
   planLibrarySavePayloadSchema, planLibraryImportPayloadSchema, planLibraryArchivePayloadSchema,
   scheduleSetPayloadSchema, scheduleEnablePayloadSchema, scheduleRemovePayloadSchema, scheduleResumePayloadSchema, scheduleFromGroupPayloadSchema,
@@ -72,6 +72,8 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "reopen-task": reopenTaskPayloadSchema, "accept-no-change": acceptNoChangePayloadSchema,
   // Tester follow-up E §5 (#241): a failed group acceptance's recheck (any) and waiver (human-only, socket tier token).
   "recheck-acceptance": emptyPayloadSchema, "waive-acceptance": waiveAcceptancePayloadSchema,
+  // Pre-existing failures spec L2 (#341): a person's answer to a check already red before the work (human-only, token).
+  "answer-preexisting-failure": answerPreexistingFailurePayloadSchema,
   // Tester follow-up G spec §3.5: the requirement review's exits (any).
   "review-accept": reviewNotePayloadSchema, "review-rerun": reviewNotePayloadSchema, "review-fix": reviewFixPayloadSchema,
   "approve-pending-decision": approvePendingDecisionPayloadSchema,

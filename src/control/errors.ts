@@ -260,6 +260,9 @@ export const durableCommandErrorStatuses = {
   "run-abandon-person-required": 409,
   // Tester follow-up E §5 (#241): recheck and waive answer a failed group acceptance only; a waiver names a person.
   "group-acceptance-not-failed": 409,
+  // Pre-existing failures spec L2 (#341): an answer names a command the group has a row for, and a person.
+  "preexisting-failure-not-reported": 409,
+  "preexisting-failure-person-required": 409,
   "group-acceptance-person-required": 409,
   // Tester follow-up G Part 5: a note for a done task (the box is disabled), or a 17th queued note for one task.
   "live-note-task-finished": 409,

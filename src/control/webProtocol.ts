@@ -692,6 +692,8 @@ export const commandVerbSchema = z.enum([
   // Tester follow-up E §5 (#241): rerun a failed group acceptance on the same tip (any), or accept it anyway (a person).
   "recheck-acceptance",
   "waive-acceptance",
+  // Pre-existing failures spec L2 (#341): a person answers a check that was already red before a task changed anything.
+  "answer-preexisting-failure",
   // Tester follow-up G spec §3.5: the exits of a requirement review that did not pass (any principal).
   "review-accept",
   "review-rerun",
@@ -914,6 +916,13 @@ export const allowRequestPayloadSchema = z.object({
 }).strict();
 export const revokeAllowancePayloadSchema = z.object({ allowanceId: idSchema }).strict();
 export const waiveAcceptancePayloadSchema = z.object({ note: z.string().max(2048).refine((note) => note.trim().length > 0, "note-empty") }).strict();
+/** Pre-existing failures spec L2 (#341): the three answers to a check that was already red before a task changed anything. */
+export const preexistingFailureAnswerSchema = z.enum(["allow-fix", "relative", "edit-requirement"]);
+export type PreexistingFailureAnswer = z.infer<typeof preexistingFailureAnswerSchema>;
+/** The row's command (as the group view names it; preexistingFailure.ts bounds it at 1024 bytes) and the answer. */
+export const answerPreexistingFailurePayloadSchema = z.object({
+  command: nonemptyString.refine((command) => Buffer.byteLength(command, "utf8") <= 1024, "command-too-large"), answer: preexistingFailureAnswerSchema,
+}).strict();
 
 const proposalTargetSchema = z.discriminatedUnion("scope", [
   z
@@ -1386,6 +1395,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("recheck-acceptance"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("waive-acceptance"), target: groupCommandTargetSchema, payload: waiveAcceptancePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("answer-preexisting-failure"), target: groupCommandTargetSchema, payload: answerPreexistingFailurePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("review-accept"), target: groupCommandTargetSchema, payload: reviewNotePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("review-rerun"), target: groupCommandTargetSchema, payload: reviewNotePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("review-fix"), target: groupCommandTargetSchema, payload: reviewFixPayloadSchema }).strict(),
@@ -1503,6 +1513,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("recheck-acceptance"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("waive-acceptance"), target: groupCommandTargetSchema, payload: waiveAcceptancePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("answer-preexisting-failure"), target: groupCommandTargetSchema, payload: answerPreexistingFailurePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("review-accept"), target: groupCommandTargetSchema, payload: reviewNotePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("review-rerun"), target: groupCommandTargetSchema, payload: reviewNotePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("review-fix"), target: groupCommandTargetSchema, payload: reviewFixPayloadSchema }).strict(),
@@ -2069,6 +2080,8 @@ export const activityKindSchema = z.enum([
   "run-abandon-requested",
   // Off-plan writes spec W3 (#346): a landed run's paths outside its task's targetPaths.
   "off-plan-write",
+  // Pre-existing failures spec L2 (#341): a run's agent reported a required check already failing before its change.
+  "preexisting-failure",
 ]);
 export const activityEntrySchema = z
   .object({
@@ -2457,6 +2470,17 @@ export const groupViewSchema = z
     // Tester #348: the group's runs the run read schema does not decode, in id order -- left out of `runs` and
     // `checkpoints` -- with the work item each is on, its task (null when that item is no task) and why. Absent when none.
     unreadableRuns: z.array(z.object({ runId: idSchema, workItemId: idSchema, taskId: idSchema.nullable(), reason: nonemptyString }).strict()).min(1).optional(),
+    // Pre-existing failures spec L2 (#341): one row per command found already failing before a task changed anything --
+    // reported by agents (each reporting run listed) and/or found red at the group's base (L3) -- with the person's answer.
+    // Absent when none, so every other group's view is what it was.
+    preexistingFailures: z.array(z.object({
+      command: nonemptyString,
+      reportedBy: z.array(z.object({ taskId: idSchema, runId: idSchema, chose: z.string() }).strict()),
+      sources: z.array(z.enum(["agent", "base-check"])).min(1),
+      baseCheck: z.object({ taskId: idSchema, runId: idSchema, at: safeInteger }).strict().optional(),
+      answer: preexistingFailureAnswerSchema.nullable(),
+      answered: z.object({ by: nonemptyString, at: safeInteger }).strict().optional(),
+    }).strict()).min(1).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -2644,6 +2668,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   // Tester follow-up E §5 (#241): the failed record is cleared and the next round checks the tip again; or it is waived.
   z.object({ kind: z.literal("acceptance-recheck-requested"), groupId: idSchema, tip: commitShaSchema }).strict(),
   z.object({ kind: z.literal("acceptance-waived"), groupId: idSchema, tip: commitShaSchema }).strict(),
+  // Pre-existing failures spec L2 (#341): the person's answer to one problem row, recorded for the review.
+  z.object({ kind: z.literal("preexisting-failure-answered"), groupId: idSchema, command: nonemptyString, answer: preexistingFailureAnswerSchema }).strict(),
   // Tester follow-up G spec §3.5: the requirement review's exits.
   z.object({ kind: z.literal("review-accepted"), groupId: idSchema }).strict(),
   z.object({ kind: z.literal("review-rerun-requested"), groupId: idSchema }).strict(),

@@ -39,6 +39,7 @@ import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import { toSingleCallEnvelope, toStartEnvelope } from "./startEnvelope.js";
 import { priorFailuresAtPrepare } from "./priorFailures.js";
 import { requestBaseCheck } from "./baseCheckRecord.js";
+import { recordPreexistingFailures } from "./preexistingFailure.js";
 import type { BaseCheckRun } from "./baseCheck.js";
 import { exportResumeBundle, readExistingResumeBundle, type InputCheckpointV1 } from "./resumeBundle.js";
 import { recordActivity } from "./activity.js";
@@ -1068,6 +1069,10 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     } catch (error) {
       process.stderr.write(`orca-driver: handoff ingest ${runId}: ${error instanceof Error ? error.message : String(error)}\n`);
     }
+    // Pre-existing failures spec L2 (#341): the agent's marked reports, whatever the outcome -- a run that lands and one
+    // that ends without landing alike, read once here from the report just saved. Never fails or blocks the collect.
+    try { write(deps, () => recordPreexistingFailures(store, { groupId: run.groupId, taskId: run.taskId!, runId }, report)); }
+    catch (error) { process.stderr.write(`orca-driver: ${runId}: pre-existing failure reports not recorded: ${logError(error)}\n`); }
   }
   deps.crash?.("C-after-handoff");
   // Stuck-runs spec 2026-11-17 S2: a run a person abandoned settles abandoned -- before the allowance and ceiling paths,

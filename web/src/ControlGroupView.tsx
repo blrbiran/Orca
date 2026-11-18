@@ -35,6 +35,7 @@ import { GroupAcceptanceProblem } from "./GroupAcceptanceProblem.js";
 import { GroupFullSuiteWarning } from "./GroupFullSuiteWarning.js";
 import { RequirementReviewPanel } from "./RequirementReviewPanel.js";
 import { LandingWatchProblem } from "./LandingWatchProblem.js";
+import { PreexistingFailureProblem } from "./PreexistingFailureProblem.js";
 import { UnreadableRuns } from "./UnreadableRuns.js";
 import { GroupAllowances } from "./GroupAllowances.js";
 import { UsagePause } from "./UsagePause.js";
@@ -631,7 +632,9 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const decisionsFailed = read !== null && "failed" in read ? read.failed : null;
   const taskNeedsHuman = (taskId: string): boolean => decisions?.tasks.some((task) => task.taskId === taskId && task.runs.some(runNeedsHuman)) === true;
   // The Problems tab's count; the Results conclusion card says the same number (#319).
-  const problemCount = view.recoveryBlockers.length + view.runs.filter(isProblemRun).length + (props.refusal ? 1 : 0) + (view.summary.acceptance?.result === "failed" ? 1 : 0) + (view.summary.landingWatch?.regressions.length ?? 0) + budgetWaiting(view).length + (view.unreadableRuns?.length ?? 0);
+  const problemCount = view.recoveryBlockers.length + view.runs.filter(isProblemRun).length + (props.refusal ? 1 : 0) + (view.summary.acceptance?.result === "failed" ? 1 : 0) + (view.summary.landingWatch?.regressions.length ?? 0) + budgetWaiting(view).length + (view.unreadableRuns?.length ?? 0)
+    // Pre-existing failures spec L2 (#341): a row waits for the person until it is answered.
+    + (view.preexistingFailures?.filter(row => row.answer === null).length ?? 0);
   const workspaceMode = workspace === undefined ? undefined
     : workspace !== null && workspace.repoId === view.plan.repoId ? workspace.workspaceMode : null;
 
@@ -972,6 +975,9 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {view.recoveryBlockers.map((blocker, index) => <p key={index}>{blocker.code}</p>)}
       {/* Tester follow-up E §5 (#241): a failed group acceptance, with Recheck, and Waive for an owner. */}
       <GroupAcceptanceProblem groupId={groupId} acceptance={view.summary.acceptance} roles={props.roles} archived={archived} revision={revision} onCommand={onCommand} />
+      {/* Pre-existing failures spec L2 (#341): a check already red before the work, with the person's three answers. */}
+      <PreexistingFailureProblem groupId={groupId} rows={view.preexistingFailures} roles={props.roles} archived={archived} revision={revision} onCommand={onCommand}
+        onEditRequirement={props.onSourceRequirement} />
       {/* Full suite spec 2026-11-12 §5 (#279): no full-suite command set (with the suggestion and Adopt), or a flaky suite; never blocking. */}
       <GroupFullSuiteWarning repoId={view.plan.repoId} acceptance={view.summary.acceptance} archived={archived} />
       {/* Tester follow-up G spec §3.3, §3.5: the requirement review and its exits. */}

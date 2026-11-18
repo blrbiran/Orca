@@ -82,6 +82,8 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
     { taskId: "t1", runId: "run-1", generation: 3, acknowledge: "charge-observed-floor" }],
   // Stuck-runs spec 2026-11-17 S2: a person abandons a running attempt; the group is resolved, the run and note pass through.
   [["run", "abandon", "g-al", "--run", "run-1", "--note", "cannot succeed"], "groups/g-alpha/abandon-run", 5, { runId: "run-1", note: "cannot succeed" }],
+  // Pre-existing failures spec L2 (#341): a person's answer to a problem row; the command and the answer pass through.
+  [["group", "preexisting-failure", "g-al", "--command", "npm test", "--answer", "relative"], "groups/g-alpha/preexisting-failure", 5, { command: "npm test", answer: "relative" }],
 ];
 
 describe("requirement, group and task commands: route and payload (spec §4)", () => {
@@ -250,6 +252,30 @@ describe("group import --project (issue 141)", () => {
     const out = await cli(["group", "import", "plan-a", "--group", "g-new", "--project", "proj", "--json"], w.dir);
     expect(out.code, out.stdout).toBe(0);
     expect(w.posts().map((p) => p.payload)).toEqual([{ groupId: "g-new", repoId: "repo-1", planId: "plan-a" }]);
+  });
+});
+
+describe("group preexisting-failure (pre-existing failures spec L2, #341)", () => {
+  it("an answer other than the three is refused before sending", async () => {
+    const w = await world();
+    const out = await cli(["group", "preexisting-failure", "g-alpha", "--command", "npm test", "--answer", "ignore", "--json"], w.dir);
+    // mutation: drop the --answer check -> one POST, red
+    expect(out.code).toBe(1);
+    expect(out.stdout + out.stderr).toContain("--answer wants allow-fix, relative or edit-requirement");
+    expect(w.posts()).toEqual([]);
+  });
+
+  it("edit-requirement is recorded, and the next line names where the requirement is changed", async () => {
+    const answered = (answer: string) => ({ status: 200, body: { schema: "orca-command-success-v1", commandId: "c", actorId: "a", verb: "answer-preexisting-failure",
+      target: { kind: "group", groupId: "g-alpha" }, commandRevision: 6, projectionSeq: 1, effectivePayloadHash: "e", authorityCommandHash: "h",
+      result: { kind: "preexisting-failure-answered", groupId: "g-alpha", command: "npm test", answer } } });
+    const edit = await world({}, { "POST groups/g-alpha/preexisting-failure": answered("edit-requirement") });
+    const out = await cli(["group", "preexisting-failure", "g-alpha", "--command", "npm test", "--answer", "edit-requirement"], edit.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    // mutation: drop the next line from the row's format -> red
+    expect(out.stdout).toContain("next: change the requirement where it lives: orca requirement show g-alpha");
+    const relative = await world({}, { "POST groups/g-alpha/preexisting-failure": answered("relative") });
+    expect((await cli(["group", "preexisting-failure", "g-alpha", "--command", "npm test", "--answer", "relative"], relative.dir)).stdout).not.toContain("next:");
   });
 });
 

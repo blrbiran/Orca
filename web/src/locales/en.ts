@@ -116,6 +116,7 @@ const activityKind = {
   "group-cap-reached": "group cap reached", "usage-paused": "paused over its expectation", "usage-pause-decided": "pause decided", "usage-over-expectation": "over its expectation",
   "run-abandon-requested": "abandon requested",
   "off-plan-write": "off-plan writes",
+  "preexisting-failure": "pre-existing failure",
 } as const satisfies Record<ActivityKindV1, string>;
 
 const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;
@@ -850,6 +851,21 @@ export const en = {
     structuredOutput: {
       hint: "The provider refused the structured-output request (--output-schema). Set \"structuredOutput\": \"prompt\" on the codex installation {{installation}} in the agents table; ccloop never chooses it on its own.",
       hintAny: "The provider refused the structured-output request (--output-schema). Set \"structuredOutput\": \"prompt\" on the codex installation this run used, in the agents table; ccloop never chooses it on its own.",
+    },
+    // Pre-existing failures spec L2 (#341): a check already red before a task changed anything, and the person's answer.
+    preexistingFailure: {
+      title: "{{command}} was already failing before the work",
+      reported: "Reported by task {{task}}: {{command}} already failed before its change; its choice: {{chose}}",
+      choseNothing: "(it said nothing)",
+      baseCheck: "Orca ran {{command}} at the group's base after task {{task}} failed it: red there too.",
+      keepsRunning: "The group keeps running. Your answer is told to the requirement review.",
+      answered: "Answered: {{answer}} (by {{by}}).",
+      answer: { "allow-fix": "Allow the fix", relative: "Judge it relative to the base", "edit-requirement": "Edit the requirement" },
+      answerExplain: {
+        "allow-fix": "the change that repaired it is allowed",
+        relative: "failures already there at the base do not count against the work",
+        "edit-requirement": "you change the requirement itself",
+      },
     },
     // Reviewed acceptance (spec 2026-11-11 §7, #227): an owner lands a settled, failed run's attempt after its checks.
     // Tester follow-up E §5 (#241): a group whose acceptance failed on its final tip.
@@ -2645,6 +2661,8 @@ export const enErrors: Record<string, string> = {
   "run-abandon-pending": "Abandoning this run is already requested; Orca settles it when it stops.",
   "run-abandon-person-required": "Abandoning an attempt is done by an owner.",
   "group-acceptance-not-failed": "This group's acceptance has not failed ({{detail}}); there is nothing to recheck or waive.",
+  "preexisting-failure-not-reported": "This group has no pre-existing failure for that command; answer one of the rows its view lists.",
+  "preexisting-failure-person-required": "Answering a pre-existing failure is a person's act: an owner on the Web, or an agent with a person token.",
   "group-acceptance-person-required": "Waiving a failed group acceptance is done by an owner.",
   "live-note-task-finished": "Task {{detail}} has finished; a note can no longer reach it.",
   "live-note-queue-full": "Task {{detail}} already has 16 notes waiting; wait until they are delivered.",

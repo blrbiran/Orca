@@ -117,6 +117,11 @@ export const OFF_PLAN_TARGETS_CONSTRAINT = "targetPaths are the files this task 
 export function offPlanWrites(planVersion: number): boolean {
   return planVersion >= 4;
 }
+/**
+ * Pre-existing failures spec L2 (#341): from version 4 (it rides #346's unreleased v4) a contract asks the agent to report
+ * a check that is red before its change as a major decision with a fixed marker (preexistingFailure.ts reads it back).
+ */
+export const PREEXISTING_FAILURE_CONSTRAINT = "If a required check already fails before you change anything, report it as a major decision whose question starts with \"Pre-existing failure:\" followed by the command, and say in \"chose\" what you did about it.";
 
 /** Spec §2.3: shared by every plan and version. The budget numbers equal TASK_WORK (estimator.ts); loopPlans.test.ts pins that. */
 const EXECUTION_POLICY = {
@@ -306,7 +311,7 @@ export function expandRecipe(taskId: string, repoPath: string, recipe: LoopRecip
     context: {
       repoPath, targetPaths: [...inputs.targetPaths], relevantDocs: [...inputs.relevantDocs],
       buildTestCommands: [...inputs.checks],
-      constraints: [...plan.constraints, ...(inputs.setup !== undefined ? [SETUP_CONSTRAINT] : []), ...(offPlan ? [OFF_PLAN_TARGETS_CONSTRAINT] : [])],
+      constraints: [...plan.constraints, ...(inputs.setup !== undefined ? [SETUP_CONSTRAINT] : []), ...(offPlan ? [OFF_PLAN_TARGETS_CONSTRAINT, PREEXISTING_FAILURE_CONSTRAINT] : [])],
       ...(inputs.setup !== undefined ? { setupCommands: [...inputs.setup] } : {}),
     },
     executionPolicy: { ...EXECUTION_POLICY, ...(recipe.planVersion>=3?{tokenBudget:inputs.tokenBudget??null}:{}), perAttemptTimeoutMs: plan.perAttemptTimeoutMs },
