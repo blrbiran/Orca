@@ -150,20 +150,25 @@ const queuedFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) 
 
 /**
  * Tester #369 (c): a pause stops new claims only; an attempt already running keeps going (stuck-runs spec: an accepted run
- * is not held). The receipt says so for the runs the group view shows running or starting, and names the command that
- * ends one now. Review of D4 (I6): the view is read after the pause is answered (formatWith), so the read never holds or
- * blocks the pause, and a run still running then is one that keeps going; a read that fails gives the plain receipt.
+ * is not held). The receipt says so for the runs the group view shows running, and names the command that ends one now.
+ * Review of D4 (I6): the view is read after the pause is answered (formatWith), so the read never holds or blocks the
+ * pause, and a run still running then is one that keeps going; a read that fails gives the plain receipt.
+ * Ruling (2026-11-18 tester batch D review 3): view `starting` (claimed, starting, start-pending) is a run that never
+ * reached the provider, and a pause settles it and gives its task back (stuck-runs spec S1, settlePausedUnstarted), so it
+ * does not keep going; it is named apart as not started yet.
  */
-const activeRunIds = (view: unknown): string[] => ((view as { runs?: Array<{ runId: string; taskId: string | null; state?: string }> }).runs ?? [])
-  .filter((run) => (run.state === "running" || run.state === "starting") && run.taskId !== null).map((run) => run.runId);
+type ViewRun = { runId: string; taskId: string | null; state?: string };
+const taskRunIds = (view: unknown, state: string): string[] => ((view as { runs?: ViewRun[] }).runs ?? [])
+  .filter((run) => run.state === state && run.taskId !== null).map((run) => run.runId);
 const pausedFormat = (row: CommandDef): CommandDef => ({ ...row, formatWith: async (body, c) => {
   const result = (body as { result?: { kind?: unknown } } | null)?.result;
   if (result?.kind !== "paused") return row.format(body);
-  let running: string[];
-  try { running = activeRunIds(await groupView(c)); } catch { running = []; }
-  if (running.length === 0) return "paused: no new run is claimed";
+  let running: string[]; let starting: string[];
+  try { const view = await groupView(c); running = taskRunIds(view, "running"); starting = taskRunIds(view, "starting"); } catch { running = []; starting = []; }
+  const startingLine = starting.length === 0 ? [] : [`${starting.length} ${starting.length === 1 ? "run" : "runs"} not started yet; the pause returns ${starting.length === 1 ? "it" : "them"} to the task list (${starting.join(", ")})`];
+  if (running.length === 0) return ["paused: no new run is claimed", ...startingLine].join("\n");
   return [`paused: no new run is claimed; ${running.length} ${running.length === 1 ? "run already running keeps going until it ends" : "runs already running keep going until they end"} (${running.join(", ")})`,
-    `to end one now: orca run abandon ${group(c)} --run <run> --note <why>`].join("\n");
+    ...startingLine, `to end one now: orca run abandon ${group(c)} --run <run> --note <why>`].join("\n");
 } });
 
 /**
