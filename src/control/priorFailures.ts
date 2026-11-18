@@ -46,16 +46,12 @@ function sameFingerprint(a: { rejectCategory: string; primaryTargetPaths: string
 }
 
 /**
- * The failed run's last rejection, uncut, from the collector's own stored copy (taskResultStore). Null unless the collector
- * settled (`available`), the run's last rejection carried its full fingerprint, and a stored, completed, rejected
- * verification has that fingerprint (the latest attempt wins). Task setup and check retry spec 2026-11-04 §4.7 reads the
- * raw entries (ladderSkip.ts); priorFailures cuts them (storedEvidence).
+ * The newest stored, completed, rejected verification of the run that `accept` takes, from the collector's own stored copy
+ * (taskResultStore). Null unless the collector settled (`available`) for this run and such a copy reads.
  */
-export async function readStoredRejection(store: ControlStore, runId: string, last: NonNullable<DriveRecord["lastFailure"]>): Promise<{ failingCommand: string | null; evidence: string[] } | null> {
-  if (last.primaryTargetPaths === undefined) return null;
+async function latestStoredRejection(store: ControlStore, runId: string, accept: (parsed: z.infer<typeof verificationSchema>) => boolean): Promise<z.infer<typeof verificationSchema> | null> {
   const state = readTaskResultState(store, runId);
   if (state === null || state.status !== "available" || state.identity?.runId !== runId) return null;
-  const fingerprint = { rejectCategory: last.rejectCategory, primaryTargetPaths: last.primaryTargetPaths, failingCommand: last.failingCommand };
   const candidates = state.observations
     .filter((observation) => observation.manifest.stage === "verification" && observation.verification === "failed" && observation.manifest.verificationRef !== null)
     .sort((a, b) => b.manifest.attempt - a.manifest.attempt);
@@ -66,19 +62,52 @@ export async function readStoredRejection(store: ControlStore, runId: string, la
       if (!value.success) continue;
       parsed = value.data;
     } catch { continue; }
-    if (parsed.approved || !sameFingerprint(parsed, fingerprint)) continue;
-    return { failingCommand: parsed.failingCommand, evidence: parsed.evidence };
+    if (parsed.approved || !accept(parsed)) continue;
+    return parsed;
   }
   return null;
+}
+
+/**
+ * The failed run's last rejection, uncut, from the collector's own stored copy (taskResultStore). Null unless the collector
+ * settled (`available`), the run's last rejection carried its full fingerprint, and a stored, completed, rejected
+ * verification has that fingerprint (the latest attempt wins). Task setup and check retry spec 2026-11-04 §4.7 reads the
+ * raw entries (ladderSkip.ts); priorFailures cuts them (storedEvidence).
+ */
+export async function readStoredRejection(store: ControlStore, runId: string, last: NonNullable<DriveRecord["lastFailure"]>): Promise<{ failingCommand: string | null; evidence: string[] } | null> {
+  if (last.primaryTargetPaths === undefined) return null;
+  const fingerprint = { rejectCategory: last.rejectCategory, primaryTargetPaths: last.primaryTargetPaths, failingCommand: last.failingCommand };
+  const parsed = await latestStoredRejection(store, runId, (candidate) => sameFingerprint(candidate, fingerprint));
+  return parsed === null ? null : { failingCommand: parsed.failingCommand, evidence: parsed.evidence };
+}
+
+/**
+ * Tester #321 C1 (plan 2026-11-18 batch D, D2): the rejection that ended the run on its final attempt. ccloop keeps a
+ * rejection in `recentFailures` (Orca's `lastFailure`) only when it retries after it, so a run whose last verification
+ * rejection was also its final attempt has no `lastFailure`; ccloop still stored that attempt's verification. The newest
+ * stored failed verification, read as readStoredRejection reads, without a fingerprint to match. Null when none reads.
+ */
+export async function finalRejectionOf(store: ControlStore, runId: string): Promise<{ rejectCategory: string; failingCommand: string | null; evidence: string[] } | null> {
+  const parsed = await latestStoredRejection(store, runId, () => true);
+  return parsed === null ? null : { rejectCategory: parsed.rejectCategory, failingCommand: parsed.failingCommand, evidence: parsed.evidence };
+}
+
+/** ccloop's run-level causes for a verification rejection (ccloop runLoop `rejectionCause`). */
+export function endedOnVerificationRejection(cause: DriveRecord["failureCause"]): boolean {
+  return cause?.phase === "verify" && (cause.cause === "required-check-failed" || cause.cause === "verifier-rejected");
+}
+
+/** Each evidence entry cut to its bound, within the entry count; null when nothing is left. */
+function cutEvidence(entries: string[]): string[] | null {
+  const evidence = entries.flatMap((entry) => { const cut = bounded(entry, PRIOR_FAILURE_BOUNDS.evidenceEntry); return cut === null ? [] : [cut]; })
+    .slice(0, PRIOR_FAILURE_BOUNDS.evidenceEntries);
+  return evidence.length === 0 ? null : evidence;
 }
 
 /** The stored rejection's evidence (readStoredRejection), each entry cut to its bound; null when there is none. */
 async function storedEvidence(store: ControlStore, runId: string, last: NonNullable<DriveRecord["lastFailure"]>): Promise<string[] | null> {
   const stored = await readStoredRejection(store, runId, last);
-  if (stored === null) return null;
-  const evidence = stored.evidence.flatMap((entry) => { const cut = bounded(entry, PRIOR_FAILURE_BOUNDS.evidenceEntry); return cut === null ? [] : [cut]; })
-    .slice(0, PRIOR_FAILURE_BOUNDS.evidenceEntries);
-  return evidence.length === 0 ? null : evidence;
+  return stored === null ? null : cutEvidence(stored.evidence);
 }
 
 /**
@@ -105,21 +134,24 @@ export async function priorFailureOf(store: ControlStore, run: { runId: string; 
   const drive = run.drive;
   const cause = bounded(drive?.failureCause?.cause, PRIOR_FAILURE_BOUNDS.failureCause);
   const last = drive?.lastFailure;
-  const entry: PriorFailure = last === undefined
-    // A run that failed without a rejection (§3): its cause stands in for the category.
+  // #321 C1: no lastFailure, yet the run ended on a verification rejection -- its final attempt's stored rejection says which.
+  const final = last === undefined && endedOnVerificationRejection(drive?.failureCause) ? await finalRejectionOf(store, run.runId).catch(() => null) : null;
+  const rejection = last ?? (final === null ? undefined : { rejectCategory: final.rejectCategory, failingCommand: final.failingCommand });
+  const entry: PriorFailure = rejection === undefined
+    // A run that failed without a rejection (§3), or whose final rejection cannot be read: its cause stands in for the category.
     ? { runId: run.runId, rejectCategory: headBytes(`run-failed:${cause ?? "unknown"}`, PRIOR_FAILURE_BOUNDS.rejectCategory), failingCommand: null, evidence: null }
     : {
       runId: run.runId,
-      rejectCategory: bounded(last.rejectCategory, PRIOR_FAILURE_BOUNDS.rejectCategory) ?? "unknown",
-      failingCommand: bounded(last.failingCommand, PRIOR_FAILURE_BOUNDS.failingCommand),
-      evidence: await storedEvidence(store, run.runId, last),
+      rejectCategory: bounded(rejection.rejectCategory, PRIOR_FAILURE_BOUNDS.rejectCategory) ?? "unknown",
+      failingCommand: bounded(rejection.failingCommand, PRIOR_FAILURE_BOUNDS.failingCommand),
+      evidence: last !== undefined ? await storedEvidence(store, run.runId, last) : cutEvidence(final!.evidence),
     };
   if (cause !== null) entry.failureCause = cause;
   // Tester #347: the hint goes first; any stored evidence follows, within the entry count.
   if (cause === NARRATION_ONLY_CAUSE) entry.evidence = [narrationOnlyEvidence(drive?.failureCause?.detail), ...(entry.evidence ?? [])].slice(0, PRIOR_FAILURE_BOUNDS.evidenceEntries);
   // Spec L3 (#341): red at the base goes first, so the entry bound never drops it.
-  const atBase = last?.rejectCategory === "required-check-failed" && typeof last.failingCommand === "string" && typeof run.groupId === "string"
-    ? baseCheckEvidence(store, run.groupId, last.failingCommand, PRIOR_FAILURE_BOUNDS.evidenceEntry) : null;
+  const atBase = rejection?.rejectCategory === "required-check-failed" && typeof rejection.failingCommand === "string" && typeof run.groupId === "string"
+    ? baseCheckEvidence(store, run.groupId, rejection.failingCommand, PRIOR_FAILURE_BOUNDS.evidenceEntry) : null;
   if (atBase !== null) entry.evidence = [atBase, ...(entry.evidence ?? [])].slice(0, PRIOR_FAILURE_BOUNDS.evidenceEntries);
   return priorFailureSchema.parse(entry);
 }
