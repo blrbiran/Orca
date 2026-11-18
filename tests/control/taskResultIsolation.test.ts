@@ -92,9 +92,15 @@ describe('isolation in H-settle, failed cleanup and continuation closure', { tim
             await t.until(driver, () => t.body(id).state === 'blocked');
             // Ruling (2026-11-19 change-sized runs P0): the cleanup no longer re-archives a run step C archived (spec §5.6,
             // review I1), so a poison made after C would reach no archive. The run's rows are deleted first, so the cleanup
-            // archives after the poison; intent kept: supplemental faults never make a failed run's evidence partial.
+            // archives after the poison; intent kept: supplemental faults never make a failed run's evidence partial. The
+            // namespaces hold a FIFO (a `special:` entry when captured), not only the dangling links of poison(), which the
+            // capture files as symlinks: with the links alone, dropping TASK_RESULT_SOURCE_EXCLUSIONS left this green (on
+            // main 9bc6e304 too).
             t.h.store.db.prepare("DELETE FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=?").run(id);
-            await poison(t.body(id).drive.sourceDir);
+            for (const ns of ['control/task-result-evidence', 'run/task-result-captures']) {
+                await mkdir(join(t.body(id).drive.sourceDir, ns), { recursive: true, mode: 0o700 });
+                execFileSync('mkfifo', [join(t.body(id).drive.sourceDir, ns, 'special')]);
+            }
             expect(t.service.retryTask(t.h.command('retry-task', { taskId: 'a' }))).not.toHaveProperty('error');
             expect(await stepCleanupFailed(t.deps, id)).toBe(true);
             expect(t.body(id)).toMatchObject({ state: 'settled-failed', highWater: 2, cumulative: { work: { tokens: 10 } }, drive: { outcome: 'failed', cleanedUp: true, cleanupError: null } });
