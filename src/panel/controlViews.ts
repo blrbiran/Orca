@@ -48,6 +48,7 @@ import { effectiveTaskLabels, readTaskLabelState } from "../control/labels.js";
 import { choosePlanByLabels, loopPlanDefinition } from "../control/loopPlans.js";
 import { recipeExpandsTo } from "../control/loopRecipeCheck.js";
 import { decodeEstimateRecord, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, readWork } from "../control/queries.js";
+import { NEWEST_ESTIMATE_INSTRUCTION, olderEstimateInstruction } from "../control/estimateInstructionAge.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
 import { clarifyLimits, hasRequirementBlock, latestDraft, latestRound, readDrafts, readRequirementGroup, readRounds, refuseClarifying } from "../control/requirementRecords.js";
 import { QUOTA_PROBE_MAX_OUTPUT_TOKENS, probeVerdictSchema, quotaProbeIdentitySchema } from "../control/quotaProbeCall.js";
@@ -1093,6 +1094,23 @@ function validateExecutionSnapshot(
   return parsed.data;
 }
 
+/**
+ * Tester #381: the estimate instruction the group's newest estimate request was made with, when it is older than the
+ * newest this Orca holds (the warning `group confirm` printed once); null otherwise, and when the estimates cannot be
+ * read -- a note never fails the read it rides on.
+ */
+export function estimatorInstructionOf(store: ControlStore, groupId: string): { used: number; newest: number } | null {
+  try {
+    for (const row of store.db.prepare("SELECT id FROM estimates WHERE group_id=? ORDER BY estimate_version DESC").all(groupId)) {
+      const request = readEstimateRecord(store, groupId, String(row.id)).request;
+      if (request === null) continue;
+      const older = olderEstimateInstruction(request.instructionVersion);
+      return older === null ? null : { used: Number(older), newest: NEWEST_ESTIMATE_INSTRUCTION };
+    }
+  } catch { /* no note */ }
+  return null;
+}
+
 function estimateViews(store: ControlStore, groupId: string, currentPlanCanonicalJson: string): { views: EstimateViewV1[]; allocations: AllocationViewV1[] } {
   const rows = store.db.prepare("SELECT id FROM estimates WHERE group_id=? ORDER BY id").all(groupId);
   const views: EstimateViewV1[] = [];
@@ -1741,6 +1759,8 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     ...((unreadable) => unreadable.length === 0 ? {} : { unreadableRuns: unreadable })(unreadableRunsOf(readSnapshot)),
     // Pre-existing failures spec L2 (#341): absent when none, so every other group's view is what it was.
     ...((rows) => rows.length === 0 ? {} : { preexistingFailures: rows })(preexistingFailuresView(store, groupId, body, readSnapshot)),
+    // Tester #381: the older estimate instruction the group's estimates used, as the brief carries it; absent otherwise.
+    ...((fact) => fact === null ? {} : { estimatorInstruction: fact })(estimatorInstructionOf(store, groupId)),
   };
   // Tester #348 review: counted from the stored rows, so a run left out of `runs` as unreadable still counts; a readable
   // run's marker was already checked above (runViews refuses an invalid settlement). A body that is not JSON cannot say.

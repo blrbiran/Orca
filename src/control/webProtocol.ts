@@ -2485,6 +2485,9 @@ export const groupViewSchema = z
     // Tester #348: the group's runs the run read schema does not decode, in id order -- left out of `runs` and
     // `checkpoints` -- with the work item each is on, its task (null when that item is no task) and why. Absent when none.
     unreadableRuns: z.array(z.object({ runId: idSchema, workItemId: idSchema, taskId: idSchema.nullable(), reason: nonemptyString }).strict()).min(1).optional(),
+    // Tester #381: the estimate instruction the group's newest estimate request used, when older than the newest this Orca
+    // holds (controlViews.ts estimatorInstructionOf); absent otherwise, so every other view is what it was.
+    estimatorInstruction: z.object({ used: positiveSafeInteger, newest: positiveSafeInteger }).strict().optional(),
     // Pre-existing failures spec L2 (#341): one row per command found already failing before a task changed anything --
     // reported by agents (each reporting run listed) and/or found red at the group's base (L3) -- with the person's answer.
     // Absent when none, so every other group's view is what it was.

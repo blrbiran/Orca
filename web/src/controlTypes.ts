@@ -642,6 +642,8 @@ export type GroupViewV1 = {
   unreadableRuns?: Array<{ runId: string; workItemId: string; taskId: string | null; reason: string }>;
   /** Pre-existing failures spec L2 (#341): one row per check already red before a task changed anything; absent when none. */
   preexistingFailures?: PreexistingFailureV1[];
+  /** Tester #381: the older estimate instruction the group's newest estimate request used; absent otherwise. */
+  estimatorInstruction?: { used: number; newest: number };
 };
 
 /** src/control/preexistingFailure.ts PreexistingFailureRow. */
