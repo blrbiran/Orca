@@ -4,7 +4,7 @@
  * the stored plan's `targetRepo` is the vault path, never the folder. The folder is changed while the call is out (after
  * A2, before Ce): the judgement still reads the call's commit, not the folder as it is now.
  */
-import { mkdirSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readDraft } from "../../src/control/requirementRecords.js";
@@ -15,10 +15,15 @@ import { INVALID_SPLIT, VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 describe("a split call on a dir project is judged in the vault (D3)", () => {
   it("an absent target path is path:<task>:<p>; a present one passes at the call's commit; targetRepo is the vault", async () => {
     let folder = "";
-    // Answered while the call is out: the folder loses src/ and gains missing/dir/ -- the opposite of what the call saw.
+    // Answered while the call is out: the folder's src/ becomes a file and README.md a directory -- the opposite of what
+    // the call saw.
+    // Ruling: session 2026-11-18, human 「这次批准改写所有必要的判据」 (tester #351) -- a target under a missing directory is
+    // legal now, so losing src/ no longer flips VALID_SPLIT; a file named src does (src/export.ts would go through it).
     const changeFolderThen = () => {
       rmSync(join(folder, "src"), { recursive: true, force: true });
-      mkdirSync(join(folder, "missing", "dir"), { recursive: true });
+      writeFileSync(join(folder, "src"), "now a file\n");
+      rmSync(join(folder, "README.md"), { force: true });
+      mkdirSync(join(folder, "README.md", "dir"), { recursive: true });
       return VALID_SPLIT;
     };
     const x = await dirRequirementHarness({ answers: [{ purpose: "split", output: INVALID_SPLIT }, { purpose: "split", output: changeFolderThen }], startAt: "split" });
@@ -28,7 +33,8 @@ describe("a split call on a dir project is judged in the vault (D3)", () => {
       const real = realpathSync(x.folder).normalize("NFC");
       x.store.db.prepare("UPDATE groups SET body=? WHERE id='r'").run(JSON.stringify({ ...x.body(), dirWorkspace: { dir: real, vaultId: vaultKeyOf(real) } }));
       await x.until(() => readDraft(x.store, "r", 2).state !== "drafting");
-      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "invalid", reasons: ["path:exporter:missing/dir/x.ts"] });
+      // Ruling: session 2026-11-18, human 「这次批准改写所有必要的判据」 (tester #351) -- INVALID_SPLIT's refused path now goes through README.md (a new directory is legal).
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "invalid", reasons: ["path:exporter:README.md/dir/x.ts"] });
       const draft = readDraft(x.store, "r", 2);
       expect(draft).toMatchObject({ state: "awaiting-review", reasons: [] });
       const vault = join(x.env.ORCA_VAULT_DIR!, `${vaultKeyOf(real)}.git`);

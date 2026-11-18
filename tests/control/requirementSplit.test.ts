@@ -81,7 +81,8 @@ describe("validating a split (N1 spec §8.3)", () => {
     ["an unknown loop plan (expandLoopTask)", task({ loopPlan: "nope" }), "expand:exporter:unknown-plan"],
     ["an investigate plan with two targets (expandLoopTask)", task({ loopPlan: "investigate" }), "expand:exporter:investigate-target"],
     ["a dangling dependency (Web import)", task({ dependsOn: ["ghost"] }), "import:dangling-dependency:exporter:ghost"],
-    ["a target under a directory the commit lacks", task({ targetPaths: ["missing/dir/x.ts"] }), "path:exporter:missing/dir/x.ts"],
+    // Ruling: session 2026-11-18, human 「这次批准改写所有必要的判据」 (tester #351) -- a target under a directory the commit lacks is legal now; the refused target goes through an existing file (README.md).
+    ["a target that goes through a file the commit has", task({ targetPaths: ["README.md/dir/x.ts"] }), "path:exporter:README.md/dir/x.ts"],
     ["a trace naming nothing", task({ traces: ["AC9"] }), "trace:exporter:AC9"],
     ["a criterion no task traces", task({ traces: ["R1.ADR1"] }), "untraced:AC1"],
   ] as const)("hands back %s by name", async (_name, output, reason) => {
@@ -91,18 +92,29 @@ describe("validating a split (N1 spec §8.3)", () => {
     expect(out.layers).toBeNull();
   });
 
+  // Tester #351: "add src/sla/model.js" (src/ exists, src/sla/ does not) was refused as path:<task>:src/sla/model.js, so the
+  // split flattened it to src/sla-model.js against the requirement. A new directory under an existing one is legal.
+  it("passes a new file in a new subdirectory and `<directory>/**` for a new directory (#351)", async () => {
+    // mutation: keep overviewPathExists's parent-must-exist rule -> path:exporter:src/sla/model.js etc., red
+    const out = await validate(task({ targetPaths: ["src/sla/model.js", "src/sla/deep/clock.js", "lib/new/**", "answer.txt"] }));
+    expect(out.reasons).toEqual([]);
+    expect(out.ok).toBe(true);
+  });
+
   it("hands back every reason at once, not the first", async () => {
-    const out = await validate({ ...VALID_SPLIT, tasks: [{ ...VALID_SPLIT.tasks[0]!, targetPaths: ["missing/x.ts"], traces: ["AC9"] }, VALID_SPLIT.tasks[1]!] });
-    expect(out.reasons).toEqual(expect.arrayContaining(["path:exporter:missing/x.ts", "trace:exporter:AC9", "untraced:AC1"]));
+    // Ruling: session 2026-11-18, human 「这次批准改写所有必要的判据」 (tester #351) -- a target under a directory the commit lacks is legal now; the refused target goes through an existing file (README.md).
+    const out = await validate({ ...VALID_SPLIT, tasks: [{ ...VALID_SPLIT.tasks[0]!, targetPaths: ["README.md/x.ts"], traces: ["AC9"] }, VALID_SPLIT.tasks[1]!] });
+    expect(out.reasons).toEqual(expect.arrayContaining(["path:exporter:README.md/x.ts", "trace:exporter:AC9", "untraced:AC1"]));
   });
 
   // The Web import is only asked once every other check passed, so the split validator names a repeated dependency and
   // repeated criterion texts itself, beside every other reason (here a missing target), not only as the draft's one fault.
   it("hands back a repeated dependency and repeated criterion texts (Web import) beside every other reason", async () => {
-    const output = { ...VALID_SPLIT, tasks: [{ ...VALID_SPLIT.tasks[0]!, targetPaths: ["missing/x.ts"] }, { ...VALID_SPLIT.tasks[1]!, dependsOn: ["exporter", "exporter"] }] };
+    // Ruling: session 2026-11-18, human 「这次批准改写所有必要的判据」 (tester #351) -- a target under a directory the commit lacks is legal now; the refused target goes through an existing file (README.md).
+    const output = { ...VALID_SPLIT, tasks: [{ ...VALID_SPLIT.tasks[0]!, targetPaths: ["README.md/x.ts"] }, { ...VALID_SPLIT.tasks[1]!, dependsOn: ["exporter", "exporter"] }] };
     const out = await validate(output, ["AC1", "AC2"], [{ id: "AC1", text: "Same." }, { id: "AC2", text: "Same." }]);
     expect(out).toMatchObject({ ok: false, layers: null, implicitEdges: null });
-    expect(out.reasons).toEqual(["import:duplicate-dependency:images", "import:duplicate-success-condition", "path:exporter:missing/x.ts"]);
+    expect(out.reasons).toEqual(["import:duplicate-dependency:images", "import:duplicate-success-condition", "path:exporter:README.md/x.ts"]);
   });
 
   // What only the Web import itself decides (here: a plan with no success condition) still reaches the person by name.

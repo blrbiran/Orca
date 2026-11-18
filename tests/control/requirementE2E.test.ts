@@ -77,7 +77,8 @@ describe("a requirement from idea to landed work, against real ccloop (N1 spec �
       expect(answerAll(runtime, 2, "answer-2")).toMatchObject({ result: { nextRoundNo: null } });
       expect(runtime.service.requirementConsensus(raw(runtime, "consensus", "requirement-consensus", { roundNo: 2 }))).toMatchObject({ result: { draftNo: 1 } });
       await until(() => { try { return readDraft(runtime.store, "g", 2).state === "awaiting-review"; } catch { return false; } }, 90_000, "draft 2", 50);
-      expect(readDraft(runtime.store, "g", 1)).toMatchObject({ state: "invalid", reasons: ["path:exporter:missing/dir/x.ts"] });
+      // Ruling: session 2026-11-18, human 「这次批准改写所有必要的判据」 (tester #351) -- INVALID_SPLIT's refused path now goes through README.md (a new directory is legal).
+      expect(readDraft(runtime.store, "g", 1)).toMatchObject({ state: "invalid", reasons: ["path:exporter:README.md/dir/x.ts"] });
       const usedBeforeAccept = readWebGroup(runtime.store, "g").used;
       // Four single calls (two rounds, two drafts), each booked as fake claude's 12 input + 3 output tokens.
       expect(usedBeforeAccept.tokens).toBe(4 * 15);

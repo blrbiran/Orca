@@ -30,10 +30,11 @@ describe("the split purpose on the single-call chain (N1 spec §8)", () => {
     const x = await requirementHarness({ answers: [{ purpose: "split", output: INVALID_SPLIT }, { purpose: "split", output: VALID_SPLIT }], startAt: "split" });
     try {
       await x.until(() => readDraft(x.store, "r", 2).state === "awaiting-review" || readDraft(x.store, "r", 2).state === "failed");
-      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "invalid", reasons: ["path:exporter:missing/dir/x.ts"] });
+      // Ruling: session 2026-11-18, human 「这次批准改写所有必要的判据」 (tester #351) -- INVALID_SPLIT's refused path now goes through README.md (a new directory is legal).
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "invalid", reasons: ["path:exporter:README.md/dir/x.ts"] });
       expect(readDraft(x.store, "r", 2)).toMatchObject({ state: "awaiting-review", autoRetry: 1 });
       const second = x.fake.calls.accept[1]!;
-      expect(second.work.kind === "single-call" && second.work.prompt).toContain("path:exporter:missing/dir/x.ts");
+      expect(second.work.kind === "single-call" && second.work.prompt).toContain("path:exporter:README.md/dir/x.ts");
     } finally { await x.dispose(); }
   });
 
@@ -41,7 +42,7 @@ describe("the split purpose on the single-call chain (N1 spec §8)", () => {
     const x = await requirementHarness({ answers: [1, 2, 3].map(() => ({ purpose: "split" as const, output: INVALID_SPLIT })), startAt: "split" });
     try {
       await x.until(() => readDraft(x.store, "r", 3).state === "failed");
-      expect(readDraft(x.store, "r", 3)).toMatchObject({ state: "failed", autoRetry: 2, reasonCode: "split-validation-exhausted", reasons: ["path:exporter:missing/dir/x.ts"] });
+      expect(readDraft(x.store, "r", 3)).toMatchObject({ state: "failed", autoRetry: 2, reasonCode: "split-validation-exhausted", reasons: ["path:exporter:README.md/dir/x.ts"] });
     } finally { await x.dispose(); }
     const y = await requirementHarness({ answers: [1, 2, 3].map(() => ({ purpose: "split" as const, output: { tasks: [] } })), startAt: "split" });
     try {

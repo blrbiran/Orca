@@ -1656,7 +1656,7 @@ export const en = {
         "investigate-max-files": "an investigate task writes exactly one file",
         "skills-shape": "the task's skills are not a profile name or a list of skill names",
       },
-      path: "this target path does not exist in the project at the requirement's commit: an exact path must be an existing file or a new file in an existing directory, and `<directory>/**` needs an existing directory",
+      path: "this target path is not legal in the project at the requirement's commit: it goes through an existing file (its nearest existing ancestor must be a directory), names an existing file as `<directory>/**`, or is not an exact relative path or `<directory>/**`; a new file or directory under directories that do not exist yet is fine",
       trace: "this id is neither an acceptance criterion's id nor an accepted decision's id in the requirement document",
       untraced: "no task traces this acceptance criterion; every one must be traced by at least one task",
       dir: "this is not a directory key the project overview lists",

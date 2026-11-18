@@ -104,11 +104,22 @@ describe("a multi split's reasons (§6.1, §6.4)", () => {
   });
 
   it("checks each target path against its own directory only", async () => {
+    // Ruling: session 2026-11-18, human 「这次批准改写所有必要的判据」 (tester #351) -- a target under a directory the commit lacks is legal now; the refused target goes through an existing file (README.md).
     const validated = await validate(output("t", [
-      { dir: "alpha", targetPaths: ["missing/x.ts"], checks: ["true"] },
+      { dir: "alpha", targetPaths: ["README.md/x.ts"], checks: ["true"] },
       { dir: "beta", targetPaths: ["docs/b.md"], checks: [] },
     ]));
-    expect(validated).toMatchObject({ ok: false, reasons: ["path:t:alpha:missing/x.ts"] });
+    expect(validated).toMatchObject({ ok: false, reasons: ["path:t:alpha:README.md/x.ts"] });
+  });
+
+  // Tester #351: the rule applies to every writes entry -- a new file in a new subdirectory is legal in each directory.
+  it("passes a new file in a new subdirectory in each directory (#351)", async () => {
+    // mutation: keep overviewPathExists's parent-must-exist rule -> path:t:alpha:src/sla/model.js and path:t:beta:docs/new/**, red
+    const validated = await validate(output("t", [
+      { dir: "alpha", targetPaths: ["src/sla/model.js"], checks: ["true"] },
+      { dir: "beta", targetPaths: ["docs/new/**"], checks: [] },
+    ]));
+    expect(validated).toMatchObject({ ok: true, reasons: [] });
   });
 
   it("asks for the primary's checks on the first written directory in registered order, not on writes[0]", async () => {

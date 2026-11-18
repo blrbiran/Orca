@@ -28,8 +28,9 @@ export const VALID_SPLIT = {
   ],
   notes: "Two tasks; the second needs the first.",
 };
-/** Spec §8.3.4: a target under a directory the commit does not have. */
-export const INVALID_SPLIT = { ...VALID_SPLIT, tasks: [{ ...VALID_SPLIT.tasks[0]!, targetPaths: ["missing/dir/x.ts"] }, VALID_SPLIT.tasks[1]!] };
+/** Spec §8.3.4: a target that goes through a file the commit has (README.md). */
+// Ruling: session 2026-11-18, human 「这次批准改写所有必要的判据」 (tester #351) -- a target under a directory the commit lacks is legal now; the refused path goes through an existing file instead.
+export const INVALID_SPLIT = { ...VALID_SPLIT, tasks: [{ ...VALID_SPLIT.tasks[0]!, targetPaths: ["README.md/dir/x.ts"] }, VALID_SPLIT.tasks[1]!] };
 /**
  * Issue 88 (external tester, 2026-10-08): the split that hit "a cycle slipped through" -- fifteen tasks writing one file,
  * with the dependsOn edges the issue lists. Its taskIds put "t10".."t15" before "t2" in lexicographic order.

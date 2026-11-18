@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
+import { pathShapeOk } from "./loopPlans.js";
 import { privateDirectory } from "./paths.js";
 import { QUIET_GIT, unsetInheritedGitEnv } from "./workspace.js";
 
@@ -301,18 +302,29 @@ export async function buildRepositoryOverview(input: {
 }
 
 /**
- * DR19 (spec §8.3.4): a target path exists in the commit, or lies under a directory that does. `**` always passes;
- * `<prefix>/**` needs `<prefix>` to be a directory; an exact path needs the file, or its parent directory (the root counts).
+ * DR19 (spec §8.3.4): a target path is legal at the commit. `**` always passes; an exact path naming an existing file
+ * passes; `<prefix>/**` naming an existing directory passes. Tester #351 (session 2026-11-18, controller ruling): any
+ * other path of a legal shape (pathShapeOk) passes when its nearest existing ancestor is a directory (the root counts) --
+ * a new file in a new directory, or `<prefix>/**` for a directory the task creates -- and fails when that ancestor is a
+ * file or a submodule (the path would go through it). The old rule (the parent must exist) forced a split to flatten
+ * `src/sla/model.js` into `src/sla-model.js` against its requirement; git has no reason to refuse a new directory.
  */
 export async function overviewPathExists(repo: string, commit: string, entry: string): Promise<boolean> {
   const typeOf = async (path: string): Promise<string | null> => {
     try { return (await run(repo, ["cat-file", "-t", `${commit}:${path}`])).trim(); } catch { return null; }
   };
   if (entry === "**") return true;
-  if (entry.endsWith("/**")) return (await typeOf(entry.slice(0, -3))) === "tree";
-  if ((await typeOf(entry)) === "blob") return true;
-  const parent = entry.includes("/") ? entry.slice(0, entry.lastIndexOf("/")) : "";
-  return parent === "" || (await typeOf(parent)) === "tree";
+  if (!pathShapeOk(entry)) return false;
+  const directory = entry.endsWith("/**");
+  const path = directory ? entry.slice(0, -3) : entry;
+  // An entry the commit has: an exact path passes whatever it names (as before #351); `<prefix>/**` needs a directory.
+  const type = await typeOf(path);
+  if (type !== null) return directory ? type === "tree" : true;
+  for (let at = path.lastIndexOf("/"); at > 0; at = path.lastIndexOf("/", at - 1)) {
+    const ancestor = await typeOf(path.slice(0, at));
+    if (ancestor !== null) return ancestor === "tree";
+  }
+  return true;
 }
 
 /**

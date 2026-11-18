@@ -39,8 +39,14 @@ describe("split instruction version 3 states what the validator enforces (#107)"
         expect(instruction).toContain("`traces` names the acceptance criteria (and decisions) each task serves, by the ids the requirement document gives them: an acceptance criterion's id as its list of acceptance criteria writes it (such as AC1), or an accepted decision's id as its heading under decisions starts (such as R1.ADR1). Nothing else can be traced: not a question's id (such as R1.Q1), a glossary entry's (such as R1.G1) or a round. Every acceptance criterion must be traced by at least one task.");
       });
 
-      it("states that `<directory>/**` needs a directory the overview's commit has", () => {
-        expect(instruction).toContain("`<directory>/**` for a directory that exists in the overview's commit");
+      // Ruling: session 2026-11-18, human 「这次批准改写所有必要的判据」 (tester #351) -- this pinned "`<directory>/**` needs a
+      // directory the overview's commit has"; a new directory is legal now, and only a path through an existing file is not.
+      it("states that a path may sit under new directories but never go through an existing file (#351)", () => {
+        // mutation: restore the old PATH_SHAPES words -> red
+        expect(instruction).toContain("an exact path (no leading `/`, no `*`, no empty, `.` or `..` segment) naming an existing file or a new file; `<directory>/**` for a directory that exists in the overview's commit or one the task creates; or `**`. A new file or directory may be under directories that do not exist yet, but no path may go through an existing file: its nearest existing ancestor in the overview's commit must be a directory (the repository root counts).");
+        expect(instruction).not.toContain("in an existing directory");
+        // mutation: restore the bugfix rule's "a new test file in an existing directory" -> red
+        expect(instruction).toContain("Its writable target paths must include an existing test or a new test file (its directory may be new), inferred from the repository overview,");
       });
     });
   }
@@ -77,8 +83,9 @@ describe("a hand-back reason carries its meaning beside its code (#107)", () => 
     ["expand:t1:unknown-plan", "the loopPlan is not one of standard, bugfix, refactor, design, investigate"],
     ["expand:t1:investigate-max-files", "an investigate task writes exactly one file"],
     ["expand:t1:skills-shape", "the task's skills are not a profile name or a list of skill names"],
-    ["path:t1:.work/**", "this target path does not exist in the overview's commit: an exact path must be an existing file or a new file in an existing directory, and `<directory>/**` needs an existing directory"],
-    ["path:t1:alpha:missing/x.ts", "this target path does not exist in the overview's commit: an exact path must be an existing file or a new file in an existing directory, and `<directory>/**` needs an existing directory"],
+    // Ruling: session 2026-11-18, human 「这次批准改写所有必要的判据」 (tester #351) -- the path meaning now says a new directory is fine and only going through a file is not.
+    ["path:t1:.work/**", "this target path is not legal in the overview's commit: it goes through an existing file (its nearest existing ancestor must be a directory; the repository root counts), names an existing file or submodule as `<directory>/**`, or is not an exact relative path or `<directory>/**`; a new file, or `<directory>/**` for a new directory, under directories that do not exist yet is fine"],
+    ["path:t1:alpha:missing/x.ts", "this target path is not legal in the overview's commit: it goes through an existing file (its nearest existing ancestor must be a directory; the repository root counts), names an existing file or submodule as `<directory>/**`, or is not an exact relative path or `<directory>/**`; a new file, or `<directory>/**` for a new directory, under directories that do not exist yet is fine"],
     ["trace:t1:R1.Q3", "this id is neither an acceptance criterion's id nor an accepted decision's id in the requirement document"],
     ["untraced:AC2", "no task traces this acceptance criterion; every one must be traced by at least one task"],
     ["dir:t1:gamma", "this is not a directory key the project overview lists"],

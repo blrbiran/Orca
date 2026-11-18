@@ -207,17 +207,45 @@ describe("the repository overview (N1 spec §6)", () => {
 
   it("answers DR19 target-path existence against the commit, not the working tree", async () => {
     const w = await world({ "src/a.ts": "1", "top.md": "t" });
+    // Ruling: session 2026-11-18, human 「这次批准改写所有必要的判据」 (tester #351) -- a new file in a new directory is
+    // legal now, so `uncommitted/**`, `uncommitted/x.ts` and `missing/new.ts` pass whatever the working tree holds. The
+    // commit-versus-working-tree point is kept by an uncommitted FILE (`blocker`) and a committed one deleted from the
+    // working tree (`top.md`): read from the working tree, each answer below would flip.
     await mkdir(join(w.repo, "uncommitted")); await writeFile(join(w.repo, "uncommitted/x.ts"), "x");
+    await writeFile(join(w.repo, "blocker"), "x"); await rm(join(w.repo, "top.md"));
     const commit = g(w.repo, "rev-parse", "HEAD");
     const exists = (entry: string) => overviewPathExists(w.repo, commit, entry);
     expect(await exists("**")).toBe(true);
     expect(await exists("src/**")).toBe(true);
-    expect(await exists("uncommitted/**")).toBe(false);
     expect(await exists("src/a.ts")).toBe(true);
     expect(await exists("src/new.ts")).toBe(true);
     expect(await exists("new.ts")).toBe(true);
-    expect(await exists("uncommitted/x.ts")).toBe(false);
-    expect(await exists("missing/new.ts")).toBe(false);
+    expect(await exists("blocker/new.ts")).toBe(true);
+    expect(await exists("blocker/**")).toBe(true);
+    expect(await exists("top.md/new.ts")).toBe(false);
+    expect(await exists("top.md/**")).toBe(false);
+  });
+
+  // Tester #351: requirement "add src/sla/model.js" (src/ exists, src/sla/ does not) was refused, and the split flattened
+  // it to src/sla-model.js against the requirement. A path is legal when its nearest existing ancestor is a directory.
+  it("takes a new file or `<directory>/**` under a directory the commit does not have yet, never through a file (#351)", async () => {
+    const w = await world({ "src/a.ts": "1", "top.md": "t" });
+    const commit = g(w.repo, "rev-parse", "HEAD");
+    const exists = (entry: string) => overviewPathExists(w.repo, commit, entry);
+    // mutation: keep the parent-must-exist rule -> these four red
+    expect(await exists("src/sla/model.js")).toBe(true);
+    expect(await exists("src/sla/deep/clock.js")).toBe(true);
+    expect(await exists("src/sla/**")).toBe(true);
+    expect(await exists("newtop/x.md")).toBe(true);
+    // mutation: stop at the first missing ancestor without asking what the nearest existing one is -> these red
+    expect(await exists("src/a.ts/x.js")).toBe(false);
+    expect(await exists("src/a.ts/deeper/x.js")).toBe(false);
+    expect(await exists("top.md/**")).toBe(false);
+    expect(await exists("top.md/sub/**")).toBe(false);
+    // mutation: drop the shape check -> these red (each has a missing nearest part, so only the shape refuses it)
+    for (const bad of ["/abs/x.js", "src/*.js", "src/new/*/x.js", "src/../up/x.js", "src//x.js", "./new/x.js", "src/new/./x.js", "new/x.js/"]) {
+      expect(await exists(bad), bad).toBe(false);
+    }
   });
 });
 

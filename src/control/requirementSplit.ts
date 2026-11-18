@@ -28,10 +28,16 @@ const PLAN_RULES = [
   `- A task's plan is its \`loopPlan\`; without one, the first of these its labels match chooses it: ${LABEL_TABLE}; no match -> standard.`,
   "- An `investigate` task names exactly one target path, and it is an exact path (the report file the task writes): never `<directory>/**` or `**`.",
   "- A `design` task's target paths do not include `**`; exact paths and `<directory>/**` are allowed.",
-  "- A `bugfix` task uses reproduce-first: first write a failing regression test. Its writable target paths must include an existing test or a new test file in an existing directory, inferred from the repository overview, as well as the source it fixes. If the task cannot grant a writable regression test, choose a loop without reproduce-first (for example `standard`) and make the goal and labels agree. Checks alone never grant write access.",
+  "- A `bugfix` task uses reproduce-first: first write a failing regression test. Its writable target paths must include an existing test or a new test file (its directory may be new), inferred from the repository overview, as well as the source it fixes. If the task cannot grant a writable regression test, choose a loop without reproduce-first (for example `standard`) and make the goal and labels agree. Checks alone never grant write access.",
 ];
 const TRACE_RULE = "- `traces` names the acceptance criteria (and decisions) each task serves, by the ids the requirement document gives them: an acceptance criterion's id as its list of acceptance criteria writes it (such as AC1), or an accepted decision's id as its heading under decisions starts (such as R1.ADR1). Nothing else can be traced: not a question's id (such as R1.Q1), a glossary entry's (such as R1.G1) or a round. Every acceptance criterion must be traced by at least one task.";
-const PATH_SHAPES = "each one of: an exact path (no leading `/`, no `*`, no empty, `.` or `..` segment) naming an existing file or a new file in an existing directory; `<directory>/**` for a directory that exists in the overview's commit; or `**`. Name every path a task may write.";
+/**
+ * Tester #351 (session 2026-11-18, controller ruling; versions stay 5 and 6, as #130/#135/#136/#280 kept theirs -- a rule's
+ * words changed, not the answer's shape, and a call already started keeps the prompt frozen in its envelope): a new file
+ * or `<directory>/**` may sit under directories that do not exist yet; only going through an existing file is refused
+ * (requirementOverview.ts overviewPathExists). The bugfix rule's "new test file" follows it.
+ */
+const PATH_SHAPES = "each one of: an exact path (no leading `/`, no `*`, no empty, `.` or `..` segment) naming an existing file or a new file; `<directory>/**` for a directory that exists in the overview's commit or one the task creates; or `**`. A new file or directory may be under directories that do not exist yet, but no path may go through an existing file: its nearest existing ancestor in the overview's commit must be a directory (the repository root counts). Name every path a task may write.";
 /**
  * Version 3, revision mode (human ruling 2026-10-28, round ledger): a retry gets the latest earlier draft and why it went
  * back -- code's reasons or the person's feedback, alike -- and fixes only what is named. buildSplitPrompt sends it last.
@@ -679,7 +685,7 @@ export function buildSplitPrompt(input: { document: string; overview: { canonica
   return `${[instruction, fence("requirement-document", nonce, input.document), fence(contextName, nonce, input.overview.canonicalJson), ...revision].join("\n\n")}\n`;
 }
 
-const PATH_MEANING = "this target path does not exist in the overview's commit: an exact path must be an existing file or a new file in an existing directory, and `<directory>/**` needs an existing directory";
+const PATH_MEANING = "this target path is not legal in the overview's commit: it goes through an existing file (its nearest existing ancestor must be a directory; the repository root counts), names an existing file or submodule as `<directory>/**`, or is not an exact relative path or `<directory>/**`; a new file, or `<directory>/**` for a new directory, under directories that do not exist yet is fine";
 const COMMAND_MEANING = "an npm setup or check command names a script or workspace that does not exist in the overview's commit: name a script that is already in that package's `scripts` (as `manifests` lists them) and a workspace the root package.json lists, or a command that is not npm";
 const EXPAND_MEANING: Record<LoopRefusal, string> = {
   "investigate-target": "an investigate task (loopPlan investigate, or no loopPlan and the label investigate) must name exactly one target path, an exact path with no `*`",

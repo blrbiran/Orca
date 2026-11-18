@@ -249,7 +249,7 @@ function exactPath(entry: string): boolean {
  * Spec §3.2 path-shape (R8): the only shapes ccloop's matcher and Orca's write set (src/scheduler/writeSet.ts
  * normalizeClaim) both read -- an exact relative path, `<prefix>/**`, or `**`.
  */
-function pathShapeOk(entry: string): boolean {
+export function pathShapeOk(entry: string): boolean {
   if (entry === "**") return true;
   if (entry.endsWith("/**")) return exactPath(entry.slice(0, -"/**".length));
   return exactPath(entry);
