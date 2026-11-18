@@ -255,7 +255,8 @@ describe("implied dependencies are not drawn (#271)", () => {
   it("lists every edge on the board's group graph, each removable", () => {
     const summary = view([]).summary;
     const groups = [{ ...summary, groupId: "a" }, { ...summary, groupId: "b", dependsOn: ["a"] }, { ...summary, groupId: "c", dependsOn: ["a", "b"] }];
-    render(<GroupGraph groups={groups as never} onCommand={vi.fn()} />);
+    // Ruling (2026-11-18 #378): 「这次批准改写所有必要的判据」 -- GroupGraph's nodes open a group, so onOpen is required; only the prop is added
+    render(<GroupGraph groups={groups as never} onCommand={vi.fn()} onOpen={vi.fn()} />);
     expect(within(screen.getByRole("list", { name: "Dependencies" })).getAllByRole("listitem").map((li) => li.firstChild?.textContent))
       .toEqual(["b waits for a", "c waits for a", "c waits for b"]);
   });

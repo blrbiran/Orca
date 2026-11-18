@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 import { useClock } from "./clock.js";
 import { goalSummary } from "./CardGoal.js";
 import { WEB_WORK_ITEM_CATEGORIES } from "./controlTypes.js";
-import type { RunViewV1, WorkItemViewV1 } from "./controlTypes.js";
+import type { RunViewV1, WorkItemCategoryV1, WorkItemViewV1 } from "./controlTypes.js";
 import { depSwatch, depSwatchOf } from "./ui/classes.js";
 import { layoutDependencies, type DependencyLayout } from "./dependencyLayout.js";
 import i18n, { enumText } from "./i18n.js";
@@ -26,7 +26,7 @@ const LANE_GAP = 12;
 const STALL_MS = 10 * 60_000;
 
 // Single-word literals joined, so the panel text scan (scripts/scan-panel-text.mjs) does not read a class list as words.
-function nodeClass(category: WorkItemViewV1["category"]): string {
+function nodeClass(category: WorkItemCategoryV1 | undefined): string {
   return (category === undefined ? ["dep-node"] : ["dep-node", `dep-${category}`]).join(" ");
 }
 
@@ -136,20 +136,98 @@ export function sampleEdge(segments: readonly EdgeSegment[], steps = 32): Point[
   return points;
 }
 
+/**
+ * #378: what one drawn node says. The caller fills it, so the drawing knows nothing of tasks or groups: the id is the
+ * node's first line, then the goal's summary (the whole goal in <title>), the status word, and the detail rows, each on
+ * a fixed row (a null row is left empty, so a later row never moves up).
+ */
+export interface DrawnNode {
+  label: string;
+  category?: WorkItemCategoryV1 | undefined;
+  goal?: string | undefined;
+  status: string;
+  details: ReadonlyArray<{ text: string; stall?: boolean } | null>;
+}
+
+/** #378: the SVG drawing of a laid-out graph, shared by a group's task graph and the Board's group graph. */
+export function DependencyDrawing(props: { layout: DependencyLayout; nodes: ReadonlyMap<string, DrawnNode>; current?: string | null; onOpen: (id: string) => void }): JSX.Element {
+  const clipBase = `dep-goal-clip${useId().replace(/[^A-Za-z0-9_-]/g, "")}`;
+  const { layout } = props;
+  const geometry = graphGeometry(layout);
+  const place = new Map(geometry.nodes.map((node) => [node.taskId, node]));
+  const { width, height } = geometry;
+  const key = (id: string) => (event: KeyboardEvent<SVGGElement>): void => {
+    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); props.onOpen(id); }
+  };
+  return (
+    <div className="dep-scroll max-w-full overflow-x-auto">
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
+        <defs>
+          <marker id="dep-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto">
+            <path d="M0,0 L8,4 L0,8 z" className="dep-arrow" />
+          </marker>
+        </defs>
+        {geometry.edges.map((edge) => (
+          <path key={`${edge.from}->${edge.to}`} data-edge={`${edge.from}->${edge.to}`} className="dep-edge" d={edgePath(edge.segments)} markerEnd="url(#dep-arrow)" />
+        ))}
+        {layout.nodes.map((node) => {
+          const at = place.get(node.taskId)!;
+          const drawn = props.nodes.get(node.taskId)!;
+          const goal = drawn.goal;
+          // Review minor 10: unique per graph instance (two graphs of one group may be on a page), safe in an id.
+          const clip = `${clipBase}-${encodeURIComponent(node.taskId).replace(/%/g, "_")}`;
+          return (
+            <g
+              key={node.taskId}
+              role="button"
+              tabIndex={0}
+              aria-label={drawn.label}
+              aria-current={props.current === node.taskId ? "true" : undefined}
+              className={nodeClass(drawn.category)}
+              transform={`translate(${at.x},${at.y})`}
+              onClick={() => props.onOpen(node.taskId)}
+              onKeyDown={key(node.taskId)}
+            >
+              {/* Tester round 2 §8.2 (H5): the goal's summary under the id, clipped to the node; the whole goal in <title>. */}
+              {goal !== undefined && <title>{goal}</title>}
+              <rect width={NODE_W} height={NODE_H} rx={6} />
+              <text x={8} y={16}>{node.taskId}</text>
+              {goal !== undefined && <>
+                <clipPath id={clip}><rect width={NODE_W - 16} height={NODE_H} x={8} /></clipPath>
+                <text x={8} y={32} className="dep-goal" clipPath={`url(#${clip})`}>{goalSummary(goal)}</text>
+              </>}
+              <text x={8} y={48} className="dep-status">{drawn.status}</text>
+              {drawn.details.map((line, row) => line === null ? null
+                : <text key={row} x={8} y={64 + row * 16} className={line.stall === true ? "dep-stall" : "dep-detail"}>{line.text}</text>)}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
 export function DependencyGraph(props: { items: WorkItemViewV1[]; runs: readonly RunViewV1[]; openTask: string | null; onOpen: (taskId: string) => void; now?: number }): JSX.Element | null {
   const { t } = useTranslation();
   const ticking = useClock(30_000);
   const now = props.now ?? ticking;
-  const clipBase = `dep-goal-clip${useId().replace(/[^A-Za-z0-9_-]/g, "")}`;
   if (props.items.length === 0) return null;
   const layout = layoutDependencies(props.items);
-  const byId = new Map(props.items.map((item) => [item.taskId, item]));
-  const geometry = graphGeometry(layout);
-  const place = new Map(geometry.nodes.map((node) => [node.taskId, node]));
-  const { width, height } = geometry;
-  const key = (taskId: string) => (event: KeyboardEvent<SVGGElement>): void => {
-    if (event.key === "Enter" || event.key === " ") { event.preventDefault(); props.onOpen(taskId); }
-  };
+  const nodes = new Map(props.items.map((item): [string, DrawnNode] => {
+    const word = enumText("workStatus", shownWorkStatus(item));
+    const lines = nodeLines(item, props.runs, now);
+    return [item.taskId, {
+      label: t("control.graph.node", { taskId: item.taskId, status: word }),
+      category: item.category,
+      goal: item.objective?.goal,
+      status: word,
+      details: [
+        lines.progress === null ? null : { text: lines.progress },
+        lines.run === null ? null : { text: lines.run },
+        lines.stalled === null ? null : { text: lines.stalled, stall: true },
+      ],
+    }];
+  }));
   return (
     <figure className="dep-graph" aria-label={t("control.graph.region")}>
       <figcaption>{t("control.graph.caption")}</figcaption>
@@ -158,53 +236,7 @@ export function DependencyGraph(props: { items: WorkItemViewV1[]; runs: readonly
           <li key={category}><span className={["dep-swatch", `dep-${category}`, depSwatch, depSwatchOf[category]].join(" ")} aria-hidden="true" />{t(`control.graph.category.${category}` as const)}</li>
         ))}
       </ul>
-      <div className="dep-scroll max-w-full overflow-x-auto">
-        <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-          <defs>
-            <marker id="dep-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" orient="auto">
-              <path d="M0,0 L8,4 L0,8 z" className="dep-arrow" />
-            </marker>
-          </defs>
-          {geometry.edges.map((edge) => (
-            <path key={`${edge.from}->${edge.to}`} data-edge={`${edge.from}->${edge.to}`} className="dep-edge" d={edgePath(edge.segments)} markerEnd="url(#dep-arrow)" />
-          ))}
-          {layout.nodes.map((node) => {
-            const at = place.get(node.taskId)!;
-            const item = byId.get(node.taskId)!;
-            const word = enumText("workStatus", shownWorkStatus(item));
-            const lines = nodeLines(item, props.runs, now);
-            const goal = item.objective?.goal;
-            // Review minor 10: unique per graph instance (two graphs of one group may be on a page), safe in an id.
-            const clip = `${clipBase}-${encodeURIComponent(node.taskId).replace(/%/g, "_")}`;
-            return (
-              <g
-                key={node.taskId}
-                role="button"
-                tabIndex={0}
-                aria-label={t("control.graph.node", { taskId: node.taskId, status: word })}
-                aria-current={props.openTask === node.taskId ? "true" : undefined}
-                className={nodeClass(item.category)}
-                transform={`translate(${at.x},${at.y})`}
-                onClick={() => props.onOpen(node.taskId)}
-                onKeyDown={key(node.taskId)}
-              >
-                {/* Tester round 2 §8.2 (H5): the goal's summary under the id, clipped to the node; the whole goal in <title>. */}
-                {goal !== undefined && <title>{goal}</title>}
-                <rect width={NODE_W} height={NODE_H} rx={6} />
-                <text x={8} y={16}>{node.taskId}</text>
-                {goal !== undefined && <>
-                  <clipPath id={clip}><rect width={NODE_W - 16} height={NODE_H} x={8} /></clipPath>
-                  <text x={8} y={32} className="dep-goal" clipPath={`url(#${clip})`}>{goalSummary(goal)}</text>
-                </>}
-                <text x={8} y={48} className="dep-status">{word}</text>
-                {lines.progress !== null && <text x={8} y={64} className="dep-detail">{lines.progress}</text>}
-                {lines.run !== null && <text x={8} y={80} className="dep-detail">{lines.run}</text>}
-                {lines.stalled !== null && <text x={8} y={96} className="dep-stall">{lines.stalled}</text>}
-              </g>
-            );
-          })}
-        </svg>
-      </div>
+      <DependencyDrawing layout={layout} nodes={nodes} current={props.openTask} onOpen={props.onOpen} />
       {layout.missing > 0 && <p role="note">{t("control.graph.missing", { count: layout.missing })}</p>}
       {layout.cycleEdges > 0 && <p role="alert">{t("control.graph.cycle", { count: layout.cycleEdges })}</p>}
       {/* #271: implied dependencies are not drawn; the count says so, so a reader never takes the drawing for all the data. */}

@@ -313,7 +313,6 @@ export const en = {
     graph: {
       region: "Group graph",
       caption: "Groups by the dependencies a person added: a group starts only after the groups it waits for have landed.",
-      layer: "Step {{n}}",
       edges: "Dependencies",
       none: "No dependencies: groups run in parallel and conflicts are resolved when they land.",
       edge: "{{dependent}} waits for {{prerequisite}}",

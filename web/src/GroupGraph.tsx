@@ -2,16 +2,25 @@
  * Kanban spec 2026-10-20 §3.3, §4, §9a.5: the groups of the board drawn by the person's edges, left to right (the task
  * graph's layout, dependencyLayout.ts, applied to groups). v1 edges come from the person only: add one (the dependent
  * waits until the other has landed) or remove one. The server refuses a cycle, a started dependent and the rest by name.
+ * #378 (tester 2026-11-18): drawn with the task graph's renderer (DependencyDrawing): a node is the group's id, its goal's
+ * summary, its state word and done/total, and opens the group; the "A waits for B" list with its Remove buttons is the
+ * folded text fallback under the drawing.
  */
 import { useState } from "react";
 import type { JSX } from "react";
 import { useTranslation } from "react-i18next";
 import type { ControlAction } from "./controlApi.js";
-import type { GroupSummaryV1 } from "./controlTypes.js";
+import type { GroupSummaryV1, WorkItemCategoryV1 } from "./controlTypes.js";
+import { DependencyDrawing, type DrawnNode } from "./DependencyGraph.js";
 import { layoutDependencies } from "./dependencyLayout.js";
+import { groupLed, type GroupLed } from "./groupCategory.js";
+import { enumText } from "./i18n.js";
 import { Select } from "./ui/Select.js";
 
-export function GroupGraph(props: { groups: GroupSummaryV1[]; onCommand: (action: ControlAction) => void }): JSX.Element {
+/** #378: a node's fill follows the card's status light (ruling H8); the state word carries the meaning. */
+const LED_CATEGORY: Record<GroupLed, WorkItemCategoryV1> = { running: "running", failed: "blocked", waiting: "waiting", idle: "idle" };
+
+export function GroupGraph(props: { groups: GroupSummaryV1[]; onCommand: (action: ControlAction) => void; onOpen: (groupId: string) => void }): JSX.Element {
   const { t } = useTranslation();
   const live = props.groups.filter((group) => group.archived !== true);
   const [dependent, setDependent] = useState("");
@@ -20,7 +29,18 @@ export function GroupGraph(props: { groups: GroupSummaryV1[]; onCommand: (action
   const layout = layoutDependencies(live.map((group) => ({ taskId: group.groupId, dependencyTaskIds: group.dependsOn ?? [] })), { reduce: false });
   const byId = new Map(live.map((group) => [group.groupId, group]));
   const selectedReplacement = byId.get(dependent)?.dependsOn?.includes(replaces) ? replaces : "";
-  const layers = Array.from({ length: layout.layers }, (_, layer) => layout.nodes.filter((node) => node.layer === layer).map((node) => node.taskId));
+  const nodes = new Map(live.map((group): [string, DrawnNode] => {
+    const state = enumText("groupState", group.state);
+    const progress = group.completion !== undefined && group.completion.total > 0
+      ? t("board.card.tasksDone", { done: group.completion.done, total: group.completion.total }) : null;
+    return [group.groupId, {
+      label: [group.groupId, state, ...(progress === null ? [] : [progress])].join(" · "),
+      category: LED_CATEGORY[groupLed(group)],
+      goal: group.goal,
+      status: state,
+      details: [progress === null ? null : { text: progress }],
+    }];
+  }));
   const send = (verb: "add-group-dependency" | "remove-group-dependency", groupId: string, dependsOn: string, from?: string): void => {
     const group = byId.get(groupId);
     if (group !== undefined) props.onCommand({ verb, groupId, expectedRevision: group.commandRevision,
@@ -29,22 +49,19 @@ export function GroupGraph(props: { groups: GroupSummaryV1[]; onCommand: (action
   return (
     <figure className="group-graph" aria-label={t("board.graph.region")}>
       <figcaption>{t("board.graph.caption")}</figcaption>
-      <div className="group-graph-layers flex gap-6 overflow-x-auto">
-        {layers.map((ids, layer) => (
-          <ol key={layer} aria-label={t("board.graph.layer", { n: layer + 1 })}>
-            {ids.map((id) => <li key={id}>{id}{byId.get(id)?.goal !== undefined ? ` · ${byId.get(id)!.goal}` : ""}</li>)}
-          </ol>
-        ))}
-      </div>
+      {live.length > 0 && <DependencyDrawing layout={layout} nodes={nodes} onOpen={props.onOpen} />}
       {layout.edges.length === 0 ? <p>{t("board.graph.none")}</p> : (
-        <ul aria-label={t("board.graph.edges")}>
-          {layout.edges.map((edge) => (
-            <li key={`${edge.from}>${edge.to}`}>
-              {t("board.graph.edge", { dependent: edge.to, prerequisite: edge.from })}{" "}
-              <button type="button" onClick={() => send("remove-group-dependency", edge.to, edge.from)}>{t("board.graph.remove")}</button>
-            </li>
-          ))}
-        </ul>
+        <details>
+          <summary>{t("board.graph.edges")}</summary>
+          <ul aria-label={t("board.graph.edges")}>
+            {layout.edges.map((edge) => (
+              <li key={`${edge.from}>${edge.to}`}>
+                {t("board.graph.edge", { dependent: edge.to, prerequisite: edge.from })}{" "}
+                <button type="button" onClick={() => send("remove-group-dependency", edge.to, edge.from)}>{t("board.graph.remove")}</button>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
       <div role="group" aria-label={t("board.graph.add")}>
         <label>{t("board.graph.dependent")}

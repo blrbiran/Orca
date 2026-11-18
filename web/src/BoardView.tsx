@@ -244,7 +244,8 @@ export function BoardView(props: BoardViewProps): JSX.Element {
       {refusal !== null && <p role="alert" data-testid="board-refusal">{refusal}</p>}
       {/* Tester #87: one line for an empty Board says what to do next; its columns stay quiet. */}
       {groups.length === 0 && flows.length === 0 && <p data-testid="board-empty">{t("board.empty")} <a href={hashFor("requirements")}>{t("control.startFromRequirement")}</a></p>}
-      {view === "graph" ? <GroupGraph groups={groups} onCommand={props.onCommand} /> : (
+      {view === "graph" ? <GroupGraph groups={groups} onCommand={props.onCommand}
+        onOpen={(groupId) => { const group = groups.find((each) => each.groupId === groupId); if (group !== undefined) props.onOpen(group); }} /> : (
         <div className="flex items-start gap-3 overflow-x-auto">
           {columns.map((column) => {
             const cards = groups.filter((group) => boardColumn(group) === column);

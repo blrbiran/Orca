@@ -163,7 +163,6 @@ export const zh: Translation<typeof en> = {
     graph: {
       region: "组关系图",
       caption: "按人加的依赖画出各组：一个组要等它依赖的组落地后才开跑。",
-      layer: "第 {{n}} 步",
       edges: "依赖",
       none: "没有依赖：各组并行运行，落地时再解决冲突。",
       edge: "{{dependent}} 等待 {{prerequisite}}",

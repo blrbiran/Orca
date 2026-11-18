@@ -379,3 +379,18 @@ orchestration record moves to `mode: "run"` while recording `startedRevision`. O
 but the ladder and quota failover both exclude it because they require `mode: "run"` (tester issue #180). A group that
 has only been confirmed with `hold` remains held until that start. The criterion starts a held group and checks its
 failover eligibility, while the existing held-before-start check remains.
+
+## 19. Correction (tester issue #378, 2026-11-18) — the group graph shares the task graph's rendering, not only its layout
+
+§4 said "reuse `DependencyGraph.tsx` / `dependencyLayout.ts`" and §9a recorded that only the layout was reused for the
+group-level view. As built, the Board's group graph used the layout's layers alone and printed them as text lists (`<ol>`
+per layer, an "A waits for B" `<ul>`), with no drawing (#378). Corrected: the rendering is shared too.
+`DependencyDrawing` (`web/src/DependencyGraph.tsx`) draws a laid-out graph -- node boxes, curved edges with arrows,
+`graphGeometry` / `edgePath`, the `.dep-*` styles -- from nodes the caller fills (id, goal, status word, detail rows,
+fill category, accessible label), so it knows nothing of tasks or groups. The task page's graph fills it from work items,
+unchanged in behaviour. The group graph (`web/src/GroupGraph.tsx`) fills it from group summaries: id, the goal's
+`goalSummary` (whole goal in `<title>`), the group state word and done/total; the fill follows the card's status light
+(`groupLed`), the text carries the meaning. Edges stay unreduced (`reduce: false`), so every person-added edge is drawn.
+A node opens its group (click, Enter or Space) through the Board's `onOpen`. The "A waits for B" list with its Remove
+buttons stays as a folded `<details>` text fallback under the drawing; the add/remove/replace command payloads do not
+change. The Board still has no batch actions or extra columns. Criteria: `web/tests/groupGraphDrawing.test.tsx`.
