@@ -1087,8 +1087,13 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     const catalogMiss = report.terminal.failureCause?.cause === "rate-limited" ? await rateLimitedCatalogMiss(deps, run) : {};
     // Off-plan writes W4 (#346, Task 5 fix round 1): a ccloop denylist stop on a parallel sibling's frozen claim is
     // classified here, once, against the task's confirmed contract and frozen siblings; read only for that stop's shape.
-    const claimed = report.terminal.stopReason?.startsWith(DENYLIST_STOP) === true
-      ? parallelClaimField(report.terminal.stopReason, readConfirmedTaskExecution(store, run.groupId, run.taskId)) : {};
+    // Fix round 2: a confirmed execution that cannot be read stores no claim; the block below is recorded all the same.
+    let claimed: { parallelClaim?: ParallelClaim } = {};
+    if (report.terminal.stopReason?.startsWith(DENYLIST_STOP) === true) {
+      try { claimed = parallelClaimField(report.terminal.stopReason, readConfirmedTaskExecution(store, run.groupId, run.taskId)); } catch (error) {
+        if (!(error instanceof ControlError)) throw error;
+      }
+    }
     blockRun(deps, runId, "C", report.terminal.stopReason?.includes("codex-skills-") ? report.terminal.stopReason : `terminal:${outcome}`, { outcome, ...stopReason, ...failure, ...catalogMiss, ...claimed });
     if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)await retainSavedInterruption(deps,runId);
     return true;
