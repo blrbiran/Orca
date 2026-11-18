@@ -329,12 +329,15 @@ describe("an archived group refuses every group-targeted command but unarchive-g
     } finally { await h.dispose(); }
   });
 
-  it("still takes unarchive-group, and after it start is accepted again", async () => {
+  // Ruling (2026-11-18 tester batch D review 2): this group is confirmed to run and never started, so the auto-start pass
+  // would start it; the unarchive pauses it (#370 review 2, K1) and a person's resume -- not `start`, which a pause refuses
+  // with stop-mode-conflict -- is what lets it run again.
+  it("still takes unarchive-group, and after it the group can be let run again (by resume, the unarchive having paused it)", async () => {
     const { h, service } = await confirmed();
     try {
       service.archiveGroup(h.command("archive-group", {}));
-      expect(service.unarchiveGroup(h.command("unarchive-group", {}))).toMatchObject({ result: { kind: "unarchived" } });
-      expect(await service.start(h.command("start", {}))).toMatchObject({ result: { kind: "scheduled", operation: "start" } });
+      expect(service.unarchiveGroup(h.command("unarchive-group", {}))).toMatchObject({ result: { kind: "unarchived", paused: true } });
+      expect(await service.resumeDispatch(h.command("resume-dispatch", {}))).toMatchObject({ result: { kind: "scheduled", operation: "resume-dispatch" } });
     } finally { await h.dispose(); }
   });
 });

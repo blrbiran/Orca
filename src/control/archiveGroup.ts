@@ -7,7 +7,8 @@ import { readGroupIntegration } from "./integrationScheme.js";
 import { pendingRequirementCall, type RequirementTarget } from "./requirementCalls.js";
 import { readDraft, readRound, writeDraft, writeRound } from "./requirementRecords.js";
 import { deriveStopState, readStopIntent, saveStopIntent } from "./stopIntent.js";
-import { flowBlockOf } from "../flow/groups.js";
+import { flowBlockOf, refuseFlowChild } from "../flow/groups.js";
+import { readGroupOrchestration } from "./orchestration.js";
 import { readBudgetProposal } from "./queries.js";
 import { nextClaimableTask } from "./webDispatch.js";
 import type { ControlStore } from "./store.js";
@@ -40,6 +41,8 @@ function groupBody(store: ControlStore, groupId: string): Record<string, unknown
  * The stop state is derived the way groupStopState derives it (the stored body's state can lag the requests it summarises).
  */
 function refuseArchive(store: ControlStore, groupId: string, group: Record<string, unknown>): RequirementTarget | null {
+  // #370 review 2: a flow child is its flow's to drive, archive included (as retry, continue, abandon and reopen refuse it).
+  refuseFlowChild(store, groupId);
   for (const row of store.db.prepare("SELECT state FROM estimates WHERE group_id=?").all(groupId)) {
     if (["running", "start-unknown"].includes(String(row.state))) throw new ControlError("archive-call-in-flight", "estimate");
   }
@@ -120,18 +123,29 @@ export function applyArchiveGroup(deps: { store: ControlStore }, command: Archiv
 const DISPATCHABLE = new Set(["ready", "running", "review"]);
 
 /**
- * Tester #370 (correction 2026-11-18, second form): whether the unarchived group would run on its own -- a dispatchable,
- * confirmed group with a queued start, no-start re-arm or resume wake, or a started group (an earlier start wake) with a
- * claimable task, which replenishStartWakes re-arms from. Never a flow child (its flow drives it) or a group already
- * under a stop intent (that stop holds it already).
+ * Tester #370 (correction 2026-11-18, second form; review 2): whether the unarchived group would run on its own. Never a
+ * flow child (its flow drives it) or a group already under a stop intent (that stop holds it already). Otherwise:
+ * - any queued start, no-start re-arm or resume wake -- whatever the group's status or confirmation, since the wake is
+ *   what the pump claims from;
+ * - a confirmed never-started ready group the auto-start pass would start (orchestration `mode = run`, no start yet),
+ *   whatever its slot or prerequisites, which only delay that start;
+ * - a dispatchable, confirmed group started before (an earlier start wake) with a claimable task, which
+ *   replenishStartWakes re-arms from.
+ * A budget proposal or orchestration row that cannot be read counts as absent here (the auto-start pass cannot start from
+ * an unreadable row either): the unarchive itself is never refused for it.
  */
 function wouldRunOnUnarchive(store: ControlStore, groupId: string, group: Record<string, unknown>): boolean {
-  if (!DISPATCHABLE.has(String(group.status)) || flowBlockOf(group)?.role === "child") return false;
+  if (flowBlockOf(group)?.role === "child") return false;
   if (store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined) return false;
-  if (readBudgetProposal(store, groupId).state !== "confirmed") return false;
   if (store.db.prepare("SELECT 1 FROM scheduler_wakes WHERE group_id=? AND kind IN ('start','no-start','resume') AND delivered=0").get(groupId) !== undefined) return true;
-  return store.db.prepare("SELECT 1 FROM scheduler_wakes WHERE group_id=? AND kind='start'").get(groupId) !== undefined
-    && nextClaimableTask(store, groupId, group) !== null;
+  let orchestration: ReturnType<typeof readGroupOrchestration>;
+  try { orchestration = readGroupOrchestration(store, groupId); } catch { orchestration = null; }
+  if (orchestration?.mode === "run" && orchestration.startedRevision === null && group.status === "ready") return true;
+  if (!DISPATCHABLE.has(String(group.status))) return false;
+  if (store.db.prepare("SELECT 1 FROM scheduler_wakes WHERE group_id=? AND kind='start'").get(groupId) === undefined) return false;
+  let confirmed: boolean;
+  try { confirmed = readBudgetProposal(store, groupId).state === "confirmed"; } catch { confirmed = false; }
+  return confirmed && nextClaimableTask(store, groupId, group) !== null;
 }
 
 /**

@@ -6,18 +6,25 @@
 // Ruling (2026-11-18 tester batch D review): the first form's expectations (`startDropped`, the wake deleted, `orca group
 // start` in the receipt) are replaced by the pause's (`paused`, the wake kept, `orca group resume`).
 // And an archived group reads `archived (was <state>)`, listed last, instead of `running · archived`.
+// Ruling (2026-11-18 tester batch D review 2): "an archived group with no queued work: unarchive pauses nothing" used a
+// group confirmed to run, which the auto-start pass starts (K1); it now expects the pause, and the no-pause case is a
+// group confirmed with `hold`.
 import { describe, expect, it } from "vitest";
 import { workHealthCheck } from "../../src/commands/status.js";
 import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
 import { replenishStartWakes } from "../../src/control/executionDriver.js";
 import { appendConfirmedTaskInTransaction } from "../../src/control/groupTaskAppend.js";
-import { readArchivedContract, readWork } from "../../src/control/queries.js";
+import { isGroupArchived } from "../../src/control/archivedMark.js";
+import { readGroupOrchestration } from "../../src/control/orchestration.js";
+import { readArchivedContract, readBudgetProposal, readWork } from "../../src/control/queries.js";
+import { WebControlService } from "../../src/control/webService.js";
 import { createWebWakeHandlers, deliverScheduledStart, settleProviderAttempt } from "../../src/control/webDispatch.js";
 import { withNeedsYou } from "../../src/panel/controlOverview.js";
 import { readControlRecovery, readControlSummary, readGroupSummary } from "../../src/panel/controlViews.js";
 import { cli, fakePanel, useFakePanels } from "../commands/fixtures/fakePanel.js";
 import { world } from "../commands/fixtures/world.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
+import { profileSnapshot, webFixture } from "./fixtures/web.js";
 
 useFakePanels();
 
@@ -135,12 +142,71 @@ describe("unarchiving a group never starts it (#370)", { timeout: 120_000 }, () 
     } finally { await t.h.dispose(); }
   });
 
-  it("an archived group with no queued work: unarchive pauses nothing", async () => {
-    const t = await driverHarness([{ taskId: "a" }]); try {
-      const result = archiveThenUnarchive(t);
+  // Ruling (2026-11-18 tester batch D review 2): this case was a group confirmed to run (driverHarness confirms with no
+  // `hold`) that read as having "no queued work" -- yet the auto-start pass starts such a group (review 2, K1), so it is
+  // now the K1 case below. The no-pause case is a group confirmed with "Confirm only, don't run yet" (`hold`).
+  it("a group confirmed with hold (nothing would start it): unarchive pauses nothing, and the auto-start pass starts nothing", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const service = new WebControlService(h.deps);
+      expect(await service.confirm(h.command("confirm", { ...(await h.confirmPayload()), hold: true }))).toMatchObject({ result: {} });
+      expect(readGroupOrchestration(h.store, "g")).toMatchObject({ mode: "hold", startedRevision: null });
+      service.archiveGroup(h.command("archive-group", {}));
+      const result = service.unarchiveGroup(h.command("unarchive-group", {}));
       expect(result).toMatchObject({ result: { kind: "unarchived", groupId: "g" } });
+      // mutation: the orchestration clause ignores `mode` (pauses a held group too) -> red here
       expect((result as { result: Record<string, unknown> }).result).not.toHaveProperty("paused");
-      expect(stopIntent(t)).toBeUndefined();
+      expect(h.store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id='g'").get()).toBeUndefined();
+      expect(await service.autoStart()).toEqual({ started: [], refused: [] });
+    } finally { await h.dispose(); }
+  });
+
+  // Review 2, K1: a confirmed group that never started has no wake at all; the auto-start pass (orchestration.ts
+  // autoStartPass) starts it once nothing holds it -- the archive mark held it, so the unarchive must.
+  it("a group confirmed to run that never started: paused; the auto-start pass starts nothing until a person resumes it", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      expect(readGroupOrchestration(t.h.store, "g")).toMatchObject({ mode: "run", startedRevision: null });
+      expect(pendingWakes(t)).toEqual([]);
+      const result = archiveThenUnarchive(t);
+      // mutation: drop the orchestration clause of wouldRunOnUnarchive -> no pause, and the pass starts g: red here
+      expect(result).toMatchObject({ result: { kind: "unarchived", groupId: "g", paused: true } });
+      expect(await t.service.autoStart()).toEqual({ started: [], refused: [] });
+      expect(pendingWakes(t)).toEqual([]);
+      const resumed = await t.service.resumeDispatch(t.h.command("resume-dispatch", {}));
+      expect(resumed).toMatchObject({ result: { kind: "scheduled" } });
+      expect((await deliverScheduledStart(t.dispatch, "g")).kind).toBe("claimed");
+    } finally { await t.h.dispose(); }
+  });
+
+  // Review 2, M-c: a queued wake is what the pump claims from, whatever the group's status or proposal says. A ready group
+  // started (its start wake still queued) whose proposal is then edited is a draft with an editable proposal -- and the
+  // start wake stays queued.
+  it("a queued start on a group whose proposal was edited after the start (draft, not confirmed): paused", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      expect(await t.service.start(t.h.command("start", {}))).toMatchObject({ result: { kind: "scheduled" } });
+      const edited = await t.service.editProposal(t.h.command("proposal-edit", { baseProposalVersion: readBudgetProposal(t.h.store, "g").proposalVersion,
+        operations: [{ target: { scope: "task", taskId: "a", allocation: "work", dimension: "tokens" }, value: 2_000_000, provenance: "human" }] }));
+      expect(edited).toMatchObject({ result: { kind: "proposal-edited" } });
+      expect(readGroupSummary(t.h.store, "g").state).toBe("draft");
+      expect(readBudgetProposal(t.h.store, "g").state).toBe("editable");
+      const queued = pendingWakes(t);
+      expect(queued.map((w) => w.kind)).toEqual(["start"]);
+      const result = archiveThenUnarchive(t);
+      // mutation: gate the queued-wake branch on a dispatchable status, or on a confirmed proposal -> no pause, red here
+      expect(result).toMatchObject({ result: { kind: "unarchived", paused: true } });
+      expect(pendingWakes(t)).toEqual(queued);
+    } finally { await t.h.dispose(); }
+  });
+
+  // Review 2, I-b: a flow child is its flow's to drive; archive refuses it like retry, continue, abandon and reopen do.
+  it("archive refuses a flow child with flow-child-managed and leaves it unarchived", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      t.h.store.db.prepare("UPDATE groups SET body=json_set(body,'$.flow',json(?)) WHERE id='g'").run(JSON.stringify({
+        role: "child", flowRunId: "fr-1", parentGroupId: "flow-1", stepKey: "to-draft-box", seq: 1, baseCommit: "a".repeat(40), effectRecordId: "eff-1",
+      }));
+      const refused = t.service.archiveGroup(t.h.command("archive-group", {}));
+      // mutation: drop refuseFlowChild from refuseArchive -> archived, red here
+      expect(refused).toMatchObject({ error: { code: "flow-child-managed" } });
+      expect(isGroupArchived(t.h.store, "g")).toBe(false);
     } finally { await t.h.dispose(); }
   });
 
