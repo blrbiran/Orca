@@ -168,7 +168,7 @@ describe("retry-task refusals (spec §4.2(2), §4.4)", () => {
   });
 
   it("refuses a run blocked for any other reason: a succeeded run out of bounds, a transient failure, another step", async () => {
-    const outOfBounds = await failingHarness([{ taskId: "a" }], () => ({ "elsewhere.txt": "x\n" })); try {
+    const outOfBounds = await failingHarness([{ taskId: "a", safetyPolicy: { denylistPaths: ["elsewhere.txt"] } }], () => ({ "elsewhere.txt": "x\n" })); try { // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) — v4 bounds a harvest by the denylist, so the out-of-bounds write is denied explicitly
       outOfBounds.succeedNext();
       const { runId } = await failedRun(outOfBounds.t);
       expect(outOfBounds.t.body(runId).drive).toMatchObject({ blockedAt: "C", outcome: "succeeded" });

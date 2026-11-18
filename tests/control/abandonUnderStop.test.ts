@@ -365,7 +365,7 @@ describe("an abandoned run ccloop answers with a handoff checkpoint (Correction 
   });
 
   it("a blocked success (closeBlocked) is not settled abandoned: a success is never abandoned (Correction 2.2)", async () => {
-    const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", modelVersion: "followup-g", sealedOwnerProof: true,
+    const t = await driverHarness([{ taskId: "a", safetyPolicy: { denylistPaths: ["outside.txt"] } }], { tokenPolicy: "optional-v1", modelVersion: "followup-g", sealedOwnerProof: true, // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) — v4 bounds a harvest by the denylist, so the out-of-bounds write is denied explicitly
       behaviour: () => "succeed", files: () => ({ a: "a\n", "outside.txt": "x\n" }) });
     try {
       const runId = await t.claim();
