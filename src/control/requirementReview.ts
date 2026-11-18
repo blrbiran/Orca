@@ -18,6 +18,7 @@ import { readArchivedContract, readArchivedPlan } from "./queries.js";
 import { boundedGroupGrant, claimGroupSingleCallInTransaction, completeGroupSingleCallInTransaction, interruptGroupSingleCall, readGroupCallContract } from "./groupSingleCall.js";
 import { saveRun } from "./budget.js";
 import { closeSingleCall } from "./singleCallLedger.js";
+import { pathShapeOk } from "./loopPlans.js";
 import { isMultiGroup } from "./multiGroup.js";
 import { cutUtf8 } from "./noChange.js";
 import { planLayers, planOrderTasks } from "./planOrder.js";
@@ -640,7 +641,7 @@ export function fixTaskContract(store: ControlStore, groupId: string, round: Rev
   const unmet = round.criteria.filter((c) => c.verdict === "not-met");
   const textOf = (id: string) => criteria.find((c) => c.id === id)?.text ?? id;
   const findings = unmet.map((c) => `- ${c.id} (${textOf(c.id)}): missing ${c.missing ?? "?"}${c.evidence.length === 0 ? "" : `; looked at ${c.evidence.map((e) => e.line === null ? e.path : `${e.path}:${e.line}`).join(", ")}`}`);
-  const named = [...new Set(unmet.flatMap((c) => c.evidence.map((e) => e.path)))];
+  const named = fixTaskPaths(unmet);
   const union = (lists: string[][]) => [...new Set(lists.flat())];
   const targetPaths = paths !== undefined && paths.length > 0 ? [...new Set(paths)] : named.length > 0 ? named : union(tasks.map((t) => t.context.targetPaths));
   const commands = acceptanceCommands(store, groupId);
@@ -665,6 +666,37 @@ export function fixTaskContract(store: ControlStore, groupId: string, round: Rev
       maxFilesTouched: Math.max(source.safetyPolicy.maxFilesTouched, targetPaths.length) },
     verification: { ...source.verification, requiredChecks: required },
   });
+}
+
+/**
+ * Tester #352 (session 2026-11-18, controller rulings): the fix task's write set from its not-met findings. For "path X is
+ * absent" the evidence is the OLD file and X is only in `missing`, so the paths `missing` names come first (each
+ * criterion's, in text order), then the evidence's, deduplicated. The review's pseudo-evidence (`orca:acceptance`,
+ * `orca:delivery`, `orca:delivered-acceptance`) names a record, not a file: it never enters the write set.
+ */
+export function fixTaskPaths(unmet: ReadonlyArray<{ readonly evidence: ReadonlyArray<{ readonly path: string }>; readonly missing: string | null }>): string[] {
+  const all = [...unmet.flatMap((c) => missingTextPaths(c.missing)), ...unmet.flatMap((c) => c.evidence.map((e) => e.path))];
+  return [...new Set(all)].filter((path) => !path.startsWith("orca:"));
+}
+
+/**
+ * Tester #352: the repository-relative paths a finding's `missing` text names -- a token in backticks, or a bare token
+ * holding a `/` that ends in a file extension or in `/` -- with leading brackets or quotes and trailing punctuation
+ * stripped. A token ending in `/` names a directory and becomes `<directory>/**`. Each must have a write-set shape
+ * (pathShapeOk: no leading `/`, no `*` but a trailing `/**`, no empty, `.` or `..` segment) and no whitespace; `**`
+ * alone is refused, since a stray token must not open the whole repository. The review schema stays as it is.
+ */
+function missingTextPaths(missing: string | null): string[] {
+  if (missing === null) return [];
+  const out: string[] = [];
+  for (const match of missing.matchAll(/`([^`]*)`|(\S+)/g)) {
+    const quoted = match[1] !== undefined;
+    const token = quoted ? match[1]!.trim() : match[2]!.replace(/^[(["'<]+/, "").replace(/[.,;:!?)\]"'>]+$/, "");
+    if (!quoted && !(token.includes("/") && (/\.[A-Za-z][A-Za-z0-9]*$/.test(token) || token.endsWith("/")))) continue;
+    const path = token.endsWith("/") ? `${token}**` : token;
+    if (path !== "**" && !/\s/.test(path) && pathShapeOk(path)) out.push(path);
+  }
+  return out;
 }
 
 /**

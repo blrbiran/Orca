@@ -7,7 +7,7 @@ import { readArchivedContract, readWork } from "../../src/control/queries.js";
 import { readRepositorySettingsBody, writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
 import { git } from "./fixtures/driverHarness.js";
 import { CRITERIA, reviewWorld, verdicts } from "./fixtures/reviewWorld.js";
-import { autoFixTokenCeiling, classifyReviewOutput, fixTaskContract, requirementReviewResponseSchema } from "../../src/control/requirementReview.js";
+import { autoFixTokenCeiling, classifyReviewOutput, fixTaskContract, fixTaskPaths, requirementReviewResponseSchema } from "../../src/control/requirementReview.js";
 
 /**
  * Tester follow-up G spec §3.4-§3.5 (human: 「自动在同一组里开一个修复任务（把复核的发现当说明）」): a review round with
@@ -387,4 +387,60 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
       expect(w.groupStatus()).not.toBe("done");
     } finally { await w.t.h.dispose(); }
   }, 600000);
+});
+
+/**
+ * Tester #352 (session 2026-11-18, controller rulings): the review's evidence for "path X is absent" is the OLD file, so a
+ * fix task whose write set came only from evidence could not write X and its correct work was discarded on an allowlist
+ * miss; and the review's pseudo-evidence (`orca:acceptance`, ...) became writable paths. Paths named in a not-met
+ * criterion's `missing` text now come first, then the evidence's; `orca:` evidence never enters the write set.
+ */
+describe("the fix task's write set takes the paths a finding says are missing (#352)", () => {
+  const unmet = (missing: string | null, evidence: string[]) => ({ missing, evidence: evidence.map((path) => ({ path, line: null })) });
+
+  it("reads backticked tokens and bare path-like tokens from missing, in text order, trailing punctuation stripped", () => {
+    // mutation: drop the backtick branch -> README.md missing, red; drop the bare branch -> src/sla/clock.js missing, red
+    // mutation: keep trailing punctuation -> "src/sla/clock.js," red
+    expect(fixTaskPaths([unmet("The required module path `src/sla/breach.js` is absent; behaviour lives in src/sla-breach.js. Also src/sla/clock.js, and `README.md`.", ["src/sla-breach.js"])]))
+      // The old flat file the text names is writable too: moving it away needs it.
+      .toEqual(["src/sla/breach.js", "src/sla-breach.js", "src/sla/clock.js", "README.md"]);
+  });
+
+  it("takes a token ending in `/` as that directory's `/**`, and refuses tokens of an illegal shape", () => {
+    // mutation: drop the trailing-slash branch -> src/sla/** missing, red
+    expect(fixTaskPaths([unmet("Create src/sla/ for the modules.", [])])).toEqual(["src/sla/**"]);
+    // mutation: drop the shape check -> /abs/x.js, ../up/x.js, a//b.js, `npm test`, `**` and src/*.js taken, red
+    expect(fixTaskPaths([unmet("Not /abs/x.js nor ../up/x.js nor a//b.js nor `npm test` nor `**` nor src/*.js nor https://example.com/x.js; a ratio 1/2.5 is no path.", [])])).toEqual([]);
+    // Bare words without a slash or an extension are prose, not paths.
+    expect(fixTaskPaths([unmet("The module is missing entirely.", [])])).toEqual([]);
+  });
+
+  it("never writes `orca:` pseudo-evidence, and orders missing paths before evidence paths across criteria, deduplicated", () => {
+    // mutation: drop the orca: filter -> orca:acceptance / orca:delivery / orca:delivered-acceptance kept, red
+    // mutation: evidence before missing -> order red
+    expect(fixTaskPaths([
+      unmet("`src/sla/model.js` is absent", ["orca:acceptance", "src/sla-model.js"]),
+      unmet("`src/sla/clock.js` is absent; `orca:delivery` says so", ["orca:delivered-acceptance", "src/sla-clock.js", "src/sla-model.js"]),
+      unmet(null, ["orca:delivery"]),
+    ])).toEqual(["src/sla/model.js", "src/sla/clock.js", "src/sla-model.js", "src/sla-clock.js"]);
+  });
+
+  it("puts the missing paths into the contract's targetPaths and allowlist; a person's --path still wins", async () => {
+    const w = await reviewWorld({ tasks: [
+      { taskId: "a", safetyPolicy: { allowlistPaths: ["a"], denylistPaths: [] } },
+      { taskId: "b", safetyPolicy: { allowlistPaths: ["b"], denylistPaths: [] } },
+    ] });
+    try {
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "passed", 120);
+      const round = { roundNo: 1, tip: "d".repeat(40), runId: null, at: 0, result: "not-met" as const, summary: "s",
+        criteria: [{ id: "AC1", verdict: "not-met" as const, evidence: [{ path: "a", line: 1 }, { path: "orca:acceptance", line: null }],
+          missing: "The required module path `src/sla/breach.js` is absent; the behaviour is in a." }] };
+      const contract = fixTaskContract(w.t.h.store, "g", round, CRITERIA, "review-fix-1", "a");
+      // The tester's loop-contract.json had ["a", "orca:acceptance"] here and an allowlist without src/sla/breach.js.
+      expect(contract.context.targetPaths).toEqual(["src/sla/breach.js", "a"]);
+      expect(contract.safetyPolicy.allowlistPaths).toEqual(["a", "b", "src/sla/breach.js"]);
+      expect(fixTaskContract(w.t.h.store, "g", round, CRITERIA, "review-fix-1", "a", "g", ["notes/x.md"]).context.targetPaths).toEqual(["notes/x.md"]);
+    } finally { await w.t.h.dispose(); }
+  }, 180000);
 });
