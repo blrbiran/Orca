@@ -243,9 +243,8 @@ describe("the repository overview (N1 spec §6)", () => {
     expect(await exists("top.md/**")).toBe(false);
     expect(await exists("top.md/sub/**")).toBe(false);
     // mutation: drop the shape check -> these red (each has a missing nearest part, so only the shape refuses it)
-    for (const bad of ["/abs/x.js", "src/*.js", "src/new/*/x.js", "src/../up/x.js", "src//x.js", "./new/x.js", "src/new/./x.js", "new/x.js/"]) {
-      expect(await exists(bad), bad).toBe(false);
-    }
+    const bad = ["/abs/x.js", "src/*.js", "src/new/*/x.js", "src/../up/x.js", "src//x.js", "./new/x.js", "src/new/./x.js", "new/x.js/"];
+    expect(Object.fromEntries(await Promise.all(bad.map(async (entry) => [entry, await exists(entry)])))).toEqual(Object.fromEntries(bad.map((entry) => [entry, false])));
   });
 });
 
