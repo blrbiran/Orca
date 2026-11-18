@@ -89,6 +89,16 @@ export async function snapshotWorkspace(workdir: string, setupCommands: readonly
  * those paths only); ignored paths that were already there stay. All steps are always tried; the first failure is
  * answered, not thrown, so a caller with an error of its own keeps that one.
  */
+/**
+ * Change-sized runs P0 review M5: a check that threw keeps its own error, unchanged when the restore after it succeeded;
+ * when the restore failed too, one error names both (the check's first), the check's error kept as `cause`.
+ */
+export function withRestoreFailure(error: unknown, restoreFailure: Error | null): unknown {
+  if (restoreFailure === null) return error;
+  const message = error instanceof Error && error.message.length > 0 ? error.message : String(error);
+  return new Error(`${message}; restore failed: ${restoreFailure.message}`, { cause: error });
+}
+
 export async function restoreWorkspace(workdir: string, attemptSha: string, snapshot: WorkspaceSnapshot): Promise<Error | null> {
   let failure: Error | null = null;
   try {
@@ -164,9 +174,9 @@ export async function checkReproduction(input: {
       verdict = (await exitsZero(workdir, command, timeoutMs, as, signal)) ? { kind: "failed", reason: "green-at-base" } : { kind: "passed", tests, command };
     }
   } catch (error) {
-    // The check's own failure is the one reported; a restore failure after it would only hide it (the next round restores).
-    await restoreWorkspace(workdir, attemptSha, snapshot);
-    throw error;
+    // The check's own failure is the one reported, and a restore failure after it is named beside it (P0 review M5), so a
+    // workspace left unrestored never passes unseen.
+    throw withRestoreFailure(error, await restoreWorkspace(workdir, attemptSha, snapshot));
   }
   const restoreFailure = await restoreWorkspace(workdir, attemptSha, snapshot);
   if (restoreFailure !== null) throw restoreFailure;

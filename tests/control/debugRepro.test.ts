@@ -70,6 +70,7 @@ async function checked(w: Awaited<ReturnType<typeof workspace>>, result: DebugRe
 const REPRO = "test -f tests/repro.test.txt && test -f fixed.txt";
 
 describe("checkReproduction (design §12.8)", () => {
+
   it("red at base and green at head passes", async () => {
     const w = await workspace();
     expect(await checked(w, { reproTests: ["tests/repro.test.txt"], reproCommand: REPRO })).toEqual({ kind: "passed", tests: ["tests/repro.test.txt"], command: REPRO });
@@ -215,14 +216,20 @@ describe("checkReproduction (design §12.8)", () => {
 });
 
 describe("checkReproduction keeps its own error (fix round 2, optional minor)", () => {
-  it("rethrows the check's error, not the restore's, when both fail", async () => {
+  // Ruling (2026-11-19 change-sized runs P0 review): 「同意这样大改，并且同意改所有必要的判据」 -- review M5: the restore's
+  // failure after a failed check is no longer swallowed (a workspace left unrestored passed unseen). Intent kept: the
+  // check's own error is the one reported -- it comes first in the message and is the `cause`; the restore's is named after.
+  // Mutation M5-R: rethrow the check's error alone again -> no "; restore failed:", red.
+  it("rethrows the check's error first, with the restore's failure named after it, when both fail", async () => {
     const w = await workspace();
     const aborted = new AbortController();
     aborted.abort();
     // The restore's checkout fails on a leftover index lock; the check itself fails first, on its aborted signal.
     writeFileSync(join(w.repo, ".git", "index.lock"), "");
-    await expect(checkReproduction({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, result: { reproTests: ["tests/repro.test.txt"], reproCommand: REPRO }, contract: contract("true"), timeoutMs: 10_000, as: { runId: "run-t" }, signal: aborted.signal }))
-      .rejects.toThrow(/^sh: aborted$/);
+    const thrown = await checkReproduction({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, result: { reproTests: ["tests/repro.test.txt"], reproCommand: REPRO }, contract: contract("true"), timeoutMs: 10_000, as: { runId: "run-t" }, signal: aborted.signal })
+      .then(() => null, (error: unknown) => error as Error);
+    expect(thrown!.message).toMatch(/^sh: aborted; restore failed: [\s\S]*index\.lock/);
+    expect((thrown!.cause as Error).message).toBe("sh: aborted");
   });
 });
 

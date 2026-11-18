@@ -59,6 +59,20 @@ const BASE = { "src/value.txt": "4\n", "tests/value.test.txt": "expect 4\n" };
 const CHECK = "test \"$(cut -d' ' -f2 tests/value.test.txt)\" = \"$(cat src/value.txt)\"";
 
 describe("runChecksAtBase (spec §4.2)", () => {
+  // Change-sized runs P0 review M5: a run that throws (the base version cannot be checked out: the index is locked) and a
+  // restore that fails after it on the same lock are both named; before, the restore's failure was dropped.
+  // Mutation M5-C: drop the restore failure in the catch (rethrow the run's error alone) -> no "restore failed", red.
+  it("a run that threw and a restore that failed after it are both named, the run's error first", async () => {
+    const w = await workspace(BASE, { "tests/value.test.txt": "expect 4 # reworded\n" });
+    await writeFile(join(w.repo, ".git", "index.lock"), "");
+    const thrown = await runChecksAtBase({ workdir: w.repo, base: w.base, attemptSha: w.attemptSha, files: ["tests/value.test.txt"], requiredChecks: [CHECK], timeoutMs: 10_000, as: { runId: "run-t" } })
+      .then(() => null, (error: unknown) => error as Error);
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown!.message).toMatch(/index\.lock[\s\S]*; restore failed: [\s\S]*index\.lock/);
+    expect(thrown!.message.indexOf("; restore failed: ")).toBeGreaterThan(0);
+    expect((thrown!.cause as Error).message).not.toContain("restore failed");
+  });
+
   it("passes when the attempt's code also meets the base version of a changed test", async () => {
     // A refactor of the test (same expectation, new wording) with code that still gives 4.
     const w = await workspace(BASE, { "tests/value.test.txt": "expect 4 # reworded\n" });

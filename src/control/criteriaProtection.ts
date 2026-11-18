@@ -3,7 +3,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { git } from "../scheduler/gitExec.js";
 import type { DispatchedAs } from "./commandClient.js";
-import { exitsZero, restoreWorkspace, runSetup, snapshotWorkspace, type WorkspaceSnapshot } from "./debugRepro.js";
+import { exitsZero, restoreWorkspace, runSetup, snapshotWorkspace, withRestoreFailure, type WorkspaceSnapshot } from "./debugRepro.js";
 import { gitChild, oneLine } from "./integrationGit.js";
 import { QUIET_GIT } from "./workspace.js";
 
@@ -251,8 +251,8 @@ export async function runChecksAtBase(input: {
       if (!(await exitsZero(workdir, command, timeoutMs, as, signal))) { verdict = { kind: "base-failed", command }; break; }
     }
   } catch (error) {
-    await restoreWorkspace(workdir, attemptSha, snapshot);
-    throw error;
+    // P0 review M5: a failed restore after a failed check is named beside it, never swallowed.
+    throw withRestoreFailure(error, await restoreWorkspace(workdir, attemptSha, snapshot));
   }
   const restoreFailure = await restoreWorkspace(workdir, attemptSha, snapshot);
   if (restoreFailure !== null) throw restoreFailure;
