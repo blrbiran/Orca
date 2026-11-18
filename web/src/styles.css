@@ -39,8 +39,12 @@
   --accent-hover: #93c5fd; /* a filled primary on hover; --on-accent stays readable on it (contrast.test.ts) */
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45), 0 1px 3px rgba(0, 0, 0, 0.3); /* menus and dialogs float above the page */
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* The system stacks, named (#356 review): a pinned theme that keeps them must set --font / --mono to them, or a light
+     browser's system-light block (same specificity) would hand it the light theme's Inter. */
+  --system-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --system-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font: var(--system-sans);
+  --mono: var(--system-mono);
   --text-xs: 12px;
   --text-sm: 13px;
   --text-md: 14px;
@@ -107,7 +111,8 @@
    controller session a9f9d6de, human: 「之前的主题都不好看，你可以都整体再优化一遍」). Each block defines every colour
    token the light block does and comes AFTER the system-light block above, so a pinned theme also wins over the
    browser's light preference (equal specificity, later source). A theme is more than colour: it may also set the type
-   (--font / --mono, the bundled --font-sans / --font-mono or a system stack), the radii (--radius-xs / -sm / --radius)
+   (--font / --mono, the bundled --font-sans / --font-mono or the named --system-sans / --system-mono -- always set,
+   since #356 the system-light block sets them too), the radii (--radius-xs / -sm / --radius)
    and the density (--space-1..5, --control-h, --control-h-sm) -- only through those tokens, so the Tailwind utilities
    (index.css maps them) and the legacy rules both follow. Pinned per theme by web/tests/themes.test.ts. */
 /* frost: crisp cool daylight -- blue-grey paper, white cards, an ocean-blue accent; Inter, rounder corners, roomier controls. */
@@ -181,6 +186,7 @@
   --stall: #f5d48f;
   --ok-subtle: rgba(134, 217, 160, 0.09); --warn-subtle: rgba(242, 198, 109, 0.09); --danger-subtle: rgba(242, 154, 154, 0.1); --info-subtle: rgba(158, 194, 245, 0.1);
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.25); --shadow-pop: 0 14px 36px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
+  --font: var(--system-sans); --mono: var(--system-mono);
   --radius-xs: 6px; --radius-sm: 10px; --radius: 16px;
   --space-1: 5px; --space-2: 10px; --space-3: 15px; --space-4: 20px; --space-5: 30px;
   --control-h: 36px; --control-h-sm: 30px;
@@ -200,6 +206,7 @@
   --stall: #f7d277;
   --ok-subtle: rgba(126, 212, 146, 0.09); --warn-subtle: rgba(247, 201, 72, 0.09); --danger-subtle: rgba(255, 127, 112, 0.1); --info-subtle: rgba(147, 189, 242, 0.1);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4); --shadow-pop: 0 10px 28px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.4);
+  --font: var(--system-sans); --mono: var(--system-mono);
   --radius-xs: 2px; --radius-sm: 3px; --radius: 4px;
   --control-h: 30px; --control-h-sm: 24px;
 }

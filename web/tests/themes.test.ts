@@ -108,11 +108,15 @@ describe("the theme list (session e236bbe4)", () => {
 
   // A candidate block that comes before the system-light block, or misses a token, lets the browser's light preference
   // leak through (equal specificity, so the later block wins): a navy page with light-theme fields.
-  it("defines every colour token the default light theme does, after the system-light block", () => {
-    // Ruling (2026-11-18 #356): lilac replaces light, scale included -- the light block now also sets scale tokens, which a
-    // candidate may leave to the shared :root scale, so the reference is the light block's colour tokens only.
-    // mutation: drop --kind-1 from frost -> red here; mutation: drop this SCALE filter -> dusk (system type) has no --font, red here
-    const reference = [...tokens("light").keys()].filter((name) => !SCALE.includes(name));
+  // Ruling (2026-11-18 #356): lilac replaces light, scale included -- the system-light block now sets type, radii and
+  // control heights too. A candidate cannot leave one of them to :root: on a light browser the system-light block
+  // (`:root:not([data-theme="dark"])`, the same specificity as a candidate) overrides :root, so a token the candidate
+  // does not set comes from the browser's preference (#356 review I-1: dusk and ember wore Inter on a light browser).
+  // The reference is therefore every token the system-light block sets, colour and scale alike.
+  it("defines every token the system-light block does, after the system-light block", () => {
+    // mutation: drop --kind-1 from frost -> red here; mutation: drop dusk's --font -> red here
+    const reference = [...blockAt(':root:not([data-theme="dark"]) {').body.matchAll(/(--[a-z0-9-]+|color-scheme):/g)].map((m) => m[1]!);
+    expect(reference).toContain("--font");
     const systemLight = css.indexOf(':root:not([data-theme="dark"]) {');
     for (const theme of PINNED) {
       const t = tokens(theme);
@@ -191,10 +195,16 @@ describe("each candidate theme is more than a palette", () => {
 
   // Only the bundled faces (fonts.css, woff2) or the system stack: a family named here that the panel does not ship
   // would fall back silently on every machine without it.
-  it("chooses its type only from the bundled fonts", () => {
+  // Ruling (2026-11-18 #356): lilac replaces light, scale included -- since the system-light block sets --font / --mono,
+  // a theme on the system stack must name it (#356 review I-1), so :root's stacks are named --system-sans /
+  // --system-mono and a theme may point at them too.
+  it("chooses its type only from the bundled fonts or the named system stack", () => {
+    // mutation: dusk's --font: "Comic Sans MS" -> red here
+    expect(tokens("dark").get("--font")).toBe("var(--system-sans)");
+    expect(tokens("dark").get("--mono")).toBe("var(--system-mono)");
     for (const theme of SCALED) {
       const t = tokens(theme);
-      for (const name of ["--font", "--mono"]) if (t.has(name)) expect(t.get(name), `${theme} ${name}`).toMatch(/^var\(--font-(sans|mono)\)$/);
+      for (const name of ["--font", "--mono"]) if (t.has(name)) expect(t.get(name), `${theme} ${name}`).toMatch(/^var\(--(font-sans|font-mono|system-sans|system-mono)\)$/);
     }
   });
 });
