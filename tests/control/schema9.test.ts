@@ -31,8 +31,8 @@ describe("schema 8 to 9 (issue-fixes spec §5.2, ruling H5)", () => {
   it("a fresh store is version 10 with the activity table: STRICT, group-referencing, both indexes", async () => {
     const store = await openControlStore({ stateDir: await stateDir() });
     try {
-      expect(schemaVersion).toBe("25"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: human authorised necessary criteria rewrites for #341 (controller brief 2026-11-18), schema 24 -> 25 base_check_results
-      expect(version(store.db)).toBe("25"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: human authorised necessary criteria rewrites for #341 (controller brief 2026-11-18), schema 24 -> 25 base_check_results
+      expect(schemaVersion).toBe("25"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; schema 24 -> 25, #341 base_check_results)
+      expect(version(store.db)).toBe("25"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; schema 24 -> 25, #341 base_check_results)
       expect(String(store.db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='activity'").get()!.sql)).toMatch(/STRICT\s*$/);
       expect(store.db.prepare("PRAGMA table_info(activity)").all().map((row) => [row.name, row.type, row.notnull])).toEqual([
         ["seq", "INTEGER", 0], ["group_id", "TEXT", 1], ["task_id", "TEXT", 0], ["run_id", "TEXT", 0], ["at", "INTEGER", 1], ["kind", "TEXT", 1], ["body", "TEXT", 1],
@@ -59,7 +59,7 @@ describe("schema 8 to 9 (issue-fixes spec §5.2, ruling H5)", () => {
     raw.close();
     const store = await openControlStore({ stateDir: dir });
     try {
-      expect(version(store.db)).toBe("25"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: human authorised necessary criteria rewrites for #341 (controller brief 2026-11-18), schema 24 -> 25 base_check_results
+      expect(version(store.db)).toBe("25"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; schema 24 -> 25, #341 base_check_results)
       expect(dump(store.db)).toEqual(before);
       expect(hasActivity(store.db)).toBe(true);
       expect(store.db.prepare("SELECT COUNT(*) AS n FROM activity").get()).toMatchObject({ n: 0 });
@@ -67,11 +67,11 @@ describe("schema 8 to 9 (issue-fixes spec §5.2, ruling H5)", () => {
   });
 
   // One-way (as 7 to 8 was): a store from a later build is refused, byte for byte unchanged.
-  it("refuses a version-26 store and leaves its bytes unchanged", async () => { // Ruling: 「这次批准改写所有必要的判据」 (the future version moves 24 -> 25 with schema 24, raw usage detail); Ruling: human authorised necessary criteria rewrites for #341 (controller brief 2026-11-18), the future version moves 25 -> 26 with schema 25 base_check_results
+  it("refuses a version-26 store and leaves its bytes unchanged", async () => { // Ruling: 「这次批准改写所有必要的判据」 (the future version moves 24 -> 25 with schema 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; the future version moves 25 -> 26 with schema 25, #341 base_check_results)
     const dir = await stateDir();
     (await openControlStore({ stateDir: dir })).close();
     const raw = new DatabaseSync(join(dir, "control.sqlite"));
-    raw.prepare("UPDATE meta SET value='26' WHERE key='schemaVersion'").run(); // Ruling: 「这次批准改写所有必要的判据」 (the future version moves 24 -> 25 with schema 24, raw usage detail); Ruling: human authorised necessary criteria rewrites for #341 (controller brief 2026-11-18), the future version moves 25 -> 26 with schema 25 base_check_results
+    raw.prepare("UPDATE meta SET value='26' WHERE key='schemaVersion'").run(); // Ruling: 「这次批准改写所有必要的判据」 (the future version moves 24 -> 25 with schema 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; the future version moves 25 -> 26 with schema 25, #341 base_check_results)
     raw.close();
     const bytes = await readFile(join(dir, "control.sqlite"));
     await expect(openControlStore({ stateDir: dir })).rejects.toThrow("control-schema-unsupported");

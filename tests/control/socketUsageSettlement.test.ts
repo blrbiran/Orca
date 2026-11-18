@@ -26,8 +26,8 @@ describe("schema 20 -> 21: commands.person_principal", () => {
       raw.close();
       const store = await openControlStore({ stateDir: dir, now: () => 2000 });
       try {
-        expect(schemaVersion).toBe("25"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: human authorised necessary criteria rewrites for #341 (controller brief 2026-11-18), schema 24 -> 25 base_check_results
-        expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("25"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: human authorised necessary criteria rewrites for #341 (controller brief 2026-11-18), schema 24 -> 25 base_check_results
+        expect(schemaVersion).toBe("25"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; schema 24 -> 25, #341 base_check_results)
+        expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("25"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; schema 24 -> 25, #341 base_check_results)
         expect(store.db.prepare("SELECT group_id,id,payload_hash,result,client,principal,person_principal FROM commands").all())
           .toEqual([{ group_id: "g", id: "c1", payload_hash: "h", result: "{}", client: "web", principal: "user:owner", person_principal: null }]);
       } finally { store.close(); }

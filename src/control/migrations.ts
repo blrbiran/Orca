@@ -260,9 +260,10 @@ export const schema23To24 = usageDetailColumns.map(([name, type]) => `ALTER TABL
 
 // Pre-existing failures spec 2026-11-18 L3 (#341): a task's failing required check, run once at its group's base, keyed by
 // (repository, base commit, command) across groups. `pending` until the base run ends; then red, green or unknown ("could
-// not tell": setup failed, timeout, the base could not be checked out). The task run that asked for it is kept beside the
-// answer (who, when), so a later reader can name it. Created empty; IF NOT EXISTS so a repeated step is harmless.
-export const schema24To25 = `CREATE TABLE IF NOT EXISTS base_check_results(repo_id TEXT NOT NULL, base TEXT NOT NULL, command TEXT NOT NULL, result TEXT NOT NULL CHECK(result IN ('pending','red','green','unknown')), tail TEXT, why TEXT, group_id TEXT NOT NULL, task_id TEXT NOT NULL, run_id TEXT NOT NULL, requested_at INTEGER NOT NULL, at INTEGER, PRIMARY KEY(repo_id, base, command)) STRICT;
+// not tell": setup failed, timeout, not runnable, the base could not be checked out). The newest task run that asked for it
+// is kept beside the answer (who, when), so a later reader can name it; `attempts` counts base runs started for the row (an
+// `error:` unknown may be asked once more, Task 3 review I-2). Created empty; IF NOT EXISTS so a repeated step is harmless.
+export const schema24To25 = `CREATE TABLE IF NOT EXISTS base_check_results(repo_id TEXT NOT NULL, base TEXT NOT NULL, command TEXT NOT NULL, result TEXT NOT NULL CHECK(result IN ('pending','red','green','unknown')), tail TEXT, why TEXT, group_id TEXT NOT NULL, task_id TEXT NOT NULL, run_id TEXT NOT NULL, requested_at INTEGER NOT NULL, at INTEGER, attempts INTEGER NOT NULL DEFAULT 1 CHECK(attempts >= 1), PRIMARY KEY(repo_id, base, command)) STRICT;
 `;
 
 /** 23 → 24: idempotent per column (see usageDetailColumns). */

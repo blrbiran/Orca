@@ -184,3 +184,16 @@ export function deliveredAcceptanceProblem(body: unknown): string | null {
   if (record === null || target === null || record.result !== "failed" || record.tip !== target.tip || record.commit !== target.commit) return null;
   return `delivered-acceptance-failed:${record.commands.at(-1)?.command ?? "?"}`;
 }
+
+/**
+ * Spec 2026-11-16: the commit the group branched from -- the base of its first work run, before any task landed. Used to
+ * classify a red full suite (red there too means the failure pre-dated this group) and, pre-existing failures spec L3
+ * (#341), as the base a failed task check is run at (baseCheckRecord.ts). Null before any work run has a base.
+ */
+export function groupBaseCommit(store: ControlStore, groupId: string): string | null {
+  for (const row of store.db.prepare("SELECT body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)) {
+    const run = JSON.parse(String(row.body)) as { phase?: unknown; drive?: { base?: unknown } };
+    if (run.phase === "work" && typeof run.drive?.base === "string") return run.drive.base;
+  }
+  return null;
+}

@@ -12,7 +12,7 @@ import { unionSetup } from "./setupUnion.js";
 import { isDirFlowGroup } from "../flow/groups.js";
 import { git } from "../scheduler/gitExec.js";
 import type { AdmissionGate } from "./admissionGate.js";
-import { acceptanceOf, landedRunCount, landedTaskCount, maxLandingsWithoutAcceptance, type FullSuiteRecord, type GroupAcceptance } from "./groupAcceptanceRecord.js";
+import { acceptanceOf, groupBaseCommit, landedRunCount, landedTaskCount, maxLandingsWithoutAcceptance, type FullSuiteRecord, type GroupAcceptance } from "./groupAcceptanceRecord.js";
 import { fullSuiteCommand, suggestFullSuiteCommand } from "./fullSuite.js";
 import type { ControlStore } from "./store.js";
 
@@ -141,18 +141,6 @@ export function acceptanceCommands(store: ControlStore, groupId: string, which: 
     checks,
     timeoutMs: Math.max(...contracts.map((contract) => contract.executionPolicy.perAttemptTimeoutMs)),
   };
-}
-
-/**
- * Spec 2026-11-16: the commit the group branched from -- the base of its first work run, before any task landed.
- * Used only to classify a red full suite: red there too means the failure pre-dated this group.
- */
-function groupBaseCommit(store: ControlStore, groupId: string): string | null {
-  for (const row of store.db.prepare("SELECT body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)) {
-    const run = JSON.parse(String(row.body)) as { phase?: unknown; drive?: { base?: unknown } };
-    if (run.phase === "work" && typeof run.drive?.base === "string") return run.drive.base;
-  }
-  return null;
 }
 
 /** One round of the pass; answers whether anything was recorded. */

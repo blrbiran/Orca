@@ -119,7 +119,7 @@ export async function priorFailureOf(store: ControlStore, run: { runId: string; 
   if (cause === NARRATION_ONLY_CAUSE) entry.evidence = [narrationOnlyEvidence(drive?.failureCause?.detail), ...(entry.evidence ?? [])].slice(0, PRIOR_FAILURE_BOUNDS.evidenceEntries);
   // Spec L3 (#341): red at the base goes first, so the entry bound never drops it.
   const atBase = last?.rejectCategory === "required-check-failed" && typeof last.failingCommand === "string" && typeof run.groupId === "string"
-    ? bounded(baseCheckEvidence(store, run.groupId, last.failingCommand), PRIOR_FAILURE_BOUNDS.evidenceEntry) : null;
+    ? baseCheckEvidence(store, run.groupId, last.failingCommand, PRIOR_FAILURE_BOUNDS.evidenceEntry) : null;
   if (atBase !== null) entry.evidence = [atBase, ...(entry.evidence ?? [])].slice(0, PRIOR_FAILURE_BOUNDS.evidenceEntries);
   return priorFailureSchema.parse(entry);
 }

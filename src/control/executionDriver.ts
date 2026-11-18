@@ -1101,8 +1101,9 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     blockRun(deps, runId, "C", report.terminal.stopReason?.includes("codex-skills-") ? report.terminal.stopReason : `terminal:${outcome}`, { outcome, ...stopReason, ...failure, ...catalogMiss, ...claimed });
     // Pre-existing failures spec L3 (#341): a task run that failed its required check asks for that command's run at the
     // group's base (once per repository, base and command; baseCheck.ts runs it off the round). Never blocks the settle.
-    if (run.mode === undefined && run.recoveryOf === undefined && report.terminal.lastFailure !== undefined) {
-      try { write(deps, () => requestBaseCheck(store, { groupId: run.groupId, taskId: run.taskId!, runId }, report.terminal!.lastFailure)); }
+    // A saved-result verification or a recovery run asks nothing (requestBaseCheck says why).
+    if (report.terminal.lastFailure !== undefined) {
+      try { write(deps, () => requestBaseCheck(store, { groupId: run.groupId, taskId: run.taskId!, runId, mode: run.mode, recoveryOf: run.recoveryOf }, report.terminal!.lastFailure)); }
       catch (error) { process.stderr.write(`orca-driver: ${runId}: base check not asked for: ${logError(error)}\n`); }
     }
     if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)await retainSavedInterruption(deps,runId);

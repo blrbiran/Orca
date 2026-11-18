@@ -83,6 +83,27 @@ export function applyAddLiveNote(store: ControlStore, command: AddLiveNoteComman
   } };
 }
 
+/**
+ * Pre-existing failures spec L3, Task 3 review I-3: a note Orca itself queues for the task's running run (the base check's
+ * red line). Only while the task has an active prepared run (a note for a later run is the prior failure's job), within
+ * LIVE_NOTE_MAX_BYTES and the queue bound, once per `noteId`. Inside the caller's transaction; the caller then mirrors the
+ * queue with writeRunLiveNotes. Answers the run it was queued for, or null.
+ */
+export function queueOrcaLiveNote(store: ControlStore, groupId: string, taskId: string, noteId: (runId: string) => string, text: string): string | null {
+  if (Buffer.byteLength(text, "utf8") > LIVE_NOTE_MAX_BYTES) return null;
+  const work = workStatus(store, groupId, taskId);
+  if (work === null || work.kind !== "task" || finished(work.status)) return null;
+  const row = store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? AND active=1").get(groupId, taskId);
+  if (row === undefined || activeSourceDir(store, groupId, taskId) === null) return null;
+  const runId = String(row.id), id = noteId(runId);
+  const notes = liveNotesOf(groupBody(store, groupId));
+  if (notes.some((note) => note.noteId === id)) return null;
+  if (notes.filter((note) => note.taskId === taskId && note.state === "queued").length >= LIVE_NOTE_QUEUE_MAX) return null;
+  saveNotes(store, groupId, [...notes, { noteId: id, taskId, text, at: store.now(), by: "orca", state: "queued" }]);
+  recordProjectionChange(store, [groupId]);
+  return runId;
+}
+
 /** The bytes Orca writes for a task's queue (ccloop's `orca-live-notes-v1`); null when there is nothing queued. */
 function fileBytes(notes: LiveNoteRecord[], taskId: string): string {
   const queued = notes.filter((note) => note.taskId === taskId && note.state === "queued");
