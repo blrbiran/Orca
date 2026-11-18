@@ -304,6 +304,8 @@ export type MultiSplitTaskV1 = {
   dependsOn: string[];
   traces: string[];
 };
+/** #351 addendum: one place the split reports its draft does not meet the requirement as written (src/control/requirementSchemas.ts). */
+export type RequirementConflictV1 = { criterion: string; feedback?: string; why: string };
 /** N1 spec §8: a draft as the requirement view shows it -- the stored plan is left out (draftBodySchema without `plan`). */
 export type DraftViewV1 = {
   draftNo: number;
@@ -311,7 +313,8 @@ export type DraftViewV1 = {
   autoRetry: number;
   waiting: null | "requirement-budget-exhausted" | "requirement-usage-unknown";
   feedback: string | null;
-  output: { tasks: SplitTaskV1[]; notes: string } | { tasks: MultiSplitTaskV1[]; notes: string } | null;
+  /** #351 addendum: `requirementConflicts`, only on a single-repository split that reported any (never defaulted). */
+  output: { tasks: SplitTaskV1[]; notes: string; requirementConflicts?: RequirementConflictV1[] } | { tasks: MultiSplitTaskV1[]; notes: string } | null;
   draftHash: string | null;
   reasons: string[];
   layers: string[][] | null;

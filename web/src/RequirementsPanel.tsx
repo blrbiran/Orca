@@ -26,7 +26,7 @@ import { localDateTime } from "./ui/localTime.js";
 import type { ControlAction } from "./controlApi.js";
 import { nextCommandId } from "./controlApi.js";
 import type { ControlRefusal } from "./controlState.js";
-import type { AgentsViewV1, ControlConfigV1, ControlSummaryV1, ModelListState, OperatorPreferencesV1, RequirementDraftEditPayloadV1, RequirementViewV1 } from "./controlTypes.js";
+import type { AgentsViewV1, ControlConfigV1, ControlSummaryV1, ModelListState, OperatorPreferencesV1, RequirementConflictV1, RequirementDraftEditPayloadV1, RequirementViewV1 } from "./controlTypes.js";
 import { requirementSelection } from "./requirementAgent.js";
 import { inScope } from "./projectScope.js";
 import type { GroupScope } from "./projectScope.js";
@@ -364,6 +364,19 @@ function canAddImpliedPath(view: View, draft: Draft, entry: { taskId: string; pa
   return primary >= 0 && added >= primary;
 }
 
+const conflictsOf = (draft: Draft): RequirementConflictV1[] => (draft.output !== null && "requirementConflicts" in draft.output ? draft.output.requirementConflicts ?? [] : []);
+
+function RequirementConflicts(props: { conflicts: RequirementConflictV1[] }): JSX.Element {
+  const { t } = useTranslation();
+  return (
+    <div role="alert" data-tone="warn" data-requirement-conflicts>
+      <p>{t("requirements.requirementConflictsTitle", { count: props.conflicts.length })}</p>
+      <ul>{props.conflicts.map((entry, index) => <li key={index}>{t("requirements.requirementConflict", { criterion: entry.criterion, why: entry.why })}
+        {entry.feedback !== undefined && <><br /><small>{t("requirements.requirementConflictFeedback", { feedback: entry.feedback })}</small></>}</li>)}</ul>
+    </div>
+  );
+}
+
 function DraftReview(props: { view: View; draft: Draft; current: boolean; onCommand: OnCommand; archived?: boolean } & EditableDrafts): JSX.Element {
   const { t } = useTranslation();
   const { draft } = props, groupId = props.view.summary.groupId;
@@ -410,6 +423,8 @@ function DraftReview(props: { view: View; draft: Draft; current: boolean; onComm
         {mayEdit && canAddImpliedPath(props.view, draft, entry) && <button type="button" className="ms-2" data-add-implied-path onClick={() => edit({ kind: "add-implied-path", taskId: entry.taskId, path: entry.path })}>{t("requirements.addImpliedPath", { task: entry.taskId, path: entry.path })}</button>}</p>)}
       {/* Tester #345: a path a task's goal names that no task may write (the split adds only files the base commit lacks). */}
       {(draft.goalPathsOutsideTargets ?? []).map((entry) => <p role="note" data-goal-path key={`${entry.taskId}:${entry.path}`}>{t("requirements.goalPath", { task: entry.taskId, path: entry.path })}</p>)}
+      {/* #351 addendum: the split's own report that this draft does not meet the requirement as written (code does not judge it). */}
+      {conflictsOf(draft).length > 0 && <RequirementConflicts conflicts={conflictsOf(draft)} />}
       {draft.reasons.length > 0 && <><p>{t("requirements.handedBack")}</p><ul>{draft.reasons.map((reason) => { const words = explainSplitReason(reason); return <li key={reason}>{reason}{words !== null ? ` · ${words}` : ""}</li>; })}</ul></>}
       {!props.archived && draft.state === "awaiting-review" && (
         <>

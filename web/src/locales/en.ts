@@ -1682,6 +1682,12 @@ export const en = {
     feedback: "Feedback",
     sendBack: "Send back",
     acceptSplit: "Accept this split",
+    // #351 addendum: the split's own report that its draft does not meet the requirement as written.
+    requirementConflictsTitle: "This draft does not meet the requirement as written ({{count}})",
+    requirementConflict: "{{criterion}}: {{why}}",
+    requirementConflictFeedback: "Caused by your feedback: “{{feedback}}”",
+    requirementConflictsHelp: "The split followed your feedback and reports this itself; Orca does not check it. Accept anyway if the feedback is what you want, send feedback to restore the requirement, or revise the requirement.",
+    acceptAnyway: "Accept anyway",
     document: "Requirement document",
     export: "Export: {{state}}",
     exportCommit: "Commit {{commit}}",

@@ -1504,6 +1504,12 @@ export const zh: Translation<typeof en> = {
     feedback: "反馈",
     sendBack: "退回重拟",
     acceptSplit: "接受这个拆分",
+    // #351 addendum: the split's own report that its draft does not meet the requirement as written.
+    requirementConflictsTitle: "这份草稿与需求原文不一致（{{count}} 处）",
+    requirementConflict: "{{criterion}}：{{why}}",
+    requirementConflictFeedback: "由你的反馈引起：“{{feedback}}”",
+    requirementConflictsHelp: "拆分照你的反馈做了，这是它自己报告的；Orca 不做校验。如果反馈就是你要的，可以仍然接受；否则发反馈恢复需求，或修订需求。",
+    acceptAnyway: "仍然接受",
     document: "需求文档",
     export: "导出：{{state}}",
     exportCommit: "提交 {{commit}}",
