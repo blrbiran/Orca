@@ -150,20 +150,20 @@ const queuedFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) 
 
 /**
  * Tester #369 (c): a pause stops new claims only; an attempt already running keeps going (stuck-runs spec: an accepted run
- * is not held). The receipt says so for the runs the group view showed running just before the pause, and names the
- * command that ends one now. Read in the payload step (as confirm's notes are), printed by the formatter.
+ * is not held). The receipt says so for the runs the group view shows running or starting, and names the command that
+ * ends one now. Review of D4 (I6): the view is read after the pause is answered (formatWith), so the read never holds or
+ * blocks the pause, and a run still running then is one that keeps going; a read that fails gives the plain receipt.
  */
-let pauseRunning: string[] = [];
-let pauseGroup = "";
-const runningRunIds = (view: unknown): string[] => ((view as { runs?: Array<{ runId: string; taskId: string | null; state?: string }> }).runs ?? [])
-  .filter((run) => run.state === "running" && run.taskId !== null).map((run) => run.runId);
-const pausedFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) => {
-  const result = (body as { result?: { kind?: unknown } } | null)?.result, running = pauseRunning;
-  pauseRunning = [];
+const activeRunIds = (view: unknown): string[] => ((view as { runs?: Array<{ runId: string; taskId: string | null; state?: string }> }).runs ?? [])
+  .filter((run) => (run.state === "running" || run.state === "starting") && run.taskId !== null).map((run) => run.runId);
+const pausedFormat = (row: CommandDef): CommandDef => ({ ...row, formatWith: async (body, c) => {
+  const result = (body as { result?: { kind?: unknown } } | null)?.result;
   if (result?.kind !== "paused") return row.format(body);
+  let running: string[];
+  try { running = activeRunIds(await groupView(c)); } catch { running = []; }
   if (running.length === 0) return "paused: no new run is claimed";
   return [`paused: no new run is claimed; ${running.length} ${running.length === 1 ? "run already running keeps going until it ends" : "runs already running keep going until they end"} (${running.join(", ")})`,
-    `to end one now: orca run abandon ${pauseGroup} --run <run> --note <why>`].join("\n");
+    `to end one now: orca run abandon ${group(c)} --run <run> --note <why>`].join("\n");
 } });
 
 /**
@@ -529,8 +529,7 @@ export const WORK_ROWS: CommandDef[] = [
     // Session 3cfc2e73 D3: the confirm result carries no allocations; the lines come from the view the payload read.
     format: (body: unknown) => { const lines = confirmNote; confirmNote = []; return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`; } }),
   queuedFormat(empty("group", "start", "start a confirmed group (one confirmed with --hold); at the running-group cap it is queued", "start", "start")),
-  pausedFormat(verb({ domain: "group", action: "pause", summary: "stop dispatching new runs (running ones finish)", verb: "pause-dispatch", positionals: [GROUP],
-    route: (c) => `groups/${group(c)}/pause-dispatch`, payload: async (c) => { pauseRunning = runningRunIds(await groupView(c)); pauseGroup = group(c); return {}; } })),
+  pausedFormat(empty("group", "pause", "stop dispatching new runs (running ones finish)", "pause-dispatch", "pause-dispatch")),
   queuedFormat(empty("group", "resume", "dispatch again after a pause", "resume-dispatch", "resume-dispatch")),
   verb({ domain: "group", action: "stop-handoff", summary: "stop: running tasks hand off and stop", verb: "handoff-stop", positionals: [GROUP],
     flags: [{ name: "deadline", type: "string", summary: "UTC YYYY-MM-DDTHH:mm:ss.sssZ" }],

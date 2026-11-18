@@ -140,6 +140,11 @@ export interface CommandDef {
   /** Human text for a 2xx body. */
   format(body: unknown): string;
   /**
+   * Tester #369 (c), review of D4 (I6): human text for a 2xx body that reads the panel after the answer (the invocation's
+   * own context, nothing kept between invocations); used instead of `format` for human output. One that throws gives `format`'s.
+   */
+  formatWith?(body: unknown, context: WriteContext): Promise<string>;
+  /**
    * Tester follow-up F §4 (#173): the body --json prints for a 2xx answer, when the row adds what its human text says
    * (only-add, e.g. `warnings`); default: the body as answered.
    */

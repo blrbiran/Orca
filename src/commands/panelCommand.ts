@@ -129,7 +129,12 @@ export async function runPanelCommand(def: CommandDef, args: ParsedArgs, io: Com
     let next: string[] = [];
     if (refused !== null) { try { next = await def.next!(refused, context!) ?? []; } catch { next = []; } }
     const shown = next.length > 0 && args.global.json && typeof response.body === "object" && response.body !== null ? { ...response, body: { ...(response.body as object), next } } : response;
-    return printResponse(shown, { json: args.global.json, quiet: args.global.quiet, format: def.format, ...(hint === undefined ? {} : { hint: () => hint }), ...(next.length === 0 ? {} : { next }),
+    // Tester #369 (c): a row whose receipt reads the panel after the answer (formatWith), only for human output.
+    let formatted: string | undefined;
+    if (def.formatWith !== undefined && context !== undefined && !args.global.json && !args.global.quiet && exitCodeFor(shown) === 0) {
+      try { formatted = await def.formatWith(shown.body, context); } catch { formatted = undefined; }
+    }
+    return printResponse(shown, { json: args.global.json, quiet: args.global.quiet, format: formatted === undefined ? def.format : () => formatted!, ...(hint === undefined ? {} : { hint: () => hint }), ...(next.length === 0 ? {} : { next }),
       ...(context?.ids.group === undefined ? {} : { groupId: context.ids.group }) }, io, request);
   };
   try {

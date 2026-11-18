@@ -24,6 +24,27 @@ describe("the pause receipt says what a pause does to a running run (#369 c)", (
     expect(out.stdout).toContain("to end one now: orca run abandon g-alpha --run <run> --note <why>");
   });
 
+  // Review of D4 (I6): a run still starting keeps going too; it is counted with the running ones.
+  it("a starting run is counted with the running ones", async () => {
+    const w = await world({}, { "POST groups/g-alpha/pause-dispatch": paused });
+    const view = groupView();
+    w.state.view = { ...view, runs: [...view.runs, { runId: "run-7", taskId: "t2", state: "running", checkpointId: null }, { runId: "run-8", taskId: "t3", state: "starting", checkpointId: null }] } as never;
+    const out = await cli(["group", "pause", "g-alpha"], w.dir);
+    expect(out.code, out.stderr).toBe(0);
+    // mutation: count only "running" -> 1 run (run-7), red here.
+    expect(out.stdout).toContain("paused: no new run is claimed; 2 runs already running keep going until they end (run-7, run-8)");
+  });
+
+  // Review of D4 (I6): the receipt's view read never blocks the pause; one that fails gives the plain receipt.
+  it("the group view cannot be read: the pause is still sent and the receipt is the plain one", async () => {
+    const w = await world({}, { "POST groups/g-alpha/pause-dispatch": paused, "GET groups/g-alpha": { status: 500, body: { error: { code: "internal", message: "boom" } } } });
+    const out = await cli(["group", "pause", "g-alpha"], w.dir);
+    // mutation: read the view before sending, without a catch -> exit 2 and no POST, red here.
+    expect(out.code, out.stderr).toBe(0);
+    expect(w.posts().map((post) => post.path)).toEqual(["groups/g-alpha/pause-dispatch"]);
+    expect(out.stdout.trim()).toBe("paused: no new run is claimed");
+  });
+
   it("with no running run: no line about running runs", async () => {
     const w = await world({}, { "POST groups/g-alpha/pause-dispatch": paused });
     const out = await cli(["group", "pause", "g-alpha"], w.dir);
