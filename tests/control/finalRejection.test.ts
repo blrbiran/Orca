@@ -54,15 +54,16 @@ describe("the next run is told the check that failed its predecessor's last atte
     try {
       expect(t.body(run).drive.lastFailure).toBeUndefined();
       expect(t.body(run).drive.failureCause).toMatchObject({ cause: "required-check-failed", phase: "verify" });
-      expect(await finalRejectionOf(t.h.store, run)).toEqual({ rejectCategory: "required-check-failed", failingCommand: CHECK, evidence: EVIDENCE });
+      // Each fact measured on its own (expect.soft): a mutation shows every one it breaks, not the first.
+      expect.soft(await finalRejectionOf(t.h.store, run)).toEqual({ rejectCategory: "required-check-failed", failingCommand: CHECK, evidence: EVIDENCE });
       // mutation: finalRejectionOf answers null -> run-failed:required-check-failed, no command, red here.
-      expect(await priorFailureOf(t.h.store, { runId: run, groupId: "g", drive: t.body(run).drive })).toEqual({
+      expect.soft(await priorFailureOf(t.h.store, { runId: run, groupId: "g", drive: t.body(run).drive })).toEqual({
         runId: run, rejectCategory: "required-check-failed", failingCommand: CHECK, evidence: EVIDENCE, failureCause: "required-check-failed",
       });
       // Step C flushed the collector before it read, and asked for the base run of that command.
-      expect(flushed).toContain(run);
-      // mutation: finalRejectionOf answers null (or step C never reads it) -> no row, red here.
-      expect(listBaseChecks(t.h.store).map((row) => [row.command, row.runId, row.taskId])).toEqual([[CHECK, run, "a"]]);
+      expect.soft(flushed).toContain(run);
+      // mutation: finalRejectionOf answers null (or step C never flushes before it reads) -> no row, red here.
+      expect.soft(listBaseChecks(t.h.store).map((row) => [row.command, row.runId, row.taskId])).toEqual([[CHECK, run, "a"]]);
     } finally { await t.h.dispose(); }
   });
 
