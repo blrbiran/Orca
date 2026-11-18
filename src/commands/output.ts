@@ -22,7 +22,7 @@ export function errorOf(body: unknown): { code: string; message: string } | null
  * `code: message` named the code twice. The code once, then the whole detail (it may hold colons); any other message as is.
  */
 function refusalLine(error: { code: string; message: string }): string {
-  if (error.message === error.code) return error.code;
+  if (error.message === error.code || error.message === "") return error.code;
   if (error.message.startsWith(`${error.code}:`)) return `${error.code}: ${error.message.slice(error.code.length + 1)}`;
   return `${error.code}: ${error.message}`;
 }
@@ -33,7 +33,7 @@ function refusalLine(error: { code: string; message: string }): string {
  */
 export function printResponse(
   response: CliResponseV1,
-  options: { json: boolean; quiet: boolean; format(body: unknown): string; hint?(error: { code: string; message: string }): string | undefined; next?: readonly string[] },
+  options: { json: boolean; quiet: boolean; format(body: unknown): string; hint?(error: { code: string; message: string }): string | undefined; next?: readonly string[]; groupId?: string },
   io: { stdout(text: string): void; stderr(text: string): void },
   request?: SentRequest,
 ): number {
@@ -52,8 +52,9 @@ export function printResponse(
   const error = errorOf(response.body);
   io.stderr(`orca: ${error === null ? `status ${response.status}` : refusalLine(error)}\n`);
   const hint = error === null ? undefined : options.hint?.(error);
-  // Tester #373: a common refusal no verb explains says the next step from one table.
-  const shownHint = hint ?? (error === null ? null : nextForCode(error.code));
+  // Tester #373: a common refusal no verb explains, and whose response names no next command, says the next step from
+  // one table (with the group's id when the CLI knows it).
+  const shownHint = hint ?? (error === null || (options.next?.length ?? 0) > 0 ? null : nextForCode(error.code, options.groupId));
   if (shownHint != null) io.stderr(`orca: ${shownHint}\n`);
   for (const command of options.next ?? []) io.stderr(`orca: next: ${command}\n`);
   if (response.commandId !== undefined) io.stderr(`orca: command id ${response.commandId}\n`);

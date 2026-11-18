@@ -129,7 +129,8 @@ export async function runPanelCommand(def: CommandDef, args: ParsedArgs, io: Com
     let next: string[] = [];
     if (refused !== null) { try { next = await def.next!(refused, context!) ?? []; } catch { next = []; } }
     const shown = next.length > 0 && args.global.json && typeof response.body === "object" && response.body !== null ? { ...response, body: { ...(response.body as object), next } } : response;
-    return printResponse(shown, { json: args.global.json, quiet: args.global.quiet, format: def.format, ...(hint === undefined ? {} : { hint: () => hint }), ...(next.length === 0 ? {} : { next }) }, io, request);
+    return printResponse(shown, { json: args.global.json, quiet: args.global.quiet, format: def.format, ...(hint === undefined ? {} : { hint: () => hint }), ...(next.length === 0 ? {} : { next }),
+      ...(context?.ids.group === undefined ? {} : { groupId: context.ids.group }) }, io, request);
   };
   try {
     // Spec §6.3: the one command refused without --if-revision, before anything is asked of the panel.
