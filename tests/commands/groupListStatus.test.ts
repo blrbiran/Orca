@@ -34,4 +34,17 @@ describe("orca group list shows what the state word hides (tester #166)", () => 
     expect(out.stdout).toContain("g-run  repo-1  running · 3 tasks (1 settling)  rev 3  go");
     expect(out.stdout).toContain("g-one  repo-1  running · 1 task  rev 4  one");
   });
+
+  // #361 review (I4): an archived group reads its stored state, never a derived `running` (as a panel derived it for an
+  // archived group with a queued start before I4).
+  it("an archived group reads archived (was <storedState>)", async () => {
+    const w = await world({}, {
+      "GET summary": { status: 200, body: { schema: "orca-control-summary-v1", epoch: "e", changeSeq: 9, resetRequired: true, groups: [
+        { groupId: "g-old", repoId: "repo-1", state: "running", storedState: "ready", archived: true, commandRevision: 3, goal: "old", counts: { running: 1, blocked: 0, done: 0, idle: 0, waiting: 0 } },
+      ] } },
+    });
+    const out = await cli(["group", "list"], w.dir);
+    // mutation: archived (was ${g.state}) -> "archived (was running)", red here
+    expect(out.stdout).toBe("g-old  repo-1  archived (was ready)  rev 3  old\n");
+  });
 });

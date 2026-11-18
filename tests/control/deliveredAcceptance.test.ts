@@ -72,6 +72,10 @@ describe("acceptance on the delivered commit (delivery tail D3)", { timeout: 240
       expect(groupNeedsYou(t.h.store, "g")).toBe(true);
       // mutation: drop deliveredAcceptance from the group summary -> undefined, red
       expect(readGroupSummary(t.h.store, "g").deliveredAcceptance).toMatchObject({ result: "failed", problem: `delivered-acceptance-failed:${CHECK}` });
+      // #359 review I2: the group's own problem names it too, with the delivered acceptance's answers (the card shows it).
+      // mutation: drop the delivered branch of groupProblemOf -> absent, red here
+      expect(readGroupSummary(t.h.store, "g").groupProblem).toEqual({ code: `delivered-acceptance-failed:${CHECK}`, why: "delivered-acceptance-failed",
+        next: ["orca group recheck-acceptance g", "orca group waive-acceptance g --note '<why the delivered tree is accepted>'"] });
       const command = t.h.command("waive-acceptance", { note: "poison.txt is the person's own fixture" });
       const answer = withCommandContext(command.commandId, { client: "web", principal: "user:owner" }, () => t.service.waiveAcceptance(command as never));
       expect(answer).toMatchObject({ result: { kind: "acceptance-waived" } });
