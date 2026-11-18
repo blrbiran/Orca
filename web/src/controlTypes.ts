@@ -117,6 +117,8 @@ export type GroupSummaryV1 = {
     expectation?: { expectedTokens: number; usedTokens: number | null };
     /** Tester follow-up G spec §2.4/§2.5: tasks over their expectation, waiting for a decision, waiting at the group cap. */
     budgetAlerts?: { overExpectation: number; waitingDecision: number; groupCapReached: number };
+    /** Tester #328 residual: pending decisions refused to tier 0, by the task whose run recorded them; absent when none. */
+    tier0Pending?: Array<{ taskId: string | null; count: number }>;
   };
   /** Kanban spec 2026-10-20 §3.3: the group's direct prerequisites (a person's edges); present only when it has any. */
   dependsOn?: string[];

@@ -589,8 +589,17 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
     const n = (value as { tokens?: unknown } | undefined)?.tokens;
     return typeof n === "number" ? n : null;
   };
-  const pending = store.db.prepare("SELECT body FROM pending_decisions WHERE group_id=? AND state='pending'").all(groupId)
-    .filter((row) => (JSON.parse(String(row.body)) as { entry?: { importance?: unknown } }).entry?.importance !== "minor").length;
+  const pendingRows = store.db.prepare("SELECT run_id,body FROM pending_decisions WHERE group_id=? AND state='pending'").all(groupId)
+    .map((row) => ({ runId: String(row.run_id), body: JSON.parse(String(row.body)) as { reason?: unknown; entry?: { importance?: unknown } } }));
+  const pending = pendingRows.filter((row) => row.body.entry?.importance !== "minor").length;
+  // Tester #328 residual: from the same rows, the pending decisions refused to tier 0 (only a person approves or rejects
+  // them), by the task whose run recorded them -- whatever their importance, as history acceptance waits on every one.
+  const tier0 = new Map<string | null, number>();
+  for (const row of pendingRows) {
+    if (typeof row.body.reason !== "string" || !row.body.reason.startsWith("tier-0:")) continue;
+    const taskId = snapshot.runById.get(row.runId)?.work_item_id ?? null;
+    tier0.set(taskId, (tier0.get(taskId) ?? 0) + 1);
+  }
   const flagged = groupCardFlaggedCount(store, groupId);
   let firstFailure: { taskId: string; cause: string; next?: string } | null = null;
   for (const taskId of taskIds) {
@@ -636,6 +645,7 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
     ...(findings.length === 0 ? {} : { reviewFindings: { major, minor: findings.length - major } }),
     ...(expectation === null ? {} : { expectation }),
     ...(alerts === null ? {} : { budgetAlerts: alerts }),
+    ...(tier0.size === 0 ? {} : { tier0Pending: [...tier0].map(([taskId, count]) => ({ taskId, count })) }),
   };
 }
 

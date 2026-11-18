@@ -1689,6 +1689,9 @@ export const groupSummarySchema = z
       expectation: z.object({ expectedTokens: safeInteger.nonnegative(), usedTokens: safeInteger.nonnegative().nullable() }).strict().optional(),
       // Tester follow-up G spec §2.4/§2.5: absent unless a task is over its expectation or waits on a person.
       budgetAlerts: z.object({ overExpectation: safeInteger.nonnegative(), waitingDecision: safeInteger.nonnegative(), groupCapReached: safeInteger.nonnegative() }).strict().optional(),
+      // Tester #328 residual: pending decisions refused to tier 0 (a person approves or rejects them), by the task whose run
+      // recorded them (null: the run is not this group's task run); absent when there are none.
+      tier0Pending: z.array(z.object({ taskId: idSchema.nullable(), count: positiveSafeInteger }).strict()).min(1).optional(),
     }).strict().optional(),
     // Kanban spec §3.3: the group's direct prerequisites (a person's edges), only when it has any.
     dependsOn: z.array(idSchema).min(1).optional(),

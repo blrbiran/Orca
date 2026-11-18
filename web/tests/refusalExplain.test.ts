@@ -85,3 +85,14 @@ describe("explaining a blocked run's reason (spec §2.2(a))", () => {
     expect(explainRunReason("debug-repro:no-tests")).toBe("Orca 的先复现检查没有通过：运行没有加上复现这条更正的测试。请重试任务。");
   });
 });
+
+// Tester #328 residual: Overview's row for pending tier-0 decisions says how many, and where they are answered, in both
+// languages (the reason code stays beside the words).
+describe("a pending tier-0 decision row (#328 residual)", () => {
+  it("names the count and both places to answer, in English and Chinese", async () => {
+    // mutation (no words for decision-tier0-pending) -> red here.
+    expect(explainRunReason("decision-tier0-pending:2")).toBe("Decisions this task's agent recorded that only you can approve or reject: 2. Answer each in the task's decisions, or with `orca decision list <group>` then `orca decision approve|reject <group> <pendingId>`.");
+    await i18n.changeLanguage("zh");
+    expect(explainRunReason("decision-tier0-pending:2")).toBe("这个任务的 agent 记下了只有你能批准或驳回的决定：2 条。在该任务的决定里逐条处理，或用 `orca decision list <group>` 查看后执行 `orca decision approve|reject <group> <pendingId>`。");
+  });
+});

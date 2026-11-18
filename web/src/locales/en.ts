@@ -2777,6 +2777,7 @@ export const enErrors: Record<string, string> = {
   "pending-decision-settled": "This decision was already settled, so it cannot be changed now: {{detail}}",
   "decision-undo-not-executable": "The undo command still cannot be run as written; give a command such as `git revert --no-edit <commit>`: {{detail}}",
   "pending-decision-entry-invalid": "This decision is invalid for a reason a new undo command cannot fix: {{detail}}",
+  "decision-tier0-pending": "Decisions this task's agent recorded that only you can approve or reject: {{detail}}. Answer each in the task's decisions, or with `orca decision list <group>` then `orca decision approve|reject <group> <pendingId>`.",
   "decision-approve-reconciling": "Another task of this group is being reconciled right now. Approve again when it has landed.",
   "decision-approve-tip-moved": "The group's branch kept moving while the decision was being written. Try again.",
   // Control run decisions plan Task 10: rejecting a decision that did not land records a correction.

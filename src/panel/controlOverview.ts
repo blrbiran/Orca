@@ -134,6 +134,9 @@ function groupSteps(store: ControlStore, source: Source, add: Add) {
     if (deliveredProblem !== null) add("task-attention", groupId, repoId, deliveredProblem, groupDestination("problem"), "delivered-acceptance-failed");
     const reviewProblemCode = summary.requirementReview?.problem;
     if (reviewProblemCode !== undefined) add("task-attention", groupId, repoId, reviewProblemCode, groupDestination("problem"), "requirement-review-not-passed");
+    // Tester #328 residual: a decision a task's agent recorded that the landing refused to tier 0 waits for a person to
+    // approve or reject it (the task's decisions, or `orca decision approve|reject`); the row names how many, per task.
+    for (const { taskId, count } of summary.card?.tier0Pending ?? []) add("task-attention", groupId, repoId, `decision-tier0-pending:${count}`, groupDestination("problem", taskId), `tier0-decisions:${taskId ?? ""}`, taskId);
     for (const work of workItems) {
       const run = work.currentRunId == null ? undefined : runById.get(work.currentRunId);
       if (work.status === "blocked" || work.status === "held" || run?.state === "blocked") {

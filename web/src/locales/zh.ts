@@ -2656,6 +2656,7 @@ export const zhErrors: Record<string, string> = {
   "check-time-zone-invalid": "定时检查用的时区本机不认识：{{detail}}",
   "pending-decision-settled": "这条决定已经处理过，现在不能再改：{{detail}}",
   "decision-undo-not-executable": "撤销命令仍然无法照原样执行，请给出类似 `git revert --no-edit <commit>` 的命令：{{message}}",
+  "decision-tier0-pending": "这个任务的 agent 记下了只有你能批准或驳回的决定：{{detail}} 条。在该任务的决定里逐条处理，或用 `orca decision list <group>` 查看后执行 `orca decision approve|reject <group> <pendingId>`。",
   "pending-decision-entry-invalid": "这条决定有别的问题，换一条撤销命令也修不好：{{message}}",
   "decision-approve-reconciling": "这个组的另一个任务正在合并冲突，等它落地后再批准。",
   "decision-approve-tip-moved": "写入决定时组分支一直在变，请再试一次。",
