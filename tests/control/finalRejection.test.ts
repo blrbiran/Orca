@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { writeArtifact } from "../../src/control/archive.js";
 import { listBaseChecks } from "../../src/control/baseCheckRecord.js";
-import { finalRejectionOf, priorFailureOf } from "../../src/control/priorFailures.js";
+import { finalRejectionOf, latestPriorRejection, priorFailureOf } from "../../src/control/priorFailures.js";
 import { saveTaskResultState } from "../../src/control/taskResultStore.js";
 import type { TaskResultCollector } from "../../src/control/taskResultCollector.js";
 import { replenishStartWakes } from "../../src/control/executionDriver.js";
@@ -165,6 +165,26 @@ describe("the next run is told the check that failed its predecessor's last atte
       // M3: no base check is asked for attempt 1's command -- not by C, not by A2.
       // mutation: let C ask with lastFailure again -> [LINT], red here.
       expect.soft(w.asked()).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
+  // Review 3 (M4): a saved-result recovery of the task failed after the original run. It never asks for a base check
+  // (requestBaseCheck), so taking it as the newest failed run hid the original's rejection from A2's ask.
+  it("review 3: a newer failed saved-result recovery run does not hide the original run's rejection from A2's base check", async () => {
+    const { t, run, stored } = await oneAttemptWorld("present");
+    try {
+      await stored();
+      // The recovery as Orca records one (retryTopUpSavedResult.test.ts's shape): mode and recoveryOf on the run, failed at C.
+      const original = t.body(run) as Record<string, unknown>;
+      const recovery = { ...original, runId: "run-recovery", mode: "verify-saved-result",
+        recoveryOf: { sourceRunId: run, sourceAttempt: 1, capsuleHash: "1".repeat(64), snapshotHash: "2".repeat(64), normalizedExecutionHash: "3".repeat(64) } };
+      const row = t.h.store.db.prepare("SELECT work_item_id, generation FROM runs WHERE id=?").get(run) as { work_item_id: string; generation: number };
+      t.h.store.transaction(() => t.h.store.db.prepare("INSERT INTO runs(id, group_id, work_item_id, generation, active, body) VALUES (?, 'g', ?, ?, 0, ?)")
+        .run("run-recovery", row.work_item_id, row.generation, JSON.stringify(recovery)));
+      // mutation: take the newest failed run whatever its kind -> the recovery run, no rejection, null, red here.
+      expect(await latestPriorRejection(t.h.store, "g", "a", "run-next")).toEqual({
+        run: expect.objectContaining({ runId: run }), rejection: { rejectCategory: "required-check-failed", failingCommand: CHECK },
+      });
     } finally { await t.h.dispose(); }
   });
 

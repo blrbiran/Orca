@@ -209,9 +209,12 @@ function failedRunsOf(store: ControlStore, groupId: string, taskId: string, runI
  * (rejectionOf), for the base check a fresh run's A2 asks for where it builds its prior failures. Step C does not wait for
  * the collector to store the final attempt's verification; by the next run's A2 it normally has. Null when there is no
  * failed run or no rejection.
+ * Ruling (2026-11-18 tester batch D review 3, M4): a saved-result verification or a recovery run never asks
+ * (requestBaseCheck), so a newest failed run of that kind hid an older original run's rejection; the newest original
+ * failed run is taken.
  */
 export async function latestPriorRejection(store: ControlStore, groupId: string, taskId: string, runId: string): Promise<{ run: FailedRun; rejection: { rejectCategory: string; failingCommand: string | null } } | null> {
-  const run = failedRunsOf(store, groupId, taskId, runId).at(-1);
+  const run = failedRunsOf(store, groupId, taskId, runId).filter((failed) => failed.mode === undefined && failed.recoveryOf === undefined).at(-1);
   if (run === undefined) return null;
   const rejection = await rejectionOf(store, run.runId, run.drive);
   return rejection === undefined ? null : { run, rejection: { rejectCategory: rejection.rejectCategory, failingCommand: rejection.failingCommand } };
