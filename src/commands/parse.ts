@@ -82,8 +82,13 @@ export function parseArgs(def: CommandDef, rest: string[]): ParsedArgs {
       if (positional.required) throw invalid(`orca ${commandPath(def)} wants <${positional.name}>`);
       continue;
     }
-    positionals[positional.name] = word;
     at += 1;
+    if (positional.isProject) {
+      if (global.project !== undefined) throw invalid(`give the project once: <${positional.name}> or --project`);
+      global.project = word;
+      continue;
+    }
+    positionals[positional.name] = word;
   }
   if (at < words.length) throw invalid(`unexpected argument ${JSON.stringify(words[at])} for orca ${commandPath(def)}`);
   for (const flag of def.flags) {

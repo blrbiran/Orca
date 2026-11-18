@@ -1,7 +1,7 @@
 import { EntryRejection, localError } from "../entry/envelope.js";
 import { renderHelp } from "./help.js";
 import { GLOBAL_FLAGS, parseArgs, rawGlobals } from "./parse.js";
-import { findCommand, REGISTRY } from "./registry.js";
+import { domainsOf, findCommand, REGISTRY } from "./registry.js";
 import type { CommandDef, CommandIo, GlobalFlags, ParsedArgs } from "./types.js";
 
 /** A refusal made here: one JSON line under --json, else one line on stderr; exit 1 (spec §7). */
@@ -55,6 +55,8 @@ export async function runRegistered(typed: readonly string[], io: CommandIo, reg
   const argv = hoistGlobalFlags(typed, registry);
   const found = findCommand(argv, registry);
   if (!("def" in found)) {
+    // Tester #374a: `orca <domain> --help` (or `orca --help <domain>`) is `orca help <domain>`; an unknown domain still is not.
+    if (argv[1] === "--help" && domainsOf(registry).includes(argv[0]!)) { io.stdout(renderHelp([argv[0]!], registry)); return 0; }
     if (typed[0] === "--help") { io.stdout(renderHelp([], registry)); return 0; }
     return null;
   }

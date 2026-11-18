@@ -25,6 +25,8 @@ export interface PositionalDef {
   required: boolean;
   /** Takes every remaining positional. */
   variadic?: boolean;
+  /** Tester #374b: the word is the global `--project`, given positionally (`orca project show <project>`). */
+  isProject?: boolean;
 }
 
 /**

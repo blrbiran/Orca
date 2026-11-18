@@ -466,6 +466,7 @@ export const READ_ROWS: CommandDef[] = [
   read({ domain: "project", action: "list", summary: "the registered projects: key, kind, control repository id, and root (a multi's member projects)", paths: () => ["projects"],
     format: projectList }),
   read({ domain: "project", action: "show", summary: "the project's workspace mode and integration settings (and their revision)",
+    positionals: [{ name: "project", required: false, isProject: true, summary: "the project (id or path), as --project; default: the registered repository holding cwd" }],
     paths: async (context) => { const { repoId } = await context.project(); return [`repositories/${repoId}/workspace`, `repositories/${repoId}/integration`]; },
     compose: async (bodies, context) => {
       const p = await context.project();
