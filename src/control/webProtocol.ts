@@ -1654,6 +1654,9 @@ export const groupSummarySchema = z
     groupId: idSchema,
     repoId: idSchema,
     state: z.enum(["clarifying", "draft", "ready", "running", "review", "done", "blocked"]),
+    // Tester #361 (plan 2026-11-18 batch D, V2): `state` is the shown word -- `running` while a stored `ready`/`review` group
+    // has work under way; `storedState` is the stored status, present only when it differs from `state`.
+    storedState: z.enum(["clarifying", "draft", "ready", "running", "review", "done", "blocked"]).optional(),
     commandRevision: positiveSafeInteger,
     projectionSeq: positiveSafeInteger,
     stopMode: z.enum(["pause", "shutdown", "handoff"]).nullable(),
@@ -1674,7 +1677,9 @@ export const groupSummarySchema = z
     // null before the first; `archived` says whether the body carries an archive mark (§6.3).
     goal: nonemptyString.optional(),
     branch: nonemptyString.optional(),
-    counts: z.object({ idle: safeInteger, running: safeInteger, waiting: safeInteger, blocked: safeInteger, done: safeInteger }).strict().optional(),
+    // Tester #376: `settling` counts the tasks whose current run landed and waits for its settle (not in `running`); present
+    // only when non-zero.
+    counts: z.object({ idle: safeInteger, running: safeInteger, waiting: safeInteger, blocked: safeInteger, done: safeInteger, settling: safeInteger.optional() }).strict().optional(),
     updatedAt: safeInteger.nullable().optional(),
     archived: z.boolean().optional(),
     // Feedback #53: a start wake is undelivered or a task is executing (an active run or a busy work status). A

@@ -11,7 +11,7 @@ export function cardArchivePending(group: GroupSummaryV1): boolean {
   if (group.archived) return false;
   if (group.stopState === "handoff-pending" || group.stopState === "handoff-unresolved") return true;
   if (group.requirement?.roundState === "drafting" || group.requirement?.draftState === "drafting" || group.requirement?.blockedRun !== null && group.requirement?.blockedRun !== undefined) return true;
-  return (group.counts?.running ?? 0) > 0;
+  return (group.counts?.running ?? 0) + (group.counts?.settling ?? 0) > 0;
 }
 
 /** A card's visible button and context gesture share one menu and one owner. */

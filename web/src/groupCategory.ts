@@ -42,7 +42,8 @@ export function groupCategory(summary: GroupSummaryV1): GroupCategory {
   if (summary.archived === true) return "archived";
   if (needsAttention(summary)) return "attention";
   if (summary.completion !== undefined && summary.completion.total > 0 && summary.completion.done === summary.completion.total) return "done";
-  if ((summary.counts?.running ?? 0) + (summary.counts?.waiting ?? 0) > 0 || summary.state === "running" || summary.state === "review") return "running";
+  // Tester #376: a settling task (landed, waiting for its settle) is still under way.
+  if ((summary.counts?.running ?? 0) + (summary.counts?.settling ?? 0) + (summary.counts?.waiting ?? 0) > 0 || summary.state === "running" || summary.state === "review") return "running";
   return "not-started";
 }
 
@@ -67,7 +68,7 @@ export type GroupLed = "running" | "failed" | "waiting" | "idle";
 export function groupLed(summary: GroupSummaryV1): GroupLed {
   const column = boardColumn(summary);
   if (column === "needs-you") return "failed";
-  if (column === "running") return (summary.counts?.running ?? (summary.state === "running" ? 1 : 0)) > 0 ? "running" : "waiting";
+  if (column === "running") return (summary.counts?.running ?? (summary.state === "running" ? 1 : 0)) + (summary.counts?.settling ?? 0) > 0 ? "running" : "waiting";
   return column === "queued" ? "waiting" : "idle";
 }
 
@@ -118,7 +119,7 @@ export function boardColumn(summary: GroupSummaryV1): BoardColumn {
   if (summary.state === "ready" && summary.executionPending !== true) {
     const orchestration = summary.orchestration;
     if (orchestration !== undefined ? orchestration.state !== "started" && orchestration.state !== "stopped"
-      : (summary.counts?.running ?? 0) + (summary.counts?.waiting ?? 0) + (summary.counts?.done ?? 0) === 0) return "queued";
+      : (summary.counts?.running ?? 0) + (summary.counts?.settling ?? 0) + (summary.counts?.waiting ?? 0) + (summary.counts?.done ?? 0) === 0) return "queued";
   }
   return "running";
 }

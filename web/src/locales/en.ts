@@ -1251,7 +1251,7 @@ export const en = {
       implied_one: "{{count}} implied dependency hidden: another drawn path already orders these tasks",
       implied_other: "{{count}} implied dependencies hidden: another drawn path already orders these tasks",
       legend: "Legend",
-      category: { idle: "idle", running: "running", waiting: "waiting", blocked: "blocked", done: "done" },
+      category: { idle: "idle", running: "running", waiting: "waiting", blocked: "blocked", done: "done", settling: "settling" },
       stepAttempt: "{{step}} · attempt {{attempt}}",
       runNumber: "run {{n}}",
       elapsed: "{{minutes}} min",

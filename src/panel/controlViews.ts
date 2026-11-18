@@ -498,20 +498,33 @@ function categoryOf(snapshot: GroupReadSnapshot, work: { status?: unknown; curre
  * names it exactly as before; a summary list must not go dark over one bad row.
  */
 function taskCompletion(snapshot: GroupReadSnapshot, plan: ReturnType<typeof readArchivedPlan>["plan"]): {
-  completion: { done: number; total: number }; counts: Record<WorkItemCategory, number>;
+  completion: { done: number; total: number }; counts: Record<WorkItemCategory, number> & { settling?: number };
 } {
   let done = 0;
-  const counts: Record<WorkItemCategory, number> = { idle: 0, running: 0, waiting: 0, blocked: 0, done: 0 };
+  const counts: Record<WorkItemCategory, number> & { settling?: number } = { idle: 0, running: 0, waiting: 0, blocked: 0, done: 0 };
   for (const task of plan.tasks) {
     type StoredWork = { status?: unknown; currentRunId?: unknown; dependsOn?: unknown };
     let work: StoredWork | null = null;
     try { work = decodedValue(snapshot.decodeWork(task.taskId)) as StoredWork ?? null; } catch { work = null; }
     if (work?.status === "done" || work?.status === "completed") done += 1;
     if (work !== null) {
-      try { counts[categoryOf(snapshot, work)] += 1; } catch { /* in no count: the view names it */ }
+      try {
+        const category = categoryOf(snapshot, work);
+        // Tester #376: a running task whose current run landed (or settled before its commit marked the task done) waits for
+        // its settle; it is counted as settling, not running. A count only, not a §6.1 category; present when non-zero.
+        if (category === "running" && settlingRun(snapshot, work)) counts.settling = (counts.settling ?? 0) + 1;
+        else counts[category] += 1;
+      } catch { /* in no count: the view names it */ }
     }
   }
   return { completion: { done, total: plan.tasks.length }, counts };
+}
+
+const SETTLING_RUN_STATES: ReadonlySet<string> = new Set(["landed", "settled"]);
+function settlingRun(snapshot: GroupReadSnapshot, work: { currentRunId?: unknown }): boolean {
+  if (typeof work.currentRunId !== "string") return false;
+  const run = decodedValue(snapshot.decodeRun(work.currentRunId)) as { state?: unknown } | undefined;
+  return typeof run?.state === "string" && SETTLING_RUN_STATES.has(run.state);
 }
 
 export { BUSY_WORK } from "../control/executionPending.js";
@@ -751,7 +764,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   // verdict (groupDone.ts), so its completion must say so too instead of the D14-blocked judge task's `done 0/1`.
   const verdictGroup = systemDebugMark?.source.kind === "criteria-review" && (systemDebugMark.settled?.state === "justified" || systemDebugMark.settled?.state === "restored");
   const completion = verdictGroup && archived !== null ? { done: archived.plan.tasks.length, total: archived.plan.tasks.length } : tally?.completion;
-  const counts = verdictGroup && archived !== null
+  const counts: (Record<WorkItemCategory, number> & { settling?: number }) | undefined = verdictGroup && archived !== null
     ? { idle: 0, running: 0, waiting: 0, blocked: 0, done: archived.plan.tasks.length }
     : tally?.counts;
   const escalation = archived === null ? [] : escalationsOf(store, groupId);
@@ -800,10 +813,15 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     },
   };
   const scheduleStart = scheduleStartOf(store, groupId, body as Record<string, unknown>);
+  // Tester #361: a Web start keeps the stored status `ready` (and every settle writes `review`) while tasks run; the summary
+  // shows `running` then, and the stored word beside it. Only the shown word: every guard reads the stored status.
+  const shownState = (body.status === "ready" || body.status === "review") && (executing === true || (counts?.running ?? 0) > 0 || (counts?.settling ?? 0) > 0)
+    ? "running" : body.status;
   const summary = {
     groupId,
     repoId,
-    state: body.status,
+    state: shownState,
+    ...(shownState === body.status ? {} : { storedState: body.status }),
     commandRevision: Number(versions.revision),
     projectionSeq: Number(versions.projection_seq),
     stopMode: stop?.mode ?? null,

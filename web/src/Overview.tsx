@@ -30,7 +30,7 @@ function ProgressRow({ row: { group, owner, ownerUnknown, target }, onOpen }: { 
   <div className="flex flex-wrap items-baseline justify-between gap-3"><button type="button" className={rowButton} onClick={() => onOpen(target)}><CardGoal group={group} fallback={group.groupId} /></button><span>{owner || t("overview.global")}{ownerUnknown ? ` · ${t("overview.ownerUnknown")}` : ""}</span></div>
   <p className={rowText}>{enumText("groupState", group.state)}{reviewWording(group) === "goal-review" ? ` · ${t("overview.goalReview")}` : reviewWording(group) === "blocked" ? ` · ${t("overview.tasksBlocked")}` : group.state === "done" ? ` · ${t("overview.deliverySeparate")}` : ""}</p>
   {group.completion ? <><p className={rowText}>{t("overview.tasks", { done: group.completion.done, total: group.completion.total })}</p>{group.completion.total > 0 && <progress className="w-full max-w-full" value={group.completion.done} max={group.completion.total} aria-label={t("overview.taskProgress")} />}</> : group.requirement ? <p className={rowText}>{t("overview.requirementProgress", { round: group.requirement.roundNo ?? "—", questions: group.requirement.openQuestions })}</p> : <p className={rowText}>{t("overview.taskCountsUnavailable")}</p>}
-  {group.counts && <p className={`${rowText} flex flex-wrap gap-3`}>{Object.entries(group.counts).map(([kind, n]) => <span key={kind}>{t(`control.graph.category.${kind as WorkItemCategoryV1}`)} {n}</span>)}</p>}
+  {group.counts && <p className={`${rowText} flex flex-wrap gap-3`}>{Object.entries(group.counts).map(([kind, n]) => <span key={kind}>{t(`control.graph.category.${kind as WorkItemCategoryV1 | "settling"}`)} {n}</span>)}</p>}
  </li>;
 }
 /**

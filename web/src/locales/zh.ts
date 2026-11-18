@@ -1080,7 +1080,7 @@ export const zh: Translation<typeof en> = {
       implied_one: "有 {{count}} 条隐含的依赖没有画出：另一条已画出的路径已经规定了这些任务的先后",
       implied_other: "有 {{count}} 条隐含的依赖没有画出：另一条已画出的路径已经规定了这些任务的先后",
       legend: "图例",
-      category: { idle: "空闲", running: "进行中", waiting: "等待依赖", blocked: "受阻", done: "已完成" },
+      category: { idle: "空闲", running: "进行中", waiting: "等待依赖", blocked: "受阻", done: "已完成", settling: "结算中" },
       stepAttempt: "{{step}} · 第 {{attempt}} 次尝试",
       runNumber: "第 {{n}} 次运行",
       elapsed: "{{minutes}} 分钟",

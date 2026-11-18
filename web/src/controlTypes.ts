@@ -78,6 +78,8 @@ export type GroupSummaryV1 = {
   /** Project filtering spec §4: the group's repository, from its plan or its requirement. */
   repoId: string;
   state: "clarifying" | "draft" | "ready" | "running" | "review" | "done" | "blocked";
+  /** Tester #361: the stored status, present only when the shown `state` (running: work under way) differs from it. */
+  storedState?: "clarifying" | "draft" | "ready" | "running" | "review" | "done" | "blocked";
   commandRevision: number;
   projectionSeq: number;
   stopMode: null | "pause" | "shutdown" | "handoff";
@@ -93,7 +95,8 @@ export type GroupSummaryV1 = {
   /** Issue-fixes spec §6.2: optional so literal fixtures need no edit; the server always sends each. */
   goal?: string;
   branch?: string;
-  counts?: Record<WorkItemCategoryV1, number>;
+  /** Tester #376: `settling` -- tasks whose run landed and waits for its settle (not in `running`); only when non-zero. */
+  counts?: Record<WorkItemCategoryV1, number> & { settling?: number };
   updatedAt?: number | null;
   archived?: boolean;
   /** Feedback #53: a start wake is undelivered or a task is executing; a Web-started group stays `ready` meanwhile. */
