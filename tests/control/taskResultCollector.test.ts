@@ -249,13 +249,48 @@ describe('retention queue and source deletion', { timeout: 30000 }, () => {
             expect(entered).toBe(2);
             held.release();
             await Promise.all(flushing);
-            expect(entered).toBe(3);
+            // Ruling (2026-11-18 tester batch D review 3): a schedule that arrives while a run's job is in flight marks it
+            // dirty, so the job runs once more after (ccloop's page may have moved past what the job read). The first two
+            // runs' second schedule came while their job was in flight: one re-run each, and a flush waits for it. The
+            // queued run's second schedule is still folded into its one job: 2 + 2 re-runs + 1 = 5.
+            expect(entered).toBe(5);
             for (const f of fixtures)
                 expect(readTaskResultState(f.t.h.store, f.runId)?.revision).toBe(1);
         }
         finally {
             held.release();
             await Promise.all(fixtures.map(f => f.dispose()));
+        }
+    });
+    // Tester #321 C1, review 3 (I-B): ccloop's later page (the final attempt) arrives while the run's job is in flight on an
+    // earlier one; the schedule step C makes then must not be dropped, or the stored page lags at the earlier attempt.
+    it('a schedule while the job is in flight re-runs it once after, and a flush waits for that re-run', async () => {
+        const f = await fixture();
+        const held = latch(), entered = latch();
+        let calls = 0;
+        try {
+            const original = f.port.collectTaskResults, attemptOne = f.page();
+            // The first job asked ccloop before the final attempt existed: it answers attempt 1's page.
+            f.port.collectTaskResults = async (...args) => { calls++; if (calls === 1) { entered.release(); await held.promise; return attemptOne; } return original(...args); };
+            f.collector.schedule(f.runId);
+            await entered.promise;
+            // ccloop's final attempt lands while the first job is still reading attempt 1's page.
+            const m2 = f.add(f.manifest(2, 2));
+            f.setPage({ ...f.page(), currentAttempt: 2, revision: 2, nextRevision: 2, manifests: [{ revision: 2, ref: m2 }] });
+            f.collector.schedule(f.runId);
+            f.collector.schedule(f.runId);
+            const flushing = f.collector.flush(f.runId);
+            held.release();
+            await flushing;
+            // mutation: drop the dirty mark in schedule() -> one call and the page stays at attempt 1, red here.
+            // mutation: re-run a dirty job but let flush wait only on the first job -> attempt 1 read here, red here.
+            expect(readTaskResultState(f.t.h.store, f.runId)).toMatchObject({ status: 'available', revision: 2, currentAttempt: 2 });
+            // Two schedules during the one in-flight job: one re-run, not two.
+            expect(calls).toBe(2);
+        }
+        finally {
+            held.release();
+            await f.dispose();
         }
     });
     it('flushes owned queued results before actual source deletion after settled budget, preserving saved bytes', async () => {

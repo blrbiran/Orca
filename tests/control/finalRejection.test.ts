@@ -56,7 +56,8 @@ const storeFinalRejection = (t: Harness, runId: string, options: { artifact: "pr
  */
 async function failedWorld(options: { attempts: number; lastFailure?: { rejectCategory: string; failingCommand: string; primaryTargetPaths: string[] } }) {
   const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "failed", requiredChecks: [LINT, CHECK], workAttempts: () => options.attempts,
-    failure: () => ({ failureCause: CAUSE, ...(options.lastFailure === undefined ? {} : { lastFailure: options.lastFailure }) }) });
+    // ccloop's terminal states the attempt the run ended on (terminalSchema currentAttempt); the port maps it through.
+    failure: () => ({ failureCause: CAUSE, currentAttempt: options.attempts, ...(options.lastFailure === undefined ? {} : { lastFailure: options.lastFailure }) }) });
   const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
   const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, attempts: limit.attempts + 10, sessions: limit.sessions + 10 } }));
   if ("error" in raised) throw new Error(`set-limit refused: ${JSON.stringify(raised.error)}`);
@@ -133,12 +134,32 @@ describe("the next run is told the check that failed its predecessor's last atte
     const { t, run } = w;
     try {
       await storeRejections(t, run, 2, [{ attempt: 1, command: LINT, evidence: LINT_EVIDENCE }]);
-      // mutation: drop the currentAttempt filter -> attempt 1's rejection, red here.
-      expect(await finalRejectionOf(t.h.store, run)).toBeNull();
-      // Falls back to lastFailure, with its stored evidence (the fingerprint matches attempt 1's copy).
+      expect(t.body(run).drive.finalAttempt).toBe(2);
+      // mutation: drop the attempt filter -> attempt 1's rejection, red here.
+      expect(await finalRejectionOf(t.h.store, run, t.body(run).drive.finalAttempt)).toBeNull();
+      // Ruling (2026-11-18 tester batch D review 3): this pinned a fallback to lastFailure (LINT). lastFailure is attempt 1's
+      // rejection; the run ended on attempt 2's, which is not stored, so the run is remembered by its run-failed line.
+      // mutation: drop rejectionOf's finalAttempt > 1 rule -> LINT with its evidence, red here.
       expect(await priorFailureOf(t.h.store, { runId: run, groupId: "g", drive: t.body(run).drive })).toEqual({
-        runId: run, rejectCategory: "required-check-failed", failingCommand: LINT, evidence: LINT_EVIDENCE, failureCause: "required-check-failed",
+        runId: run, rejectCategory: "run-failed:required-check-failed", failingCommand: null, evidence: null, failureCause: "required-check-failed",
       });
+    } finally { await t.h.dispose(); }
+  });
+
+  // Review 3 (I-B): the collector's page lags at attempt 1 (a collect it missed) while ccloop's terminal said the run ended
+  // on attempt 2. The page's currentAttempt named attempt 1 as final, so the next run was told attempt 1's command.
+  it("review 3: the collector page lags at attempt 1 while ccloop's terminal says 2 -- the next run is not told attempt 1's command", async () => {
+    const w = await failedWorld({ attempts: 2, lastFailure: { rejectCategory: "required-check-failed", failingCommand: LINT, primaryTargetPaths: ["a"] } });
+    const { t, run } = w;
+    try {
+      await storeRejections(t, run, 1, [{ attempt: 1, command: LINT, evidence: LINT_EVIDENCE }]);
+      // mutation: step C does not keep ccloop's terminal currentAttempt -> undefined, red here.
+      expect.soft(t.body(run).drive.finalAttempt).toBe(2);
+      // mutation: filter on the page's currentAttempt again -> attempt 1's LINT, red here.
+      expect.soft(await finalRejectionOf(t.h.store, run, t.body(run).drive.finalAttempt)).toBeNull();
+      const second = await w.next();
+      // mutation: filter on the page's currentAttempt again -> told LINT, red here.
+      expect.soft(w.priorFailures(second)).toEqual([expect.objectContaining({ runId: run, rejectCategory: "run-failed:required-check-failed", failingCommand: null })]);
     } finally { await t.h.dispose(); }
   });
 

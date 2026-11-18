@@ -192,6 +192,10 @@ export const driveRecordSchema = z.object({
   // when ccloop stated none (an older ccloop, or a run with no rejection) and in every drive record written before them.
   failureCause: runFailureCauseSchema.optional(),
   lastFailure: lastFailureSchema.optional(),
+  // Tester #321 C1 review 3 (I-B): ccloop's terminal `currentAttempt` -- the attempt the run ended on -- stored with them, so
+  // the final rejection is read from the collector's stored copy of that attempt, not from the collector page's own
+  // `currentAttempt`, which lags when a collect is missed. Optional: absent from an older ccloop and every older drive record.
+  finalAttempt: safeInteger.positive().optional(),
   // Issue #209: a run that failed as rate-limited whose frozen model the agent's read catalog does not list, in the words
   // the selection preview warned with (estimatorCompatibility.ts catalogMissReason). Optional: absent for every other run
   // and in every older drive record.

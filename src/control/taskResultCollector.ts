@@ -25,6 +25,9 @@ type Job = {
     runId: string;
     cancelled: boolean;
     started: boolean;
+    // Ruling (2026-11-18 tester batch D review 3): a schedule() that arrives while this job is in flight (a later collect,
+    // e.g. step C after ccloop's final attempt) may carry a page the job already read past; the job runs once more after.
+    dirty: boolean;
     done: Promise<void>;
     finish: () => void;
     cancel: Promise<void>;
@@ -192,12 +195,19 @@ export function createTaskResultCollector(deps: TaskResultCollectorDeps): TaskRe
             await diagnostic(job, owner, error).catch(() => { });
         }
     };
-    const schedule = (runId: string) => {
-        if (stopped || jobs.has(runId))
+    const enqueue = (runId: string, markDirty: boolean) => {
+        if (stopped)
             return;
+        const existing = jobs.get(runId);
+        if (existing) {
+            // A queued job has not read yet; only an in-flight one can have read past what this schedule is for.
+            if (markDirty && existing.started)
+                existing.dirty = true;
+            return;
+        }
         let finish!: () => void, abort!: () => void;
         const done = new Promise<void>(r => { finish = r; }), cancel = new Promise<void>(r => { abort = r; });
-        const job: Job = { runId, cancelled: false, started: false, done, finish, cancel, abort };
+        const job: Job = { runId, cancelled: false, started: false, dirty: false, done, finish, cancel, abort };
         jobs.set(runId, job);
         queue.push({ key: deps.store.stateDir + ':' + runId, start: async () => {
                 job.started = true;
@@ -208,22 +218,30 @@ export function createTaskResultCollector(deps: TaskResultCollectorDeps): TaskRe
                 finally {
                     if (jobs.get(runId) === job)
                         jobs.delete(runId);
+                    // The re-run is queued before this job's waiters wake, so a flush waiting on it sees the re-run too.
+                    if (job.dirty && !job.cancelled)
+                        enqueue(runId, false);
                     job.finish();
                 }
             } });
         pump();
     };
+    const schedule = (runId: string) => enqueue(runId, true);
     const collector: TaskResultCollector = { schedule, async flush(runId) {
             if (stopped)
                 return;
-            schedule(runId);
-            const job = jobs.get(runId);
-            if (!job)
+            // A flush waits for what is scheduled (and any re-run a later schedule asked for); it adds no re-run itself.
+            enqueue(runId, false);
+            if (!jobs.has(runId))
                 return;
+            const settled = (async () => { for (let job = jobs.get(runId); job !== undefined; job = jobs.get(runId)) await job.done; })();
             let timer: NodeJS.Timeout | undefined;
             try {
-                await Promise.race([job.done, new Promise<void>(resolve => {
+                await Promise.race([settled, new Promise<void>(resolve => {
                         timer = setTimeout(() => {
+                            const job = jobs.get(runId);
+                            if (!job)
+                                return resolve();
                             // Queue time counts. Fence acquisition before allowing source deletion.
                             const failure = Promise.resolve().then(() => { const owner = deps.resolve(runId); return owner ? diagnostic(job, owner, new Error('task-result-flush-timeout')) : undefined; });
                             void failure.catch(() => { }).finally(() => {

@@ -47,15 +47,15 @@ function sameFingerprint(a: { rejectCategory: string; primaryTargetPaths: string
 
 /**
  * The newest stored, completed, rejected verification of the run that `accept` takes, from the collector's own stored copy
- * (taskResultStore). Null unless the collector settled (`available`) for this run and such a copy reads. `finalOnly`: only
- * the attempt ccloop last stated as its current one (the page's `currentAttempt`) is read.
+ * (taskResultStore). Null unless the collector settled (`available`) for this run and such a copy reads. `onlyAttempt`:
+ * only that attempt's copy is read.
  */
-async function latestStoredRejection(store: ControlStore, runId: string, accept: (parsed: z.infer<typeof verificationSchema>) => boolean, finalOnly = false): Promise<z.infer<typeof verificationSchema> | null> {
+async function latestStoredRejection(store: ControlStore, runId: string, accept: (parsed: z.infer<typeof verificationSchema>) => boolean, onlyAttempt?: (state: { currentAttempt: number }) => number): Promise<z.infer<typeof verificationSchema> | null> {
   const state = readTaskResultState(store, runId);
   if (state === null || state.status !== "available" || state.identity?.runId !== runId) return null;
   const candidates = state.observations
     .filter((observation) => observation.manifest.stage === "verification" && observation.verification === "failed" && observation.manifest.verificationRef !== null)
-    .filter((observation) => !finalOnly || observation.manifest.attempt === state.currentAttempt)
+    .filter((observation) => onlyAttempt === undefined || observation.manifest.attempt === onlyAttempt(state))
     .sort((a, b) => b.manifest.attempt - a.manifest.attempt);
   for (const observation of candidates) {
     let parsed: z.infer<typeof verificationSchema>;
@@ -88,11 +88,15 @@ export async function readStoredRejection(store: ControlStore, runId: string, la
  * rejection in `recentFailures` (Orca's `lastFailure`) only when it retries after it (runLoop: the `retryable` branch), so
  * the final attempt's rejection is never there: a one-attempt run has no `lastFailure`, and in a longer run `lastFailure` is
  * an earlier attempt's. ccloop still stored the final attempt's verification. Review of D2 (I1): only a stored rejection
- * of the attempt ccloop's page names as current is that one; read as readStoredRejection reads, without a fingerprint to
- * match. Null when none reads.
+ * of the attempt the run ended on is that one; read as readStoredRejection reads, without a fingerprint to match. Null
+ * when none reads.
+ * Ruling (2026-11-18 tester batch D review 3, I-B): the attempt the run ended on is ccloop's terminal `currentAttempt`,
+ * kept on the drive record at step C (`finalAttempt`). The collector page's own `currentAttempt` lags when a collect is
+ * missed, and then names an earlier attempt whose rejection is not the one that ended the run. A drive record from before
+ * `finalAttempt` falls back to the page's.
  */
-export async function finalRejectionOf(store: ControlStore, runId: string): Promise<{ rejectCategory: string; failingCommand: string | null; evidence: string[] } | null> {
-  const parsed = await latestStoredRejection(store, runId, () => true, true);
+export async function finalRejectionOf(store: ControlStore, runId: string, finalAttempt?: number): Promise<{ rejectCategory: string; failingCommand: string | null; evidence: string[] } | null> {
+  const parsed = await latestStoredRejection(store, runId, () => true, (state) => finalAttempt ?? state.currentAttempt);
   return parsed === null ? null : { rejectCategory: parsed.rejectCategory, failingCommand: parsed.failingCommand, evidence: parsed.evidence };
 }
 
@@ -118,11 +122,15 @@ async function storedEvidence(store: ControlStore, runId: string, last: NonNulla
  * The rejection a failed run is remembered by: when the run ended on a verification rejection, its final attempt's stored
  * one (finalRejectionOf; review of D2, I1: it wins over `lastFailure`, which is then an earlier attempt's); otherwise, or
  * when that cannot be read, `lastFailure` with its stored evidence. Undefined when there is neither. Uncut, but evidence.
+ * Ruling (2026-11-18 tester batch D review 3, I-B): a run known to have ended on attempt 2 or later whose final rejection
+ * is not stored is not told by `lastFailure` either -- that is an earlier attempt's rejection, not what ended the run --
+ * so it is undefined and the run is remembered by its run-failed line.
  */
 async function rejectionOf(store: ControlStore, runId: string, drive: DriveRecord | undefined): Promise<{ rejectCategory: string; failingCommand: string | null; evidence: string[] | null } | undefined> {
   if (endedOnVerificationRejection(drive?.failureCause)) {
-    const final = await finalRejectionOf(store, runId).catch(() => null);
+    const final = await finalRejectionOf(store, runId, drive?.finalAttempt).catch(() => null);
     if (final !== null) return { rejectCategory: final.rejectCategory, failingCommand: final.failingCommand, evidence: cutEvidence(final.evidence) };
+    if (drive?.finalAttempt !== undefined && drive.finalAttempt > 1) return undefined;
   }
   const last = drive?.lastFailure;
   return last === undefined ? undefined : { rejectCategory: last.rejectCategory, failingCommand: last.failingCommand, evidence: await storedEvidence(store, runId, last) };

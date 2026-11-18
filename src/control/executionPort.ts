@@ -24,7 +24,8 @@ export interface StartEnvelope { protocol:3|4;mode?:"verify-saved-result";savedR
 export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;configHash:string}|{kind:"unknown";launch?:"never-claimed"}|{kind:"stopped";proof:StopProof};
 export interface ExecutionReport {
  events:UsageEvent[];candidate:Candidate|null;
- terminal:{tokenRemainingStatus?:"known"|"unlimited"|"unknown";waitingCause?:"token-allowance";allowanceNextPhase?:"plan"|"execute"|"verify";outcome:"succeeded"|"blocked_waiting_human"|"exhausted"|"cancelled"|"failed";attemptSha:string|null;sourceDir:string;repoDir:string;stopReason?:string|null;failureCause?:RunFailureCause;lastFailure?:LastFailure;budgetSnapshot?:{attemptsRemaining:number;timeRemainingMs:number;tokenBudgetRemaining:number|null}}|null;
+ // Tester #321 C1 review 3 (I-B): `currentAttempt` is ccloop's terminal attempt (terminalSchema); optional so the synthetic ports need no edit.
+ terminal:{tokenRemainingStatus?:"known"|"unlimited"|"unknown";waitingCause?:"token-allowance";allowanceNextPhase?:"plan"|"execute"|"verify";outcome:"succeeded"|"blocked_waiting_human"|"exhausted"|"cancelled"|"failed";attemptSha:string|null;sourceDir:string;repoDir:string;stopReason?:string|null;failureCause?:RunFailureCause;lastFailure?:LastFailure;currentAttempt?:number;budgetSnapshot?:{attemptsRemaining:number;timeRemainingMs:number;tokenBudgetRemaining:number|null}}|null;
  /** Labels and progress spec §3.2 (§8 R5): optional so the synthetic ports need no edit; absent reads as null. */
  progress?:RunProgress|null;
  /** Decisions the agent reported: optional like `progress`; read only through reportedDecisions.ts. */

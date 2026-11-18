@@ -67,7 +67,8 @@ export function fakeCcloopPort(input: {
   /** Issue fixes spec §4.4: ccloop's terminal `stopReason` for this work item's run; null or absent = none stated. */
   stopReason?: (workItemId: string) => string | null;
   /** Failure-cause spec 2026-10-21 §3: the cause and last rejection the port maps onto the terminal; undefined = neither. */
-  failure?: (workItemId: string) => { failureCause?: RunFailureCause; lastFailure?: LastFailure } | undefined;
+  // Tester #321 C1 review 3 (I-B): `currentAttempt` is ccloop's terminal attempt, as ccloopPort maps it.
+  failure?: (workItemId: string) => { failureCause?: RunFailureCause; lastFailure?: LastFailure; currentAttempt?: number } | undefined;
   pathPolicyMisses?: (workItemId: string) => PathPolicyMissV1[] | undefined;
   /** Control run decisions: what the run reports as `decisions` on its terminal report; undefined = the field is absent. */
   decisions?: (workItemId: string) => unknown;
