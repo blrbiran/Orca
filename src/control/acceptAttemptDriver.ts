@@ -275,7 +275,14 @@ async function land(deps: ExecutionDriverDeps, run: DriverRun, intent: OperatorA
  */
 async function acceptedOffPlan(deps: ExecutionDriverDeps, run: DriverRun, targetRepo: string, staged: { old: string; next: string; attemptSha: string }): Promise<OffPlanWriteBody | null> {
   if (staged.old === staged.next) return null;
-  return landingOffPlanWrite(deps.store, run, targetRepo, run.drive!.base, staged.attemptSha);
+  // Information only (fix round 2): an unreadable record must not refuse an acceptance -- in the staged recovery the swap
+  // has already happened. Logged, and no row.
+  try {
+    return await landingOffPlanWrite(deps.store, run, targetRepo, run.drive!.base, staged.attemptSha);
+  } catch (error) {
+    process.stderr.write(`orca-driver: off-plan record skipped for accepted ${run.runId}: ${error instanceof Error ? error.message : String(error)}\n`);
+    return null;
+  }
 }
 
 /** After the swap: the acceptance, the refused entries, the task done (completeAcceptedAttempt) and the activity row, in one write. */

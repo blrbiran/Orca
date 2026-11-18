@@ -206,6 +206,27 @@ describe("an accepted attempt's off-plan writes (accept-attempt)", { timeout: 12
     } finally { await t.h.dispose(); }
   });
 
+  // Fix round 2, item 1: the accepted range is the run's own base to its attempt, never the tip the acceptance merges onto.
+  it("an acceptance merged onto a tip a sibling moved records only its own paths", async () => {
+    const files: HarnessOptions["files"] = (id) => ({ [id]: `${id}\n`, [`${id}-notes.md`]: "n\n" });
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { behaviour: (id) => id === "a" ? "failed" : "succeed", sealedOwnerProof: true, files }); try {
+      const ids = [await t.claim(), await t.claim()];
+      const a = ids.find((id) => t.body(id).taskId === "a")!, b = ids.find((id) => t.body(id).taskId === "b")!;
+      const driver = t.driver();
+      await t.until(driver, () => t.body(a).state === "blocked" && LANDED.includes(t.body(b).state), 120);
+      const closed = t.service.closeRun(t.h.command("close-run", { runId: a }));
+      if ("error" in closed) throw new Error(JSON.stringify(closed));
+      await t.until(driver, () => t.body(a).drive.cleanedUp === true);
+      expect(git(t.repo, "show", "refs/heads/orca/g:b")).toBe("b");
+      const command = t.h.command("accept-attempt", { taskId: "a", runId: a, note: "read the diff" }, "acc-1");
+      await withCommandContext(command.commandId, OWNER, () => t.service.acceptAttempt(command));
+      await untilDeadline(driver, settled(t, a), 30_000);
+      expect(t.body(a).operatorAcceptance.state).toBe("landed");
+      // mutation: diff from the tip the acceptance merged onto (`staged.old`) -> b's files read as a's deletions, red
+      expect(offPlanRows(t).find((row) => row.runId === a)?.body).toEqual({ taskId: "a", runId: a, paths: ["a-notes.md"], count: 1 });
+    } finally { await t.h.dispose(); }
+  });
+
   it("an E-block attempt D already landed adds no row (D recorded it)", async () => {
     const { t, runId, accept } = await failedAndClosed({ a: "a\n", "notes.md": "n\n" }); try {
       // The E-block shape (acceptAttemptCompleted.test.ts): the run's work is on the tip already -- a commit holding the

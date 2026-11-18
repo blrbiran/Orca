@@ -151,6 +151,8 @@ describe("accept-attempt bounds a v4 attempt by its denylist", { timeout: 120_00
     try {
       // mutation: the denylist bound denies nothing -> landed, red
       expect(intent).toMatchObject({ state: "refused", reason: "out-of-bounds:b" });
+      // A refused acceptance landed nothing, so it records nothing (fix round 2).
+      expect(t.h.store.db.prepare("SELECT 1 FROM activity WHERE group_id='g' AND kind='off-plan-write'").all()).toEqual([]);
     } finally { await t.h.dispose(); }
   });
 });
