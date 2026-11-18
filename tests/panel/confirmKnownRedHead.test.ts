@@ -124,4 +124,16 @@ describe("the confirm step predicts at the target's HEAD (#341 L4, review I-1)",
       expect((await w.confirm()).spawned).toBe(1);
     } finally { await w.done(); }
   });
+
+  it("a group stacked on another starts from that group's branch, not HEAD: nothing starts", async () => {
+    const w = await world();
+    try {
+      group(w.h, "old", { status: "done", plan: { repoId: "repo" }, acceptance: red(w.head) });
+      // A done stacked prerequisite whose accepted tip had nothing red: the predicted base answers (empty), HEAD is not read.
+      group(w.h, "pre", { status: "done", plan: { repoId: "repo" }, acceptance: { tip: OTHER, result: "passed", at: DAY, commands: [{ command: "npm test", exit: "0", ms: 1 }] } });
+      w.h.store.db.prepare("INSERT INTO group_edges(from_group,to_group,body) VALUES ('pre','g','{}')").run();
+      // mutation: drop the "not stacked" condition -> one rev-parse -> red
+      expect(await w.confirm()).toEqual({ body: { schema: "orca-confirm-known-red-v1" }, spawned: 0 });
+    } finally { await w.done(); }
+  });
 });
