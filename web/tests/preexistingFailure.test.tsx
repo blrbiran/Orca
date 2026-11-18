@@ -20,10 +20,10 @@ const ROW: PreexistingFailureV1 = {
   reportedBy: [{ taskId: "a", runId: "run-a", chose: "edited README" }, { taskId: "b", runId: "run-b", chose: "" }],
   baseCheck: { taskId: "c", runId: "run-c", at: 5 },
 };
-const show = (roles: ("owner" | "member")[], rows: PreexistingFailureV1[] | null = [ROW], answer: number | null = 7) => {
+const show = (roles: ("owner" | "member")[], rows: PreexistingFailureV1[] | null = [ROW], answer: number | null = 7, region: "problem" | "results" = "problem") => {
   // The panel's sendControl answers the new revision on success, null on a refusal or an unknown outcome.
   const onCommand = vi.fn(async (_action: ControlAction) => answer), onSourceRequirement = vi.fn();
-  render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "problem", taskId: null, runId: null }}
+  render(<ControlGroupView focus={{ kind: "group", groupId: "g", region, taskId: null, runId: null }}
     view={{ ...view([]), ...(rows === null ? {} : { preexistingFailures: rows }) }}
     config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} roles={roles} refusal={null} onSourceRequirement={onSourceRequirement} />);
   return { onCommand, onSourceRequirement };
@@ -90,6 +90,19 @@ describe("a pre-existing failure in Problems (spec L2)", () => {
     show(["owner"]);
     // mutation: leave unanswered rows out of the problem count -> no count, red
     expect(screen.getByRole("tab", { name: /Problems/ }).textContent).toContain("1");
+  });
+
+  it("an unanswerable row never counts: nothing could clear it (final review Important)", () => {
+    // A base-check row on a group with no requirement review (plan file, flow child, debug) has no buttons, so if it counted
+    // the Problems tab and the Results conclusion would say a problem waits forever.
+    // Opened on Results, so the conclusion card is mounted beside the tab row.
+    show(["owner"], [{ ...ROW, answerable: false }], 7, "results");
+    // mutation: count every unanswered row regardless of answerable -> "1" on the tab and in the conclusion, red
+    // Both places measured in one assertion, so neither short-circuits the other (Rule 9).
+    expect({
+      tabCounts: /\d/.test(screen.getByRole("tab", { name: /Problems/ }).textContent ?? ""),
+      conclusionWaits: (document.body.textContent ?? "").includes("problem to look at"),
+    }).toEqual({ tabCounts: false, conclusionWaits: false });
   });
 
   it("a view without rows shows none", () => {

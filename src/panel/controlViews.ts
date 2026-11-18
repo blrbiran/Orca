@@ -1,6 +1,6 @@
 import { autoConfirmView } from "../control/autoConfirm.js";
 import {validSavedNoDispatch} from "../control/savedResultNoDispatch.js";
-import { flowRoleSql } from "../flow/groups.js";
+import { flowGroupOf, flowRoleSql } from "../flow/groups.js";
 import {savedDispatchSchema,recoveryOfSchema,savedRecoverySchema,savedSourceSchema} from "../control/savedResultProtocol.js";
 import { hasOptionalTaskPolicy, readFundedAllowance } from "../control/fundedAllowance.js";
 import { groupTopUps, type TopUpRow } from "../control/workTopUp.js";
@@ -1708,19 +1708,23 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
  */
 function preexistingFailuresView(store: ControlStore, groupId: string, body: unknown, snapshot: GroupReadSnapshot) {
   let base: string | null = null;
+  // groupBaseCommit's rule (L3's scope): the first work run's base, and none once a body before it does not decode -- which
+  // run came first is then unknown, so no later run's base is taken (final review minor 1).
+  let baseSettled = false;
   const failed: FailedCheck[] = [];
   for (const row of snapshot.runsByRowid) {
     // A run body that does not decode is named in unreadableRuns; it reports nothing here.
     const decoded = snapshot.decodeRun(String(row.id));
-    if (decoded === undefined || !decoded.ok) continue;
+    if (decoded === undefined || !decoded.ok) { baseSettled = true; continue; }
     const run = decoded.value;
     const drive = (run as { phase?: unknown; drive?: { base?: unknown } } | null);
-    if (base === null && drive?.phase === "work" && typeof drive.drive?.base === "string") base = drive.drive.base;
+    if (!baseSettled && drive?.phase === "work" && typeof drive.drive?.base === "string") { base = drive.drive.base; baseSettled = true; }
     const check = failedCheckOf(run);
     if (check !== null) failed.push(check);
   }
   let scope: { repoId: string; base: string } | null = null;
-  if (base !== null && multiDirOf(body) === null && dirWorkspaceOf(body) === null) {
+  // baseCheckScopeOf's exclusions, from the body this read holds: a multi-directory, dir or dir flow group has no single tree.
+  if (base !== null && multiDirOf(body) === null && dirWorkspaceOf(body) === null && flowGroupOf(store, groupId, body)?.workspaceKind !== "dir") {
     try { scope = { repoId: groupRepoId(store, groupId, body), base }; } catch { scope = null; }
   }
   return preexistingFailureRows(store, groupId, body, scope, failed);

@@ -81,8 +81,6 @@ import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun,
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 
-/** Task 4 review I-1: the confirm step's one HEAD read is bounded (a hung git never holds the read). */
-const TARGET_HEAD_TIMEOUT_MS = 10_000;
 import { applySetCriteriaReview, criteriaDecisionIdOf, criteriaReviewCandidates, criteriaReviewFacts, criteriaReviewVerdict, type SetCriteriaReviewCommand } from "./criteriaReview.js";
 import { flagDecision, ratifyFlag, readFlaggedDecision } from "./flaggedDecisions.js";
 import { join as joinPath } from "node:path";
@@ -148,6 +146,9 @@ import {
   applyRequirementAnswer, applyRequirementClarifyMore, applyRequirementRevise, applyRequirementClassify, applyRequirementSetAgent, applyRequirementConsensus, applyRequirementDraftAccept, applyRequirementDraftFeedback, applyRequirementOpen,
   type RequirementAnswerCommand, type RequirementClarifyMoreCommand, type RequirementReviseCommand, type RequirementClassifyCommand, type RequirementSetAgentCommand, type RequirementConsensusCommand, type RequirementDraftAcceptCommand, type RequirementDraftFeedbackCommand, type RequirementOpenCommand,
 } from "./requirementCommands.js";
+
+/** Task 4 review I-1: the confirm step's one HEAD read is bounded (a hung git never holds the read). */
+const TARGET_HEAD_TIMEOUT_MS = 10_000;
 
 export type ProposalEditCommand = Extract<RawAuthorityCommandV1, { verb: "proposal-edit" }>;
 export type ReestimateCommand = Extract<RawAuthorityCommandV1, { verb: "estimate" }>;

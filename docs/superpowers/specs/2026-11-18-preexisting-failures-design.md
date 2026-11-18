@@ -254,3 +254,16 @@ section records what the build decided and where it differs from or fills in the
 - Task 2: the answerable path is not measured by `controlPollPerformance`; `group brief` does not list the preexisting
   failure rows (only `group show` does).
 - Tests: `criteriaBaseRun` and `acceptAttemptLanding` flaked under load in quick-tier runs; watch them at test:wide.
+
+### Added by the final fix wave
+
+Written by the final-review fix agent of Orca session ca534c51 (2026-11-18), following commit `6d37f342`. The items above
+are unchanged.
+
+- **What:** "latest wins" -- a later green acceptance at the same base cancels an earlier red -- is applied in L4 (the
+  brief and the confirm step) only. L2's problem row and L3's evidence line can still show that red.
+- **Why:** kept to the reviewed scope; the final whole-branch review recorded it as a minor rather than a fix.
+- **Cost:** a stale red on the row and in the evidence line until the next base check at that base.
+- The same wave fixed, in code: an unanswerable row no longer counts on the Problems tab or in the Results conclusion;
+  the view's base for the base-check source follows `baseCheckScopeOf` (no base past an unreadable earlier run body, none
+  for a dir flow group); and `TARGET_HEAD_TIMEOUT_MS` (item 14) now sits after the import block.

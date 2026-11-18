@@ -122,7 +122,7 @@ describe("group brief names a check already known red at this group's base (#341
       baseCheck(w.h, "repo", BASE, "npm run build", "green", DAY);
       baseCheck(w.h, "repo", BASE, "npm run e2e", "unknown", DAY);
       group(w.h, "old", { status: "done", plan: { repoId: "repo" }, acceptance: acceptance(BASE, EARLIER_BASE) });
-      // mutation: drop `result='red'` from redBaseChecksAt -> build and e2e appear -> red
+      // mutation: drop `result='red'` from answeredBaseChecksAt -> build and e2e appear -> red
       // mutation: drop the dedupe by command -> `npm test` twice -> red
       expect((await w.brief()).knownRedAtBase).toEqual([
         { command: "npm run lint", base: BASE, source: "base-check", groupId: "sib", taskId: "t2", at: DAY + 1_000 },

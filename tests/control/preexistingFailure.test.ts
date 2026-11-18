@@ -173,6 +173,37 @@ describe("the base-check source (L3's red answer) feeds the same row", () => {
       expect(view(t).preexistingFailures).toEqual([{ command: check, reportedBy: [], sources: ["base-check"], baseCheck: { taskId: "a", runId, at: expect.any(Number) }, answer: null, answerable: false }]);
     } finally { await t.h.dispose(); }
   }, 180_000);
+
+  it("the view's base is L3's (baseCheckScopeOf): none for a dir flow group, none when an earlier run body cannot be read (final review minor 1)", async () => {
+    const check = "test -e never-there.txt";
+    const lastFailure = { rejectCategory: "required-check-failed", failingCommand: check, primaryTargetPaths: ["a"] };
+    const t = await driverHarness([{ taskId: "a", requiredChecks: [check] }], {
+      behaviour: () => "failed", failure: () => ({ failureCause: { cause: "required-check-failed", phase: "verify", retries: 0, detail: null }, lastFailure }),
+    }); try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).state === "blocked", 120);
+      await driver.stop();
+      const db = t.h.store.db;
+      const base = (t.body(runId).drive as { base: string }).base;
+      // L3's answer, written as its record would be (no base run needed: this asks only which base the view reads).
+      db.prepare("INSERT OR REPLACE INTO base_check_results(repo_id,base,command,result,tail,why,group_id,task_id,run_id,requested_at,at,attempts) VALUES ('repo',?,?,'red',NULL,NULL,'g','a',?,1,5,1)").run(base, check, runId);
+      expect(view(t).preexistingFailures?.map((row) => row.sources)).toEqual([["base-check"]]);
+      const original = String(db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body);
+      // A dir flow group has no single tree to run a check at: L3 asks nothing there, so the view shows no base-check row.
+      db.prepare("INSERT INTO flow_runs(id,group_id,template_ref,template_sha256,workspace,vault_id,params_sha256,pool_tokens,state,revision,body) VALUES ('fr','g','t','x','{\"kind\":\"dir\"}',NULL,'x',0,'running',0,'{}')").run();
+      db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...JSON.parse(original), flow: { role: "parent", flowRunId: "fr" } }));
+      // mutation: drop the dir-flow exclusion from the view's scope -> a base-check row, red
+      expect(view(t).preexistingFailures).toBeUndefined();
+      db.prepare("UPDATE groups SET body=? WHERE id='g'").run(original);
+      db.prepare("DELETE FROM flow_runs WHERE id='fr'").run();
+      // A run body before the work run that cannot be read: which run came first is unknown, so no later run's base is taken
+      // (groupBaseCommit and recordedBaseOf give up there too).
+      db.prepare("INSERT INTO runs(rowid,id,group_id,work_item_id,generation,active,body) VALUES (-1,'run-garbled','g','probe-x',0,0,'{not json')").run();
+      // mutation: skip an undecodable row and take the next work run's base -> a base-check row, red
+      expect(view(t).preexistingFailures).toBeUndefined();
+    } finally { await t.h.dispose(); }
+  }, 180_000);
 });
 
 describe("the person's three answers (acceptance 3)", () => {

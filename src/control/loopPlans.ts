@@ -302,6 +302,8 @@ export function expandRecipe(taskId: string, repoPath: string, recipe: LoopRecip
     return { ok: false, reason: "investigate-max-files" };
   }
   if (plan.planId === "design" && inputs.targetPaths.includes("**")) return { ok: false, reason: "design-target" };
+  // offPlanWrites() gates both v4 lines -- #346's off-plan constraint and #341 L2's pre-existing-failure one -- so
+  // re-versioning one moves the other.
   const offPlan = offPlanWrites(recipe.planVersion);
   const contract = {
     objective: {
