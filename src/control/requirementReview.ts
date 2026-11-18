@@ -155,7 +155,7 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
     "- verdict not-met: name the evidence you looked at, in the same forms, and say in `missing` what is still needed.",
     "- verdict cannot-judge: only when neither the diff, the files listed nor Orca's records above can show it; say in `missing` which record or content would. Do not guess what a file's unshown content says.",
     "- fixableBy, for every criterion, says who could meet it: \"work\" when changing files in the repository can meet it; \"plan\" when it is about the accepted plan itself (its tasks, their targetPaths, dependsOn or order), which no change to files alters; \"person\" when only the person can decide (their instructions contradict each other, or it depends on a fact outside the repository). Orca opens an automatic fix task only for not-met criteria that are \"work\".",
-    "If a not-met criterion asks for a change that contradicts an explicit human restriction and a required check, add checkConflict: {criterionId, requiredCheck, because}. Name the exact check and the person's instruction; do not assume that two red test runs have the same cause. Orca will stop automatic repair for review, not waive the check.",
+    "If a not-met criterion asks for a change that contradicts an explicit human restriction and a required check, add checkConflict: {criterionId, requiredCheck, because}; \"checkConflict\": null when there is none. Name the exact check and the person's instruction; do not assume that two red test runs have the same cause. Orca will stop automatic repair for review, not waive the check.",
     "Every criterion id above must appear exactly once.",
   ].join("\n");
 }
@@ -500,6 +500,28 @@ async function groupChanges(repo: string, base: string, tip: string): Promise<{ 
 /** #334: room for the changed-file lists and one blob read (the cat-file bound this file always gave). */
 const REVIEW_GIT_LIST_MAX_BYTES = 256 * 1024 * 1024;
 
+/** Tester #358: ccloop's code for a single-call answer it could not read as one JSON object of the asked shape. */
+export const REVIEW_SHAPE_FAILURE = "single-call-output-invalid";
+
+/**
+ * Tester #358 (plan 2026-11-18 batch D, D3): in the failed call's settlement transaction (already billed), a second call of
+ * the same round on the same work item -- only when this was the round's first call, the group is neither archived nor
+ * stopping, and it can still fund a review. Answers whether it was claimed; when not, the round settles as before.
+ */
+function askReviewAgain(store: ControlStore, runRow: SingleCallRunRow, roundNo: number, tip: string, contract: Record<string, unknown> | null): boolean {
+  const { groupId, workItemId } = runRow;
+  if (Number(store.db.prepare("SELECT count(*) AS n FROM runs WHERE group_id=? AND work_item_id=?").get(groupId, workItemId)!.n) !== 1) return false;
+  if (isGroupArchived(store, groupId) || store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined) return false;
+  const funded = boundedGroupGrant(store, groupId, { ...REQUIREMENT_REVIEW_GRANT }, REVIEW_FLOOR_TOKENS, store.now());
+  if ("unfunded" in funded) return false;
+  const reviewer = reviewerOf(store, groupId);
+  const note = typeof contract?.note === "string" ? { note: contract.note } : {};
+  claimGroupSingleCallInTransaction(store, { groupId, workItemId, purpose: "requirement-review",
+    identity: { requirementReview: { roundNo, tip } }, slot: reviewer.slot, profile: reviewer.profile, grant: funded.grant,
+    contract: { schema: "orca-requirement-review-contract-v1", roundNo, tip, maxOutputTokens: REVIEW_MAX_OUTPUT_TOKENS, ...note } });
+  return true;
+}
+
 interface ReviewSettled { classified: ReturnType<typeof classifyReviewOutput> | null; failure: string | null }
 
 export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
@@ -552,6 +574,8 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
     const failed = failure ?? (settled as ReviewSettled | null)?.failure ?? null;
     const body = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(runRow.groupId)!.body));
     const current = reviewOf(body) ?? { state: "reviewing" as const, rounds: [], autoFixRounds: 0 };
+    // Tester #358: an answer in a broken shape says nothing about the work; the round's call is asked once more.
+    if (failed === REVIEW_SHAPE_FAILURE && current.state === "reviewing" && askReviewAgain(store, runRow, roundNo, tip, contract)) return;
     const result: ReviewRoundResult = failed !== null || answer === null ? "failed" : answer.result;
     const conflict = answer !== null && answer.result !== "invalid" && result === "not-met" ? answer.checkConflict : undefined;
     const round: ReviewRound = { roundNo, tip, runId: runRow.runId, at: store.now(), result,
