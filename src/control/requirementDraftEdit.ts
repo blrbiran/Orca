@@ -31,6 +31,9 @@ const invalid = (detail: string): never => { throw new ControlError("group-state
 /** The draft the edit names: the latest, awaiting review, with the hash the person read (as accept checks it). */
 function reviewed(store: ControlStore, groupId: string, payload: RequirementDraftEditCommand["payload"]): DraftBody & { output: Output; plan: Record<string, unknown> } {
   const group = readRequirementGroup(store, groupId);
+  // Tester #379: after accept no state takes a draft edit again (no reopen: accept froze and exported the document and
+  // imported the tasks), so the refusal names the accepted draft rather than a state to wait for.
+  if (group.requirement.acceptedDraftNo !== null) throw new ControlError("requirement-already-accepted", `draft-edits-closed:${group.requirement.acceptedDraftNo}`);
   if (group.status !== "clarifying") invalid("not-clarifying");
   if (group.stopped || readStopIntent(store, groupId) !== null) throw new ControlError("group-stopped");
   const draft = latestDraft(store, groupId);

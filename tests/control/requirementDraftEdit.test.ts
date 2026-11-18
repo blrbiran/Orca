@@ -303,3 +303,31 @@ describe("a person drops a stray target path from a draft task (#380)", () => {
     } finally { await x.dispose(); }
   });
 });
+
+// Tester #379: after accept, every draft edit was refused as `group-state-invalid:not-clarifying`, which read as "wrong
+// state, try later" -- while no later state takes a draft edit. Reopening an accepted split is not built: accept froze
+// and queued the document's export (a commit in the target repository), imported the tasks and queued their estimate (a
+// model call), so a reopen would have to undo work outside the store (spec 2026-11-18 split-feedback-conflicts,
+// Correction 2026-11-19). The refusal now names that the split was accepted and which draft.
+describe("a draft edit after the split was accepted (#379)", () => {
+  it("feedback and every requirement-draft-edit are refused as requirement-already-accepted, naming the accepted draft, changing nothing", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: HEALTH }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
+      const accepted = await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: readDraft(x.store, "r", 1).draftHash }));
+      expect(accepted).toMatchObject({ result: { kind: "requirement-draft-accepted", draftNo: 1 } });
+      const after = readDraft(x.store, "r", 1);
+      expect(after.state).toBe("accepted");
+      // mutation: drop the accepted check in reviewed() -> group-state-invalid:not-clarifying, red
+      for (const change of [{ kind: "drop-target-path", taskId: "health-model", path: "src/health/report.js" }, { kind: "apply-parallel-candidates" },
+        { kind: "narrow-target-path", taskId: "health-model", path: "src/health/report.js", to: ["src/health/report.js"] }]) {
+        expect(await edit(x, 1, change)).toMatchObject({ error: { code: "requirement-already-accepted", message: "requirement-already-accepted:draft-edits-closed:1" } });
+      }
+      // mutation: drop the accepted check in applyRequirementDraftFeedback -> group-state-invalid:not-clarifying, red
+      expect(x.service.requirementDraftFeedback(x.command("requirement-draft-feedback", { draftNo: 1, feedback: "run them together" })))
+        .toMatchObject({ error: { code: "requirement-already-accepted", message: "requirement-already-accepted:draft-edits-closed:1" } });
+      expect(readDraft(x.store, "r", 1)).toEqual(after);
+      expect(() => readDraft(x.store, "r", 2)).toThrow();
+    } finally { await x.dispose(); }
+  });
+});

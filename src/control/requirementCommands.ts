@@ -449,6 +449,9 @@ export function applyRequirementDraftFeedback(deps: RequirementCommandDeps, comm
     rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
     apply: (context) => {
       const id = command.target.groupId;
+      // Tester #379: as requirementDraftEdit.ts reviewed() -- a split already accepted takes no draft edit.
+      const accepted = readRequirementGroup(deps.store, id).requirement.acceptedDraftNo;
+      if (accepted !== null) throw new ControlError("requirement-already-accepted", `draft-edits-closed:${accepted}`);
       notStopped(deps.store, clarifying(deps.store, id));
       const draft = latestDraft(deps.store, id);
       if (draft === null || draft.draftNo !== command.payload.draftNo || draft.state !== "awaiting-review") return invalid("draft-not-awaiting-review");

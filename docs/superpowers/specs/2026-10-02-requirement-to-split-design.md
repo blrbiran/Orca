@@ -461,3 +461,32 @@ directory. Why: a requirement naming `src/sla/model.js` (no `src/sla/` yet) was 
 to `src/sla-model.js`, which shipped against the requirement; git has no reason to refuse a new directory. The split
 instruction keeps its version (rule wording only; the prompt hash pin moved). Full record:
 `docs/superpowers/specs/2026-11-16-implied-write-paths-design.md` Correction 2.
+
+## Correction (tester #379, #380; Orca session 2026-11-19; the text above is kept as written)
+
+Written by the implementing agent of the Orca session of 2026-11-19 (the controller's E-split track) on branch
+`feat/e-split`, from `main` at `dd799bb4`, in the commits `feat(requirement): drop-path removes one stray target path from
+a draft task and re-validates the split (#380)` and `feat(requirement): a draft edit after accept is refused as
+requirement-already-accepted and names the plan-library route (#379)`.
+
+1. **A draft edit removes one target path (#380).** `requirement-draft-edit` takes a fourth kind, `drop-target-path`
+   `{taskId, path}`: the path is removed from that task's `targetPaths` (in a multi split, from the write that declares
+   it). Refused, changing nothing: a task or path the draft does not list (`draft-edit-not-a-target-path:<task>:<path>`),
+   and the task's (or the declaring write's) last path (`draft-edit-last-target-path:<task>:<path>`; the schema's
+   `minItems: 1`). The edited split is re-evaluated as every edit's is (layers, implicit edges, implied paths, parallel
+   candidates), so an implicit edge goes only when the overlap that made it does. Why: a split that put each sibling
+   module in the other's `targetPaths` ran the pair one after the other (#268's implicit edge); `apply-parallel` drops
+   only declared edges and `narrow-path` only narrows a claim, so the only remedy was another split call. CLI:
+   `orca requirement drop-path <group> --task <t> --path <p>`. No Web control (its sibling `narrow-path` has none).
+   Until the implied-paths half of #353(c) is on the same branch, a path a task's success condition names is added back
+   by the re-evaluation (spec 2026-11-16), so dropping such a path changes nothing.
+2. **No reopen of an accepted split (#379); the refusal says so.** §9.1 makes accept one transaction that freezes the
+   document, queues its export (the driver commits it into the target repository), imports the tasks and queues their
+   estimate (a model call, with `estimate: "preflight"`). Reopening would have to undo a commit outside the store and an
+   estimate that may already be running, so it is not built. Instead a draft edit (`requirement-draft-feedback`,
+   `requirement-draft-edit`) on a group whose `requirement.acceptedDraftNo` is set is refused
+   `requirement-already-accepted` with detail `draft-edits-closed:<acceptedDraftNo>` (it was `group-state-invalid:
+   not-clarifying`, which named no way forward). The CLI rows of those edits say that draft edits are closed and give,
+   as `next`, the supported way to change the plan before confirm: `orca plan save --requirement <g> --draft <n>`,
+   `orca plan export`, `orca plan import … --entry … --as-person`, `orca group import --library <entry>`, then
+   `orca group archive <g>`.
