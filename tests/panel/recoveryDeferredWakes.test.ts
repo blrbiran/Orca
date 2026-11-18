@@ -39,10 +39,13 @@ describe("the recovery read names a start wake that never delivers (#171)", () =
       // start it on unarchive (the unarchive pauses the group), so neither is listed as a start waiting on the archive (under
       // either reason); its resume wake still is.
       // mutation: skip only `start` for an archived group -> the no-start row is listed, red here
+      // Ruling (2026-11-18 tester batch D review 2): the resume wake's row now also says it waits on the unarchive and a
+      // person's resume (`waitsOn`), since the unarchive pauses the group.
+      // mutation: drop `waitsOn` from the archived resume row -> red here
       store.dispatchBlocked = true;
-      expect(readControlRecovery(store, "epoch-test").deferredWakes).toEqual([{ groupId: "g-archived", kind: "resume", reason: "dispatch-blocked" }]);
+      expect(readControlRecovery(store, "epoch-test").deferredWakes).toEqual([{ groupId: "g-archived", kind: "resume", reason: "dispatch-blocked", waitsOn: "unarchive-then-resume" }]);
       store.dispatchBlocked = false;
-      expect(readControlRecovery(store, "epoch-test").deferredWakes).toEqual([{ groupId: "g-archived", kind: "resume", reason: "group-archived" }]);
+      expect(readControlRecovery(store, "epoch-test").deferredWakes).toEqual([{ groupId: "g-archived", kind: "resume", reason: "group-archived", waitsOn: "unarchive-then-resume" }]);
       store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id='w2'").run();
       expect(readControlRecovery(store, "epoch-test")).not.toHaveProperty("deferredWakes");
     } finally { await dispose(); }

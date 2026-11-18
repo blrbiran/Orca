@@ -2542,7 +2542,9 @@ export const recoveryViewSchema = z
     // Terminal run closure #169: current terminal failures and the one step that ends their accounting.
     terminalRuns: z.array(z.object({ groupId: idSchema, taskId: idSchema, runId: idSchema, outcome: z.string().min(1), next: z.enum(["settle-usage", "close-run"]) }).strict()).optional(),
     // Tester #171: a start-family wake the drainer keeps deferring, with the condition that defers it. Absent when none does.
-    deferredWakes: z.array(z.object({ groupId: idSchema, kind: nonemptyString, reason: z.enum(["dispatch-blocked", "group-blocker", "group-archived"]) }).strict()).optional(),
+    // #370 review 2: `waitsOn` on an archived group's resume wake -- delivered only after the unarchive and a person's resume.
+    deferredWakes: z.array(z.object({ groupId: idSchema, kind: nonemptyString, reason: z.enum(["dispatch-blocked", "group-blocker", "group-archived"]),
+      waitsOn: z.literal("unarchive-then-resume").optional() }).strict()).optional(),
     // Tester follow-up I (seat L): a current work run blocked where recovery retry resumes it, with that command. Absent when none.
     blockedRuns: z.array(z.object({ groupId: idSchema, taskId: idSchema, runId: idSchema, blockedAt: nonemptyString, reason: z.string().nullable(), next: nonemptyString }).strict()).optional(),
     // Tester follow-up J (#308): the same for a single call (requirement clarify/split/review, estimate, flow call), which has no task.
