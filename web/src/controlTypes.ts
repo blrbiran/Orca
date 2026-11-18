@@ -645,6 +645,8 @@ export interface PreexistingFailureV1 {
   baseCheck?: { taskId: string; runId: string; at: number };
   answer: PreexistingFailureAnswerV1 | null;
   answered?: { by: string; at: number };
+  /** Task 2 review I-1: false for a group whose requirement review does not run; the row is information only. */
+  answerable: boolean;
 }
 
 /** src/control/estimateHistory.ts EstimateHistoryView. */

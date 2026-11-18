@@ -12,11 +12,12 @@
 import { describe, expect, it } from "vitest";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { expandLoopPlan, expandRecipe, PREEXISTING_FAILURE_CONSTRAINT, OFF_PLAN_TARGETS_CONSTRAINT, type LoopInputs } from "../../src/control/loopPlans.js";
-import { preexistingFailureRows, preexistingFailuresOf, recordPreexistingFailures, PREEXISTING_PER_RUN_MAX } from "../../src/control/preexistingFailure.js";
+import { preexistingFailureRows, preexistingFailuresOf, readPreexistingFailures, recordPreexistingFailures, PREEXISTING_PER_RUN_MAX } from "../../src/control/preexistingFailure.js";
 import { reviewFacts } from "../../src/control/requirementReview.js";
 import { write } from "../../src/control/executionDriver.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
+import { FIXTURE_SLOT } from "./fixtures/requirement.js";
 
 type Harness = Awaited<ReturnType<typeof driverHarness>>;
 const LANDED = ["landed", "settled"];
@@ -30,6 +31,16 @@ const reports = (t: Harness) => t.h.store.db.prepare("SELECT task_id, run_id, bo
 const view = (t: Harness) => readControlGroup(t.h.store, "epoch-test", "g");
 const groupBody = (t: Harness) => JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as Record<string, unknown>;
 const asOwner = <T>(commandId: string, action: () => T): T => withCommandContext(commandId, { client: "web", principal: "user:owner" }, action);
+/** Makes the harness group one created from a requirement (as reviewWorld does): its requirement review runs, so it is answerable. */
+const REQUIREMENT = {
+  requirementId: "0123456789abcdef0123456789abcdef", repoId: "repo", slug: null, contentLanguage: "en", createdOn: "2026-11-12",
+  idea: "Write a.txt", profile: { profileId: "all", profileHash: "b".repeat(64) }, agentSlot: FIXTURE_SLOT, maxOutputTokens: 64_000,
+  consensus: { roundNo: 1, at: "2026-11-12T00:00:00.000Z", openBranches: [], openQuestions: [] }, acceptedDraftNo: 1, document: null,
+  export: { state: "done", path: "docs/requirements/x.md", commit: "c".repeat(40), parent: "d".repeat(40), detail: null },
+};
+const withRequirement = (t: Harness): void => {
+  t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...groupBody(t), requirement: REQUIREMENT }));
+};
 const INPUTS: LoopInputs = { goal: "g", successCondition: "s", targetPaths: ["a.txt"], checks: ["npm test"], nonGoals: [], relevantDocs: [], protectedPaths: [], maxFilesTouched: null };
 
 describe("the v4 contract asks for the report; older contracts keep their bytes (spec L2, acceptance 6)", () => {
@@ -98,7 +109,8 @@ describe("a run's report becomes activity and one problem row per command (accep
       const rows = view(t).preexistingFailures;
       // mutation: drop the de-dup by command (one row per report) -> three rows, red
       expect(rows).toHaveLength(1);
-      expect(rows![0]).toEqual({ command: "npm test", sources: ["agent"], answer: null,
+      // Fix round 1 (Task 2 review I-1): every row says whether the group can be answered (a plan-file harness group cannot).
+      expect(rows![0]).toEqual({ command: "npm test", sources: ["agent"], answer: null, answerable: false,
         reportedBy: reports(t).map((row) => ({ taskId: row.body.taskId, runId: row.body.runId, chose: row.body.chose })) });
       expect(rows![0]!.reportedBy.map((by) => by.taskId).sort()).toEqual(["a", "b", "c"]);
       // A collect that happens again (a crash replayed) records nothing twice.
@@ -135,13 +147,13 @@ describe("the base-check source (L3's red answer) feeds the same row", () => {
       const failed = [{ taskId: "a", runId: "run-a1", command: "npm test" }, { taskId: "a", runId: "run-a2", command: "npm run lint" }];
       // mutation: drop the red filter -> a lint row, red; mutation: drop the failed-command match -> a build row, red
       expect(preexistingFailureRows(t.h.store, "g", {}, scope, failed)).toEqual([
-        { command: "npm test", reportedBy: [], sources: ["base-check"], baseCheck: { taskId: "a", runId: "run-a1", at: 5 }, answer: null },
+        { command: "npm test", reportedBy: [], sources: ["base-check"], baseCheck: { taskId: "a", runId: "run-a1", at: 5 }, answer: null, answerable: false },
       ]);
       // With no base (no work run yet, or a multi-directory / dir group) there is no base-check source.
       expect(preexistingFailureRows(t.h.store, "g", {}, null, failed)).toEqual([]);
       write(t.deps, () => recordPreexistingFailures(t.h.store, { groupId: "g", taskId: "a", runId: "run-a1" }, { decisions: [marker("npm test", "edited README")] }));
       expect(preexistingFailureRows(t.h.store, "g", {}, scope, failed)).toEqual([
-        { command: "npm test", reportedBy: [{ taskId: "a", runId: "run-a1", chose: "edited README" }], sources: ["agent", "base-check"], baseCheck: { taskId: "a", runId: "run-a1", at: 5 }, answer: null },
+        { command: "npm test", reportedBy: [{ taskId: "a", runId: "run-a1", chose: "edited README" }], sources: ["agent", "base-check"], baseCheck: { taskId: "a", runId: "run-a1", at: 5 }, answer: null, answerable: false },
       ]);
     } finally { await t.h.dispose(); }
   }, 60_000);
@@ -158,14 +170,15 @@ describe("the base-check source (L3's red answer) feeds the same row", () => {
       await t.until(driver, () => t.body(runId).state === "blocked", 120);
       for (let i = 0; i < 150 && t.h.store.db.prepare("SELECT result FROM base_check_results").get()?.result !== "red"; i += 1) { await driver.round(); await new Promise((resolve) => setTimeout(resolve, 20)); }
       // mutation: leave the base-check source out of the view -> undefined, red
-      expect(view(t).preexistingFailures).toEqual([{ command: check, reportedBy: [], sources: ["base-check"], baseCheck: { taskId: "a", runId, at: expect.any(Number) }, answer: null }]);
+      expect(view(t).preexistingFailures).toEqual([{ command: check, reportedBy: [], sources: ["base-check"], baseCheck: { taskId: "a", runId, at: expect.any(Number) }, answer: null, answerable: false }]);
     } finally { await t.h.dispose(); }
   }, 180_000);
 });
 
 describe("the person's three answers (acceptance 3)", () => {
-  const world = async () => {
+  const world = async (reviewed = true) => {
     const t = await driverHarness([{ taskId: "a" }], { decisions: () => [marker("npm test", "edited README to the v3 example")] });
+    if (reviewed) withRequirement(t);
     const runId = await t.claim();
     await t.until(t.driver(), () => LANDED.includes(t.body(runId).state));
     const answer = (command: string, chosen: "allow-fix" | "relative" | "edit-requirement", person = true) => {
@@ -186,12 +199,13 @@ describe("the person's three answers (acceptance 3)", () => {
   it.each([
     ["allow-fix", "the person allows the change that repaired it -- it is an allowed change, not a breach of the requirement"],
     ["relative", "the person judges this check relative to the group's base -- failures already present at the base do not count against the work"],
-    ["edit-requirement", "the person is changing the requirement itself -- judge the work against the requirement as it is written here"],
+    // Fix round 1 (Task 2 review I-3): Orca cannot change an accepted requirement, and the review is told so.
+    ["edit-requirement", "the person wants the requirement itself changed, which Orca cannot do to an accepted requirement yet -- judge the work against the requirement as it is written here"],
   ] as const)("%s is recorded on the group, shown on the row, and in the review's facts", async (chosen, means) => {
     const { t, answer, facts } = await world(); try {
       expect(answer("npm test", chosen)).toMatchObject({ result: { kind: "preexisting-failure-answered", groupId: "g", command: "npm test", answer: chosen } });
       expect(groupBody(t).preexistingFailureAnswers).toEqual({ "npm test": { answer: chosen, by: "user:owner", at: expect.any(Number) } });
-      expect(view(t).preexistingFailures![0]).toMatchObject({ answer: chosen, answered: { by: "user:owner" } });
+      expect(view(t).preexistingFailures![0]).toMatchObject({ answer: chosen, answered: { by: "user:owner" }, answerable: true });
       expect((await facts()).find((line) => line.startsWith("Pre-existing failure"))).toBe(
         `Pre-existing failure \`npm test\` (already failing before a task changed anything): reported by a (chose: edited README to the v3 example). answered "${chosen}": ${means}.`);
     } finally { await t.h.dispose(); }
@@ -212,6 +226,65 @@ describe("the person's three answers (acceptance 3)", () => {
       // mutation: drop the person check -> recorded with no person, red
       expect(answer("npm test", "relative", false)).toMatchObject({ error: { code: "preexisting-failure-person-required" } });
       expect(groupBody(t)).not.toHaveProperty("preexistingFailureAnswers");
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+});
+
+describe("fix round 1: who can answer, and an answer outlives its pruned report (Task 2 review I-1, I-2, minor 2)", () => {
+  const answerAs = (t: Harness, command: string, chosen: "allow-fix" | "relative" | "edit-requirement") => {
+    const sent = t.h.command("answer-preexisting-failure", { command, answer: chosen });
+    return asOwner(sent.commandId, () => t.service.answerPreexistingFailure(sent));
+  };
+  const landed = async (reviewed: boolean) => {
+    const t = await driverHarness([{ taskId: "a" }], { decisions: () => [marker("npm test", "edited README")] });
+    if (reviewed) withRequirement(t);
+    const runId = await t.claim();
+    await t.until(t.driver(), () => LANDED.includes(t.body(runId).state));
+    return { t, runId };
+  };
+
+  it("a group with no requirement review shows the row for information only and refuses an answer", async () => {
+    const { t } = await landed(false); try {
+      // mutation: answerable always true -> red
+      expect(view(t).preexistingFailures![0]!.answerable).toBe(false);
+      // mutation: drop the answerable check in the command -> recorded, red
+      expect(answerAs(t, "npm test", "relative")).toMatchObject({ error: { code: "preexisting-failure-not-answerable" } });
+      expect(groupBody(t)).not.toHaveProperty("preexistingFailureAnswers");
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+
+  it("a requirement group is answerable unless it is multi-directory or dir (whose review does not run), or predates follow-up G", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      write(t.deps, () => recordPreexistingFailures(t.h.store, { groupId: "g", taskId: "a", runId: "run-a1" }, { decisions: [marker("npm test", "x")] }));
+      const answerable = (body: Record<string, unknown>) => preexistingFailureRows(t.h.store, "g", body, null, [])[0]!.answerable;
+      const reviewed = { modelVersion: "followup-g", requirement: REQUIREMENT };
+      expect(answerable(reviewed)).toBe(true);
+      // mutation: drop the multi-directory clause -> true, red
+      expect(answerable({ ...reviewed, multiDir: { project: "p", dirs: [{ key: "a", repoId: "repo", kind: "repo" }, { key: "b", repoId: "r2", kind: "repo" }], landing: null } })).toBe(false);
+      // mutation: drop the dir clause -> true, red
+      expect(answerable({ ...reviewed, dirWorkspace: { dir: "/nowhere", vaultId: "e".repeat(64) } })).toBe(false);
+      expect(answerable({ requirement: REQUIREMENT })).toBe(false);
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+
+  it("an answer whose report was pruned (activity retention) still yields its row and its review line", async () => {
+    const { t } = await landed(true); try {
+      answerAs(t, "npm test", "allow-fix");
+      t.h.store.db.prepare("DELETE FROM activity WHERE kind='preexisting-failure'").run();
+      // mutation: drop the rows for answers with no surviving source -> no row, red
+      expect(view(t).preexistingFailures).toEqual([{ command: "npm test", reportedBy: [], sources: [], answer: "allow-fix", answered: { by: "user:owner", at: expect.any(Number) }, answerable: true }]);
+      const facts = await reviewFacts(t.repo, groupBody(t), git(t.repo, "rev-parse", "refs/heads/orca/g"), t.h.store, "g");
+      expect(facts).toContain("Pre-existing failure `npm test` (already failing before a task changed anything): its reports are no longer kept. answered \"allow-fix\": the person allows the change that repaired it -- it is an allowed change, not a breach of the requirement.");
+      // The person may still change the answer.
+      expect(answerAs(t, "npm test", "relative")).toMatchObject({ result: { kind: "preexisting-failure-answered" } });
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+
+  it("a run body that does not decode is skipped when the rows are read outside the view", async () => {
+    const { t, runId } = await landed(true); try {
+      t.h.store.db.prepare("UPDATE runs SET body='broken run' WHERE id=?").run(runId);
+      // mutation: parse every run body -> SyntaxError, red
+      expect(readPreexistingFailures(t.h.store, "g", groupBody(t)).map((row) => row.command)).toEqual(["npm test"]);
     } finally { await t.h.dispose(); }
   }, 60_000);
 });

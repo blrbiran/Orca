@@ -9,19 +9,22 @@ const ANSWERS: readonly PreexistingFailureAnswerV1[] = ["allow-fix", "relative",
 /**
  * Pre-existing failures spec L2 (#341): one Problems row per check that was already red before a task changed anything --
  * who reported it and what each chose, or that Orca found it red at the group's base -- with the person's three answers
- * (an owner's act, as a waiver). "Edit the requirement" is recorded like the others and then opens the group's
- * requirement, where it is changed (no editor of its own). The group keeps running whatever the answer.
+ * (an owner's act, as a waiver), recorded for the requirement review. "Edit the requirement" is recorded like the others
+ * and, once the panel accepted it, opens the group's requirement; Orca cannot change an accepted requirement yet (Task 2
+ * review I-3). A group with no requirement review (`answerable` false: plan file, flow child, debug, multi-directory,
+ * dir) shows its rows for information only (I-1). The group keeps running whatever the answer.
  */
 export function PreexistingFailureProblem(props: {
   groupId: string; rows: readonly PreexistingFailureV1[] | undefined; roles?: readonly Role[]; archived: boolean; revision: number;
-  onCommand: (action: ControlAction) => void; onEditRequirement?: (groupId: string) => void;
+  onCommand: (action: ControlAction) => void | Promise<number | null>; onEditRequirement?: (groupId: string) => void;
 }): JSX.Element | null {
   const { t } = useTranslation();
   if (props.rows === undefined || props.rows.length === 0) return null;
   const owner = props.roles?.includes("owner") === true;
   const answer = (command: string, chosen: PreexistingFailureAnswerV1): void => {
-    props.onCommand({ verb: "answer-preexisting-failure", groupId: props.groupId, expectedRevision: props.revision, payload: { command, answer: chosen } });
-    if (chosen === "edit-requirement") props.onEditRequirement?.(props.groupId);
+    const sent = props.onCommand({ verb: "answer-preexisting-failure", groupId: props.groupId, expectedRevision: props.revision, payload: { command, answer: chosen } });
+    // Task 2 review minor 1: only after the panel accepted the answer (it resolves to the new revision; null when refused).
+    if (chosen === "edit-requirement") void Promise.resolve(sent).then((revision) => { if (typeof revision === "number") props.onEditRequirement?.(props.groupId); }, () => undefined);
   };
   return (
     <>
@@ -34,9 +37,9 @@ export function PreexistingFailureProblem(props: {
             ))}
             {row.baseCheck !== undefined && <li>{t("control.preexistingFailure.baseCheck", { command: row.command, task: row.baseCheck.taskId })}</li>}
           </ul>
-          <p>{t("control.preexistingFailure.keepsRunning")}</p>
+          <p>{t(row.answerable ? "control.preexistingFailure.keepsRunning" : "control.preexistingFailure.notAnswerable")}</p>
           {row.answer !== null && <p>{t("control.preexistingFailure.answered", { answer: t(`control.preexistingFailure.answer.${row.answer}`), by: row.answered?.by ?? "" })}</p>}
-          {!props.archived && owner && (
+          {!props.archived && owner && row.answerable && (
             <div role="group" aria-label={t("control.preexistingFailure.title", { command: row.command })}>
               {ANSWERS.map((chosen) => (
                 <button key={chosen} type="button" aria-pressed={row.answer === chosen} title={t(`control.preexistingFailure.answerExplain.${chosen}`)}

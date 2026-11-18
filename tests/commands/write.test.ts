@@ -273,7 +273,8 @@ describe("group preexisting-failure (pre-existing failures spec L2, #341)", () =
     const out = await cli(["group", "preexisting-failure", "g-alpha", "--command", "npm test", "--answer", "edit-requirement"], edit.dir);
     expect(out.code, out.stdout + out.stderr).toBe(0);
     // mutation: drop the next line from the row's format -> red
-    expect(out.stdout).toContain("next: change the requirement where it lives: orca requirement show g-alpha");
+    // Fix round 1 (Task 2 review I-3): the line no longer promises a change Orca cannot make to an accepted requirement.
+    expect(out.stdout).toContain("next: recorded for the requirement review, which judges the work against the requirement as written; Orca cannot change an accepted requirement yet (read it: orca requirement show g-alpha)");
     const relative = await world({}, { "POST groups/g-alpha/preexisting-failure": answered("relative") });
     expect((await cli(["group", "preexisting-failure", "g-alpha", "--command", "npm test", "--answer", "relative"], relative.dir)).stdout).not.toContain("next:");
   });

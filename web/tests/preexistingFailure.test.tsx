@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "../src/i18n.js";
 import { ControlGroupView } from "../src/ControlGroupView.js";
-import { controlCommandPath } from "../src/controlApi.js";
+import { controlCommandPath, type ControlAction } from "../src/controlApi.js";
 import type { PreexistingFailureV1 } from "../src/controlTypes.js";
 import { config, view } from "./usageRecoveryFixture.js";
 
@@ -16,12 +16,13 @@ import { config, view } from "./usageRecoveryFixture.js";
  */
 afterEach(cleanup);
 const ROW: PreexistingFailureV1 = {
-  command: "npm test", sources: ["agent", "base-check"], answer: null,
+  command: "npm test", sources: ["agent", "base-check"], answer: null, answerable: true,
   reportedBy: [{ taskId: "a", runId: "run-a", chose: "edited README" }, { taskId: "b", runId: "run-b", chose: "" }],
   baseCheck: { taskId: "c", runId: "run-c", at: 5 },
 };
-const show = (roles: ("owner" | "member")[], rows: PreexistingFailureV1[] | null = [ROW]) => {
-  const onCommand = vi.fn(), onSourceRequirement = vi.fn();
+const show = (roles: ("owner" | "member")[], rows: PreexistingFailureV1[] | null = [ROW], answer: number | null = 7) => {
+  // The panel's sendControl answers the new revision on success, null on a refusal or an unknown outcome.
+  const onCommand = vi.fn(async (_action: ControlAction) => answer), onSourceRequirement = vi.fn();
   render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "problem", taskId: null, runId: null }}
     view={{ ...view([]), ...(rows === null ? {} : { preexistingFailures: rows }) }}
     config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} roles={roles} refusal={null} onSourceRequirement={onSourceRequirement} />);
@@ -51,12 +52,31 @@ describe("a pre-existing failure in Problems (spec L2)", () => {
     expect(onSourceRequirement).not.toHaveBeenCalled();
   });
 
-  it("Edit the requirement is recorded too, then opens the group's requirement (the existing place it is changed)", () => {
+  it("Edit the requirement is recorded too, then opens the group's requirement (the existing place it is read)", async () => {
     const { onCommand, onSourceRequirement } = show(["owner"]);
     fireEvent.click(within(row()).getByRole("button", { name: "Edit the requirement" }));
     expect(onCommand.mock.calls).toEqual([[{ verb: "answer-preexisting-failure", groupId: "g", expectedRevision: 6, payload: { command: "npm test", answer: "edit-requirement" } }]]);
     // mutation: drop the requirement route on edit-requirement -> not called, red
-    expect(onSourceRequirement.mock.calls).toEqual([["g"]]);
+    await waitFor(() => expect(onSourceRequirement.mock.calls).toEqual([["g"]]));
+    // Fix round 1 (Task 2 review I-3): the button's explanation does not promise a change Orca cannot make.
+    expect(within(row()).getByRole("button", { name: "Edit the requirement" }).getAttribute("title")).toContain("Orca cannot change an accepted requirement yet");
+  });
+
+  it("a refused answer does not navigate (Task 2 review minor 1)", async () => {
+    const { onCommand, onSourceRequirement } = show(["owner"], [ROW], null);
+    fireEvent.click(within(row()).getByRole("button", { name: "Edit the requirement" }));
+    await waitFor(() => expect(onCommand).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // mutation: navigate before the answer -> called, red
+    expect(onSourceRequirement).not.toHaveBeenCalled();
+  });
+
+  it("a group with no requirement review shows the row for information only (Task 2 review I-1)", () => {
+    show(["owner"], [{ ...ROW, answerable: false }]);
+    // mutation: drop the answerable gate on the buttons -> three buttons, red
+    expect(within(row()).queryAllByRole("button")).toEqual([]);
+    expect(row().textContent).toContain("This group has no requirement review to tell, so there is nothing to answer: this is shown for information.");
+    expect(row().textContent).not.toContain("recorded for the requirement review");
   });
 
   it("an answered row says the answer and who gave it, and no longer counts on the Problems tab", () => {

@@ -268,7 +268,7 @@ answer a check that already failed before the work: allow-fix, relative or edit-
 - Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<group>`: a group id or a unique prefix
 - `--command <command>` (required): the check as the group's problem row names it (orca group show <group>: preexistingFailures)
-- `--answer <answer>` (required): allow-fix (the change that repaired it is allowed), relative (judge the check against the base) or edit-requirement (you change the requirement)
+- `--answer <answer>` (required): allow-fix (the change that repaired it is allowed), relative (judge the check against the base) or edit-requirement (you want the requirement changed); recorded and told to the group's requirement review
 
 ```
 orca group preexisting-failure g1 --command 'npm test' --answer relative

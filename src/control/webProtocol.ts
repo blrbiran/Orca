@@ -2476,10 +2476,13 @@ export const groupViewSchema = z
     preexistingFailures: z.array(z.object({
       command: nonemptyString,
       reportedBy: z.array(z.object({ taskId: idSchema, runId: idSchema, chose: z.string() }).strict()),
-      sources: z.array(z.enum(["agent", "base-check"])).min(1),
+      // Empty only for an answered row whose reports activity retention pruned (Task 2 review I-2).
+      sources: z.array(z.enum(["agent", "base-check"])),
       baseCheck: z.object({ taskId: idSchema, runId: idSchema, at: safeInteger }).strict().optional(),
       answer: preexistingFailureAnswerSchema.nullable(),
       answered: z.object({ by: nonemptyString, at: safeInteger }).strict().optional(),
+      // Task 2 review I-1: false for a group whose requirement review does not run; its rows are information only.
+      answerable: z.boolean(),
     }).strict()).min(1).optional(),
   })
   .strict()

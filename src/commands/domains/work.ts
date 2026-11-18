@@ -156,14 +156,15 @@ const answeredFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body
   return result?.kind === "requirement-answered" && result.finished === true && answeredGroup !== null ? { ...(body as object), next: `orca requirement accept ${answeredGroup}` } : body;
 } });
 /**
- * Pre-existing failures spec L2 (#341): `edit-requirement` is recorded like the other answers; the change itself is made
- * where the requirement lives (no editor of its own), so the line after it names that place.
+ * Pre-existing failures spec L2 (#341): `edit-requirement` is recorded like the other answers, for the requirement review.
+ * Task 2 review I-3: Orca cannot change an accepted requirement yet (requirement-revise works only while clarifying), so
+ * the line after it says so and names only where the requirement can be read.
  */
 const preexistingFailureFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) => {
   const result = (body as { result?: { kind?: unknown; answer?: unknown; groupId?: unknown } } | null)?.result;
   const printed = row.format(body);
   return result?.kind === "preexisting-failure-answered" && result.answer === "edit-requirement" && typeof result.groupId === "string"
-    ? `${printed}\nnext: change the requirement where it lives: orca requirement show ${result.groupId}` : printed;
+    ? `${printed}\nnext: recorded for the requirement review, which judges the work against the requirement as written; Orca cannot change an accepted requirement yet (read it: orca requirement show ${result.groupId})` : printed;
 } });
 /** Tester #272 (4): what follows `<code>:` in a refusal's message ("" when nothing does). */
 const refusalDetail = (error: { code: string; message: string }): string =>
@@ -586,7 +587,7 @@ export const WORK_ROWS: CommandDef[] = [
     verb: "answer-preexisting-failure", positionals: [GROUP], access: "token",
     flags: [
       { name: "command", type: "string", required: true, summary: "the check as the group's problem row names it (orca group show <group>: preexistingFailures)" },
-      { name: "answer", type: "string", required: true, summary: "allow-fix (the change that repaired it is allowed), relative (judge the check against the base) or edit-requirement (you change the requirement)" },
+      { name: "answer", type: "string", required: true, summary: "allow-fix (the change that repaired it is allowed), relative (judge the check against the base) or edit-requirement (you want the requirement changed); recorded and told to the group's requirement review" },
     ],
     route: (c) => `groups/${group(c)}/preexisting-failure`,
     payload: (c) => {
