@@ -48,7 +48,7 @@ describe("the clarify answer's title (Task 10a)", () => {
     expect((CLARIFY_JSON_SCHEMA as { properties: Record<string, unknown>; required: string[] }).properties.title).toEqual({ type: "string" });
     expect((CLARIFY_JSON_SCHEMA as { required: string[] }).required).not.toContain("title");
     const prompt = buildClarifyPrompt({ idea: "x", contentLanguage: "zh", overview: { canonicalJson: "{}", hash: "f".repeat(64) }, earlier: [], retryReason: null, limits: { roundNo: 1, classification: null, roundCap: 3 } });
-    // Ruling: 2026-11-18 (human authorised rewriting necessary criteria this round, session 4389b15f): #341 L1 added a rule to the clarify instruction, so its head is version 4 (was 3).
+    // Ruling: 「这次批准改写所有必要的判据」 (human, Orca session 2026-11-18): #341 L1 added a rule to the clarify instruction, so its head is version 4 (was 3).
     expect(prompt.startsWith("Orca requirement clarification, instruction version 4.")).toBe(true);
     expect(prompt).toContain("\"title\": optional, in any round: a short title naming what the work delivers, in the language the `Write in:` line names, at most 40 characters; a longer one is ignored, not a reason to discard the answer,");
   });

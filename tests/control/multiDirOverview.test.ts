@@ -29,7 +29,7 @@ import { ROUND_ONE } from "./fixtures/requirementOutputs.js";
 const sha = (text: string): string => createHash("sha256").update(text).digest("hex");
 /** The bytes of the single-repository prompts and schemas at commit 2d707b29, before this task. */
 const PINNED = {
-  // Ruling: 2026-11-18 (human authorised rewriting necessary criteria this round, session 4389b15f): #341 L1 adds one rule paragraph and head version 4 to the clarify instruction; only the clarify pins below change.
+  // Ruling: 「这次批准改写所有必要的判据」 (human, Orca session 2026-11-18): #341 L1 adds one rule paragraph and head version 4 to the clarify instruction; only the clarify pins below change.
   clarifyInstructionV3: "cdab7affb3aacb5470a07282c9a56c6416af3fbfc7fdac9788423260830c8ae6",
   clarifyPrompt: "b8c5aab40c437f0666bd7fb749e0aa08c5ba86be233ee0a45e3f38cacfe7e452",
   // Split instruction version 2 (the requirement document and Orca's files are in the repository): the pin moves with it.
@@ -95,7 +95,7 @@ describe("the overview across directories (M5, §6.3)", () => {
       expect(existsSync(join(root, controlRepoKey("alpha"), x.alphaHead, "overview.json"))).toBe(false);
       // The composed prompt: the multi instruction and the fenced project overview, both members inside.
       const prompt = x.promptOf(0);
-      // Ruling: 2026-11-18 (human authorised rewriting necessary criteria this round, session 4389b15f): #341 L1 added a rule to the clarify instruction, so its head is version 4 (was 3).
+      // Ruling: 「这次批准改写所有必要的判据」 (human, Orca session 2026-11-18): #341 L1 added a rule to the clarify instruction, so its head is version 4 (was 3).
       expect(prompt.startsWith("Orca requirement clarification, instruction version 4.")).toBe(true);
       expect(prompt).toContain("for a project made of several directories (repositories or folders), listed in order; the first is the primary");
       expect(prompt).toContain("<<<ORCA-DATA project-overview ");
@@ -247,7 +247,7 @@ describe("a single-repository group's prompts are byte-equal to today's (M5, §6
     try {
       await clarify.until(() => clarify.round(1).state !== "drafting");
       const prompt = PROMPT_OF(clarify.fake.calls.accept[0]!);
-      // Ruling: 2026-11-18 (human authorised rewriting necessary criteria this round, session 4389b15f): #341 L1 added a rule to the clarify instruction, so its head is version 4 (was 3).
+      // Ruling: 「这次批准改写所有必要的判据」 (human, Orca session 2026-11-18): #341 L1 added a rule to the clarify instruction, so its head is version 4 (was 3).
       expect(prompt.startsWith("Orca requirement clarification, instruction version 4.")).toBe(true);
       expect(prompt).toContain("for one software repository");
       expect(prompt).toContain("<<<ORCA-DATA repository-overview ");

@@ -17,7 +17,7 @@ import { ROUND_ONE, ROUND_TWO } from "./fixtures/requirementOutputs.js";
  * overview without `structure`. The golden was regenerated from that code; its only change is the `structure` key gone from
  * both prompts' `repository-overview` (checked by word diff), and it still pins every other byte.
  *
- * Ruling: 2026-11-18 (human authorised rewriting necessary criteria this round, session 4389b15f): #341 L1 added one rule paragraph
+ * Ruling: 「这次批准改写所有必要的判据」 (human, Orca session 2026-11-18): #341 L1 added one rule paragraph
  * to the clarify instruction and raised its head to version 4; the golden was regenerated, and its only changes are that head
  * (twice) and that paragraph (twice), checked by diff.
  */
