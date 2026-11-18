@@ -35,7 +35,8 @@ export interface QueuedAnswer {
   recordExtra?: Record<string, unknown>;
 }
 // A multi-dir group's split prompt has the multi instruction's head; a single-repository group's has V1's (M5).
-const HEADS = { clarify: ["Orca requirement clarification, instruction version 3."],
+// Ruling: 2026-11-18 (human authorised rewriting necessary criteria this round, session 4389b15f): #341 L1 added a rule to the clarify instruction, so its head is version 4 (was 3).
+const HEADS = { clarify: ["Orca requirement clarification, instruction version 4."],
   // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27 (split version 1 -> 2)
   // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); the fake still tells a split prompt by its head.
   // Ruling: 2026-11-17 #328, human approved necessary criterion rewrites; new single-repository calls use V6 for explicit Git history.

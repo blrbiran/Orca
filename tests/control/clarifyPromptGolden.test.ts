@@ -16,6 +16,10 @@ import { ROUND_ONE, ROUND_TWO } from "./fixtures/requirementOutputs.js";
  * Ruling: 「先 (a)，前后质量对比过了再 (b)」 (human, session 43913afc; overview findings 2026-11-01 §4 (a)): clarify is sent the
  * overview without `structure`. The golden was regenerated from that code; its only change is the `structure` key gone from
  * both prompts' `repository-overview` (checked by word diff), and it still pins every other byte.
+ *
+ * Ruling: 2026-11-18 (human authorised rewriting necessary criteria this round, session 4389b15f): #341 L1 added one rule paragraph
+ * to the clarify instruction and raised its head to version 4; the golden was regenerated, and its only changes are that head
+ * (twice) and that paragraph (twice), checked by diff.
  */
 const GOLDEN = join(import.meta.dirname, "fixtures", "clarifyPromptGolden.txt");
 const SEPARATOR = "\n----- ORCA C7 GOLDEN: next clarify prompt -----\n";

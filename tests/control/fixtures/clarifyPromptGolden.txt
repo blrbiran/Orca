@@ -1,4 +1,4 @@
-Orca requirement clarification, instruction version 3.
+Orca requirement clarification, instruction version 4.
 
 You help a person turn an idea into an agreed requirement for one software repository, by asking rounds of questions. You have no tools: you cannot run, open or inspect anything, and everything you may use is below. Answer with one JSON object and nothing else.
 
@@ -20,6 +20,8 @@ Below this instruction come blocks that open with a line `<<<ORCA-DATA <name> <n
 ## Which questions are the person's
 
 Ask only questions whose answer changes the plan materially: the goal, what is in and out of scope, constraints the work must respect, how success is judged, and choices that are hard to undo. Do not ask about implementation details, edge cases, file locations, naming, error handling, test layout or cleanup: the agent that carries out the work decides those and reports them afterwards as decisions. When in doubt, leave a question out.
+
+One more question is the person's, and only when both sentences are in the requirement: it forbids changing existing behaviour, contracts or documents, and it requires a whole check (a test suite, a lint, a build) to pass. Then ask once how a failure that already exists in the repository is handled: fix it, as a change the requirement then allows, or judge the check relative to the base. Ask it only when both sentences are present, and never when either is absent.
 
 ## Size and limits
 
@@ -65,7 +67,7 @@ ORCA-DATA repository-overview <NONCE>>>>
 ORCA-DATA rounds <NONCE>>>>
 
 ----- ORCA C7 GOLDEN: next clarify prompt -----
-Orca requirement clarification, instruction version 3.
+Orca requirement clarification, instruction version 4.
 
 You help a person turn an idea into an agreed requirement for one software repository, by asking rounds of questions. You have no tools: you cannot run, open or inspect anything, and everything you may use is below. Answer with one JSON object and nothing else.
 
@@ -87,6 +89,8 @@ Below this instruction come blocks that open with a line `<<<ORCA-DATA <name> <n
 ## Which questions are the person's
 
 Ask only questions whose answer changes the plan materially: the goal, what is in and out of scope, constraints the work must respect, how success is judged, and choices that are hard to undo. Do not ask about implementation details, edge cases, file locations, naming, error handling, test layout or cleanup: the agent that carries out the work decides those and reports them afterwards as decisions. When in doubt, leave a question out.
+
+One more question is the person's, and only when both sentences are in the requirement: it forbids changing existing behaviour, contracts or documents, and it requires a whole check (a test suite, a lint, a build) to pass. Then ask once how a failure that already exists in the repository is handled: fix it, as a change the requirement then allows, or judge the check relative to the base. Ask it only when both sentences are present, and never when either is absent.
 
 ## Size and limits
 

@@ -3,7 +3,7 @@ import {
   CLARIFY_CAPS, classificationSchema, clarifyTier, MAX_QUESTIONS, SLUG_PATTERN, type ClarifyCaps, type ClarifyResult, type ClassPair, type RoundBody,
 } from "./requirementSchemas.js";
 
-export const CLARIFY_PROMPT_HEAD = "Orca requirement clarification, instruction version 3.";
+export const CLARIFY_PROMPT_HEAD = "Orca requirement clarification, instruction version 4.";
 const LANGUAGE_NAMES = { en: "English", zh: "中文 (Chinese)" } as const;
 
 const capLine = (c: ClarifyCaps) => `${c.rounds} ${c.rounds === 1 ? "round" : "rounds"}; per round at most ${c.questions} questions, ${c.glossary} glossary entries and ${c.adrs} decisions.`;
@@ -12,7 +12,8 @@ const capLine = (c: ClarifyCaps) => `${c.rounds} ${c.rounds === 1 ? "round" : "r
  * N1 spec §7.1: the fixed instruction, carrying the four grilling rules of goal.md N1. Version 2 (clarify caps spec
  * 2026-10-21 §3.5): only questions that change the plan, the round-1 classification, and the cap table, stated from
  * CLARIFY_CAPS. Version 3 (flow gaps Task 10a, human request in session 0e13a9b7): the optional short `title` the cards
- * show. Changing it (or that table) means version 4.
+ * show. Version 4 (#341 L1): one conditional question about a failure already in the repository. Changing it (or that table)
+ * means version 5.
  */
 export const CLARIFY_INSTRUCTION_V3 = [
   CLARIFY_PROMPT_HEAD,
@@ -37,6 +38,8 @@ export const CLARIFY_INSTRUCTION_V3 = [
   "## Which questions are the person's",
   "",
   "Ask only questions whose answer changes the plan materially: the goal, what is in and out of scope, constraints the work must respect, how success is judged, and choices that are hard to undo. Do not ask about implementation details, edge cases, file locations, naming, error handling, test layout or cleanup: the agent that carries out the work decides those and reports them afterwards as decisions. When in doubt, leave a question out.",
+  "",
+  "One more question is the person's, and only when both sentences are in the requirement: it forbids changing existing behaviour, contracts or documents, and it requires a whole check (a test suite, a lint, a build) to pass. Then ask once how a failure that already exists in the repository is handled: fix it, as a change the requirement then allows, or judge the check relative to the base. Ask it only when both sentences are present, and never when either is absent.",
   "",
   "## Size and limits",
   "",
@@ -68,7 +71,7 @@ export const CLARIFY_INSTRUCTION_V3 = [
 
 /**
  * Multi-directory projects spec §6.4: V3's text for a project of several directories (repositories or folders), listed
- * in order, the first being the primary. The one sentence is replaced; V3 itself stays byte-identical, and the frame
+ * in order, the first being the primary. The one sentence is replaced; V3's own bytes are not touched by this replacement, and the frame
  * names the fenced block `project-overview`.
  */
 export const CLARIFY_INSTRUCTION_MULTI_V1 = CLARIFY_INSTRUCTION_V3.replace(
