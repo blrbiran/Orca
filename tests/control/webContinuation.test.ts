@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { WebControlService } from "../../src/control/webService.js";
 import { continuationIdentity, continuationWakeBody } from "../../src/control/continuation.js";
 import { groupStopState, readStopIntent } from "../../src/control/stopIntent.js";
-import { createWebWakeHandlers, deliverScheduledStart, settleProviderAttempt } from "../../src/control/webDispatch.js";
+import { createWebWakeHandlers, deliverScheduledStart, nextClaimableTask, settleProviderAttempt } from "../../src/control/webDispatch.js";
 import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { readCanonicalRecord } from "../../src/control/snapshot.js";
@@ -631,6 +631,29 @@ describe("an archived group with a queued continuation and a queued start (issue
       await service.resumeDispatch(h.command("resume-dispatch", {}));
       const after = await deliverSchedulerWakes(h.store, handlers);
       for (const id of wakes) expect(after.delivered).toContain(id);
+      expect(activeRunIds(h.store).length).toBeGreaterThan(0);
+    } finally { await h.dispose(); }
+  });
+});
+
+// #370 review: a resume wake is held by the unarchive's pause even when no task is claimable (a's continuation is the
+// group's only work), so the queued-wake rule, not the claimable-task one, is what pauses it.
+describe("an archived group whose only queued work is a continuation (#370 review)", () => {
+  it("unarchive pauses it; the resume wake is delivered only after a person's resume", async () => {
+    const ctx = await continuationFixture([{ taskId: "a" }]); const { h, service } = ctx; try {
+      const a = await recoverablePredecessor(ctx, "a");
+      await stoppedAfterHandoff(ctx);
+      const resumed = await service.resumeFromHandoff(h.command("resume-from-handoff", { selections: [selection(a.predecessor)] }));
+      if ("error" in resumed || resumed.result.kind !== "resumed-from-handoff") throw new Error(JSON.stringify(resumed));
+      expect(nextClaimableTask(h.store, "g")).toBeNull();
+      service.archiveGroup(h.command("archive-group", {}));
+      // mutation: drop the queued-wake rule of wouldRunOnUnarchive -> no pause, the continuation is claimed, red here
+      expect(service.unarchiveGroup(h.command("unarchive-group", {}))).toMatchObject({ result: { kind: "unarchived", paused: true } });
+      const handlers = createWebWakeHandlers({ ...ctx.deps, service });
+      await deliverSchedulerWakes(h.store, handlers);
+      expect(activeRunIds(h.store)).toEqual([]);
+      await service.resumeDispatch(h.command("resume-dispatch", {}));
+      await deliverSchedulerWakes(h.store, handlers);
       expect(activeRunIds(h.store).length).toBeGreaterThan(0);
     } finally { await h.dispose(); }
   });
