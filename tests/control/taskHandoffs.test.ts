@@ -117,15 +117,18 @@ describe("ingestRunHandoff (Part 4.1, 4.6)", () => {
   // Ruling: 「这次批准改写所有必要的判据」 (human, tester follow-up J, 2026-11-13): tests/control/taskHandoffs.test.ts:117-122
   // asserted an 11-line summary invalid/too-many-lines; #309 keeps it truncated (taskHandoffs.ts judgeAgentFile), so this
   // criterion now asserts that, and the stored text, beside the unchanged too-large/not-utf8/empty cases.
-  it("8193-byte handoff ⇒ invalid/too-large; 11-line summary ⇒ truncated/too-many-lines; invalid UTF-8 ⇒ not-utf8; empty ⇒ empty; activity:true", async () => {
+  // Ruling (tester #309, controller brief 2026-11-18-tester-small Part 1): "enforce only the byte cap. A summary of <= 4096
+  // bytes is stored whole whatever its line count" -- the 11-line summary below asserted truncated/too-many-lines; it is now
+  // stored whole, byte-equal.
+  it("8193-byte handoff ⇒ invalid/too-large; 11-line summary ⇒ stored whole; invalid UTF-8 ⇒ not-utf8; empty ⇒ empty; activity:true", async () => {
     const store = await world([{ id: "a" }, { id: "b" }]);
     const eleven = Array.from({ length: 11 }, (_, i) => `l${i}`).join("\n");
     const big = finish(store, "a", "r1", "succeeded", { "handoff.md": "x".repeat(8193), "summary.md": eleven });
     expect(big.record.handoff).toEqual({ state: "invalid", reason: "too-large", bytes: 8193 });
-    expect(big.record.summary).toEqual({ state: "truncated", reason: "too-many-lines", bytes: Buffer.byteLength(eleven) });
+    expect(big.record.summary).toEqual({ state: "stored", reason: null, bytes: Buffer.byteLength(eleven) });
     expect(big.activity).toBe(true);
     const keptRoot = groupHandoffsDir(store.stateDir, "g");
-    expect(readFileSync(join(keptRoot, "summary-a-r1.md"), "utf8")).toBe(`${eleven.split("\n").slice(0, 10).join("\n")}\n… (truncated)\n`);
+    expect(readFileSync(join(keptRoot, "summary-a-r1.md"), "utf8")).toBe(eleven);
     rmSync(join(keptRoot, "summary-a-r1.md"));
     const bad = finish(store, "b", "r2", "failed", { "handoff.md": Buffer.from([0xff, 0xfe, 0x41]), "summary.md": "" });
     expect(bad.record.handoff).toEqual({ state: "invalid", reason: "not-utf8", bytes: 3 });
@@ -135,22 +138,71 @@ describe("ingestRunHandoff (Part 4.1, 4.6)", () => {
     expect(readdirSync(root).filter((name) => name.endsWith(".md"))).toEqual([]);
   });
 
-  // Tester #309 (follow-up J): the dogfood summary was 11 lines -- a title, blanks and five paragraphs -- and was dropped
-  // whole, so the next task read no summary. Blank lines are not counted; past ten non-empty lines the first ten are kept
-  // with a truncation line, recorded `truncated`, and still passed downstream (the README names the cut).
-  it("counts non-empty lines, keeps an over-long summary truncated and passes it downstream (#309)", async () => {
+  // Tester #309 (follow-up J, then the 2026-11-18 tester note): a line cap dropped the line the next task needed most -- an
+  // 11-line summary lost its last line, "full suite 464/464". Ruling (brief 2026-11-18-tester-small Part 1): only the
+  // 4096-byte cap is enforced. Within it a summary is stored whole whatever its line count; above it the summary is cut at
+  // the last line end that still leaves room for the truncation line (the stored text never exceeds the cap), recorded
+  // `truncated` with reason too-large, and still passed downstream with the README naming the cut.
+  it("stores a many-line summary whole; cuts an over-4096-byte one at a line end, truncated/too-large, and passes it downstream (#309)", async () => {
     const store = await world([{ id: "a", status: "done" }, { id: "b", dependsOn: ["a"] }]);
-    const dogfood = ["# Schema", "", "p1", "", "p2", "", "p3", "", "p4", "", "p5"].join("\n") + "\n";
-    // mutation (count every line again) -> red here: 11 lines, truncated.
-    expect(finish(store, "a", "r0", "succeeded", { "handoff.md": "h", "summary.md": dogfood }).record.summary).toEqual({ state: "stored", reason: null, bytes: Buffer.byteLength(dogfood) });
-    const twelve = Array.from({ length: 12 }, (_, i) => `p${i}`).join("\n\n");
-    const cut = finish(store, "a", "r1", "succeeded", { "handoff.md": "h", "summary.md": twelve });
-    // mutation (over the limit is invalid again, nothing stored) -> red here and below.
-    expect(cut.record.summary).toMatchObject({ state: "truncated", reason: "too-many-lines" });
-    const expected = `${Array.from({ length: 10 }, (_, i) => `p${i}`).join("\n")}\n… (truncated)\n`;
+    const tester = [...Array.from({ length: 10 }, (_, i) => `p${i}`), "full suite 464/464"].join("\n") + "\n";
+    // mutation (restore the 10-non-empty-line cap) -> red here: the last line is cut.
+    const whole = finish(store, "a", "r0", "succeeded", { "handoff.md": "h", "summary.md": tester });
+    expect(whole.record.summary).toEqual({ state: "stored", reason: null, bytes: Buffer.byteLength(tester) });
+    expect(whole.activity).toBe(false);
+    expect(readStoredHandoff(store.stateDir, "g", "a", "r0")!.summary).toBe(tester);
+    // 41 lines of 100 bytes (99 + newline) = 4100 bytes, one line over the cap; the truncation line takes 16 bytes, so 40
+    // lines (4000 bytes) are kept and the stored text is 4016 bytes.
+    const line = (i: number) => `${String(i).padStart(2, "0")}${"é".repeat(48)}x`;
+    const over = Array.from({ length: 41 }, (_, i) => line(i)).join("\n") + "\n";
+    expect(Buffer.byteLength(line(0))).toBe(99);
+    expect(Buffer.byteLength(over)).toBe(4100);
+    // mutation (over the cap is invalid again, nothing stored) -> red here and below.
+    const cut = finish(store, "a", "r1", "succeeded", { "handoff.md": "h", "summary.md": over });
+    expect(cut.record.summary).toEqual({ state: "truncated", reason: "too-large", bytes: 4100 });
+    expect(cut.activity).toBe(true);
+    const expected = `${Array.from({ length: 40 }, (_, i) => line(i)).join("\n")}\n… (truncated)\n`;
     expect(readStoredHandoff(store.stateDir, "g", "a", "r1")!.summary).toBe(expected);
+    expect(Buffer.byteLength(expected)).toBeLessThanOrEqual(4096);
     const dirs = prepareRunHandoff(store, "g", "b", "rb");
     expect(readFileSync(join(dirs.inputDir, "summary-a-r1.md"), "utf8")).toBe(expected);
+    expect(readFileSync(join(dirs.inputDir, "README.md"), "utf8")).toContain("summary-a-r1.md (truncated at 4096 bytes)");
+  });
+
+  // The truncation line must fit inside the cap: a summary whose last line end within 4096 bytes is too close to the cap
+  // to leave room for it is cut one line earlier, never stored over the cap.
+  it("reserves room for the truncation line inside the cap (#309)", async () => {
+    const store = await world([{ id: "a" }]);
+    // "head\n", then 4090 bytes of one line and its newline (ending exactly at byte 4096), then "tail\n": keeping up to
+    // that line end leaves no room for the 16-byte truncation line, so the cut falls back to the line end before it.
+    const text = `head\n${"y".repeat(4090)}\ntail\n`;
+    expect(Buffer.byteLength(text)).toBe(4096 + 5);
+    // mutation (no reserve: cut at the last line end within 4096) -> red: 4096 + 16 bytes stored.
+    const cut = finish(store, "a", "r1", "succeeded", { "handoff.md": "h", "summary.md": text });
+    expect(cut.record.summary).toEqual({ state: "truncated", reason: "too-large", bytes: 4101 });
+    expect(readStoredHandoff(store.stateDir, "g", "a", "r1")!.summary).toBe("head\n… (truncated)\n");
+  });
+
+  // An over-cap summary with no line end inside the cap has nothing to keep: it stays invalid/too-large, as before.
+  it("an over-cap summary with no line end inside the cap is invalid/too-large and stores nothing (#309)", async () => {
+    const store = await world([{ id: "a" }]);
+    // mutation (keep an empty cut as truncated) -> red here.
+    const cut = finish(store, "a", "r1", "succeeded", { "handoff.md": "h", "summary.md": "z".repeat(5000) });
+    expect(cut.record.summary).toEqual({ state: "invalid", reason: "too-large", bytes: 5000 });
+    expect(readStoredHandoff(store.stateDir, "g", "a", "r1")!.summary).toBeNull();
+  });
+
+  // Old records are not re-judged: a record written under the line cap (truncated/too-many-lines) is still read and passed
+  // on, and the README still names it as cut to its first 10 lines.
+  it("an old truncated/too-many-lines record is still passed downstream with its own wording (#309)", async () => {
+    const store = await world([{ id: "a", status: "done" }, { id: "b", dependsOn: ["a"] }]);
+    const root = groupHandoffsDir(store.stateDir, "g");
+    writeFileSync(join(root, "summary-a-r1.md"), "l0\n… (truncated)\n");
+    writeFileSync(join(root, "record-a-r1.json"), `${JSON.stringify({ schema: "orca-task-handoff-record-v1", groupId: "g", taskId: "a", runId: "r1", outcome: "succeeded",
+      handoff: { state: "missing", reason: null, bytes: null }, summary: { state: "truncated", reason: "too-many-lines", bytes: 793 }, recordedAt: 5, notesMerged: [], reported: null })}\n`);
+    const dirs = prepareRunHandoff(store, "g", "b", "rb");
+    expect(readFileSync(join(dirs.inputDir, "summary-a-r1.md"), "utf8")).toBe("l0\n… (truncated)\n");
+    // mutation (README names bytes for every truncated record) -> red here.
     expect(readFileSync(join(dirs.inputDir, "README.md"), "utf8")).toContain("summary-a-r1.md (truncated to its first 10 lines)");
   });
 

@@ -17,14 +17,16 @@ import { writePrivateFile } from "../service/privateFiles.js";
  */
 
 export const HANDOFF_MAX_BYTES = 8192;
+/** The only bound a summary is held to (tester #309, 2026-11-18): within it a summary is stored whole whatever its line count. */
 export const SUMMARY_MAX_BYTES = 4096;
-/** Non-empty lines (tester #309: a title and blank separators are not the summary's lines); past it the summary is truncated. */
-export const SUMMARY_MAX_LINES = 10;
 export const TRUNCATED_LINE = "… (truncated)";
+/** The line cap old records were judged under (reason too-many-lines); kept only to name their cut. */
+const LEGACY_SUMMARY_MAX_LINES = 10;
 
 /**
- * Tester #309 (follow-up J): `truncated` -- a summary over SUMMARY_MAX_LINES non-empty lines kept as its first ones and
- * TRUNCATED_LINE (reason too-many-lines), stored and passed on like `stored`; an 11-line summary used to be dropped whole.
+ * Tester #309: `truncated` -- a summary over SUMMARY_MAX_BYTES cut at a line end and closed with TRUNCATED_LINE (reason
+ * too-large), the whole stored text within the cap; stored and passed on like `stored`. Records written before
+ * 2026-11-18 may carry reason too-many-lines (the retired 10-non-empty-line cap); they are read as they are, never re-judged.
  */
 export type HandoffFileState = {
   state: "stored" | "truncated" | "missing" | "invalid";
@@ -124,7 +126,7 @@ export function prepareRunHandoff(store: ControlStore, groupId: string, taskId: 
   for (const source of sources) {
     const listed: string[] = [];
     if (kept(source.handoff)) { const name = handoffName(source.taskId, source.runId); files.set(name, readFileSync(join(root, name), "utf8")); listed.push(name); }
-    if (kept(source.summary)) { const name = summaryName(source.taskId, source.runId); files.set(name, readFileSync(join(root, name), "utf8")); listed.push(source.summary.state === "truncated" ? `${name} (truncated to its first ${SUMMARY_MAX_LINES} lines)` : name); }
+    if (kept(source.summary)) { const name = summaryName(source.taskId, source.runId); files.set(name, readFileSync(join(root, name), "utf8")); listed.push(source.summary.state !== "truncated" ? name : source.summary.reason === "too-many-lines" ? `${name} (truncated to its first ${LEGACY_SUMMARY_MAX_LINES} lines)` : `${name} (truncated at ${SUMMARY_MAX_BYTES} bytes)`); }
     sourceLines.push(`- ${source.taskId} (run ${source.runId}): ${listed.join(", ")}`);
   }
   const previousLines: string[] = [];
@@ -144,8 +146,12 @@ export function prepareRunHandoff(store: ControlStore, groupId: string, taskId: 
   return { inputDir, outputDir };
 }
 
-/** Reads one agent-written file without following a link (Review Focus 1) and judges it; never throws for its content. */
-function judgeAgentFile(path: string, maxBytes: number, maxLines: number | null): { state: HandoffFileState; text: string | null } {
+/**
+ * Reads one agent-written file without following a link (Review Focus 1) and judges it; never throws for its content.
+ * `cutOver`: a file over `maxBytes` is cut at its last line end that leaves room for TRUNCATED_LINE within the cap, instead
+ * of being refused; with no such line end there is nothing to keep and it is refused as too-large.
+ */
+function judgeAgentFile(path: string, maxBytes: number, cutOver: boolean): { state: HandoffFileState; text: string | null } {
   let fd: number;
   try {
     const metadata = lstatSync(path);
@@ -160,18 +166,23 @@ function judgeAgentFile(path: string, maxBytes: number, maxLines: number | null)
     if (!metadata.isFile()) return { state: { state: "invalid", reason: "not-a-file", bytes: null }, text: null };
     const bytes = metadata.size;
     if (bytes === 0) return { state: { state: "invalid", reason: "empty", bytes }, text: null };
-    if (bytes > maxBytes) return { state: { state: "invalid", reason: "too-large", bytes }, text: null };
-    const buffer = Buffer.alloc(bytes);
+    const over = bytes > maxBytes;
+    if (over && !cutOver) return { state: { state: "invalid", reason: "too-large", bytes }, text: null };
+    // Over the cap only the first maxBytes are read; a line end (0x0A) is always a UTF-8 character boundary.
+    const want = over ? maxBytes : bytes;
+    const buffer = Buffer.alloc(want);
     let read = 0;
-    while (read < bytes) { const n = readSync(fd, buffer, read, bytes - read, read); if (n === 0) break; read += n; }
-    const content = buffer.subarray(0, read);
+    while (read < want) { const n = readSync(fd, buffer, read, want - read, read); if (n === 0) break; read += n; }
+    let content = buffer.subarray(0, read);
+    if (over) {
+      const end = content.subarray(0, maxBytes - Buffer.byteLength(`${TRUNCATED_LINE}\n`)).lastIndexOf(0x0a);
+      if (end < 0) return { state: { state: "invalid", reason: "too-large", bytes }, text: null };
+      content = content.subarray(0, end + 1);
+    }
     let text: string;
     try { text = new TextDecoder("utf-8", { fatal: true }).decode(content); }
-    catch { return { state: { state: "invalid", reason: "not-utf8", bytes: read }, text: null }; }
-    if (maxLines !== null) {
-      const lines = text.split("\n").filter((line) => line.trim() !== "");
-      if (lines.length > maxLines) return { state: { state: "truncated", reason: "too-many-lines", bytes: read }, text: `${[...lines.slice(0, maxLines), TRUNCATED_LINE].join("\n")}\n` };
-    }
+    catch { return { state: { state: "invalid", reason: "not-utf8", bytes: over ? bytes : read }, text: null }; }
+    if (over) return { state: { state: "truncated", reason: "too-large", bytes }, text: `${text}${TRUNCATED_LINE}\n` };
     return { state: { state: "stored", reason: null, bytes: read }, text };
   } catch {
     return { state: { state: "invalid", reason: "not-a-file", bytes: null }, text: null };
@@ -190,8 +201,8 @@ export function ingestRunHandoff(store: ControlStore, run: { groupId: string; ta
   const existing = readRecord(root, run.taskId, run.runId);
   if (existing !== null) return { record: existing, activity: false };
   const out = join(root, "runs", run.runId, "out");
-  const handoff = judgeAgentFile(join(out, "handoff.md"), HANDOFF_MAX_BYTES, null);
-  const summary = judgeAgentFile(join(out, "summary.md"), SUMMARY_MAX_BYTES, SUMMARY_MAX_LINES);
+  const handoff = judgeAgentFile(join(out, "handoff.md"), HANDOFF_MAX_BYTES, false);
+  const summary = judgeAgentFile(join(out, "summary.md"), SUMMARY_MAX_BYTES, true);
   if (handoff.text !== null) writePrivateFile(join(root, handoffName(run.taskId, run.runId)), handoff.text);
   if (summary.text !== null) writePrivateFile(join(root, summaryName(run.taskId, run.runId)), summary.text);
   crash?.("handoff-before-record");
