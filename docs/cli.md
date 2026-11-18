@@ -42,7 +42,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 ### `orca project`
 
 - `orca project list` — the registered projects: key, kind, control repository id, and root (a multi's member projects)
-- `orca project show` — the project's workspace mode and integration settings (and their revision)
+- `orca project show [<project>]` — the project's workspace mode and integration settings (and their revision)
 - `orca project set-workspace-mode --mode <mode>` — worktree or clone for the project's runs
 - `orca project set-integration --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>] [--history-source <history-source>] [--history-artifact <history-artifact>]` — where the project's finished work goes by default
 - `orca project set-criteria-review [--on] [--off]` — whether Orca's reviewer judges a flagged test change before a person sees it

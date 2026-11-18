@@ -11,12 +11,13 @@ the registered projects: key, kind, control repository id, and root (a multi's m
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 
-## `orca project show`
+## `orca project show [<project>]`
 
 the project's workspace mode and integration settings (and their revision)
 
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<project>` (optional): the project (id or path), as --project; default: the registered repository holding cwd
 
 ## `orca project set-workspace-mode --mode <mode>`
 
