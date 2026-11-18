@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { driverHarness } from "./fixtures/driverHarness.js";
@@ -195,8 +195,14 @@ describe("a step failure on a settled run is logged when it changes, not every r
       const id = await t.claim();
       await t.until(driver, () => t.body(id).state === "blocked");
       expect(t.service.retryTask(t.h.command("retry-task", { taskId: "a" }))).not.toHaveProperty("error");
-      // A cleanup that fails the same way every round: the run's source directory went missing.
-      saveDriverRun(t.h.store, { ...t.body(id), drive: { ...t.body(id).drive, sourceDir: `${t.body(id).drive.sourceDir}-gone` } });
+      // A cleanup that fails the same way every round.
+      // Ruling (2026-11-19 change-sized runs P0 x Track D merge): the old way (point sourceDir at a missing path) no longer
+      // fails -- the run was archived at C, so the cleanup does not archive again, and a missing copy has nothing to
+      // remove. A source directory that exists but is not named for the run is refused by removeResultCopies
+      // (cleanup-path-invalid) on every round, which keeps what this test measures: one stderr line for a repeated error.
+      const other = `${t.body(id).drive.sourceDir}-other`;
+      mkdirSync(join(other, "repo"), { recursive: true });
+      saveDriverRun(t.h.store, { ...t.body(id), drive: { ...t.body(id).drive, sourceDir: other } });
       vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array) => { lines.push(String(chunk)); return true; });
       for (let round = 0; round < 5; round += 1) await driver.round();
       expect(t.body(id).drive.cleanupError).not.toBeNull();
