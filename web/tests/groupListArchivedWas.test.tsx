@@ -4,7 +4,10 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "../src/i18n.js";
+import { BoardView } from "../src/BoardView.js";
+import { ControlGroupView } from "../src/ControlGroupView.js";
 import { GroupList } from "../src/GroupList.js";
+import { config, view } from "./fixtures/board.js";
 import type { GroupSummaryV1 } from "../src/controlTypes.js";
 
 const zero = { idle: 0, running: 0, waiting: 0, blocked: 0, done: 0 };
@@ -24,5 +27,24 @@ describe("an archived group's card (#370)", () => {
     fireEvent.click(within(screen.getByRole("group", { name: "Show groups" })).getByRole("button", { name: "Archived" }));
     // mutation: show enumText(state) for an archived group again -> "old · running", red
     expect(name()).toContain("old · archived (was running)");
+  });
+
+  // #361 review (I4/M4): a summary that derived `running` beside a stored `ready` (as the panel did for an archived group
+  // with a queued start before I4) reads the stored word.
+  it("reads the stored state, never the derived running, in the card and the board", () => {
+    render(<GroupList groups={[g("old", { archived: true, state: "running", storedState: "ready" })]} selected={null} onSelect={vi.fn()} now={0} />);
+    fireEvent.click(within(screen.getByRole("group", { name: "Show groups" })).getByRole("button", { name: "Archived" }));
+    // mutation: archivedWas from `state` instead of `storedState ?? state` -> "archived (was running)", red here
+    expect(nav().querySelector(".group-card-name")!.textContent).toContain("old · archived (was ready)");
+    cleanup();
+    render(<BoardView groups={[g("old", { archived: true, state: "running", storedState: "ready" })]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show archived" }));
+    expect(screen.getByTestId("board-card-old").textContent).toContain("old · archived (was ready)");
+    cleanup();
+    // #370 review M4: the group page's heading too.
+    const archived = view([]);
+    render(<ControlGroupView view={{ ...archived, summary: { ...archived.summary, archived: true, state: "running", storedState: "ready" } }} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    // mutation: the heading keeps enumText(view.summary.state) -> "g · running", red here
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe("g · archived (was ready)");
   });
 });

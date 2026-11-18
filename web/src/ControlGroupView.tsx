@@ -59,7 +59,7 @@ import { RunTranscript } from "./AgentTranscript.js";
 import { liveUsageNote, phaseEndNote, usageByKind } from "./usageNotes.js";
 import { ObservedPathRetry } from "./ObservedPathRetry.js";
 import { planText } from "./LoopPlanCard.js";
-import i18n, { currentLanguage, enumText } from "./i18n.js";
+import i18n, { currentLanguage, enumText, groupStateText } from "./i18n.js";
 import { Tokens, formatTokens, shortTokens } from "./TokenInput.js";
 import { capScopeText } from "./UsagePanel.js";
 import { closingText } from "./CorrectionsView.js";
@@ -774,7 +774,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
     <section ref={sectionRef} aria-label={t("control.group.region", { groupId })}>
       <h2>
         {/* #81/#228: the revision and projection counters are in the Technical region, not the first screen. */}
-        {t("control.group.heading", { groupId, state: enumText("groupState", view.summary.state) })}
+        {/* Tester #370 review (M4): an archived group reads archived (was <stored state>) here too. */}
+        {t("control.group.heading", { groupId, state: groupStateText(view.summary) })}
       </h2>
       {(view.summary.criteriaReviews ?? []).length > 0 && (
         <div className="detail-block" data-testid="criteria-reviews">

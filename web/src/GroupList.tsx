@@ -13,7 +13,7 @@ import type { GroupSummaryV1 } from "./controlTypes.js";
 import {
   GROUP_FILTERS, groupCategory, groupFilterStorage, groupLed, matchesGroupFilter, needsAttention, readGroupFilter, writeGroupFilter, type GroupFilter,
 } from "./groupCategory.js";
-import { enumText } from "./i18n.js";
+import { groupStateText } from "./i18n.js";
 import { inScope, type GroupScope } from "./projectScope.js";
 import { hashFor } from "./sections.js";
 import { GroupActionsMenu } from "./GroupActionsMenu.js";
@@ -83,7 +83,7 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
         {/* Ruling H8: the status light; decorative, the state is in this text. */}
         <span className="led" data-led={groupLed(group)} aria-hidden="true" />
         {/* Tester #370: an archived group's stored state is not what it is now. */}
-        {group.groupId} · {stop !== null && <><strong data-testid="group-card-stop">{t(`control.groupCard.stop.${stop}` as const)}</strong> · </>}{group.archived === true ? t("control.groupCard.archivedWas", { state: enumText("groupState", group.state) }) : enumText("groupState", group.state)}
+        {group.groupId} · {stop !== null && <><strong data-testid="group-card-stop">{t(`control.groupCard.stop.${stop}` as const)}</strong> · </>}{groupStateText(group)}
         {group.completion !== undefined ? t("control.groupDone", { done: group.completion.done, total: group.completion.total }) : ""}
         {group.recoveryBlockerCount > 0 ? t("control.groupBlockers", { n: group.recoveryBlockerCount }) : ""}
       </span>
@@ -135,7 +135,7 @@ export function GroupList(props: GroupListProps): JSX.Element {
               aria-labelledby={`req-name-${group.groupId}`} aria-describedby={`req-goal-${group.groupId}`}>
               {/* Task 11 acceptance (session ffec7b28): the card names its requirement the way every other card does; tester #17: first. */}
               <span id={`req-goal-${group.groupId}`} className={`group-card-lead ${groupCardLead}`}><CardGoal group={group} className={`group-card-goal ${groupCardGoal}`} /></span>
-              <span id={`req-name-${group.groupId}`} className={`group-card-name ${groupCardName}`}><span className="led" data-led={groupLed(group)} aria-hidden="true" />{group.groupId} · {enumText("groupState", group.state)} · {t("control.requirementBadge")}{label(group.repoId)}</span>
+              <span id={`req-name-${group.groupId}`} className={`group-card-name ${groupCardName}`}><span className="led" data-led={groupLed(group)} aria-hidden="true" />{group.groupId} · {groupStateText(group)} · {t("control.requirementBadge")}{label(group.repoId)}</span>
             </a>
           )}</GroupActionsMenu>
         ) : (

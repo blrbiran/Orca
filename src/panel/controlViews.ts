@@ -817,7 +817,9 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   const scheduleStart = scheduleStartOf(store, groupId, body as Record<string, unknown>);
   // Tester #361: a Web start keeps the stored status `ready` (and every settle writes `review`) while tasks run; the summary
   // shows `running` then, and the stored word beside it. Only the shown word: every guard reads the stored status.
-  const shownState = (body.status === "ready" || body.status === "review") && (executing === true || (counts?.running ?? 0) > 0 || (counts?.settling ?? 0) > 0)
+  // #361 review (I4): only a task under way (running or settling) makes it `running` -- a queued start with nothing claimed
+  // yet keeps the stored word (`executionPending` already says a start is queued).
+  const shownState = (body.status === "ready" || body.status === "review") && ((counts?.running ?? 0) > 0 || (counts?.settling ?? 0) > 0)
     ? "running" : body.status;
   const summary = {
     groupId,

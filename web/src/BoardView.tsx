@@ -13,7 +13,7 @@ import { CardGoal } from "./CardGoal.js";
 import type { FlowListV1, GroupSummaryV1 } from "./controlTypes.js";
 import { BOARD_COLUMNS, boardColumn, boardDrop, groupLed, needsAttention, type BoardColumn } from "./groupCategory.js";
 import { GroupGraph } from "./GroupGraph.js";
-import { currentLanguage, enumText } from "./i18n.js";
+import { currentLanguage, enumText, groupStateText } from "./i18n.js";
 import { useClock } from "./clock.js";
 import { formatTokens, shortTokens } from "./TokenInput.js";
 import { inScope, type GroupScope } from "./projectScope.js";
@@ -112,7 +112,8 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
           <span id={`${base}-name`} className={cardName}>
             {/* Ruling H8: the status light; decorative, the state is in this text. */}
             <span className="led" data-led={groupLed(group)} aria-hidden="true" />
-            {group.groupId} · {enumText("groupState", group.state)}{props.repoText}
+            {/* Tester #370: an archived group reads archived (was <stored state>). */}
+            {group.groupId} · {groupStateText(group)}{props.repoText}
           </span>
         </button>
       )}</GroupActionsMenu>

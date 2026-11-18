@@ -91,6 +91,14 @@ export function enumText<F extends keyof typeof en.enums>(family: F, value: stri
   return i18n.exists(key) ? (i18n.t(key as never) as string) : value;
 }
 
+/**
+ * Tester #370: a group's state word -- `archived (was <stored state>)` for an archived group, whose stored state is not what
+ * it is now (#361 review I4: the stored word, never the derived `running`), else the shown state.
+ */
+export function groupStateText(group: { state: string; storedState?: string; archived?: boolean }): string {
+  return group.archived === true ? i18n.t("control.groupCard.archivedWas", { state: enumText("groupState", group.storedState ?? group.state) }) : enumText("groupState", group.state);
+}
+
 /** The current language's refusal table (spec 2026-10-08 §2.2(a)). */
 function errorTable(): Record<string, string> {
   return currentLanguage() === "zh" ? zhErrors : enErrors;

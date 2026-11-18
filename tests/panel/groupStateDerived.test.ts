@@ -35,6 +35,19 @@ describe("a group's shown state follows its work (#361 #376)", { timeout: 60_000
     } finally { await t.h.dispose(); }
   });
 
+  // #361 review (I4): only a task under way derives `running`. A start queued with nothing claimed keeps the stored word;
+  // executionPending already says a start is queued (and an archived group with a queued start read `running` before).
+  it("a start queued with nothing claimed yet: state stays ready, executionPending says the start is queued", async () => {
+    const t = await driverHarness(ids(2)); try {
+      expect(await t.service.start(t.h.command("start", {}))).toMatchObject({ result: { kind: "scheduled" } });
+      const summary = readGroupSummary(t.h.store, "g");
+      expect(summary.executionPending).toBe(true);
+      // mutation: derive running from executionPending again -> "running", red here
+      expect(summary.state).toBe("ready");
+      expect(summary).not.toHaveProperty("storedState");
+    } finally { await t.h.dispose(); }
+  });
+
   it("a task whose run landed and waits for its settle counts as settling, not running; done is unchanged", async () => {
     const t = await driverHarness(ids(2)); try {
       const runId = await t.claim();

@@ -95,7 +95,7 @@ function probeVerdictLines(run: { purpose?: string; probeVerdict?: ProbeVerdictV
 let proposalNote: string[] = [];
 
 interface GroupView { summary: { groupId: string; repoId?: string; state?: string; commandRevision: number; completion?: { done: number; total: number }; counts?: Record<string, number>; stopState?: string | null; executionPending?: boolean; overGrant?: boolean; archived?: boolean; recoveryBlockerCount?: number; projectionSeq?: number }; proposal: unknown; allocations: unknown[]; ledger: { groupLimit: unknown }; workItems: Array<{ taskId: string }>; runs: Array<{ runId: string; taskId: string | null }> }
-interface Summary { groups: Array<{ groupId: string; repoId?: string; state?: string; commandRevision?: number; goal?: string; counts?: { running?: number; blocked?: number; done?: number; idle?: number; waiting?: number }; completion?: { done: number; total: number }; stopState?: string | null; overGrant?: boolean; archived?: boolean }> }
+interface Summary { groups: Array<{ groupId: string; repoId?: string; state?: string; storedState?: string; commandRevision?: number; goal?: string; counts?: { running?: number; blocked?: number; done?: number; idle?: number; waiting?: number; settling?: number }; completion?: { done: number; total: number }; stopState?: string | null; overGrant?: boolean; archived?: boolean }> }
 
 /**
  * Spec §14 R6: the group holding a run -- the one --group names, else the first group whose view lists it.
@@ -211,10 +211,14 @@ const groupList = (body: unknown): string => {
   // Tester #370: archived groups are listed (Issue 151), last; the order is otherwise the panel's.
   const groups = [...((body as Summary).groups ?? [])].sort((a, b) => Number(a.archived === true) - Number(b.archived === true));
   return groups.length === 0 ? "no groups" : groups.map((g) => {
-    const count = g.counts?.running ?? 0;
-    const live = count > 0 && (g.state === "ready" || g.state === "review") ? `${g.state} · running ${count} task${count === 1 ? "" : "s"}` : g.state ?? "";
-    // Tester #370: an archived group's stored state is not what it is now; it reads `archived (was <state>)`.
-    const state = g.archived === true ? `archived (was ${g.state ?? "?"})` : live;
+    const count = g.counts?.running ?? 0, settling = g.counts?.settling ?? 0;
+    // Tester #361 review (M1): the panel derives `running` from the tasks under way, settling ones included, and says how many.
+    const live = g.state === "running" && count + settling > 0 ? `running · ${count + settling} task${count + settling === 1 ? "" : "s"}${settling === 0 ? "" : ` (${settling} settling)`}`
+      // A panel before #361 sends the stored word and its running count.
+      : count > 0 && (g.state === "ready" || g.state === "review") ? `${g.state} · running ${count} task${count === 1 ? "" : "s"}` : g.state ?? "";
+    // Tester #370: an archived group's stored state is not what it is now; it reads `archived (was <state>)` -- the stored
+    // state (#361 review I4), never the derived `running`.
+    const state = g.archived === true ? `archived (was ${g.storedState ?? g.state ?? "?"})` : live;
     // Tester #166: the list used to hide a paused, over-grant or blocked group behind its state word.
     const flags = [
       g.stopState !== null && g.stopState !== undefined ? (g.stopState === "paused" ? "paused" : `stopping (${g.stopState})`) : "",
