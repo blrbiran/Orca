@@ -4,10 +4,11 @@
  */
 import type { GroupSummaryV1 } from "./controlTypes.js";
 
-export const GROUP_CATEGORIES = ["not-started", "running", "attention", "done", "archived"] as const;
+// Tester #355 (human ruling 2026-11-19): `closed` is its own category beside `archived` -- the same terminal mark's other kind.
+export const GROUP_CATEGORIES = ["not-started", "running", "attention", "done", "closed", "archived"] as const;
 export type GroupCategory = (typeof GROUP_CATEGORIES)[number];
-/** The chips, in the order they are shown; All shows every group but the archived ones. */
-export const GROUP_FILTERS = ["all", "not-started", "running", "attention", "done", "archived"] as const;
+/** The chips, in the order they are shown; All shows every group but the closed and archived ones. */
+export const GROUP_FILTERS = ["all", "not-started", "running", "attention", "done", "closed", "archived"] as const;
 export type GroupFilter = (typeof GROUP_FILTERS)[number];
 export const GROUP_FILTER_KEY = "orca.panel.groupFilter";
 
@@ -39,7 +40,7 @@ export function needsAttention(summary: GroupSummaryV1): boolean {
 }
 
 export function groupCategory(summary: GroupSummaryV1): GroupCategory {
-  if (summary.archived === true) return "archived";
+  if (summary.archived === true) return summary.archiveKind === "closed" ? "closed" : "archived";
   if (needsAttention(summary)) return "attention";
   if (summary.completion !== undefined && summary.completion.total > 0 && summary.completion.done === summary.completion.total) return "done";
   // Tester #376: a settling task (landed, waiting for its settle) is still under way.
@@ -77,7 +78,7 @@ export function groupLed(summary: GroupSummaryV1): GroupLed {
 
 export function matchesGroupFilter(summary: GroupSummaryV1, filter: GroupFilter): boolean {
   const category = groupCategory(summary);
-  return filter === "all" ? category !== "archived" : category === filter;
+  return filter === "all" ? category !== "archived" && category !== "closed" : category === filter;
 }
 
 /** localStorage, or undefined where touching it throws (a private window, blocked site data). */
@@ -132,14 +133,15 @@ export function boardColumn(summary: GroupSummaryV1): BoardColumn {
  * the page (the card snaps back with the reason). Builder's call (spec §11): pause is a running card dropped on
  * `queued`; resume is a paused card dropped on `running`; done → archived archives, archived → done unarchives.
  */
-export type BoardDrop = { verb: "pause-dispatch" | "resume-dispatch" | "archive-group" | "unarchive-group" } | { refused: "same" | "not-allowed" };
+export type BoardDrop = { verb: "pause-dispatch" | "resume-dispatch" | "archive-group" | "unarchive-group" | "unclose-group" } | { refused: "same" | "not-allowed" };
 export function boardDrop(summary: GroupSummaryV1, to: BoardColumn): BoardDrop {
   const from = boardColumn(summary);
   if (from === to) return { refused: "same" };
   if (from === "running" && to === "queued" && summary.stopState === null) return { verb: "pause-dispatch" };
   if (summary.stopState === "paused" && to === "running") return { verb: "resume-dispatch" };
   if (from === "done" && to === "archived") return { verb: "archive-group" };
-  if (from === "archived" && to === "done") return { verb: "unarchive-group" };
+  // Tester #355: a closed group sits in the Archived column too (under Show archived); dropping it on Done uncloses it.
+  if (from === "archived" && to === "done") return { verb: summary.archiveKind === "closed" ? "unclose-group" : "unarchive-group" };
   return { refused: "not-allowed" };
 }
 

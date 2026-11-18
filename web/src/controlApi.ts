@@ -440,6 +440,9 @@ export async function recoverUncertainCommand(groupId: string, commandId: string
 }
 
 /** A command the UI can offer, already carrying the revision the server was last seen at. */
+/** Issue-fixes spec §6.3, tester #355: the terminal-mark verbs a group card (list, Board, menu) sends. */
+export type GroupCardVerb = "archive-group" | "unarchive-group" | "close-group" | "unclose-group";
+
 export type ControlAction =
   | { verb: "import-plan"; groupId: string; expectedRevision: number; payload: ImportPlanPayloadV1 }
   | { verb: "proposal-edit"; groupId: string; expectedRevision: number; payload: ProposalEditPayloadV1 }
@@ -468,8 +471,8 @@ export type ControlAction =
   | { verb: "abandon-run"; groupId: string; expectedRevision: number; payload: { runId: string; note: string } }
   | { verb: "reopen-task"; groupId: string; expectedRevision: number; payload: { taskId: string; runId: string; note: string } }
   | { verb: "accept-no-change"; groupId: string; expectedRevision: number; payload: { taskId: string; runId: string; note: string } }
-  // Issue-fixes spec §6.3: archive and unarchive a group (empty payload).
-  | { verb: "archive-group" | "unarchive-group"; groupId: string; expectedRevision: number; payload: Record<string, never> }
+  // Issue-fixes spec §6.3: archive and unarchive a group (empty payload). Tester #355: close and unclose a done group.
+  | { verb: GroupCardVerb; groupId: string; expectedRevision: number; payload: Record<string, never> }
   // Integration spec §3.1, §6.5, §7: the group's scheme, Retry, and an owner's approval of an agent's resolution.
   | { verb: "set-group-integration"; groupId: string; expectedRevision: number; payload: SetGroupIntegrationPayloadV1 }
   | { verb: "retry-integration" | "integrate-now" | "resolve-integration-conflict"; groupId: string; expectedRevision: number; payload: Record<string, never> }
@@ -606,6 +609,10 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/archive`;
     case "unarchive-group":
       return `${group}/unarchive`;
+    case "close-group":
+      return `${group}/close`;
+    case "unclose-group":
+      return `${group}/unclose`;
     case "requirement-open":
       return "/api/control/requirements";
     case "requirement-answer":

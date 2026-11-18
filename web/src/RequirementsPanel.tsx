@@ -3,6 +3,7 @@
  * the browser originates only intents. Model-written text is shown as written (human ruling H8); the panel's own words
  * go through t.
  */
+import type { GroupCardVerb } from "./controlApi.js";
 import { RequirementMarkdown } from "./RequirementMarkdown.js";
 import { actionRow, documentSectionTitle, roundBox, roundSummary } from "./ui/requirementClasses.js";
 import { overviewRegionId } from "./overviewNavigation.js";
@@ -877,7 +878,11 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
       )}
       {view.requirement.acceptedDraftNo !== null && view.summary.state !== "clarifying" &&
         <div className={`${actionRow} mb-2`}><button type="button" onClick={() => props.onPrepare?.(groupId)}>{t("requirements.goToPreparation")}</button></div>}
-      {archived ? <section aria-label={t("control.group.archivedRegion")}>
+      {/* Tester #355: a closed group (done, from this requirement) says so and offers its own undo. */}
+      {archived ? view.summary.archiveKind === "closed" ? <section aria-label={t("control.group.closedRegion")}>
+        <p>{t("control.group.closedBanner")}</p>
+        <button type="button" onClick={() => props.onCommand({ verb: "unclose-group", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("control.group.unclose")}</button>
+      </section> : <section aria-label={t("control.group.archivedRegion")}>
         <p>{t("control.group.archivedBanner")}</p>
         <button type="button" onClick={() => props.onCommand({ verb: "unarchive-group", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("control.group.unarchive")}</button>
       </section> : archiveAllowed && <div className={`${actionRow} mb-2`}><button type="button" onClick={() => props.onCommand({ verb: "archive-group", groupId, expectedRevision: revisionOf(view), payload: {} })}>{t("control.group.archive")}</button></div>}
@@ -1035,7 +1040,7 @@ export function RequirementsPanel(props: { focus?: Extract<OverviewTarget, { kin
   /** Issue #220: the operator's agent preferences (null: not read yet), so the forms say what an unchosen agent or model runs. */
   preferences?: OperatorPreferencesV1 | null;
   onPrepare?: (groupId: string) => void;
-  onGroupAction?: (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string) => void;
+  onGroupAction?: (groupId: string, verb: GroupCardVerb, repoId: string) => void;
   groupRefusals?: Record<string, ControlRefusal>;
   /** `submitted` names the draft a success may clear, when it is still unchanged (spec §11 R2). */
   onCommand: (action: ControlAction, submitted?: Submitted) => void;

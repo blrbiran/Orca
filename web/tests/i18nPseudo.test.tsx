@@ -397,7 +397,8 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
     // Ruling: human approved necessary criteria changes this round (session 4389b15f, 2026-11-18: 「这一轮必要的判据都允许改。」) -- the activityKind `off-plan-write` (off-plan writes spec W3, #346) adds one: 228 + 1.
     // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) -- the activityKind `preexisting-failure` (pre-existing failures spec L2, #341) adds one: 229 + 1.
     // Ruling (2026-11-18 #356): lilac replaces light, scale included -- the theme family drops `lilac` (human: 「同意 lilac 整体覆盖 light」): 230 - 1.
-    expect(ENUM_VALUES.length).toBe(229);
+    // Ruling (2026-11-19 #355/#357): 「这次批准改写所有必要的判据」 -- the activityKinds `closed` and `unclosed` (a done group closed, and the close undone) add two: 229 + 2.
+    expect(ENUM_VALUES.length).toBe(231);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {

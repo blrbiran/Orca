@@ -8,6 +8,7 @@
  * so nothing here decides whether a group may start, how much budget is free, or
  * whether an unknown run is finished.
  */
+import type { GroupCardVerb } from "./controlApi.js";
 import { ShortcutsHelp } from "./ShortcutsHelp.js";
 import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
@@ -19,7 +20,7 @@ import type { GroupDecisionsRead } from "./RunDecisions.js";
 import { RecoveryView } from "./RecoveryView.js";
 import { RefusalNotice } from "./RefusalNotice.js";
 import { enumText, refusalText } from "./i18n.js";
-import { GroupList } from "./GroupList.js";
+import { GroupList, type GroupListProps } from "./GroupList.js";
 import { Select } from "./ui/Select.js";
 import { Dialog } from "./ui/Dialog.js";
 import { Menu, MenuItem } from "./ui/Menu.js";
@@ -71,7 +72,9 @@ export interface ControlPanelProps {
   onSelect: (groupId: string) => void;
   onSelectRequirement?: (groupId: string) => void;
   onSourceRequirement?: (groupId: string) => void;
-  onGroupAction?: (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string) => void;
+  onGroupAction?: (groupId: string, verb: GroupCardVerb, repoId: string) => void;
+  /** Tester #357: the list's bulk archive/close, one group at a time (GroupList onBulkAction). */
+  onGroupBulk?: GroupListProps["onBulkAction"];
   onOpenDispatch?: (groupId: string) => void;
   onDraft: (key: string, text: string) => void;
   onCommand: (action: ControlAction) => void | Promise<number | null>;
@@ -397,7 +400,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
         <p role="alert" data-tone="warn" key={row.groupId}>{t("control.unreadableGroup", { groupId: row.groupId, reason: row.reason })}</p>
       ))}
       <GroupList groups={summary.groups} selected={selected} scope={scope} repoLabel={props.repoLabel} onSelect={props.onSelect}
-        onSelectRequirement={props.onSelectRequirement} onAction={props.onGroupAction} refusals={props.groupRefusals} now={props.now} onOpenDispatch={props.onOpenDispatch} />
+        onSelectRequirement={props.onSelectRequirement} onAction={props.onGroupAction} onBulkAction={props.onGroupBulk} refusals={props.groupRefusals} now={props.now} onOpenDispatch={props.onOpenDispatch} />
       {/* Issue #56: the keys an open group's view takes (r, the arrows on its region tabs and menus), above that view and
           outside it, so the group's own actions stay exactly its actions. */}
       {view !== undefined && <div className="mt-3 flex justify-end"><ShortcutsHelp /></div>}

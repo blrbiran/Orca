@@ -22,7 +22,9 @@ const GROUPS = [
 ];
 const nav = () => screen.getByRole("navigation", { name: "Control groups" });
 const ids = () => [...nav().querySelectorAll(":scope > .group-card-row > .group-card")].map((card) => (card.textContent ?? "").split(" · ")[0]);
-const chip = (name: string) => within(screen.getByRole("group", { name: "Show groups" })).getByRole("button", { name });
+// Ruling (2026-11-19 #355/#357): 「这次批准改写所有必要的判据」 -- every chip names how many groups it holds (tester #357), so
+// a chip is found by its word followed by a count; groupListBulk.test.tsx pins the counts themselves.
+const chip = (name: string) => within(screen.getByRole("group", { name: "Show groups" })).getByRole("button", { name: new RegExp(`^${name} \\(\\d+\\)$`) });
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); try { window.localStorage.clear(); } catch { /* none */ } });
 

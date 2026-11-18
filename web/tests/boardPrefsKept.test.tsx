@@ -49,9 +49,10 @@ describe("the Board keeps its view through an unmount (tester #91)", () => {
   // mutation: App stops passing prefs -> each return starts from the columns with Archived unticked -> red
   it("keeps the archived box after a card was opened and Back pressed", async () => {
     render(<App />);
-    fireEvent.click((await boardRegion()).getByRole("checkbox", { name: "Show archived" }));
+    // Ruling (2026-11-19 #355/#357): 「这次批准改写所有必要的判据」 -- the box's label names closed groups too (tester #355).
+    fireEvent.click((await boardRegion()).getByRole("checkbox", { name: "Show closed and archived" }));
     await leaveByCardAndComeBack();
-    expect(((await boardRegion()).getByRole("checkbox", { name: "Show archived" }) as HTMLInputElement).checked).toBe(true);
+    expect(((await boardRegion()).getByRole("checkbox", { name: "Show closed and archived" }) as HTMLInputElement).checked).toBe(true);
     expect((await boardRegion()).getByRole("region", { name: "Archived" })).toBeTruthy();
   });
 

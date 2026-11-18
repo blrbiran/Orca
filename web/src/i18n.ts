@@ -95,7 +95,9 @@ export function enumText<F extends keyof typeof en.enums>(family: F, value: stri
  * Tester #370: a group's state word -- `archived (was <stored state>)` for an archived group, whose stored state is not what
  * it is now (#361 review I4: the stored word, never the derived `running`), else the shown state.
  */
-export function groupStateText(group: { state: string; storedState?: string; archived?: boolean }): string {
+export function groupStateText(group: { state: string; storedState?: string; archived?: boolean; archiveKind?: "archived" | "closed" }): string {
+  // Tester #355: a closed group is done by definition; its word is `closed`.
+  if (group.archived === true && group.archiveKind === "closed") return i18n.t("control.groupCard.closed");
   return group.archived === true ? i18n.t("control.groupCard.archivedWas", { state: enumText("groupState", group.storedState ?? group.state) }) : enumText("groupState", group.state);
 }
 

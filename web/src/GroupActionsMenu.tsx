@@ -2,6 +2,7 @@ import { useId, useState, type JSX, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { GroupSummaryV1 } from "./controlTypes.js";
 import type { ControlRefusal } from "./controlState.js";
+import type { GroupCardVerb } from "./controlApi.js";
 import { cardDispatchVerb } from "./groupCategory.js";
 import { RefusalNotice } from "./RefusalNotice.js";
 import { groupCardRow, groupMore } from "./ui/classes.js";
@@ -18,7 +19,7 @@ export function cardArchivePending(group: GroupSummaryV1): boolean {
 export function GroupActionsMenu(props: {
   group: GroupSummaryV1;
   onOpen: () => void;
-  onAction?: (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string) => void;
+  onAction?: (groupId: string, verb: GroupCardVerb, repoId: string) => void;
   refusal?: ControlRefusal | null;
   /** Spec 2026-10-13-unmetered-usage-settlement §B.3: archive-run-active is resolved from the group's dispatch controls. */
   onOpenDispatch?: () => void;
@@ -33,6 +34,11 @@ export function GroupActionsMenu(props: {
   const archivePending = cardArchivePending(props.group);
   const archiveBlocked = props.onAction === undefined || archivePending;
   const context = (event: MouseEvent<HTMLElement>): void => { event.preventDefault(); setOpen(true); };
+  // Tester #355: archive and close are the terminal mark's two kinds, each with its own undo; a mark of one kind converts to
+  // the other (human ruling 「同意允许互转」). Close is offered on a done group only (the server refuses any other).
+  const kind = props.group.archived === true ? props.group.archiveKind ?? "archived" : null;
+  const archiveVerb: GroupCardVerb = kind === "archived" ? "unarchive-group" : "archive-group";
+  const closeVerb: GroupCardVerb | null = kind === "closed" ? "unclose-group" : props.group.state === "done" ? "close-group" : null;
   return <div className={`group-card-row ${groupCardRow}`}>
     {props.children(context)}
     <span id={ownerDescriptionId} className="sr-only">{t("control.groupMenu.owner", { groupId: props.group.groupId })}</span>
@@ -43,9 +49,15 @@ export function GroupActionsMenu(props: {
         <MenuItem onSelect={() => props.onDispatch?.(dispatchVerb)}>{t(dispatchVerb === "pause-dispatch" ? "control.group.pause" : "control.group.resume")}</MenuItem>
       )}
       <MenuItem disabled={archiveBlocked} describedBy={archiveBlocked ? `archive-reason-${props.group.groupId}` : undefined}
-        onSelect={() => props.onAction?.(props.group.groupId, props.group.archived ? "unarchive-group" : "archive-group", props.group.repoId)}>
-        {t(props.group.archived ? "control.group.unarchive" : "control.group.archive")}
+        onSelect={() => props.onAction?.(props.group.groupId, archiveVerb, props.group.repoId)}>
+        {t(archiveVerb === "unarchive-group" ? "control.group.unarchive" : "control.group.archive")}
       </MenuItem>
+      {closeVerb !== null && (
+        <MenuItem disabled={archiveBlocked} describedBy={archiveBlocked ? `archive-reason-${props.group.groupId}` : undefined}
+          onSelect={() => props.onAction?.(props.group.groupId, closeVerb, props.group.repoId)}>
+          {t(closeVerb === "unclose-group" ? "control.group.unclose" : "control.group.close")}
+        </MenuItem>
+      )}
       {archiveBlocked && <small id={`archive-reason-${props.group.groupId}`}>{t(archivePending ? "control.groupMenu.archivePending" : "control.groupMenu.archiveUnavailable")}</small>}
       <MenuItem onSelect={() => { void navigator.clipboard?.writeText(props.group.groupId); }}>{t("control.groupMenu.copyId")}</MenuItem>
     </Menu>

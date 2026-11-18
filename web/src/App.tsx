@@ -96,7 +96,8 @@ import {
   workspaceModePath,
   writeUncertainCommands,
 } from "./controlApi.js";
-import type { ControlAction } from "./controlApi.js";
+import type { ControlAction, GroupCardVerb } from "./controlApi.js";
+import type { BulkOutcome } from "./GroupList.js";
 import { AccountContext } from "./AuthGate.js";
 import { ControlPanel, IMPORT_TARGET_DRAFT } from "./ControlPanel.js";
 import { initialControlState, reduceControlState, startQueuedEvent, summaryView } from "./controlState.js";
@@ -597,7 +598,7 @@ export function App(): JSX.Element {
   const sendControl = async (action: ControlAction): Promise<number | null> => {
     // N1 spec §11.2: a requirement's details come from its own view; a clarifying group has no group view (DR25).
     const owner = controlNow.current.groups[action.groupId];
-    const requirementArchive = (action.verb === "archive-group" || action.verb === "unarchive-group") && owner?.requirement !== undefined;
+    const requirementArchive = (action.verb === "archive-group" || action.verb === "unarchive-group" || action.verb === "close-group" || action.verb === "unclose-group") && owner?.requirement !== undefined;
     const requirementVerb = action.verb.startsWith("requirement-") || requirementArchive
       || ((action.verb === "recovery-retry" || action.verb === "handoff-stop" || action.verb === "set-limit") && owner?.state === "clarifying");
     const commandId = nextCommandId();
@@ -638,7 +639,8 @@ export function App(): JSX.Element {
     // Tester #63: an archived group or requirement leaves the list it was opened from, so its open detail closes with it;
     // "Show archived" brings both back. Not after a scope change: that already closed every detail (scopeKey effect).
     // The URL follows only when it names that group, so an archive from the Board or a list stays on its page.
-    if (answer.status < 400 && action.verb === "archive-group" && scopeKeyNow.current === scopeAtSend) {
+    // Tester #355: a closed group leaves the list the same way.
+    if (answer.status < 400 && (action.verb === "archive-group" || action.verb === "close-group") && scopeKeyNow.current === scopeAtSend) {
       const shown = routeNow.current;
       if (selectedGroupNow.current === action.groupId) {
         navigationSeq.current++; setSelectedGroup(null);
@@ -674,24 +676,32 @@ export function App(): JSX.Element {
     }
   };
 
-  /** Card actions read the exact owner at click time; a stale card cannot submit its old revision. */
-  const sendGroupCardAction = async (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string): Promise<void> => {
+  /**
+   * Card actions read the exact owner at click time; a stale card cannot submit its old revision. Tester #357: answers how
+   * it went, for the list's bulk toolbar (skipped: the group is already as the verb would set it, or changed under the click).
+   */
+  const sendGroupCardAction = async (groupId: string, verb: GroupCardVerb, repoId: string): Promise<BulkOutcome> => {
     try {
       const scopeAtClick = scopeKeyNow.current;
       const sourceAtClick = sourceIdentityNow.current;
       const summaryOwner = controlNow.current.groups[groupId];
-      if (summaryOwner === undefined || summaryOwner.repoId !== repoId) return;
+      if (summaryOwner === undefined || summaryOwner.repoId !== repoId) return "skipped";
       const fresh = summaryOwner.state === "clarifying" ? await fetchRequirement(groupId) : await fetchControlGroup(groupId);
-      if (fresh.summary.groupId !== groupId || fresh.summary.repoId !== repoId) return;
-      if (verb === "unarchive-group" ? fresh.summary.archived !== true : fresh.summary.archived === true) return;
+      if (fresh.summary.groupId !== groupId || fresh.summary.repoId !== repoId) return "skipped";
+      // Tester #355: the mark's kind decides; archive and close each convert the other kind (human ruling 「同意允许互转」).
+      const kind = fresh.summary.archived === true ? (fresh.summary as { archiveKind?: "archived" | "closed" }).archiveKind ?? "archived" : null;
+      const already = verb === "archive-group" ? kind === "archived" : verb === "close-group" ? kind === "closed"
+        : verb === "unarchive-group" ? kind !== "archived" : kind !== "closed";
+      if (already) return "skipped";
       // A project/auth/epoch change during the GET invalidates this click. The ledger judges all remaining archive guards.
       if (scopeAtClick !== scopeKeyNow.current || sourceAtClick !== sourceIdentityNow.current
-        || controlNow.current.groups[groupId]?.repoId !== repoId) return;
+        || controlNow.current.groups[groupId]?.repoId !== repoId) return "skipped";
       if (fresh.schema === "orca-requirement-view-v1") setRequirementViews((all) => ({ ...all, [groupId]: fresh }));
       else dispatchControl({ type: "group", value: fresh });
-      await sendControl({ verb, groupId, expectedRevision: fresh.summary.commandRevision, payload: {} });
+      return await sendControl({ verb, groupId, expectedRevision: fresh.summary.commandRevision, payload: {} }) === null ? "refused" : "succeeded";
     } catch (err) {
       dispatchControl({ type: "refusal", place: "group", groupId, value: controlFailureFrom(err) });
+      return "refused";
     }
   };
 
@@ -1891,6 +1901,7 @@ export function App(): JSX.Element {
           onSelectRequirement={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedRequirement(id); navigate({ kind: "requirement", section: "requirements", groupId: id }); void readRequirement(id); }}
           onSourceRequirement={(id) => { navigationSeq.current++; setOverviewFocus(null); setSelectedRequirement(id); navigate({ kind: "requirement", section: "requirements", groupId: id }); void readRequirement(id); }}
           onGroupAction={(groupId, verb, repoId) => { void sendGroupCardAction(groupId, verb, repoId); }}
+          onGroupBulk={sendGroupCardAction}
           onOpenDispatch={(groupId) => { navigate({ kind: "group", section: "tasks", groupId, region: null, taskId: null }); const request = ++navigationSeq.current; setSelectedGroup(groupId); setOverviewFocus({ target: { kind: "group", groupId, region: "dispatch", taskId: null, runId: null }, request }); }}
           onDraft={(key, text) => dispatchControl({ type: "draft", key, text })}
           onCommand={sendControl}

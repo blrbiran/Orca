@@ -752,6 +752,12 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
               {t("control.group.archive")}
             </button>
           )}
+          {/* Tester #355: a done group closes (the server refuses any other); the archive guards hold for it too. */}
+          {archiveOpen(view) && view.summary.state === "done" && (
+            <button type="button" onClick={() => onCommand({ verb: "close-group", groupId, expectedRevision: revision, payload: {} })}>
+              {t("control.group.close")}
+            </button>
+          )}
         </div>
       )}
       </div>
@@ -857,14 +863,22 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
       {view.summary.debug !== undefined && <DebugMark debug={view.summary.debug} />}
       {view.summary.requirement !== undefined && <a href="#requirements" onClick={() => props.onSourceRequirement?.(groupId)}>{t("control.group.sourceRequirement")}</a>}
       {!archived && view.summary.state !== "clarifying" && <GroupLibraryActions view={view} onCommand={onCommand} />}
-      {archived && (
+      {archived && (view.summary.archiveKind === "closed" ? (
+        // Tester #355: a closed group is frozen as an archived one; it says it is closed and offers its own undo.
+        <p role="status" aria-label={t("control.group.closedRegion")}>
+          {t("control.group.closedBanner")}{" "}
+          <button type="button" onClick={() => onCommand({ verb: "unclose-group", groupId, expectedRevision: revision, payload: {} })}>
+            {t("control.group.unclose")}
+          </button>
+        </p>
+      ) : (
         <p role="status" aria-label={t("control.group.archivedRegion")}>
           {t("control.group.archivedBanner")}{" "}
           <button type="button" onClick={() => onCommand({ verb: "unarchive-group", groupId, expectedRevision: revision, payload: {} })}>
             {t("control.group.unarchive")}
           </button>
         </p>
-      )}
+      ))}
       {/* #81: only a line that says something about this group; the generic one every page carried is gone. */}
       {reviewWording(view.summary) !== null && <p>{t(reviewWording(view.summary) === "goal-review" ? "detail.goalReview" : "detail.tasksBlocked")}</p>}
       {/* Issue #47: the execution controls are one bar above the region tabs, shown whatever tab is open. */}

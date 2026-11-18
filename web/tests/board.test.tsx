@@ -122,7 +122,8 @@ describe("the board tab (kanban spec §4)", () => {
     const onCommand = vi.fn<(action: ControlAction) => void>();
     render(<BoardView groups={[g({ groupId: "a", dependsOn: ["b"] }), g({ groupId: "b", commandRevision: 3 })]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={onCommand} />);
     expect(screen.queryByRole("region", { name: "Archived" })).toBeNull();
-    fireEvent.click(screen.getByRole("checkbox", { name: "Show archived" }));
+    // Ruling (2026-11-19 #355/#357): 「这次批准改写所有必要的判据」 -- the box also shows closed groups (tester #355), so it says so.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show closed and archived" }));
     expect(screen.getByRole("region", { name: "Archived" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Group graph" }));
     expect(screen.getByRole("list", { name: "Dependencies" }).textContent).toContain("a waits for b");

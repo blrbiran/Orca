@@ -580,3 +580,46 @@ extras' workspaces, then the result copy `<sourceDir>/repo` (`removeResultCopies
 `cleanedUp: true` last, so a crash after the removal resumes without reading the removed copy. Commit `c55c1e44`
 (`fix(control): a settled run's result copy goes once its archive holds it, and a failed run's cleanup resumes without
 re-archiving (#363 #366 P0, review I1)`). Design: `2026-11-19-change-sized-runs-design.md` §5.6.
+
+## Correction 2026-11-19 — closed: the terminal mark's second kind; list chip counts and multi-select (#355, #357)
+
+Recorded by the f-closed implementer (Orca session subagent, branch `feat/f-closed` over `dd799bb4`; the server half is
+commit `3ae0381e`). The sections above are kept as written; this one extends §6.3 and §6.4. Human rulings: #355
+「同意该方案，同意允许互转」 (one terminal mark, close only on done groups, unclose/unarchive remove it, conversion both ways);
+#92 「同意」 (no generic batch on the Board; the list gets multi-select with bulk archive/close; no bulk retry).
+
+- **§6.3 — the mark.** `archived: { at, actor }` gains an optional `kind: "closed"` (`archivedMark.ts`; the schema stays
+  `.strict()`). A mark without `kind` is archived; existing marks are not rewritten (no backfill). The status enum is not
+  extended (H4 holds): a closed group's status stays `done`.
+- **§6.3 — verbs.** `close-group` (any principal, empty payload, `POST groups/:id/close`) writes the closed mark on a group
+  whose status is `done` (`group-not-done`, 409, otherwise), after the same refusals as archive (`refuseArchive`: a flow
+  child, an estimate or requirement call in flight, a stop settling, an integration resolving, an active run), and writes a
+  `closed` activity row. `unclose-group` (`POST groups/:id/unclose`) removes a closed mark (`no-op-command` with none)
+  and writes `unclosed`; it applies the #370 pause rule exactly as unarchive does (`wouldRunOnUnarchive`), its result
+  carrying `paused: true` when it paused. `unarchive-group` removes only an archived mark.
+- **§6.3 — the gate.** The ledger gate (`terminalGateRefusal`) admits on an archived group `unarchive-group` and
+  `close-group` (a done one converts to closed; a group that is not done is refused `group-not-done` and stays archived),
+  and refuses every other verb `group-archived`, `unclose-group` included. On a closed group it admits `unclose-group` and
+  `archive-group` (converting to archived, after the archive refusals) and refuses every other verb `group-closed` (409),
+  `unarchive-group` and `close-group` included. Preflight books the same codes.
+- **§6.3 — frozen alike.** Every reader that asks only whether the mark is there (`isGroupArchived`, `archivedMarkOf`)
+  treats a closed group as archived: no claim, no wake delivery, no integration, no landing watch, no group acceptance,
+  out of `orca status`'s work health and the overview. The dispatch reason a closed group's claim is refused with stays
+  `group-archived`, and `recovery list`'s `deferredWakes` reason too (not split: a closed group is done, so a wake
+  waiting on it is an edge case).
+- **§6.2 — summary.** `archiveKind: "archived" | "closed"` beside `archived: true` on every group with a mark. CLI
+  `group list` reads `closed` for a closed group (`archived (was <state>)` for an archived one), both listed last.
+- **§6.4 — the list.** Categories gain `closed` (`groupCategory`); the chips are All, Not started, Running, Needs
+  attention, Done, Closed, Archived, and All shows neither closed nor archived groups. Every chip names how many groups
+  in the current project scope it holds, `Done (3)`, whichever chip is chosen. A closed card reads `closed`.
+- **§6.4 — the card is no longer only a button.** Where the page can send card actions, a selection checkbox sits beside
+  the card's button (or a clarifying card's link) in the card row -- a sibling, since a checkbox cannot sit inside a
+  button; the card's own button and accessible name are unchanged. With a selection, a toolbar ("Selected groups") shows
+  how many are selected and offers Archive, Close (enabled only when every selected group is `done` and not closed) and
+  Clear selection, all secondary or quiet (no primary). Each bulk action sends one command per group, in order, through
+  the card action's fresh read (no server batch verb; each command keeps its own `expectedRevision` and refusal), and
+  lists each group's outcome: done, nothing sent (already so, or changed under the click), or the group's refusal with
+  its code and what to do. Refused groups stay selected. There is no bulk retry or pause, and nothing on the Board.
+- **§6.5 — the group page.** A closed group shows a "Closed" status line with Unclose (`unclose-group`); a done group
+  offers Close beside Archive, under the same guards as Archive. The card menu offers Archive or Unarchive by the mark's
+  kind, and Close (a done group) or Unclose (a closed one).

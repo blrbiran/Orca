@@ -16,6 +16,8 @@ const g = (groupId: string, over: Partial<GroupSummaryV1> = {}): GroupSummaryV1 
   recoveryBlockerCount: 0, completion: { done: 0, total: 1 }, counts: { ...zero, idle: 1 }, archived: false, ...over,
 });
 const nav = () => screen.getByRole("navigation", { name: "Control groups" });
+// Ruling (2026-11-19 #355/#357): 「这次批准改写所有必要的判据」 -- every chip names its count now (tester #357), so the
+// Archived chip is found by its word and a count, and the board's box by its new label (closed groups too).
 
 afterEach(() => { cleanup(); try { window.localStorage.clear(); } catch { /* none */ } });
 
@@ -24,7 +26,7 @@ describe("an archived group's card (#370)", () => {
     render(<GroupList groups={[g("live"), g("old", { archived: true })]} selected={null} onSelect={vi.fn()} now={0} />);
     const name = () => nav().querySelector(".group-card-name")!.textContent ?? "";
     expect(name()).toContain("live · running");
-    fireEvent.click(within(screen.getByRole("group", { name: "Show groups" })).getByRole("button", { name: "Archived" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Show groups" })).getByRole("button", { name: /^Archived \(\d+\)$/ }));
     // mutation: show enumText(state) for an archived group again -> "old · running", red
     expect(name()).toContain("old · archived (was running)");
   });
@@ -33,12 +35,12 @@ describe("an archived group's card (#370)", () => {
   // with a queued start before I4) reads the stored word.
   it("reads the stored state, never the derived running, in the card and the board", () => {
     render(<GroupList groups={[g("old", { archived: true, state: "running", storedState: "ready" })]} selected={null} onSelect={vi.fn()} now={0} />);
-    fireEvent.click(within(screen.getByRole("group", { name: "Show groups" })).getByRole("button", { name: "Archived" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Show groups" })).getByRole("button", { name: /^Archived \(\d+\)$/ }));
     // mutation: archivedWas from `state` instead of `storedState ?? state` -> "archived (was running)", red here
     expect(nav().querySelector(".group-card-name")!.textContent).toContain("old · archived (was ready)");
     cleanup();
     render(<BoardView groups={[g("old", { archived: true, state: "running", storedState: "ready" })]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
-    fireEvent.click(screen.getByRole("checkbox", { name: "Show archived" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show closed and archived" }));
     expect(screen.getByTestId("board-card-old").textContent).toContain("old · archived (was ready)");
     cleanup();
     // #370 review M4: the group page's heading too.

@@ -105,6 +105,10 @@ export const groupCard = "flex min-w-0 flex-1 flex-col items-stretch gap-[6px] r
 /** The card and its menu button side by side; the menu button sits over the card's top-right corner. */
 export const groupCardRow = "relative flex min-w-0 flex-wrap [&>.refusal]:basis-full";
 export const groupMore = "absolute top-2 right-2 z-[1] ms-0 min-h-control min-w-control";
+/** Tester #357: a card's selection box, a sibling of the card button (a checkbox cannot sit inside a button), bottom-right. */
+export const groupSelect = "absolute right-3 bottom-3 z-[1] flex items-center";
+/** Tester #357: the list's selection toolbar -- quiet buttons only (no primary), each row's outcome listed under it. */
+export const groupBulk = "my-2 flex flex-wrap items-center gap-2 [&>button]:ms-0 [&>ul]:basis-full [&>ul]:m-0 [&>ul]:ps-4";
 /** Tester #17: what the group is for leads the card; its id and state follow as the smaller line. */
 export const groupCardLead = "empty:hidden";
 export const groupCardGoal = "basis-full text-sm font-semibold text-fg-strong wrap-anywhere";

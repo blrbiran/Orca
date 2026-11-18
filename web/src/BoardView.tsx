@@ -4,6 +4,7 @@
  * A drag is weak: an allowed drop sends exactly one existing command (boardDrop), any other drop is refused on the page
  * and the card stays where the summary puts it. A second view draws the person's edges between groups (§3.3, §9a.5).
  */
+import type { GroupCardVerb } from "./controlApi.js";
 import { hashFor } from "./sections.js";
 import { useId, useState } from "react";
 import type { DragEvent, JSX } from "react";
@@ -35,7 +36,7 @@ export interface BoardViewProps {
   onOpen: (group: GroupSummaryV1) => void;
   onCommand: (action: ControlAction) => void;
   /** Tester #94: a card menu's archive and unarchive, through the same channel as a Tasks card (App's sendGroupCardAction). */
-  onGroupAction?: (groupId: string, verb: "archive-group" | "unarchive-group", repoId: string) => void;
+  onGroupAction?: (groupId: string, verb: GroupCardVerb, repoId: string) => void;
   /** A refused card action, said on its card as on Tasks. */
   groupRefusals?: Record<string, ControlRefusal>;
   /** Flow engine spec §14.1: flow runs, each a card for its parent with a template badge (children are never cards). */

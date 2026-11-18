@@ -401,3 +401,12 @@ Remove (payload unchanged), and a dependency that would close a cycle is counted
 "No dependencies" is said only when there is none of any kind. A legend gives each fill its group meaning (not started,
 queued or waiting, running, needs you, done; a group in the Done column is filled as done). A node's accessible label
 comes from the locale (`board.graph.node` / `nodeProgress`).
+
+## Correction 2026-11-19 — the Archived column also holds closed groups (#355)
+
+Recorded by the f-closed implementer (Orca session subagent, branch `feat/f-closed` over `dd799bb4`). §4 is kept as
+written. Tester #355 (human ruling 2026-11-19 「同意该方案，同意允许互转」) adds a closed kind to the archive mark
+(issue-fixes spec, Correction 2026-11-19). The Board gains no column: a closed group sits in the Archived column, shown
+only under the column box, now labelled "Show closed and archived", and its card reads `closed`. Dropping an Archived
+card on Done sends `unclose-group` for a closed group and `unarchive-group` for an archived one (`boardDrop`); Done to
+Archived still archives. No batch actions on the Board (#92 ruling: multi-select lives in the list only).
