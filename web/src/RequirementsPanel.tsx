@@ -387,6 +387,10 @@ function DraftReview(props: { view: View; draft: Draft; current: boolean; onComm
   const maySave = mayHumanOnly(useContext(AccountContext)) && props.archived !== true && draft.draftHash !== null
     && (draft.state === "awaiting-review" || props.view.requirement.acceptedDraftNo === draft.draftNo);
   const [moreOpen, setMoreOpen] = useState(false);
+  // #351 addendum (spec D2, the Issue 88 shape): a draft whose split reports conflicts is accepted only after a dialog.
+  const [confirmingConflicts, setConfirmingConflicts] = useState(false);
+  const conflicts = conflictsOf(draft);
+  const accept = () => props.onCommand({ verb: "requirement-draft-accept", groupId, expectedRevision: revisionOf(props.view), payload: { draftNo: draft.draftNo, draftHash: draft.draftHash! } });
   const mayEdit = !props.archived && draft.state === "awaiting-review" && draft.draftHash !== null;
   const edit = (change: RequirementDraftEditPayloadV1["edit"]) =>
     props.onCommand({ verb: "requirement-draft-edit", groupId, expectedRevision: revisionOf(props.view), payload: { draftNo: draft.draftNo, draftHash: draft.draftHash!, edit: change } });
@@ -424,7 +428,7 @@ function DraftReview(props: { view: View; draft: Draft; current: boolean; onComm
       {/* Tester #345: a path a task's goal names that no task may write (the split adds only files the base commit lacks). */}
       {(draft.goalPathsOutsideTargets ?? []).map((entry) => <p role="note" data-goal-path key={`${entry.taskId}:${entry.path}`}>{t("requirements.goalPath", { task: entry.taskId, path: entry.path })}</p>)}
       {/* #351 addendum: the split's own report that this draft does not meet the requirement as written (code does not judge it). */}
-      {conflictsOf(draft).length > 0 && <RequirementConflicts conflicts={conflictsOf(draft)} />}
+      {conflicts.length > 0 && <RequirementConflicts conflicts={conflicts} />}
       {draft.reasons.length > 0 && <><p>{t("requirements.handedBack")}</p><ul>{draft.reasons.map((reason) => { const words = explainSplitReason(reason); return <li key={reason}>{reason}{words !== null ? ` · ${words}` : ""}</li>; })}</ul></>}
       {!props.archived && draft.state === "awaiting-review" && (
         <>
@@ -432,8 +436,19 @@ function DraftReview(props: { view: View; draft: Draft; current: boolean; onComm
           <div className={actionRow}>
           <button type="button" disabled={feedback.trim() === ""} onClick={() => props.onCommand({ verb: "requirement-draft-feedback", groupId, expectedRevision: revisionOf(props.view), payload: { draftNo: draft.draftNo, feedback } },
             { slot: "feedback", key, value: feedback })}>{t("requirements.sendBack")}</button>
-          <button type="button" onClick={() => props.onCommand({ verb: "requirement-draft-accept", groupId, expectedRevision: revisionOf(props.view), payload: { draftNo: draft.draftNo, draftHash: draft.draftHash! } })}>{t("requirements.acceptSplit")}</button>
+          <button type="button" onClick={() => (conflicts.length > 0 ? setConfirmingConflicts(true) : accept())}>{t("requirements.acceptSplit")}</button>
           </div>
+          {confirmingConflicts && (
+            <div role="dialog" aria-label={t("requirements.requirementConflictsTitle", { count: conflicts.length })}>
+              <p>{t("requirements.requirementConflictsTitle", { count: conflicts.length })}</p>
+              <ul>{conflicts.map((entry, index) => <li key={index}>{t("requirements.requirementConflict", { criterion: entry.criterion, why: entry.why })}</li>)}</ul>
+              <p>{t("requirements.requirementConflictsHelp")}</p>
+              <div className={actionRow}>
+                <button type="button" onClick={() => { setConfirmingConflicts(false); accept(); }}>{t("requirements.acceptAnyway")}</button>
+                <button type="button" onClick={() => setConfirmingConflicts(false)}>{t("requirements.consensusCancel")}</button>
+              </div>
+            </div>
+          )}
         </>
       )}
       {maySave && (

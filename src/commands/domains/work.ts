@@ -58,7 +58,7 @@ function operatorNote(c: WriteContext): { text: string; scope: typeof NOTE_SCOPE
 type RoundView = ClarifyRoundView;
 interface RequirementView {
   summary: { archived?: boolean; requirement?: { roundNo: number | null; draftNo: number | null } };
-  rounds?: RoundView[]; drafts: Array<{ draftNo: number; draftHash: string | null }>;
+  rounds?: RoundView[]; drafts: Array<{ draftNo: number; draftHash: string | null; output?: { requirementConflicts?: unknown[] } | null }>;
 }
 const requirement = async (c: WriteContext): Promise<RequirementView> => await c.read(`groups/${group(c)}/requirement`) as RequirementView;
 /**
@@ -110,7 +110,7 @@ function answerSetHint(error: { code: string; message: string }): string | undef
   });
   return lines.length === 0 ? undefined : `the round's ids do not match (orca requirement show lists them): ${lines.join(" | ")}`;
 }
-async function latestDraft(c: WriteContext): Promise<{ draftNo: number; draftHash: string | null }> {
+async function latestDraft(c: WriteContext): Promise<RequirementView["drafts"][number]> {
   const view = await requirement(c);
   const draftNo = view.summary.requirement?.draftNo ?? null;
   const draft = draftNo === null ? undefined : view.drafts.find((d) => d.draftNo === draftNo);
@@ -364,9 +364,20 @@ export const WORK_ROWS: CommandDef[] = [
   verb({ domain: "requirement", action: "feedback", summary: "ask for a new draft of the split", verb: "requirement-draft-feedback", positionals: [GROUP],
     flags: [{ name: "text", type: "string", required: true, summary: "what to change" }],
     route: (c) => `groups/${group(c)}/requirement/feedback`, payload: async (c) => ({ draftNo: (await latestDraft(c)).draftNo, feedback: str(c, "text") }) }),
-  verb({ domain: "requirement", action: "accept", summary: "accept the current draft: the group becomes a draft task group", verb: "requirement-draft-accept", positionals: [GROUP],
+  // #351 addendum (spec D2): a draft whose split reports it does not meet the requirement as written is accepted only on
+  // purpose (the Web's "Accept anyway"); the refusal is the CLI's own, the payload is the same either way.
+  verb({ domain: "requirement", action: "accept", summary: "accept the current draft: the group becomes a draft task group; a draft reporting requirement conflicts is refused unless --despite-conflicts", verb: "requirement-draft-accept", positionals: [GROUP],
+    flags: [{ name: "despite-conflicts", type: "boolean", summary: "accept a draft whose split reports it does not meet the requirement as written" }],
     route: (c) => `groups/${group(c)}/requirement/accept`,
-    payload: async (c) => { const d = await latestDraft(c); if (d.draftHash === null) throw missing(c, await requirement(c), "requirement-no-draft", `draft ${d.draftNo} has no output yet`); return { draftNo: d.draftNo, draftHash: d.draftHash }; } }),
+    payload: async (c) => {
+      const d = await latestDraft(c);
+      if (d.draftHash === null) throw missing(c, await requirement(c), "requirement-no-draft", `draft ${d.draftNo} has no output yet`);
+      const conflicts = d.output?.requirementConflicts?.length ?? 0;
+      if (conflicts > 0 && c.args.flags["despite-conflicts"] !== true) {
+        throw new EntryRejection("requirement-draft-conflicts", `draft ${d.draftNo} reports ${conflicts} conflict(s) with the requirement as written (orca requirement show ${group(c)}); send feedback, or pass --despite-conflicts to accept it as it stands`);
+      }
+      return { draftNo: d.draftNo, draftHash: d.draftHash };
+    } }),
   // Tester follow-up K (#284, #265): apply one of the current draft's hints (requirement show lists them); Orca re-validates
   // the edited split as the next draft, awaiting review. No model call is made.
   verb({ domain: "requirement", action: "apply-parallel", summary: "drop the dependsOn edges the current draft lists as parallel candidates; the result is the next draft", verb: "requirement-draft-edit", positionals: [GROUP],

@@ -77,13 +77,14 @@ ask for a new draft of the split
 - `<group>`: a group id or a unique prefix
 - `--text <text>` (required): what to change
 
-## `orca requirement accept <group>`
+## `orca requirement accept <group> [--despite-conflicts]`
 
-accept the current draft: the group becomes a draft task group
+accept the current draft: the group becomes a draft task group; a draft reporting requirement conflicts is refused unless --despite-conflicts
 
 - What it does: sends control verb `requirement-draft-accept`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
+- `--despite-conflicts`: accept a draft whose split reports it does not meet the requirement as written
 
 ## `orca requirement apply-parallel <group>`
 
