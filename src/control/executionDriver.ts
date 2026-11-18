@@ -1765,11 +1765,15 @@ export async function stepCleanupFailed(deps: ExecutionDriverDeps, runId: string
       }
       return false;
     }
+    // Ruling (2026-11-18 tester batch D review 3, M1): the delay is lifted only once the proof is stored and the run
+    // archived; a read, hash check or archive that throws keeps it, so a failing proof is not collected every round.
+    try {
+      const bytes = await port.readEvidence(proof.source);
+      if (createHash("sha256").update(bytes).digest("hex") !== proof.source.hash) throw new ControlError("artifact-hash-mismatch");
+      await writeArtifact(store, proof.source.artifactId, bytes, archiveAdmission(deps));
+      await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: proof }, archiveAdmission(deps));
+    } catch (error) { checked.set(runId, now + CLEANUP_AWAITING_STOP_RECHECK_MS); throw error; }
     checked.delete(runId);
-    const bytes = await port.readEvidence(proof.source);
-    if (createHash("sha256").update(bytes).digest("hex") !== proof.source.hash) throw new ControlError("artifact-hash-mismatch");
-    await writeArtifact(store, proof.source.artifactId, bytes, archiveAdmission(deps));
-    await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: proof }, archiveAdmission(deps));
   }
   await cleanupRunWorkspace(deps.resolveRepository(cleanupRepoIdOf(store, run)), deps.roots, runId, workspaceOf(drive));
   for (const dir of drive.dirs?.slice(1) ?? []) await cleanupExtraWorkspace(dir.targetRepo, deps.roots, runId, dir.key);

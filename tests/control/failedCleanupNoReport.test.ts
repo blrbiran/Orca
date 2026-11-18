@@ -26,10 +26,16 @@ async function failedWithoutReport(shape: "never-accepted" | "alive" | "proved-s
   const alive = { value: false };
   const answer = { value: "real" as "real" | "terminal-only" | "wrong-generation" };
   const collected = { value: 0 };
+  // Review 3 (M1): what reading a stop proof's evidence does -- `read-fails` throws, `hash-mismatch` answers other bytes.
+  const evidenceFault = { value: null as null | "read-fails" | "hash-mismatch" };
   const t = await driverHarness([{ taskId: "a" }], {
     behaviour: () => "failed",
     // ccloop still running it: a collect with nothing to report yet (no candidate, no terminal, no stop proof).
-    wrapPort: (port: ExecutionPort): ExecutionPort => ({ ...port, collect: async (envelope, after) => {
+    wrapPort: (port: ExecutionPort): ExecutionPort => ({ ...port, readEvidence: async (ref) => {
+      if (evidenceFault.value === "read-fails") throw new Error("evidence-unreadable");
+      const bytes = await port.readEvidence(ref);
+      return evidenceFault.value === "hash-mismatch" ? Buffer.concat([bytes, Buffer.from("x")]) : bytes;
+    }, collect: async (envelope, after) => {
       collected.value += 1;
       if (alive.value) return { events: [], candidate: null, terminal: null };
       const report = await port.collect(envelope, after);
@@ -57,7 +63,7 @@ async function failedWithoutReport(shape: "never-accepted" | "alive" | "proved-s
   const workspace = run.drive.workspacePath as string;
   expect(existsSync(workspace)).toBe(true);
   collected.value = 0;
-  return { t, driver, id, workspace, alive, answer, collected };
+  return { t, driver, id, workspace, alive, answer, collected, evidenceFault };
 }
 
 const archiveOf = (t: Awaited<ReturnType<typeof driverHarness>>, runId: string) =>
@@ -127,6 +133,22 @@ describe("a settled-failed run with no saved report (#360)", { timeout: 60000 },
       expect(t.body(id).drive).toMatchObject({ cleanedUp: false });
       expect(existsSync(workspace)).toBe(true);
     } finally { await t.h.dispose(); }
+  });
+
+  // Review 3 (M1): a stop proof whose bytes cannot be read (or fail their hash) throws for the round; the next round must
+  // not collect again at once -- the delay stays until the proof is stored and the run archived.
+  it.each(["read-fails", "hash-mismatch"] as const)("accepted, proved stopped, the proof's evidence %s: thrown, and ccloop is not asked again before the delay", async (fault) => {
+    const { t, id, workspace, collected, evidenceFault } = await failedWithoutReport("proved-stopped");
+    evidenceFault.value = fault;
+    try {
+      await expect(stepCleanupFailed(t.deps, id)).rejects.toThrow(fault === "read-fails" ? "evidence-unreadable" : "artifact-hash-mismatch");
+      expect(collected.value).toBe(1);
+      // mutation: lift the delay before the proof is read (checked.delete first) -> a second collect now, red here.
+      expect(await stepCleanupFailed(t.deps, id)).toBe(false);
+      expect(collected.value).toBe(1);
+      expect(t.body(id).drive).toMatchObject({ cleanedUp: false });
+      expect(existsSync(workspace)).toBe(true);
+    } finally { vi.restoreAllMocks(); await t.h.dispose(); }
   });
 
   it("Review Focus 4: accepted, no stop proof, still running -- workspace kept, cleanup-awaiting-stop, one log line over many rounds", async () => {
