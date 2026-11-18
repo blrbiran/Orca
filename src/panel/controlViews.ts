@@ -28,7 +28,7 @@ import { multiDirOf } from "../control/multiGroup.js";
 import { readMultiLanding } from "../control/multiLandingRecord.js";
 import { criteriaReviewsOf, escalationsOf, readSystemDebugMark } from "../control/systemDebug.js";
 import { acceptanceOf, acceptanceProblem, countLandedTasks, deliveredAcceptanceOf, deliveredAcceptanceProblem, fullSuiteWarning } from "../control/groupAcceptanceRecord.js";
-import { landingWatchOf } from "../control/landingWatchRecord.js";
+import { landingWatchOf, watchHasNothingLeft } from "../control/landingWatchRecord.js";
 import { allowancesOf } from "../control/groupAllowances.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
@@ -872,9 +872,10 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(landingWatch === null ? {} : { landingWatch: {
       tip: landingWatch.tip, at: landingWatch.at, commands: landingWatch.commands,
       regressions: landingWatch.regressions.map((regression) => ({ ...regression, problem: `landing-regression:${regression.command}` })),
-      // Tester #371: once the group acceptance has a result it decides the final tip (follow-up G §6.2 A5) and the watch
-      // runs no more; its last record's regressions are then no longer the group's problems.
-      ...(acceptance !== null && acceptance.result !== "not-run" ? { supersededBy: "acceptance" as const } : {}),
+      // Tester #371: once nothing is left to land the group acceptance decides the final tip (follow-up G §6.2 A5) and the
+      // watch runs no more; its last record's regressions are then no longer the group's problems. #371 review (I5): the
+      // watch's own stop rule, not the acceptance record (deleted while an acceptance reruns; kept when a task is appended).
+      ...(watchHasNothingLeft(store, groupId) ? { supersededBy: "acceptance" as const } : {}),
     } }),
     ...(scheduleStart === null ? {} : { scheduleStart }),
     ...(multiSummary === null ? {} : { multiDir: multiSummary }),

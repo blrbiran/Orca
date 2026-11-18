@@ -3,7 +3,7 @@ import { isGroupArchived } from "./archivedMark.js";
 import { runEveryCheck, type EveryCheckOutcome } from "./checkCommand.js";
 import { groupRepoId, isDirGroup } from "./dirGroup.js";
 import { acceptanceCommands, clearGroupFailure, logGroupFailureOnce, recordWorkBranchMissing, runOnScratchTip, workBranchKnownMissing, type GroupAcceptanceDeps } from "./groupAcceptance.js";
-import { landingWatchOf, nextLandingWatch } from "./landingWatchRecord.js";
+import { landedRuns, landingWatchOf, nextLandingWatch, watchHasNothingLeft } from "./landingWatchRecord.js";
 import { isMultiGroup } from "./multiGroup.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { isLandingWatchPathOf, landingWatchPathOf, workBranchTip } from "./workspace.js";
@@ -33,28 +33,6 @@ let watchSeq = 0;
 /** Every watch still running in this process, whichever driver started it (a criterion awaits them before removing state). */
 const running = new Set<Promise<void>>();
 export async function landingWatchesSettled(): Promise<void> { await Promise.all([...running]); }
-
-/** The group's task runs that landed a commit on its branch, in run order: runId and taskId. */
-function landedRuns(store: ControlStore, groupId: string): Array<{ runId: string; taskId: string }> {
-  const landed: Array<{ runId: string; taskId: string }> = [];
-  for (const row of store.db.prepare("SELECT id, body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)) {
-    const run = JSON.parse(String(row.body)) as { taskId?: unknown; drive?: { landedCommit?: unknown } };
-    if (typeof run.taskId === "string" && typeof run.drive?.landedCommit === "string") landed.push({ runId: String(row.id), taskId: run.taskId });
-  }
-  return landed;
-}
-
-function taskIdsOf(store: ControlStore, groupId: string): string[] {
-  return store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId)
-    .map((row) => JSON.parse(String(row.body)) as { kind?: string; taskId?: unknown })
-    .filter((work) => work.kind === "task" && typeof work.taskId === "string").map((work) => work.taskId as string);
-}
-
-function allTasksDone(store: ControlStore, groupId: string): boolean {
-  const tasks = store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId)
-    .map((row) => JSON.parse(String(row.body)) as { kind?: string; status?: string }).filter((work) => work.kind === "task");
-  return tasks.length > 0 && tasks.every((work) => work.status === "done");
-}
 
 /** One round of the pass; answers whether anything was recorded. */
 export async function watchLandings(deps: GroupAcceptanceDeps, checks: Map<string, LandingWatchCheck>): Promise<boolean> {
@@ -101,9 +79,8 @@ async function watchGroup(deps: GroupAcceptanceDeps, checks: Map<string, Landing
   if (store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined) return false;
   if (isMultiGroup(store, groupId) || isDirGroup(store, groupId) || isDirFlowGroup(store, groupId)) return false;
   // Every task done, or every task landed (nothing is left to land after this tip): group acceptance checks the final tip.
-  if (allTasksDone(store, groupId)) return false;
+  if (watchHasNothingLeft(store, groupId)) return false;
   const landed = landedRuns(store, groupId);
-  if (taskIdsOf(store, groupId).every((taskId) => landed.some((run) => run.taskId === taskId))) return false;
   const covered = new Set(landingWatchOf(body)?.coveredRunIds ?? []);
   const later = landed.filter((run) => !covered.has(run.runId));
   if (later.length === 0) return false;

@@ -1808,8 +1808,9 @@ export const groupSummarySchema = z
         command: nonemptyString, landedTaskIds: z.array(idSchema), tip: commitShaSchema, exit: nonemptyString,
         tail: z.string().max(2048).optional(), since: safeInteger, problem: nonemptyString,
       }).strict()),
-      // Tester #371: present when the group acceptance has a result and so decides the final tip; the regressions are then
-      // the watch's last record, not problems.
+      // Tester #371: present when nothing is left to land (the watch's own stop rule, landingWatchRecord.ts
+      // watchHasNothingLeft), so the group acceptance decides the final tip; the regressions are then the watch's last
+      // record, not problems.
       supersededBy: z.literal("acceptance").optional(),
     }).strict().optional(),
     // Tester follow-up G §6.3 (#189): what this group lets through (groupAllowances.ts), revoked ones included. Omitted when none.

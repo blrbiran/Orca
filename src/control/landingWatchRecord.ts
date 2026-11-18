@@ -8,6 +8,7 @@
  * clears when the check is green again.
  */
 import type { EveryCheckOutcome } from "./checkCommand.js";
+import type { ControlStore } from "./store.js";
 
 export type CheckState = "green" | "red" | "not-run";
 export interface LandingRegression { command: string; landedTaskIds: string[]; tip: string; exit: string; tail?: string; since: number }
@@ -49,4 +50,38 @@ export function nextLandingWatch(previous: LandingWatch | null, run: { tip: stri
 /** The problems a record shows (Problems, `group show`): one per regression. */
 export function landingRegressionProblems(record: LandingWatch | null): string[] {
   return (record?.regressions ?? []).map((regression) => `landing-regression:${regression.command}`);
+}
+
+/** The group's task runs that landed a commit on its branch, in run order: runId and taskId. */
+export function landedRuns(store: ControlStore, groupId: string): Array<{ runId: string; taskId: string }> {
+  const landed: Array<{ runId: string; taskId: string }> = [];
+  for (const row of store.db.prepare("SELECT id, body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)) {
+    const run = JSON.parse(String(row.body)) as { taskId?: unknown; drive?: { landedCommit?: unknown } };
+    if (typeof run.taskId === "string" && typeof run.drive?.landedCommit === "string") landed.push({ runId: String(row.id), taskId: run.taskId });
+  }
+  return landed;
+}
+
+function taskIdsOf(store: ControlStore, groupId: string): string[] {
+  return store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId)
+    .map((row) => JSON.parse(String(row.body)) as { kind?: string; taskId?: unknown })
+    .filter((work) => work.kind === "task" && typeof work.taskId === "string").map((work) => work.taskId as string);
+}
+
+function allTasksDone(store: ControlStore, groupId: string): boolean {
+  const tasks = store.db.prepare("SELECT body FROM work_items WHERE group_id=?").all(groupId)
+    .map((row) => JSON.parse(String(row.body)) as { kind?: string; status?: string }).filter((work) => work.kind === "task");
+  return tasks.length > 0 && tasks.every((work) => work.status === "done");
+}
+
+/**
+ * The watch's own stop rule (landingWatch.ts watchLandings): every task done, or every task landed -- nothing is left to
+ * land after this tip, and the group acceptance checks the final tip. Tester #371 review (I5): the views read the same rule,
+ * so a watch the acceptance took over stays taken over while that acceptance reruns, and one that runs again (a task
+ * appended after the acceptance) shows its regressions again. DB reads only.
+ */
+export function watchHasNothingLeft(store: ControlStore, groupId: string): boolean {
+  if (allTasksDone(store, groupId)) return true;
+  const landed = landedRuns(store, groupId);
+  return taskIdsOf(store, groupId).every((taskId) => landed.some((run) => run.taskId === taskId));
 }
