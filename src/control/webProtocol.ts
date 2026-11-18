@@ -2540,7 +2540,10 @@ export const recoveryViewSchema = z
     dispatchBlocked: z.boolean(),
     blockers: z.array(recoveryViewBlockerSchema),
     // Terminal run closure #169: current terminal failures and the one step that ends their accounting.
-    terminalRuns: z.array(z.object({ groupId: idSchema, taskId: idSchema, runId: idSchema, outcome: z.string().min(1), next: z.enum(["settle-usage", "close-run"]) }).strict()).optional(),
+    // D5 (salvage narrow fix): a run Orca's own bound stopped carries its out-of-bounds paths and, for a parallel sibling's
+    // claim, the sibling to retry after (orca task retry --after).
+    terminalRuns: z.array(z.object({ groupId: idSchema, taskId: idSchema, runId: idSchema, outcome: z.string().min(1), next: z.enum(["settle-usage", "close-run"]),
+      outOfBounds: z.array(z.string().min(1)).optional(), retryAfter: idSchema.optional() }).strict()).optional(),
     // Tester #171: a start-family wake the drainer keeps deferring, with the condition that defers it. Absent when none does.
     // #370 review 2: `waitsOn` on an archived group's resume wake -- delivered only after the unarchive and a person's resume.
     deferredWakes: z.array(z.object({ groupId: idSchema, kind: nonemptyString, reason: z.enum(["dispatch-blocked", "group-blocker", "group-archived"]),

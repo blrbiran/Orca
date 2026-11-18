@@ -316,8 +316,9 @@ describe("a parallel-claim block recorded by Orca's own bound", { timeout: 120_0
       // mutation: retryAfterSibling does not read the run's outcome -> the card names `--after b` and the run view offers it, red
       expect(readGroupSummary(t.h.store, "g").card!.firstFailure).toEqual({ taskId: "a", cause: "out-of-bounds:b" });
       expect(runView(t, runId).retryAfter).toBeUndefined();
-      // The step the card used to name is refused: a dead end, not a way out.
-      expect(retry(t, { taskId: "a", runId, after: "b" }, "after-bound")).toMatchObject({ error: { code: "task-not-retryable" } });
+      // Ruling (2026-11-18 tester batch D): D5 / human ruling on #352 salvage -- this run now has a retry exit, `--after b`
+      // included (recovery list names it); the card and run view still do not offer it. (Was: refused task-not-retryable.)
+      expect(retry(t, { taskId: "a", runId, after: "b" }, "after-bound")).toMatchObject({ result: { kind: "task-retried", taskId: "a", fromRunId: runId } });
     } finally { await t.h.dispose(); }
   });
 });

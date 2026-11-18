@@ -5,6 +5,7 @@ import { z } from "zod";
 import { amountSchema, artifactSchema, candidateSchema, idSchema, safeInteger } from "./schema.js";
 import { canonicalBytes } from "./canonicalJson.js";
 import { ControlError } from "./errors.js";
+import { isBoundStoppedRun } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
 import type { Amount, ArtifactRef, Candidate, Grant } from "./types.js";
 
@@ -106,7 +107,8 @@ export function settlementProof(store: ControlStore, run: SettlementRun): { repo
     const report = JSON.parse(settlementArtifact(store, source).toString());
     const c = candidateSchema.parse(report.candidate);
     candidateIdentity(c, run);
-    if (!report.terminal || report.terminal.outcome === "succeeded" || report.terminal.outcome !== run.drive?.outcome
+    // D5 (salvage narrow fix): a success Orca's own bound refused is closed as a failure is, on the same proof.
+    if (!report.terminal || (report.terminal.outcome === "succeeded" && !isBoundStoppedRun(run as never)) || report.terminal.outcome !== run.drive?.outcome
       || report.terminal.sourceDir !== run.drive?.sourceDir || c.terminalOutcome !== report.terminal.outcome || !c.stopProof) throw new Error("report-terminal");
     validateStopProof(store, run, c);
     return { report: source, stopProof: c.stopProof };

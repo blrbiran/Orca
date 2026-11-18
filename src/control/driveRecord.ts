@@ -306,6 +306,22 @@ export function isTerminallyFailedRun(run: { state: string; drive?: DriveRecord;
   return live || closed;
 }
 
+/** Orca's own harvest bound's block reason at C (executionDriver.ts), `out-of-bounds:<paths>`. */
+export const OUT_OF_BOUNDS_BLOCK = "out-of-bounds:";
+
+/**
+ * Salvage narrow fix (plan 2026-11-18 batch D, D5; human ruling: a close/retry exit and a recovery-list row): a run whose
+ * ccloop attempt succeeded but whose result Orca's own harvest bound refused -- blocked at C, outcome `succeeded`,
+ * `out-of-bounds:<paths>` -- still blocked, or since closed by close-run. Collecting it again only blocks it again, so like
+ * a terminally failed run it is closed or retried; unlike one, it is never retried by Orca on its own (the ladder and
+ * quota routing read isTerminallyFailedRun, which stays as it was).
+ */
+export function isBoundStoppedRun(run: { state: string; drive?: DriveRecord; terminalClosure?: unknown }): boolean {
+  const drive = run.drive;
+  if (drive === undefined || drive.blockedAt !== "C" || drive.outcome !== "succeeded" || drive.blockedReason?.startsWith(OUT_OF_BOUNDS_BLOCK) !== true) return false;
+  return run.state === "blocked" || (run.state === "settled-failed" && terminalClosureSchema.safeParse(run.terminalClosure).success);
+}
+
 /** Worker-lost recovery spec 2026-11-12 §4.2/§5.4: ccloop's failure cause for a run whose worker died (settle-lost-worker). */
 export const WORKER_LOST_CAUSE = "worker-lost";
 /** Tester follow-up J (#299): ccloop 9c83b38's cause for a provider that does not serve the run's model (a 404); not retryable. */

@@ -1,7 +1,7 @@
 import { recordActivity } from "./activity.js";
 import { add, hasObservedUsage } from "./budget.js";
 import { applyWebCommand } from "./commandLedger.js";
-import { isTerminallyFailedRun, recoveryRetryCommand, resumableBlockedRun, terminalClosureSchema, type DriveRecord } from "./driveRecord.js";
+import { isBoundStoppedRun, isTerminallyFailedRun, recoveryRetryCommand, resumableBlockedRun, terminalClosureSchema, type DriveRecord } from "./driveRecord.js";
 import { ControlError } from "./errors.js";
 import { readWork, saveWork } from "./queries.js";
 import { ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readRunBody, releaseCommitment, saveRunBody, setAllocationStates, type RunBody } from "./stopIntent.js";
@@ -36,7 +36,7 @@ function sealedProof(store: ControlStore, run: TerminalRun): { report: TerminalC
 export function validTerminalClosure(store: ControlStore, run: TerminalRun): boolean {
   try {
     if (run.state !== "settled-failed" || Number(store.db.prepare("SELECT active FROM runs WHERE id=?").get(run.runId)?.active) !== 0
-      || !isWebWorkRun(store, run.runId) || run.drive?.outcome === null || run.drive?.outcome === "succeeded" || run.drive?.blockedAt !== "C") return false;
+      || !isWebWorkRun(store, run.runId) || run.drive?.outcome === null || (run.drive?.outcome === "succeeded" && !isBoundStoppedRun(run)) || run.drive?.blockedAt !== "C") return false;
     const marker = terminalClosureSchema.parse(run.terminalClosure), proof = sealedProof(store, run);
     const row = store.db.prepare("SELECT verb, body_json FROM commands WHERE group_id=? AND id=?").get(run.groupId, marker.closeCommandId) as { verb?: string; body_json?: string } | undefined;
     const receipt = row === undefined ? null : (JSON.parse(String(row.body_json)) as { result?: { kind?: unknown; runId?: unknown; alreadyClosed?: unknown } }).result;
@@ -68,7 +68,8 @@ export function applyCloseRun(deps: CloseRunDeps, command: CloseRunCommand): Com
         if (Number(deps.store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)?.active) !== 1) throw new ControlError("run-closure-not-terminal");
         // Tester #267: a run blocked before ccloop stated an outcome is not closed; recovery-retry resumes it, so the refusal names it.
         if (run.phase === "work" && run.mode === undefined && run.recoveryOf === undefined && resumableBlockedRun(run)) throw new ControlError("run-closure-not-terminal", recoveryRetryCommand(runId));
-        if (run.phase !== "work" || run.mode !== undefined || run.recoveryOf !== undefined || !isTerminallyFailedRun(run)) throw new ControlError("run-closure-not-terminal");
+        // D5 (salvage narrow fix): a run Orca's own bound stopped (outcome succeeded at C) is closed as a failed one is.
+        if (run.phase !== "work" || run.mode !== undefined || run.recoveryOf !== undefined || (!isTerminallyFailedRun(run) && !isBoundStoppedRun(run))) throw new ControlError("run-closure-not-terminal");
         const work = readWork(deps.store, groupId, run.workItemId) as unknown as WorkBody;
         if (work.kind !== "task" || work.currentRunId !== runId || work.status !== "running" || work.pendingRunId != null
           || deps.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1").get(groupId, run.workItemId)?.id !== runId) throw new ControlError("run-closure-not-current");

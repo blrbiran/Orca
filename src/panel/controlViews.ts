@@ -16,7 +16,7 @@ import { denySiblingClaims, derivedPhaseTimeoutMs, frozenAllocationShape, offPla
 import { frozenWorkAgent, resolveGroupSelections } from "../control/agentFreeze.js";
 import { runAgentAgrees } from "../control/agentSwitch.js";
 import { installationRests, type InstallationRest } from "../control/quotaRest.js";
-import { allowObservedPathsCommand, continueRestartsFresh, isTerminallyFailedRun, MODEL_UNAVAILABLE_CAUSE, USAGE_PAUSE_FRESH_START, modelUnavailableCommand, recoveryRetryCommand, repairableCeilingBlock, requirementSetAgentCommand, resumableBlockedRun, retryAfterCommand } from "../control/driveRecord.js";
+import { allowObservedPathsCommand, continueRestartsFresh, isTerminallyFailedRun, MODEL_UNAVAILABLE_CAUSE, OUT_OF_BOUNDS_BLOCK, USAGE_PAUSE_FRESH_START, modelUnavailableCommand, recoveryRetryCommand, repairableCeilingBlock, requirementSetAgentCommand, resumableBlockedRun, retryAfterCommand } from "../control/driveRecord.js";
 import { blockedOnRequirementAgent } from "../control/estimatorCompatibility.js";
 import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from "../control/agentSelection.js";
 import { readAgentPreferences } from "../control/agentPreferences.js";
@@ -2087,14 +2087,27 @@ function unresolvedRunRows(store: ControlStore): Array<{ groupId: string; taskId
   return out;
 }
 
-/** Terminal runs whose accounting a person or agent still has to end, with the one command each needs (#169). */
-function terminalRunRows(store: ControlStore): Array<{ groupId: string; taskId: string; runId: string; outcome: string; next: "settle-usage" | "close-run" }> {
-  const out: Array<{ groupId: string; taskId: string; runId: string; outcome: string; next: "settle-usage" | "close-run" }> = [];
+type TerminalRunRow = { groupId: string; taskId: string; runId: string; outcome: string; next: "settle-usage" | "close-run"; outOfBounds?: string[]; retryAfter?: string };
+
+/**
+ * Terminal runs whose accounting a person or agent still has to end, with the one command each needs (#169).
+ * D5 (salvage narrow fix): a run Orca's own bound stopped (outcome succeeded, `out-of-bounds:<paths>`) is listed too, with the
+ * paths and, when they are a parallel sibling's frozen claim, the sibling a retry should wait for (`task retry --after`).
+ */
+function terminalRunRows(store: ControlStore): TerminalRunRow[] {
+  const out: TerminalRunRow[] = [];
   for (const row of store.db.prepare("SELECT id,body FROM runs WHERE active=1 ORDER BY rowid").all()) {
-    const run = parseJson(row.body, `run-invalid:${String(row.id)}`) as { runId?: unknown; groupId?: unknown; taskId?: unknown; phase?: unknown; unknown?: { work?: unknown; handoff?: unknown }; drive?: { blockedAt?: unknown; outcome?: unknown } };
+    const run = parseJson(row.body, `run-invalid:${String(row.id)}`) as { runId?: unknown; groupId?: unknown; taskId?: unknown; phase?: unknown; state?: unknown; unknown?: { work?: unknown; handoff?: unknown };
+      drive?: { blockedAt?: unknown; outcome?: unknown; blockedReason?: unknown; parallelClaim?: { siblingIds?: unknown } } };
     if (run.phase !== "work" || typeof run.runId !== "string" || run.runId !== String(row.id) || typeof run.groupId !== "string" || typeof run.taskId !== "string") continue;
-    if (run.drive?.blockedAt !== "C" || typeof run.drive.outcome !== "string" || run.drive.outcome === "succeeded") continue;
-    out.push({ groupId: run.groupId, taskId: run.taskId, runId: run.runId, outcome: run.drive.outcome, next: run.unknown?.work === true || run.unknown?.handoff === true ? "settle-usage" : "close-run" });
+    if (run.drive?.blockedAt !== "C" || typeof run.drive.outcome !== "string") continue;
+    const bound = run.state === "blocked" && run.drive.outcome === "succeeded" && typeof run.drive.blockedReason === "string" && run.drive.blockedReason.startsWith(OUT_OF_BOUNDS_BLOCK);
+    if (run.drive.outcome === "succeeded" && !bound) continue;
+    const next = run.unknown?.work === true || run.unknown?.handoff === true ? "settle-usage" : "close-run";
+    if (!bound) { out.push({ groupId: run.groupId, taskId: run.taskId, runId: run.runId, outcome: run.drive.outcome, next }); continue; }
+    const paths = (run.drive.blockedReason as string).slice(OUT_OF_BOUNDS_BLOCK.length).split(/[;,]/).filter((path) => path !== "");
+    const sibling = Array.isArray(run.drive.parallelClaim?.siblingIds) && typeof run.drive.parallelClaim.siblingIds[0] === "string" ? run.drive.parallelClaim.siblingIds[0] : null;
+    out.push({ groupId: run.groupId, taskId: run.taskId, runId: run.runId, outcome: run.drive.outcome, next, outOfBounds: paths, ...(sibling === null ? {} : { retryAfter: sibling }) });
   }
   return out;
 }

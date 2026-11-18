@@ -7,7 +7,7 @@ import { readGroup, saveGroup } from "./queries.js";
 import { createHash } from "node:crypto";
 import { readWorkClaimEnvelope } from "./webDispatch.js";
 import type { AdmissionGate } from "./admissionGate.js";
-import { recoveryRetryCommand, WORKER_LOST_CAUSE, type DriveRecord } from "./driveRecord.js";
+import { isBoundStoppedRun, recoveryRetryCommand, WORKER_LOST_CAUSE, type DriveRecord } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
 import type { PathPolicyMissV1 } from "./pathPolicyMisses.js";
 import type { Amount } from "./types.js";
@@ -289,7 +289,8 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         // Tester #267: blocked at C before ccloop stated any outcome (its collect failed), recovery-retry collects it again.
         // Stuck-runs spec S3: a held run was stopped by a handoff, often mid-work with no outcome; its retry is a fresh run
         // and its checkpoint is left unused (task continue is the other way out), so its outcome is not asked.
-        if (!held && !heldReleased && (drive.outcome === null || drive.outcome === "succeeded")) throw new ControlError("task-not-retryable", `outcome:${drive.outcome ?? "none"}${live && drive.outcome === null ? `:${recoveryRetryCommand(runId)}` : ""}`);
+        // D5 (salvage narrow fix): a run Orca's own bound stopped (outcome succeeded, out-of-bounds) is retried as a failed one is.
+        if (!held && !heldReleased && !isBoundStoppedRun(run as never) && (drive.outcome === null || drive.outcome === "succeeded")) throw new ControlError("task-not-retryable", `outcome:${drive.outcome ?? "none"}${live && drive.outcome === null ? `:${recoveryRetryCommand(runId)}` : ""}`);
         const observed = command.payload.allowObservedPaths === true ? drive.pathPolicyMisses : null;
         if (command.payload.allowanceId !== undefined && command.payload.allowObservedPaths !== true) throw new ControlError("observed-paths-invalid", "allowance-id-needs-observed-paths");
         if (command.payload.allowObservedPaths === true) {

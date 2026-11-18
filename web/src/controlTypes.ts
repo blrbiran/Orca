@@ -715,7 +715,7 @@ export type RecoveryViewV1 = {
   epoch: string;
   dispatchBlocked: boolean;
   blockers: Array<{ scope: "global" | "group" | "run"; groupId: string; runId: string | null; code: string; evidenceIds: string[] }>;
-  terminalRuns?: Array<{ groupId: string; taskId: string; runId: string; outcome: string; next: "settle-usage" | "close-run" }>;
+  terminalRuns?: Array<{ groupId: string; taskId: string; runId: string; outcome: string; next: "settle-usage" | "close-run"; outOfBounds?: string[]; retryAfter?: string }>;
   blockedRuns?: Array<{ groupId: string; taskId: string; runId: string; blockedAt: string; reason: string | null; next: string }>;
   blockedCalls?: Array<{ groupId: string; runId: string; purpose: string; blockedAt: string; reason: string | null; next: string }>;
   /** Stuck-runs spec 2026-11-17 S4: a task held behind a run a handoff stopped, with the commands that move it. */

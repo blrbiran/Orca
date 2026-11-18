@@ -172,8 +172,9 @@ describe("retry-task refusals (spec §4.2(2), §4.4)", () => {
       outOfBounds.succeedNext();
       const { runId } = await failedRun(outOfBounds.t);
       expect(outOfBounds.t.body(runId).drive).toMatchObject({ blockedAt: "C", outcome: "succeeded" });
-      expect(refusal(retry(outOfBounds.t))).toEqual({ code: "task-not-retryable", message: "task-not-retryable:outcome:succeeded" });
-      unchanged(outOfBounds.t, runId);
+      // Ruling (2026-11-18 tester batch D): D5 / human ruling on #352 salvage -- a run Orca's own bound stopped (outcome
+      // succeeded, out-of-bounds) gets a retry exit; it was the dead end this line pinned. (Was: refused outcome:succeeded.)
+      expect(refusal(retry(outOfBounds.t))).toEqual({ code: "accepted", message: "" });
     } finally { await outOfBounds.t.h.dispose(); }
     const { t } = await failingHarness(); try {
       const { runId } = await failedRun(t);
