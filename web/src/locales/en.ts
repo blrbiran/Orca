@@ -1309,7 +1309,7 @@ export const en = {
       mergeYours: "Merging {{branch}} into your main branch is yours; Orca does not do it",
       keptOn: "The files are on {{branch}}, not in your working tree.",
       keptOnTip: "The files are on {{branch}} (tip {{tip}}), not in your working tree.",
-      keptTake: "List them: git diff --name-only HEAD...{{branch}} · take them: git checkout {{branch}} -- <paths> · or set local delivery and Orca merges them into a local branch",
+      keptTake: "List them: git diff --name-only HEAD...{{branch}} · take them: git checkout {{branch}} -- <paths> (this overwrites uncommitted edits in those paths) · or deliver this group locally (a person's act): orca group set-integration {{groupId}} --delivery local --target <branch>; for later groups: orca project set-integration --delivery local --target <branch>",
       artifact: "Work branch",
       tip: "tip",
       noTip: "no accepted tip recorded yet",

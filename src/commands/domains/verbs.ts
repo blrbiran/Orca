@@ -357,15 +357,19 @@ export function deliveryLines(groupId: string, delivered: DeliveredView | undefi
 
 /**
  * Tester #365(a): a done group delivered with `keep` has its files on orca/<group> only, not in the person's working tree;
- * where they are (the tip when the view has one), the commands that list and take them, and local delivery as the other way.
+ * where they are (the tip when the view has one), the commands that list and take them, and local delivery as the other
+ * way -- for this group, and for later ones. `delivery` is the group's (a keep group has no integration record, so the
+ * caller reads a missing one as keep); undefined says nothing.
  */
-export function keptLines(groupId: string, b: { summary?: { state?: string; acceptance?: { tip?: string | null }; placement?: unknown; multiDir?: unknown }; integration?: { scheme?: { delivery?: string } } } | null): string[] {
-  const s = b?.summary;
-  if (s?.state !== "done" || b?.integration?.scheme?.delivery !== "keep" || s.placement !== undefined || s.multiDir !== undefined) return [];
+export interface KeptSummary { state?: string; acceptance?: { tip?: string | null }; placement?: unknown; multiDir?: unknown }
+export function keptLines(groupId: string, s: KeptSummary | undefined, delivery: string | undefined): string[] {
+  if (s?.state !== "done" || delivery !== "keep" || s.placement !== undefined || s.multiDir !== undefined) return [];
   const branch = `orca/${groupId}`, tip = s.acceptance?.tip ?? null;
   return [`delivery: keep -- the files are on ${branch}${tip === null ? "" : ` (tip ${tip.slice(0, 12)})`}, not in your working tree`,
-    `  list them: git diff --name-only HEAD...${branch}`, `  take them: git checkout ${branch} -- <paths>`,
-    "  or: local delivery merges them into a local branch for groups confirmed after: orca project set-integration --delivery local --target <branch>"];
+    `  list them: git diff --name-only HEAD...${branch}`,
+    `  take them: git checkout ${branch} -- <paths>   (this overwrites uncommitted edits in those paths)`,
+    `  or deliver this group locally (needs a person token): orca group set-integration ${groupId} --delivery local --target <branch>`,
+    "  for later groups: orca project set-integration --delivery local --target <branch>"];
 }
 
 export function reviewLines(groupId: string, review: ReviewView | undefined): string[] {
@@ -529,7 +533,9 @@ export function formatWithUnestimated(body: unknown): string {
     ...(typeof groupId === "string" ? acceptanceLines(groupId, b?.summary?.acceptance) : []),
     ...(typeof groupId === "string" ? deliveryLines(groupId, (b?.summary as { deliveredAcceptance?: DeliveredView } | undefined)?.deliveredAcceptance,
       (b as { integration?: { retryAfter?: number; transient?: number; transientReason?: string | null } } | null)?.integration) : []),
-    ...(typeof groupId === "string" ? keptLines(groupId, b as Parameters<typeof keptLines>[1]) : []),
+    // A keep group has no integration record (newGroupIntegration returns null for keep): a missing one is keep.
+    ...(typeof groupId === "string" ? keptLines(groupId, b?.summary as KeptSummary | undefined,
+      (b as { integration?: { scheme?: { delivery?: string } } } | null)?.integration?.scheme?.delivery ?? "keep") : []),
     ...(typeof groupId === "string" ? reviewLines(groupId, (b?.summary as { requirementReview?: ReviewView } | undefined)?.requirementReview) : []),
     ...(typeof groupId === "string" ? landingWatchLines(groupId, b?.summary?.landingWatch) : []),
     ...allowanceLines(b?.summary?.allowances),

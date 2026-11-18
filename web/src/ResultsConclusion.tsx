@@ -109,7 +109,7 @@ export function ResultsConclusion(props: ResultsConclusionProps): JSX.Element {
           {merge !== null && <span className="block" data-conclusion="merge">{merge}</span>}
           {kept && <>
             <span className="block" data-conclusion="kept">{tip === null ? t("control.results.keptOn", { branch }) : t("control.results.keptOnTip", { branch, tip: short(tip) })}</span>
-            <span className="block" data-conclusion="kept-take">{t("control.results.keptTake", { branch })}</span>
+            <span className="block" data-conclusion="kept-take">{t("control.results.keptTake", { branch, groupId: summary.groupId })}</span>
           </>}
         </dd>
         <dt>{t("control.results.waiting")}</dt>

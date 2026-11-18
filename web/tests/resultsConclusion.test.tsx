@@ -154,7 +154,8 @@ describe("the conclusion card (#319 proposal 1)", () => {
     show(done());
     // mutation: drop the kept lines -> red here.
     expect(line("kept").textContent).toBe("The files are on orca/g (tip abcdef012345), not in your working tree.");
-    expect(line("kept-take").textContent).toBe("List them: git diff --name-only HEAD...orca/g · take them: git checkout orca/g -- <paths> · or set local delivery and Orca merges them into a local branch");
+    // Batch D fix wave I-5, m-4: the checkout's caveat, and local delivery for this group (and the project's for later ones).
+    expect(line("kept-take").textContent).toBe("List them: git diff --name-only HEAD...orca/g · take them: git checkout orca/g -- <paths> (this overwrites uncommitted edits in those paths) · or deliver this group locally (a person's act): orca group set-integration g --delivery local --target <branch>; for later groups: orca project set-integration --delivery local --target <branch>");
     cleanup();
     const noTip = done(); delete noTip.summary.acceptance;
     show(noTip);

@@ -35,7 +35,7 @@ import { correctionDebugOpenPayloadSchema, orchestrationViewSchema, savedResultE
 import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
 import { groupRepoIdOf } from "../control/usageLedger.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
-import { readIntegrationDefault } from "../control/integrationScheme.js";
+import { readGroupIntegration, readIntegrationDefault } from "../control/integrationScheme.js";
 import { checksRead, readReviewRecord, reviewDismissals } from "../control/checks/settings.js";
 import { suggestFullSuiteCommand } from "../control/fullSuite.js";
 import { readFlowSettings } from "../flow/settings.js";
@@ -67,6 +67,12 @@ export interface ControlReadApiDeps {
 }
 
 let knownRedFailureLogged = false;
+function deliveryOf(store: ControlStore, groupId: string): string | null {
+  const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+  if (row === undefined) return null;
+  try { return readGroupIntegration(JSON.parse(String(row.body)))?.scheme.delivery ?? "keep"; } catch { return null; }
+}
+
 /** Task 4 review minor 4: the brief's L4 note never fails the brief -- a failed read is no note, said on stderr once. */
 function knownRedNote(store: ControlStore, groupId: string): KnownRedAtBase[] {
   try { return knownRedAtBase(store, groupId); }
@@ -314,8 +320,12 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       // Pre-existing failures spec L4 (#341): each check already known red at this group's base, from the store only
       // (nothing runs); absent when none. The web confirm step reads it here too.
       const knownRed = knownRedNote(deps.store, groupId);
+      // Tester #365(a): the group's delivery, so the brief can say where a kept group's files are; a keep group has no
+      // integration record. An unreadable record says nothing here (the full view names it).
+      const delivery = deliveryOf(deps.store, groupId);
       res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }), ...(warnings.length === 0 ? {} : { warnings }),
-        ...(costOutliers === null ? {} : { costOutliers }), ...(unreadableRuns.length === 0 ? {} : { unreadableRuns }), ...(knownRed.length === 0 ? {} : { knownRedAtBase: knownRed }) }); }
+        ...(costOutliers === null ? {} : { costOutliers }), ...(unreadableRuns.length === 0 ? {} : { unreadableRuns }), ...(knownRed.length === 0 ? {} : { knownRedAtBase: knownRed }),
+        ...(delivery === null ? {} : { delivery }) }); }
     catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") {
         sendControlError(res, 404, error.code, "No control group was found.");

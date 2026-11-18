@@ -6,7 +6,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
-import { acceptanceLines, contextHandoffLines, emptyResultLines, sessionCleanupLines, workerLostLines, formatWithUnestimated, fundingLines, historyLines, noChangeLines, proposalDocument, softCeilingLines, unestimatedLines, withFunding, type EmptyResultRun, type EstimateHistory, type NoChangeItem } from "./verbs.js";
+import { acceptanceLines, contextHandoffLines, emptyResultLines, keptLines, type KeptSummary, sessionCleanupLines, workerLostLines, formatWithUnestimated, fundingLines, historyLines, noChangeLines, proposalDocument, softCeilingLines, unestimatedLines, withFunding, type EmptyResultRun, type EstimateHistory, type NoChangeItem } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { MODEL_UNAVAILABLE_CAUSE, NARRATION_ONLY_CAUSE, recoveryRetryCommand } from "../../control/driveRecord.js";
@@ -514,7 +514,9 @@ export const READ_ROWS: CommandDef[] = [
         // Tester #348 review: each run the read schema cannot decode, with its task.
         ...unreadableRunLines(field(body, "unreadableRuns")),
         // Pre-existing failures spec L4 (#341): what Orca already knows was red at this group's base.
-        ...knownRedAtBaseLines(field(body, "knownRedAtBase"))].join("\n"); } }),
+        ...knownRedAtBaseLines(field(body, "knownRedAtBase")),
+        // Tester #365(a): where a kept delivery's files are, from the brief's own delivery (absent: nothing said).
+        ...(typeof groupId === "string" ? keptLines(groupId, body as KeptSummary, field(body, "delivery") as string | undefined) : [])].join("\n"); } }),
   read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`],
     format: requirementShow }),
   read({ domain: "proposal", action: "show", summary: "the group's budget proposal: version, allocations, group limit, revision", positionals: [GROUP],
