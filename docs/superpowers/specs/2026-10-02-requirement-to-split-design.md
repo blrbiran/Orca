@@ -448,3 +448,16 @@ and the Web answer form has a secondary button, "Answer and finish clarifying". 
 says "round N is now drafting; use --finish to stop after a round". When consensus is refused `round-state` because the
 latest round is drafting, the CLI hint names that round and `--finish`. The Web's second confirmation on open branches
 (Consensus) is not asked by the finishing button.
+
+## Correction (tester #351, Orca session 2026-11-18)
+
+Written by the controller of the Orca session of 2026-11-18 (second of the day) on branch `fix/review-fix-paths-351-352`,
+after `fix(control): a split target may sit under a new directory, never through a file (#351)`. The path rule stated
+above ("exists in the overview's commit or lies under a directory that does" / "a new file in an existing directory")
+no longer holds. A target path the commit does not have is legal when its shape passes (`targetShapeOk`: `pathShapeOk`
+and no `.git` segment) and its nearest existing ancestor in the commit is a directory (the repository root counts);
+a path through an existing file or a submodule is refused; `<directory>/**` naming an existing entry still needs a
+directory. Why: a requirement naming `src/sla/model.js` (no `src/sla/` yet) was refused and the splitter flattened it
+to `src/sla-model.js`, which shipped against the requirement; git has no reason to refuse a new directory. The split
+instruction keeps its version (rule wording only; the prompt hash pin moved). Full record:
+`docs/superpowers/specs/2026-11-16-implied-write-paths-design.md` Correction 2.

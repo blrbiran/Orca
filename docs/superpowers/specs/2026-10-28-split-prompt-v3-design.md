@@ -88,3 +88,16 @@ Folded into version 3 (not yet released when it landed), so the round has one ve
   round; the panel still lists hand-back reasons as bare codes (the plain-language meanings reach the model only); an
   omp row without `maxTokens` (or an openrouter row with no window) still reads `context-unavailable`; only the primary
   `writes` entry's paths are shape-checked in a multi split (predates v3, which now states the rule for every entry).
+
+## Correction (tester #351, Orca session 2026-11-18)
+
+Written by the controller of the Orca session of 2026-11-18 (second of the day) on branch `fix/review-fix-paths-351-352`,
+after `fix(control): a split target may sit under a new directory, never through a file (#351)`. The path rule stated
+above ("exists in the overview's commit or lies under a directory that does" / "a new file in an existing directory")
+no longer holds. A target path the commit does not have is legal when its shape passes (`targetShapeOk`: `pathShapeOk`
+and no `.git` segment) and its nearest existing ancestor in the commit is a directory (the repository root counts);
+a path through an existing file or a submodule is refused; `<directory>/**` naming an existing entry still needs a
+directory. Why: a requirement naming `src/sla/model.js` (no `src/sla/` yet) was refused and the splitter flattened it
+to `src/sla-model.js`, which shipped against the requirement; git has no reason to refuse a new directory. The split
+instruction keeps its version (rule wording only; the prompt hash pin moved). Full record:
+`docs/superpowers/specs/2026-11-16-implied-write-paths-design.md` Correction 2.

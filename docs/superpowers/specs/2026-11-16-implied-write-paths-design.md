@@ -131,3 +131,6 @@ flattened it to `src/sla-model.js`, which shipped against the requirement. Git h
 
 Tests: `tests/control/requirementOverview.test.ts`, `tests/control/requirementSplit.test.ts`,
 `tests/control/multiDirSplit.test.ts`, `tests/control/splitImpliedPathsGoal.test.ts`, `tests/control/splitPromptV3.test.ts`.
+- **Known widening (review of #351).** Correction 1's auto-add now also takes a new path under a new directory, so a goal
+  that names such a path only to say it is out of scope still gets it added (the same risk Correction 1 (e) already
+  recorded for new files in existing directories). `.git` segments are refused everywhere (`targetShapeOk`).
