@@ -263,10 +263,10 @@ describe("a person drops a stray target path from a draft task (#380)", () => {
 
   it("multi-directory: drops the path from the write that declares it, and refuses emptying that write", () => {
     const multi = (taskId: string, writes: MultiWrite[]) => ({ taskId, title: taskId, labels: ["feature"], goal: "g", successCondition: "s", writes, dependsOn: [], traces: ["AC1"] });
-    const split = { notes: "", tasks: [multi("a", [{ dir: "d1", targetPaths: ["x.js", "y.js"], checks: [] }, { dir: "d2", targetPaths: ["y.js"], checks: [] }])] };
-    // mutation: drop from the first write listing any path -> d1 loses y.js, red
+    const split = { notes: "", tasks: [multi("a", [{ dir: "d1", targetPaths: ["x.js"], checks: [] }, { dir: "d2", targetPaths: ["y.js", "z.js"], checks: [] }])] };
+    // mutation: drop from the task's first write -> d2 keeps y.js, red
     expect((editedSplit(split, { kind: "drop-target-path", taskId: "a", path: "y.js" }).output.tasks[0] as { writes: MultiWrite[] }).writes)
-      .toEqual([{ dir: "d1", targetPaths: ["x.js"], checks: [] }, { dir: "d2", targetPaths: ["y.js"], checks: [] }]);
+      .toEqual([{ dir: "d1", targetPaths: ["x.js"], checks: [] }, { dir: "d2", targetPaths: ["z.js"], checks: [] }]);
     const lone = { notes: "", tasks: [multi("a", [{ dir: "d1", targetPaths: ["x.js"], checks: [] }])] };
     expect(() => editedSplit(lone, { kind: "drop-target-path", taskId: "a", path: "x.js" })).toThrow("draft-edit-last-target-path:a:x.js");
   });
