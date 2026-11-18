@@ -54,8 +54,10 @@ describe("group brief (issue 199)", () => {
         return { status: response.status, body: await response.json() as Record<string, unknown> };
       };
       expect(await get("/api/control/groups/r/brief")).toMatchObject({ status: 200, body: { schema: "orca-group-brief-v1", groupId: "r", state: "clarifying", requirement: { roundNo: 1 } } });
-      // Tester #365(a) (batch D fix wave C-1): the brief says the group's delivery; no integration record is keep.
-      expect((await get("/api/control/groups/r/brief")).body.delivery).toBe("keep");
+      // Tester #365(a): the brief names a done group's delivery only. A clarifying group has no integration copy yet, so
+      // "keep" would be false there (batch D re-review Important 2).
+      // Ruling (2026-11-18 tester batch D review): this assertion pinned "keep" for a clarifying group; that was the defect.
+      expect((await get("/api/control/groups/r/brief")).body.delivery).toBeUndefined();
       expect(await get("/api/control/groups/r")).toMatchObject({ status: 422, body: { error: { code: "requirement-not-split" } } });
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));

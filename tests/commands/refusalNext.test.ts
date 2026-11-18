@@ -143,3 +143,14 @@ describe("task settle-usage's refusals name the next command (tester follow-up K
     expect((await nextOf(settle("charge-remaining-grant"), settleRefused("run-usage-settled"))).next).toEqual(["orca run show run-1"]);
   });
 });
+
+describe("proposal set-agent's refusal on a started group names task retry --agent (tester #368a, batch D re-review)", () => {
+  it("--task given: retry that task on another installation", async () => {
+    expect((await nextOf(["proposal", "set-agent", "g-alpha", "--task", "t1", "--agent", "codex"], refused("proposal/agent", "grant-amendment-unsupported", "grant-amendment-unsupported:group-started"))).next)
+      .toEqual(["orca task retry g-alpha t1 --agent <installation>"]);
+  });
+  it("--slot given: the task is the person's to name", async () => {
+    expect((await nextOf(["proposal", "set-agent", "g-alpha", "--slot", "worker", "--agent", "codex"], refused("proposal/agent", "grant-amendment-unsupported", "grant-amendment-unsupported:task-started"))).next)
+      .toEqual(["orca task retry g-alpha <task> --agent <installation>"]);
+  });
+});

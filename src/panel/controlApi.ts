@@ -322,7 +322,8 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       const knownRed = knownRedNote(deps.store, groupId);
       // Tester #365(a): the group's delivery, so the brief can say where a kept group's files are; a keep group has no
       // integration record. An unreadable record says nothing here (the full view names it).
-      const delivery = deliveryOf(deps.store, groupId);
+      // Batch D re-review: only a done group's, the one the kept lines read; a group still clarifying has no copy yet.
+      const delivery = summary.state === "done" ? deliveryOf(deps.store, groupId) : null;
       res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }), ...(warnings.length === 0 ? {} : { warnings }),
         ...(costOutliers === null ? {} : { costOutliers }), ...(unreadableRuns.length === 0 ? {} : { unreadableRuns }), ...(knownRed.length === 0 ? {} : { knownRedAtBase: knownRed }),
         ...(delivery === null ? {} : { delivery }) }); }

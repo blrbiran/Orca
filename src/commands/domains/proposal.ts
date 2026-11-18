@@ -87,6 +87,15 @@ function setBudgetNext(error: { code: string; message: string }, c: Parameters<t
   return undefined;
 }
 
+/**
+ * Tester #368a (batch D re-review): a started group's agent selection no longer changes through its proposal; a task is
+ * moved to another installation by retrying it with --agent.
+ */
+function setAgentNext(error: { code: string; message: string }, c: Parameters<typeof groupView>[0]): string[] | undefined {
+  if (error.code !== "grant-amendment-unsupported") return undefined;
+  return [`orca task retry ${group(c)} ${str(c, "task") ?? "<task>"} --agent <installation>`];
+}
+
 export const PROPOSAL_ROWS: CommandDef[] = [
   verb({ domain: "proposal", action: "set-budget", summary: "set one budget value: --task <t> --allocation work|handoff, or --goal-review; --dimension; --value <n>|none",
     verb: "proposal-edit", positionals: [GROUP],
@@ -136,7 +145,8 @@ export const PROPOSAL_ROWS: CommandDef[] = [
       const partial = c.args.flags.clear === true ? null : { ...(str(c, "agent") === undefined ? {} : { agent: str(c, "agent") }), ...(str(c, "model") === undefined ? {} : { model: str(c, "model") }) };
       if (partial !== null && Object.keys(partial).length === 0) throw invalid("give --agent and/or --model, or --clear");
       return { baseProposalVersion: await baseVersion(c), scope: slot !== undefined ? { kind: "group", slot } : { kind: "task", taskId }, partial };
-    } }),
+    },
+    next: setAgentNext }),
   REPLACE_ROW,
   {
     domain: "proposal", action: "edit", summary: "TTY only: edit the proposal in $EDITOR; the changed values are sent as replace --if-revision <the revision read>",
