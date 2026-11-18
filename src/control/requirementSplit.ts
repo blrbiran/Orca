@@ -96,6 +96,8 @@ const IMPLIED_PATH_RULE = "- Give a task every file its `successCondition` requi
  * Version 3 (#107, Orca tester feedback round 2026-10-28): PLAN_RULES, TRACE_RULE, PATH_SHAPES and EARLIER_DRAFTS above.
  * A call already started keeps the prompt frozen in its envelope at A2 (stepA2SingleCall), whatever version built it.
  * Version 4 (#188) adds the bugfix test-scope rule; version 5 (#168) ties required checks to writable work.
+ * Version 6 (#328, SPLIT_INSTRUCTION_V6) adds the optional historyExpectation; version 7 (#351 addendum,
+ * SPLIT_INSTRUCTION_V7) the optional requirementConflicts. Both are single-repository only; the multi instruction stays 5.
  * In-flight calls keep their frozen envelope.
  */
 const SPLIT_INSTRUCTION_V5 = [
@@ -146,6 +148,19 @@ export const SPLIT_INSTRUCTION_V6 = SPLIT_INSTRUCTION_V5
   .replace(SPLIT_PROMPT_HEAD, SPLIT_PROMPT_HEAD_V6)
   .replace("## The answer", "If the agreed requirement explicitly asks for named branches to be merged into a local target with real merge parents, propose historyExpectation. List each pre-existing source branch with the task that carries it; use full refs/heads/ names and name any required final files. Each named source task after the first must depend on the previous source task, even when their file writes do not overlap, because the required Git history has that order. Do not ask a task agent to create or merge Git branches: Orca owns Git history delivery, and missing source refs block the group by name. Otherwise omit the key. The person must approve this delivery separately before execution.\n\n## The answer")
   .replace("  \"notes\": anything the person should know about this split", "  \"historyExpectation\": optional { \"version\": 1, \"targetRef\": \"refs/heads/<target>\", \"directSecondParent\": true, \"sourceRefs\": [ { \"taskId\": a task id, \"ref\": \"refs/heads/<source>\" } ], \"artifactPaths\": optional list of final files },\n  \"notes\": anything the person should know about this split");
+
+/** The single-directory head a new split call sends since the #351 addendum (version 7). */
+export const SPLIT_PROMPT_HEAD_V7 = "Orca requirement split, instruction version 7.";
+/**
+ * #351 addendum (spec 2026-11-18-split-feedback-conflicts-design.md D1): feedback that breaks an explicit criterion or
+ * structure is still followed, and the split reports the conflict; whether two sentences contradict is the model's call.
+ */
+export const REQUIREMENT_CONFLICTS_RULE = "- Feedback does not change the agreed requirement. When `earlier-draft` carries the person's feedback, follow it; if following it means your draft no longer meets an acceptance criterion or a structure the requirement document states explicitly (such as tasks it says run concurrently, an order between tasks, a path or a module layout), still follow the feedback and report each such conflict in `requirementConflicts`: `criterion` is the acceptance criterion's id (such as AC4), or a short quote of the requirement's sentence when no criterion states it; `feedback` quotes the feedback words that caused it; `why` says what in this draft does not meet it. Report there too, without `feedback`, any other place where your draft does not meet something the requirement document states explicitly. Report only a stated criterion or structure the draft does not meet, never a preference, a risk or a guess; at most 8 entries, each string at most 1024 bytes. When there is none, omit the key.";
+/** Version 7 is version 6 plus the conflicts rule and template line; the V5 and V6 bytes stay as they are. */
+export const SPLIT_INSTRUCTION_V7 = SPLIT_INSTRUCTION_V6
+  .replace(SPLIT_PROMPT_HEAD_V6, SPLIT_PROMPT_HEAD_V7)
+  .replace(`${REVISION_RULE}\n`, `${REVISION_RULE}\n${REQUIREMENT_CONFLICTS_RULE}\n`)
+  .replace("  \"notes\": anything the person should know about this split", "  \"requirementConflicts\": optional [ { \"criterion\": an acceptance criterion's id or a short quote, \"feedback\": optional, the feedback words that caused it, \"why\": what in this draft does not meet it } ],\n  \"notes\": anything the person should know about this split");
 
 const str = { type: "string" }, strings = { type: "array", items: str };
 /**
@@ -215,6 +230,12 @@ export const SPLIT_JSON_SCHEMA_V6: Readonly<Record<string, unknown>> = deepFreez
       artifactPaths: strings },
   } },
 });
+export const SPLIT_JSON_SCHEMA_V7: Readonly<Record<string, unknown>> = deepFreeze({
+  ...SPLIT_JSON_SCHEMA_V6,
+  properties: { ...(SPLIT_JSON_SCHEMA_V6.properties as object), requirementConflicts: {
+    type: "array", items: { type: "object", additionalProperties: false, required: ["criterion", "why"], properties: { criterion: str, feedback: str, why: str } },
+  } },
+});
 
 /** Multi-directory projects spec §6.1/§6.4: a task's `writes` entries replace `targetPaths` and `checks`. */
 export const SPLIT_JSON_SCHEMA_MULTI: Readonly<Record<string, unknown>> = deepFreeze({
@@ -234,9 +255,22 @@ export const SPLIT_JSON_SCHEMA_MULTI: Readonly<Record<string, unknown>> = deepFr
  * `null` is folded away there, but a model may write `"setup": []` as it does for `labels` or `dependsOn`. A call with
  * no such fold (claude, omp) passes on the `null` the instruction allows. An empty or null setup means none, so the key
  * is dropped before the schema (which bounds setup to 1-8 commands) reads the answer.
+ * #351 addendum (spec D4): the same fold drops a `requirementConflicts` that is `[]` or `null`, and an entry's `feedback`
+ * that is `null`, so a split with no conflicts stores no key.
  */
 export function withoutEmptySetup(raw: unknown): unknown {
   if (raw === null || typeof raw !== "object" || !Array.isArray((raw as { tasks?: unknown }).tasks)) return raw;
+  const { requirementConflicts: conflicts, ...others } = raw as Record<string, unknown>;
+  const folded = conflicts === null || (Array.isArray(conflicts) && conflicts.length === 0) ? others
+    : !Array.isArray(conflicts) ? raw
+    : { ...others, requirementConflicts: conflicts.map((entry) => {
+      if (entry === null || typeof entry !== "object" || (entry as { feedback?: unknown }).feedback !== null) return entry;
+      const { feedback: _null, ...rest } = entry as Record<string, unknown>;
+      return rest;
+    }) };
+  return withoutEmptyTaskSetup(folded as { tasks: unknown[] });
+}
+function withoutEmptyTaskSetup(raw: { tasks: unknown[] }): unknown {
   const tasks = (raw as { tasks: unknown[] }).tasks.map((task) => {
     if (task === null || typeof task !== "object" || !("setup" in task)) return task;
     const setup = (task as { setup: unknown }).setup;
@@ -671,7 +705,7 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
  * Multi-directory projects spec §6.4: `multi` uses the multi instruction and fences the composed overview as
  * `project-overview`; absent, the bytes are the single-repository ones.
  */
-export function buildSplitPrompt(input: { document: string; overview: { canonicalJson: string; hash: string }; earlierDrafts: DraftBody[]; multi?: boolean; instructionVersion?: 5 | 6 }): string {
+export function buildSplitPrompt(input: { document: string; overview: { canonicalJson: string; hash: string }; earlierDrafts: DraftBody[]; multi?: boolean; instructionVersion?: 5 | 6 | 7 }): string {
   const nonce = input.overview.hash.slice(0, 16);
   const sent = input.earlierDrafts.filter((draft) => draft.output !== null || draft.reasons.length > 0);
   // Review I2 (session a9f9d6de): the block revises the latest draft that has tasks -- its tasks and the person's feedback
@@ -679,7 +713,7 @@ export function buildSplitPrompt(input: { document: string; overview: { canonica
   const withTasks = sent.filter((draft) => draft.output !== null).at(-1);
   const latest = withTasks ?? sent.at(-1);
   const later = withTasks === undefined ? [] : sent.filter((draft) => draft.draftNo > withTasks.draftNo);
-  const instruction = input.multi === true ? SPLIT_INSTRUCTION_MULTI_V5 : input.instructionVersion === 5 ? SPLIT_INSTRUCTION_V5 : SPLIT_INSTRUCTION_V6;
+  const instruction = input.multi === true ? SPLIT_INSTRUCTION_MULTI_V5 : input.instructionVersion === 5 ? SPLIT_INSTRUCTION_V5 : input.instructionVersion === 6 ? SPLIT_INSTRUCTION_V6 : SPLIT_INSTRUCTION_V7;
   const contextName = input.multi === true ? "project-overview" : "repository-overview";
   const revision = latest === undefined ? [] : [fence("earlier-draft", nonce, JSON.stringify({
     draftNo: latest.draftNo, tasks: latest.output?.tasks ?? null, feedback: latest.feedback,

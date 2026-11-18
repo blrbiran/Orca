@@ -97,7 +97,18 @@ export const splitTaskSchema = z.object({
   // multi-directory task below does not have it (spec §5.4).
   setup: setupCommandsSchema.optional(),
 }).strict();
-export const splitOutputSchema = z.object({ tasks: z.array(splitTaskSchema).min(1), notes: z.string(), historyExpectation: historyExpectationSchema.optional() }).strict();
+/**
+ * #351 addendum (spec 2026-11-18-split-feedback-conflicts-design.md D1/D5): where the split's draft does not meet a
+ * criterion or structure the requirement states explicitly, as the split reports it (a judgment, never checked in code).
+ * At most 8 entries (as SETUP_BOUNDS.commands), each string 1-1024 UTF-8 bytes.
+ */
+export const REQUIREMENT_CONFLICT_BOUNDS = { entries: 8, bytes: 1024 } as const;
+const conflictText = z.string().refine((s) => s.length > 0 && Buffer.byteLength(s, "utf8") <= REQUIREMENT_CONFLICT_BOUNDS.bytes,
+  { message: `1-${REQUIREMENT_CONFLICT_BOUNDS.bytes} utf8 bytes` });
+export const requirementConflictSchema = z.object({ criterion: conflictText, feedback: conflictText.optional(), why: conflictText }).strict();
+// D4: optional and never defaulted, so a draft without conflicts stores, shows and hashes as before.
+export const splitOutputSchema = z.object({ tasks: z.array(splitTaskSchema).min(1), notes: z.string(), historyExpectation: historyExpectationSchema.optional(),
+  requirementConflicts: z.array(requirementConflictSchema).min(1).max(REQUIREMENT_CONFLICT_BOUNDS.entries).optional() }).strict();
 /**
  * Multi-directory projects spec §6.1: one task's writes as the model names them, per directory (`dir`, `targetPaths`,
  * `checks`). A non-primary entry may have no checks; the primary's checks are checked by validation (O5).

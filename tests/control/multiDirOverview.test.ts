@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
 import { buildRepositoryOverview, dividedOverviewLimits, OVERVIEW_LIMITS, type ProjectOverview } from "../../src/control/requirementOverview.js";
 import { buildClarifyPrompt, CLARIFY_INSTRUCTION_V3 } from "../../src/control/requirementClarify.js";
-import { buildSplitPrompt, SPLIT_INSTRUCTION_MULTI_V5, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_V6, SPLIT_JSON_SCHEMA_MULTI } from "../../src/control/requirementSplit.js";
+import { buildSplitPrompt, SPLIT_INSTRUCTION_MULTI_V5, SPLIT_INSTRUCTION_V6, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_V7, SPLIT_JSON_SCHEMA_MULTI } from "../../src/control/requirementSplit.js";
 import { multiSplitOutputSchema } from "../../src/control/requirementSchemas.js";
 import { readRequirementGroup } from "../../src/control/requirementRecords.js";
 import { vaultKeyOf } from "../../src/flow/vault/paths.js";
@@ -46,6 +46,9 @@ const PINNED = {
   // Ruling (session 2026-11-18, tester #351): 「这次批准改写所有必要的判据」 -- PATH_SHAPES and the bugfix rule allow a new file or `<directory>/**` under directories that do not exist yet (never through an existing file); version stays 5; only this split-prompt hash changes.
   splitPrompt: "9a943f1a0bf51ff2b46dff2d009819de02b49eab7ade004a0d1f4c1f5b045643",
   splitSchema: "257941d5d9103ffb4f6a1d31c79fa186f042832b8a99008f3a59a88a5de6349c",
+  // #351 addendum: SPLIT_INSTRUCTION_V6 as on main at 6f597477 (branch base 5411cc2b), before version 7; V7 is built
+  // from V6 by .replace, so no shared constant may change under V6.
+  splitInstructionV6: "9b3e21f41d6a71150077d8780cf5f2a3057a44ae73bce67255ef7be775d79eeb",
 } as const;
 const FIXED_OVERVIEW = { canonicalJson: "{}", hash: "a".repeat(64) };
 
@@ -233,6 +236,8 @@ describe("a single-repository group's prompts are byte-equal to today's (M5, §6
     // Ruling: 2026-11-17 #328, the pinned V5 prompt stays byte-identical; new calls opt into V6 for named history.
     expect(sha(buildSplitPrompt({ document: "A fixed requirement document.", overview: FIXED_OVERVIEW, earlierDrafts: [], instructionVersion: 5 }))).toBe(PINNED.splitPrompt);
     expect(sha256Canonical(SPLIT_JSON_SCHEMA)).toBe(PINNED.splitSchema);
+    // mutation: add the #351 conflicts sentence to the shared REVISION_RULE -> red
+    expect(sha(SPLIT_INSTRUCTION_V6)).toBe(PINNED.splitInstructionV6);
   });
 
   it("sends the single-repository clarify and split prompts, unframed", async () => {
@@ -254,11 +259,13 @@ describe("a single-repository group's prompts are byte-equal to today's (M5, §6
     try {
       await split.until(() => split.fake.calls.accept.length > 0);
       const envelope = split.fake.calls.accept[0]! as { work: { kind: string; prompt: string; responseSchema: unknown } };
-      expect(envelope.work.responseSchema).toEqual(SPLIT_JSON_SCHEMA_V6);
+      // Ruling: human 「这次批准改写所有必要的判据」 (Orca session 2026-11-18) — new single-repository calls send split instruction v7 and its schema (V6 plus the optional requirementConflicts).
+      expect(envelope.work.responseSchema).toEqual(SPLIT_JSON_SCHEMA_V7);
       // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27 (version 1 -> 2)
       // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); it still encodes: a single-repository group is sent the single instruction.
       // Ruling: 2026-11-17 #328, new single-repository calls advertise the structured history proposal.
-      expect(envelope.work.prompt.startsWith("Orca requirement split, instruction version 6.")).toBe(true);
+      // Ruling: human 「这次批准改写所有必要的判据」 (Orca session 2026-11-18) — the #351 addendum makes the single-repository split instruction version 7.
+      expect(envelope.work.prompt.startsWith("Orca requirement split, instruction version 7.")).toBe(true);
       expect(envelope.work.prompt).toContain("for one software repository");
       expect(envelope.work.prompt).toContain("<<<ORCA-DATA repository-overview ");
       expect(envelope.work.prompt).not.toContain("project-overview");

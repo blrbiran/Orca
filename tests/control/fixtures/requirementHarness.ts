@@ -39,7 +39,8 @@ const HEADS = { clarify: ["Orca requirement clarification, instruction version 3
   // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27 (split version 1 -> 2)
   // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); the fake still tells a split prompt by its head.
   // Ruling: 2026-11-17 #328, human approved necessary criterion rewrites; new single-repository calls use V6 for explicit Git history.
-  split: ["Orca requirement split, instruction version 5.", "Orca requirement split, instruction version 6.", "Orca requirement split (several directories), instruction version 5."],
+  // Ruling: human 「这次批准改写所有必要的判据」 (Orca session 2026-11-18) — the #351 addendum adds single-repository split v7; v5, v6 and multi v5 stay known.
+  split: ["Orca requirement split, instruction version 5.", "Orca requirement split, instruction version 6.", "Orca requirement split, instruction version 7.", "Orca requirement split (several directories), instruction version 5."],
   estimate: ["You are estimating the budget"] } as const;
 const sha = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
 

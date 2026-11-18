@@ -27,7 +27,9 @@ import { CLARIFY_PROMPT_HEAD } from "../../src/control/requirementClarify.js";
 import { readDraft, readRequirementGroup, readRound } from "../../src/control/requirementRecords.js";
 // Ruling: 「这次批准改写所有必要的判据」 (human, session 9982cf01, 2026-11-17): #328 made a new single-directory split call
 // send instruction version 6, so the fake claude queue must match that head or no draft ever arrives.
-import { SPLIT_PROMPT_HEAD_V6 as SPLIT_PROMPT_HEAD } from "../../src/control/requirementSplit.js";
+// Ruling: human 「这次批准改写所有必要的判据」 (Orca session 2026-11-18) — the #351 addendum makes a new single-directory
+// split call send instruction version 7, so the fake claude queue matches that head.
+import { SPLIT_PROMPT_HEAD_V7 as SPLIT_PROMPT_HEAD } from "../../src/control/requirementSplit.js";
 import type { ControlRuntime } from "../../src/panel/controlAssembly.js";
 import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import { schedulerControlPlanSourceOf } from "../../src/scheduler/planFile.js";

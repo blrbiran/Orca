@@ -20,7 +20,7 @@ import {
 } from "./requirementRecords.js";
 import { CALL_DETAIL_MAX_BYTES, MAX_AUTO_RETRIES, multiSplitOutputSchema, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody, type RequirementWaiting } from "./requirementSchemas.js";
 import {
-  buildSplitPrompt, expandMultiSplitDraft, expandSplitDraft, SPLIT_JSON_SCHEMA_V6, SPLIT_JSON_SCHEMA_MULTI, validateMultiSplitDraft, validateSplitDraft, withoutEmptySetup,
+  buildSplitPrompt, expandMultiSplitDraft, expandSplitDraft, SPLIT_JSON_SCHEMA_V7, SPLIT_JSON_SCHEMA_MULTI, validateMultiSplitDraft, validateSplitDraft, withoutEmptySetup,
   type SplitPlanFile,
 } from "./requirementSplit.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall, type StoppedSingleCallRun } from "./singleCallLedger.js";
@@ -516,7 +516,7 @@ export const SPLIT_HANDLER: SingleCallHandler = {
   async prepare(deps, run) {
     // Multi-directory projects spec §6.4: a multi group's split names writes per directory, in the multi schema.
     const multi = multiDirOf(readRequirementGroup(deps.store, run.groupId)) !== null;
-    return prepareRequirementCall(deps, run, multi ? SPLIT_JSON_SCHEMA_MULTI : SPLIT_JSON_SCHEMA_V6, (target) => readDraft(deps.store, run.groupId, target.no).state === "drafting", (group, target, built) =>
+    return prepareRequirementCall(deps, run, multi ? SPLIT_JSON_SCHEMA_MULTI : SPLIT_JSON_SCHEMA_V7, (target) => readDraft(deps.store, run.groupId, target.no).state === "drafting", (group, target, built) =>
       buildSplitPrompt({
         document: renderRequirementDocument({ groupId: run.groupId, requirement: group.requirement, rounds: chainRounds(readRounds(deps.store, run.groupId)), acceptedSplit: null }),
         overview: built, earlierDrafts: readDrafts(deps.store, run.groupId).filter((draft) => draft.draftNo < target.no), ...(multi ? { multi: true } : {}),
