@@ -123,7 +123,7 @@ estimate instruction a group's estimates used (#381)`.
    snapshot (`profiles.ts` `resolve`). Rewriting `instructionVersion` in that file changes the hash, so after the next
    panel start every group that froze the old hash -- the estimator binding of draft groups, and the worker, handoff
    and goal-review bindings of confirmed and running groups when one profile (`all`) serves every work kind -- is
-   refused `profile-changed` (spec 2026-09-19 §6: a changed post-start snapshot cannot be amended; a handoff becomes
+   refused `profile-changed` (spec 2026-09-19 §4 and §6: a changed post-start snapshot cannot be amended; a handoff becomes
    `settled-unrecoverable`). `schemaVersion` has one legal value (`budget-estimate-v1`), so it is not what changes. A
    safe update is a new profile under a new `profileId` beside the old one (the panel started with both `--profile`
    files and `--estimator-profile <new id>`); that is a decision for the human, and §4's warning text ("update the
