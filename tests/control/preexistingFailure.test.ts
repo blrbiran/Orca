@@ -162,8 +162,13 @@ describe("the base-check source (L3's red answer) feeds the same row", () => {
     // Red at the base and on the attempt: the check needs a file no commit has.
     const check = "test -e never-there.txt";
     const lastFailure = { rejectCategory: "required-check-failed", failingCommand: check, primaryTargetPaths: ["a"] };
+    // Ruling (2026-11-19 tester batch D gate): this world was a one-attempt run that ended on its required check with that
+    // check as lastFailure -- a shape ccloop never reports, and step C no longer asks for a run that ended on a verification
+    // rejection (D2 review 3: the next run's A2 asks). C's ask is played in ccloop's shape, as baseCheck.test.ts's world is:
+    // attempt 1 was rejected on the check (lastFailure), attempt 2 ended on its budget. The end-to-end intent is unchanged.
     const t = await driverHarness([{ taskId: "a", requiredChecks: [check] }], {
-      behaviour: () => "failed", failure: () => ({ failureCause: { cause: "required-check-failed", phase: "verify", retries: 0, detail: null }, lastFailure }),
+      behaviour: () => "failed", workAttempts: () => 2,
+      failure: () => ({ failureCause: { cause: "budget-exhausted", phase: "execute", retries: 0, detail: null }, lastFailure, currentAttempt: 2 }),
     }); try {
       const runId = await t.claim();
       const driver = t.driver();
