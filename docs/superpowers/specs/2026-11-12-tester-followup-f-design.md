@@ -103,3 +103,28 @@ unchanged. What W1 actually overrides is the confirm refusal of a null threshold
 recorded in the spec sections W1 appended corrections to (`2026-09-19-web-recoverable-control-design.md`,
 `2026-10-24-tester-round2-design.md` §26). The human's 「要改」 was given on the controller's framing of a conflict; the
 change itself does not contradict any recorded ruling. Reported to the human at round end.
+
+## Correction (tester #381; Orca session 2026-11-19; the text above is kept as written)
+
+Written by the implementing agent of the Orca session of 2026-11-19 (the controller's E-split track) on branch
+`feat/e-split`, from `main` at `dd799bb4`, in the commit `feat(control): group brief and group show keep the older
+estimate instruction a group's estimates used (#381)`.
+
+1. **The warning is kept on the group's reads.** §4's warning reached only the `group estimate` / `group confirm`
+   answers, so it was read once. `GET groups/<g>/brief` and `GET groups/<g>` (only-add) now carry
+   `estimatorInstruction: { used, newest }` when the group's newest estimate request (the estimates table, newest
+   `estimate_version` with a request) was made with a known instruction older than the newest (`estimateInstructionAge.ts`);
+   absent otherwise or when the estimates cannot be read. `orca group brief` and `orca group show` print one line from it.
+   The fact is what the group's estimates used, not what the panel's profile names now: after a profile change it goes
+   away with the group's next estimate. The Web budget editor's note (§4, from the config's profile) is unchanged.
+2. **No profile upgrade command.** The tester asked for a supported update of `estimatorPreflight.instructionVersion`
+   (#381 b). Not built: the panel loads the profile file named by `--profile <path>` (no environment variable and no
+   default path; README §3), and the router resolves every frozen binding by `profileHash`, the hash of the whole
+   snapshot (`profiles.ts` `resolve`). Rewriting `instructionVersion` in that file changes the hash, so after the next
+   panel start every group that froze the old hash -- the estimator binding of draft groups, and the worker, handoff
+   and goal-review bindings of confirmed and running groups when one profile (`all`) serves every work kind -- is
+   refused `profile-changed` (spec 2026-09-19 §6: a changed post-start snapshot cannot be amended; a handoff becomes
+   `settled-unrecoverable`). `schemaVersion` has one legal value (`budget-estimate-v1`), so it is not what changes. A
+   safe update is a new profile under a new `profileId` beside the old one (the panel started with both `--profile`
+   files and `--estimator-profile <new id>`); that is a decision for the human, and §4's warning text ("update the
+   profile's estimatorPreflight.instructionVersion") gives the unsafe in-place advice -- left as written, reported.

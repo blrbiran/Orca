@@ -9,7 +9,8 @@ import { groupRepoId } from "../control/executionDriver.js";
 import { fundingPreview } from "../control/fundedAllowance.js";
 import { retryFundingPreview } from "../control/retryTask.js";
 import { multiDirOf, multiPrimaryRepoIdOf } from "../control/multiGroup.js";
-import { readGroup } from "../control/queries.js";
+import { readEstimateRecord, readGroup } from "../control/queries.js";
+import { NEWEST_ESTIMATE_INSTRUCTION, olderEstimateInstruction } from "../control/estimateInstructionAge.js";
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import { planLibraryEntryView, planLibraryListView, planLibraryVersionBytes } from "../control/planLibrary/views.js";
 import { scheduleDetailView, scheduleFiresView, scheduleListView } from "../control/schedules/views.js";
@@ -71,6 +72,23 @@ function deliveryOf(store: ControlStore, groupId: string): string | null {
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   if (row === undefined) return null;
   try { return readGroupIntegration(JSON.parse(String(row.body)))?.scheme.delivery ?? "keep"; } catch { return null; }
+}
+
+/**
+ * Tester #381: the estimate instruction the group's newest estimate request was made with, when it is older than the
+ * newest this Orca holds (the warning `group confirm` printed once); null otherwise, and when the estimates cannot be
+ * read -- a note never fails the read it rides on.
+ */
+function estimatorInstructionOf(store: ControlStore, groupId: string): { used: number; newest: number } | null {
+  try {
+    for (const row of store.db.prepare("SELECT id FROM estimates WHERE group_id=? ORDER BY estimate_version DESC").all(groupId)) {
+      const request = readEstimateRecord(store, groupId, String(row.id)).request;
+      if (request === null) continue;
+      const older = olderEstimateInstruction(request.instructionVersion);
+      return older === null ? null : { used: Number(older), newest: NEWEST_ESTIMATE_INSTRUCTION };
+    }
+  } catch { /* no note */ }
+  return null;
 }
 
 /** Task 4 review minor 4: the brief's L4 note never fails the brief -- a failed read is no note, said on stderr once. */
@@ -324,9 +342,10 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       // integration record. An unreadable record says nothing here (the full view names it).
       // Batch D re-review: only a done group's, the one the kept lines read; a group still clarifying has no copy yet.
       const delivery = summary.state === "done" ? deliveryOf(deps.store, groupId) : null;
+      const estimatorInstruction = estimatorInstructionOf(deps.store, groupId);
       res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }), ...(warnings.length === 0 ? {} : { warnings }),
         ...(costOutliers === null ? {} : { costOutliers }), ...(unreadableRuns.length === 0 ? {} : { unreadableRuns }), ...(knownRed.length === 0 ? {} : { knownRedAtBase: knownRed }),
-        ...(delivery === null ? {} : { delivery }) }); }
+        ...(delivery === null ? {} : { delivery }), ...(estimatorInstruction === null ? {} : { estimatorInstruction }) }); }
     catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") {
         sendControlError(res, 404, error.code, "No control group was found.");
@@ -349,7 +368,9 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
 
   app.get("/api/control/groups/:groupId", (req, res) => {
     const groupId = String(req.params.groupId);
-    try { res.json(readControlGroup(deps.store, deps.epoch, groupId)); }
+    // Tester #381: the group's older estimate instruction, as the brief carries it (only-add; absent otherwise).
+    try { const estimatorInstruction = estimatorInstructionOf(deps.store, groupId);
+      res.json({ ...readControlGroup(deps.store, deps.epoch, groupId), ...(estimatorInstruction === null ? {} : { estimatorInstruction }) }); }
     catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") {
         sendControlError(res, 404, error.code, "No control group was found.");

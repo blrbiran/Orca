@@ -109,6 +109,16 @@ export function instructionLines(view: ConfigView, profileId: string | null | un
   return [`warning: estimator profile ${profileId} uses estimate instruction ${version}; the newest is ${NEWEST_ESTIMATE_INSTRUCTION}. Its estimates follow the older instruction; update the profile's estimatorPreflight.instructionVersion to use the newest`];
 }
 
+/**
+ * Tester #381: the warning `group confirm` printed once, kept: the brief and the group view carry the instruction the
+ * group's newest estimate request used, when older than the newest (controlApi.ts estimatorInstructionOf); one line.
+ */
+export function groupInstructionLines(fact: unknown): string[] {
+  const f = fact as { used?: unknown; newest?: unknown } | null | undefined;
+  if (typeof f?.used !== "number" || typeof f.newest !== "number") return [];
+  return [`warning: this group's estimates used estimate instruction ${f.used}; the newest is ${f.newest}. Its budgets follow the older instruction`];
+}
+
 /** What the unestimated-default lines read: a group view, or `orca proposal show`'s document (no estimates in it). */
 export interface UnestimatedSource {
   allocations?: GroupView["allocations"];
@@ -526,6 +536,7 @@ export function formatWithUnestimated(body: unknown): string {
     ...(typeof groupId === "string" ? noChangeLines(groupId, (b as { workItems?: NoChangeItem[] } | null)?.workItems ?? [], runs.filter((run) => current.has(run.runId))) : []),
     ...(typeof groupId === "string" && b !== null ? unestimatedLines(groupId, b) : []),
     ...(b === null ? [] : softCeilingLines(b)),
+    ...groupInstructionLines((b as { estimatorInstruction?: unknown } | null)?.estimatorInstruction),
     ...(b === null ? [] : expectationLines(b as Parameters<typeof expectationLines>[0])),
     // Tester #285: the group's used figure lags while a run whose agent reports at phase end is under way.
     ...((note) => phaseEndBudgetLines(note.runIds, note.asOf))(phaseEndOfRuns(runs as UsageRun[])),

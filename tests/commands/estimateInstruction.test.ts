@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { ESTIMATE_INSTRUCTIONS } from "../../src/control/estimatePrompt.js";
 import { cli, useFakePanels } from "./fixtures/fakePanel.js";
-import { READS, world } from "./fixtures/world.js";
+import { READS, groupView, world } from "./fixtures/world.js";
 
 useFakePanels();
 
@@ -50,5 +50,30 @@ describe("an older estimate instruction is named (#224)", () => {
       expect(out.code, out.stderr).toBe(0);
       expect(out.json().body).not.toHaveProperty("warnings");
     }
+  });
+});
+
+// Tester #381: the warning confirm printed once is kept -- group brief and group show print it from the read's own
+// `estimatorInstruction` fact (the group's newest estimate request), and say nothing without it.
+describe("group brief and group show keep the older-instruction warning (#381)", () => {
+  const BRIEF = { schema: "orca-group-brief-v1", groupId: "g-alpha", state: "draft" };
+  const LINE = `warning: this group's estimates used estimate instruction 1; the newest is ${NEWEST}`;
+  it("brief prints one line from the fact, and none without it", async () => {
+    const w = await world({}, { "GET groups/g-alpha/brief": { status: 200, body: { ...BRIEF, estimatorInstruction: { used: 1, newest: Number(NEWEST) } } } });
+    const out = await cli(["group", "brief", "g-alpha"], w.dir);
+    expect(out.code, out.stderr).toBe(0);
+    // mutation: drop the line from the brief format -> red
+    expect(out.stdout.split("\n").filter((line) => line.startsWith("warning: this group's estimates"))).toEqual([expect.stringContaining(LINE)]);
+    const none = await world({}, { "GET groups/g-alpha/brief": { status: 200, body: BRIEF } });
+    expect((await cli(["group", "brief", "g-alpha"], none.dir)).stdout).not.toContain("warning: this group's estimates");
+  });
+
+  it("show prints the same line", async () => {
+    const w = await world({}, { "GET groups/g-alpha": { status: 200, body: { ...groupView(), estimatorInstruction: { used: 1, newest: Number(NEWEST) } } } });
+    const out = await cli(["group", "show", "g-alpha"], w.dir);
+    expect(out.code, out.stderr).toBe(0);
+    // mutation: drop the line from formatWithUnestimated -> red
+    expect(out.stdout).toContain(LINE);
+    expect((await cli(["group", "show", "g-alpha"], (await world()).dir)).stdout).not.toContain("warning: this group's estimates");
   });
 });
