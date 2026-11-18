@@ -27,7 +27,7 @@ import { readWork } from "./queries.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import { readDraft, readRounds } from "./requirementRecords.js";
 import { reviewOf, reviewRequired, type CriterionVerdict, type RequirementReview, type ReviewRound, type ReviewRoundResult, type ReviewWhy } from "./requirementReviewRecord.js";
-import type { SingleCallHandler, SingleCallRunRow } from "./singleCallPurposes.js";
+import type { SingleCallHandler, SingleCallRecordFacts, SingleCallRunRow } from "./singleCallPurposes.js";
 import { taskWorkTokens } from "./usagePause.js";
 import { QUIET_GIT, workBranchTip } from "./workspace.js";
 import { isDirFlowGroup } from "../flow/groups.js";
@@ -502,6 +502,21 @@ const REVIEW_GIT_LIST_MAX_BYTES = 256 * 1024 * 1024;
 
 /** Tester #358: ccloop's code for a single-call answer it could not read as one JSON object of the asked shape. */
 export const REVIEW_SHAPE_FAILURE = "single-call-output-invalid";
+/**
+ * Review of D3 (I3): ccloop's codex refusals of an answer given more than once -- an earlier agent message that is itself
+ * an object (`:messages`) or a second completed turn (`:turns`). `:tool` (the model ran a tool) is not asked again.
+ */
+export const REVIEW_REPEATED_ANSWER_CODES: ReadonlySet<string> = new Set(["codex-single-call-not-single:messages", "codex-single-call-not-single:turns"]);
+
+/**
+ * Tester #358, review of D3 (I3): a review call whose answer says nothing about the work because of its shape -- no single
+ * object of the asked shape, or the answer printed twice. ccloop's omp adapter also answers `single-call-output-invalid`
+ * when the model stopped at its output-token cap (`stopReason === "length"`); ccloop's record carries the same code and no
+ * cause for both, so Orca cannot tell that one apart, and its one re-ask may hit the same cap (bounded: once a round).
+ */
+export function reviewShapeFailure(failure: string | null, facts: SingleCallRecordFacts | undefined): boolean {
+  return failure === REVIEW_SHAPE_FAILURE || (typeof facts?.errorCode === "string" && REVIEW_REPEATED_ANSWER_CODES.has(facts.errorCode));
+}
 
 /**
  * Tester #358 (plan 2026-11-18 batch D, D3): in the failed call's settlement transaction (already billed), a second call of
@@ -559,12 +574,12 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
     return { classified, failure: null } satisfies ReviewSettled;
   },
   classify: classifyReviewOutput,
-  complete(deps, runRow, settled, commitTerminal, failure = null) {
+  complete(deps, runRow, settled, commitTerminal, failure = null, facts) {
     const release = deps.admissionGate?.enter();
-    try { deps.store.transaction(() => REQUIREMENT_REVIEW_HANDLER.completeInTransaction!(deps.store, runRow, settled, commitTerminal, failure)); }
+    try { deps.store.transaction(() => REQUIREMENT_REVIEW_HANDLER.completeInTransaction!(deps.store, runRow, settled, commitTerminal, failure, facts)); }
     finally { release?.(); }
   },
-  completeInTransaction(store, runRow, settled, commitTerminal, failure = null) {
+  completeInTransaction(store, runRow, settled, commitTerminal, failure = null, facts) {
     const { roundNo, tip } = reviewIdentity(runRow);
     const contract = readGroupCallContract(store, runRow.groupId, runRow.workItemId);
     const grant = (contract?.grant as { work?: Amount } | undefined)?.work;
@@ -574,8 +589,12 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
     const failed = failure ?? (settled as ReviewSettled | null)?.failure ?? null;
     const body = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(runRow.groupId)!.body));
     const current = reviewOf(body) ?? { state: "reviewing" as const, rounds: [], autoFixRounds: 0 };
-    // Tester #358: an answer in a broken shape says nothing about the work; the round's call is asked once more.
-    if (failed === REVIEW_SHAPE_FAILURE && current.state === "reviewing" && askReviewAgain(store, runRow, roundNo, tip, contract)) return;
+    // Tester #358: an answer in a broken shape says nothing about the work; the round's call is asked once more, and the
+    // activity says so (review of D3).
+    if (reviewShapeFailure(failed, facts) && current.state === "reviewing" && askReviewAgain(store, runRow, roundNo, tip, contract)) {
+      recordActivity(store, { groupId: runRow.groupId, runId: runRow.runId, kind: "requirement-review", body: { roundNo, result: "asked-again", tip, state: current.state, failure: facts?.errorCode ?? failed } });
+      return;
+    }
     const result: ReviewRoundResult = failed !== null || answer === null ? "failed" : answer.result;
     const conflict = answer !== null && answer.result !== "invalid" && result === "not-met" ? answer.checkConflict : undefined;
     const round: ReviewRound = { roundNo, tip, runId: runRow.runId, at: store.now(), result,

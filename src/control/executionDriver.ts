@@ -1486,7 +1486,7 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
   // §4.5: "the call failed" means outcome !== complete; the handler is told ccloop's (normalised) code, rawOutput is unchanged.
   const failure = record.outcome === "complete" ? null : normalizeSingleCallErrorCode(record.errorCode);
   // Issue #125: `complete` is given the same facts, so a failed requirement call can keep ccloop's failure detail.
-  const facts = { outcome: record.outcome, failureCause: record.failureCause ?? null };
+  const facts = { outcome: record.outcome, failureCause: record.failureCause ?? null, errorCode: record.errorCode };
   const settled = handler.evaluate === undefined ? rawOutput : await handler.evaluate(deps, run, rawOutput, failure, facts);
   try {
     // Spec 2026-10-27 single-call unknown usage §9 R2: one commit, shared with a person's usage settlement.

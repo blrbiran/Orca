@@ -23,7 +23,11 @@ import type { DriveRecord } from "./driveRecord.js";
  * handoff-stop, stop intents and recovery are written once, in the driver, for every single call.
  */
 /** What Ce read in ccloop's single-call record besides the output and the normalised code. */
-export interface SingleCallRecordFacts { outcome: "complete" | "aborted" | "failed"; failureCause: { cause: string; detail: string | null } | null }
+export interface SingleCallRecordFacts {
+  outcome: "complete" | "aborted" | "failed"; failureCause: { cause: string; detail: string | null } | null;
+  /** Tester #358 review (I3): ccloop's errorCode as written, before normalizeSingleCallErrorCode keeps only its head. */
+  errorCode?: string | null;
+}
 export interface SingleCallRequest { prompt: string; responseSchema: Record<string, unknown>; maxOutputTokens: number }
 export interface SingleCallRunRow { runId: string; groupId: string; workItemId: string; estimateId?: unknown; purpose?: unknown; [key: string]: unknown }
 /** What A2 of a single call may use besides the store (phase 2's purposes read the target repository through it). */

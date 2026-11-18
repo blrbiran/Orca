@@ -16,6 +16,9 @@ const settle = async (w: ReviewWorld, until: () => boolean) => {
   await w.t.until(w.driver, until, 120);
 };
 const reviewRuns = (w: ReviewWorld) => w.calls.filter((c) => c.purpose === "requirement-review").map((c) => c.runId);
+/** The activity rows saying a review call was asked again. */
+const askedAgain = (w: ReviewWorld) => w.t.h.store.db.prepare("SELECT run_id, body FROM activity WHERE group_id='g' AND kind='requirement-review'").all()
+  .map((row) => ({ runId: String(row.run_id), body: JSON.parse(String(row.body)) as Record<string, unknown> })).filter((row) => row.body.result === "asked-again");
 const booked = (w: ReviewWorld, runId: string) => readRun(w.t.h.store, runId).cumulative.work.tokens;
 /** The group's used tokens equal what its runs booked -- every call billed, none twice. */
 const ledgerMatchesRuns = (w: ReviewWorld) => {
@@ -41,6 +44,35 @@ describe("a review answer with a broken shape is asked once more (#358)", () => 
     } finally { await w.t.h.dispose(); }
   }, 180000);
 
+  // Review of D3 (I3): Codex refusing an answer printed twice (ccloop codexSingleCall `notSingle("messages")` /
+  // `notSingle("turns")`, the record's errorCode as ccloop writes it) is the same broken shape, asked once more.
+  it.each(["codex-single-call-not-single:messages", "codex-single-call-not-single:turns"])("%s, then a good answer: asked once more, and the activity says so", async (errorCode) => {
+    let n = 0;
+    const w = await reviewWorld({ answer: () => (n += 1) === 1 ? { outcome: "failed", errorCode, tokens: 7_000 } : { outcome: "complete", output: allMet(), tokens: 9_000 } });
+    try {
+      await settle(w, () => w.review()?.state === "passed" || w.review()?.state === "not-passed");
+      // mutation: re-ask only single-call-output-invalid -> not-passed/failed after one call, red here.
+      expect.soft(w.review()).toMatchObject({ state: "passed" });
+      expect.soft(reviewRuns(w)).toHaveLength(2);
+      // mutation: drop the activity row -> [], red here.
+      expect.soft(askedAgain(w)).toEqual([{ runId: reviewRuns(w)[0], body: expect.objectContaining({ roundNo: 1, result: "asked-again", failure: errorCode }) }]);
+    } finally { await w.t.h.dispose(); }
+  }, 180000);
+
+  it("codex-single-call-not-single:tool (the model ran a tool) is not asked again", async () => {
+    const w = await reviewWorld({ answer: () => ({ outcome: "failed", errorCode: "codex-single-call-not-single:tool", tokens: 7_000 }) });
+    try {
+      await settle(w, () => w.review()?.state === "not-passed");
+      for (let i = 0; i < 5; i += 1) await w.driver.round();
+      expect(w.review()).toMatchObject({ state: "not-passed", why: "failed" });
+      expect(reviewRuns(w)).toHaveLength(1);
+      expect(askedAgain(w)).toEqual([]);
+    } finally { await w.t.h.dispose(); }
+  }, 180000);
+
+  // Review of D3 (I3): ccloop's omp adapter answers single-call-output-invalid also for a model stopped at its output cap
+  // (stopReason "length"); the record carries the same code and no cause, so Orca cannot tell it apart and this case is it
+  // too -- the one re-ask may hit the same cap, and the round then settles failed as below (bounded: exactly two calls).
   it("invalid twice: the round settles failed after exactly two calls, as today's one failed call did", async () => {
     const w = await reviewWorld({ answer: () => ({ outcome: "failed", errorCode: "single-call-output-invalid", tokens: 7_000 }) });
     try {
