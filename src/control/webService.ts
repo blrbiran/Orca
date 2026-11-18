@@ -69,7 +69,7 @@ import { applyIntegrateNow, type IntegrateNowCommand } from "./integrationComman
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, historyReconciledTarget, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyResolveFolderChange, type ResolveFolderChangeCommand } from "./folderChangeCommands.js";
 import { applyMultiDirLanding, type MultiDirLandingCommand } from "./multiLanding.js";
-import { applyArchiveGroup, applyUnarchiveGroup, type ArchiveGroupCommand, type UnarchiveGroupCommand } from "./archiveGroup.js";
+import { applyArchiveGroup, applyCloseGroup, applyUnarchiveGroup, applyUncloseGroup, type ArchiveGroupCommand, type CloseGroupCommand, type UnarchiveGroupCommand, type UncloseGroupCommand } from "./archiveGroup.js";
 import { applyCloseRun, type CloseRunCommand } from "./terminalRunClosure.js";
 import { refuseUnnamedDebugChecks } from "./debugChecks.js";
 import { readCorrectionList, type CorrectionListItemV1 } from "./correctionState.js";
@@ -2064,6 +2064,13 @@ export class WebControlService {
   }
   unarchiveGroup(command: UnarchiveGroupCommand): WebCommandResult {
     return this.mutate(() => applyUnarchiveGroup({ store: this.store }, command)) as WebCommandResult;
+  }
+  /** Tester #355: close a done group (hidden and frozen like an archived one) / take it back. */
+  closeGroup(command: CloseGroupCommand): WebCommandResult {
+    return this.mutate(() => applyCloseGroup({ store: this.store }, command)) as WebCommandResult;
+  }
+  uncloseGroup(command: UncloseGroupCommand): WebCommandResult {
+    return this.mutate(() => applyUncloseGroup({ store: this.store }, command)) as WebCommandResult;
   }
   /** Terminal run closure #169: release a proved terminal failure's unused reservation without accepting its work. */
   closeRun(command: CloseRunCommand): WebCommandResult {

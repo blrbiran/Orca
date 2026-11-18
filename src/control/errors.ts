@@ -149,6 +149,10 @@ export const durableCommandErrorStatuses = {
   "group-already-exists": 409,
   // Issue-fixes spec §6.3: an archived group refuses every group-targeted command but unarchive-group.
   "group-archived": 409,
+  // Tester #355: a closed group refuses every group-targeted command but unclose-group and archive-group; only a done group
+  // closes.
+  "group-closed": 409,
+  "group-not-done": 409,
   "group-graph-conflict": 409,
   "group-project-conflict": 409,
   "handoff-identity-conflict": 409,

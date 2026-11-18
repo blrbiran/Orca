@@ -4,7 +4,7 @@ import { commandArgumentsHash } from "./commandArguments.js";
 import { commandClientFor, commandPrincipalFor, ledgerPersonFor } from "./commandClient.js";
 import { ArchiveRunActiveError, ControlError, durableCommandErrorStatus } from "./errors.js";
 import { appendActivity } from "./activity.js";
-import { isGroupArchived } from "./archivedMark.js";
+import { terminalGateRefusal } from "./archivedMark.js";
 import { orchestrationRevision } from "./orchestration.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import type { ControlStore } from "./store.js";
@@ -201,12 +201,13 @@ export function preflightWebCommand<T = CommandBody>(store: ControlStore, input:
     const stale = rawCommand.expectedRevision !== currentCommandRevision;
     // Same order as applyWebCommand's in-transaction backstop: a stale revision wins, then the archive gate. Booking
     // group-archived here, before any pre-transaction probe, keeps an archived group from costing an agent probe.
-    const archived = !stale && commandScope.groupId !== null && rawCommand.verb !== "unarchive-group" && isGroupArchived(store, commandScope.groupId);
-    if (!stale && !archived) return null;
+    // Tester #355: a closed group is gated the same way, by its own code (terminalGateRefusal).
+    const terminal = stale || commandScope.groupId === null ? null : terminalGateRefusal(store, commandScope.groupId, rawCommand.verb);
+    if (!stale && terminal === null) return null;
 
     const commandRevision = setting !== null ? currentCommandRevision : commandScope.groupId === null ? null : currentCommandRevision;
     const projectionSeq = commandScope.groupId === null || !groupRow ? null : Number(groupRow.projection_seq);
-    const refused = stale ? revisionConflict(currentCommandRevision) : domainErrorOutcome(new ControlError("group-archived"), commandRevision)!;
+    const refused = stale ? revisionConflict(currentCommandRevision) : domainErrorOutcome(new ControlError(terminal!), commandRevision)!;
     const outcome = validatedOutcome(refused.status, refused.body);
     assertFinalVersions(outcome.body, commandRevision, projectionSeq);
     persistCommandOutcome(store, rawCommand, outcome, commandRevision, projectionSeq);
@@ -364,11 +365,13 @@ export function applyWebCommand<T>(store: ControlStore, input: WebCommandInput<T
     let unvalidated: StoredCommandOutcome<T | CommandBody>;
     if (rawCommand.expectedRevision !== currentCommandRevision) {
       unvalidated = revisionConflict(currentCommandRevision);
-    } else if (commandScope.groupId !== null && rawCommand.verb !== "unarchive-group" && isGroupArchived(store, commandScope.groupId)) {
+    } else if (commandScope.groupId !== null && terminalGateRefusal(store, commandScope.groupId, rawCommand.verb) !== null) {
       // Issue-fixes spec §6.3: an archived group refuses every group-targeted command but unarchive-group. Every group
       // command books its outcome here (persistCommandOutcome's only other caller books revision conflicts), so this one
       // gate, ahead of expand and apply, covers every verb -- retry-task included -- and any verb added later.
-      unvalidated = domainErrorOutcome(new ControlError("group-archived"), resultCommandRevision)!;
+      // Tester #355: the archived group also takes close-group (a done one converts); a closed group refuses every verb but
+      // unclose-group and archive-group with group-closed (archivedMark.ts terminalGateRefusal).
+      unvalidated = domainErrorOutcome(new ControlError(terminalGateRefusal(store, commandScope.groupId, rawCommand.verb)!), resultCommandRevision)!;
     } else {
       const expansion = invokeWithSavepoint(store, "web_command_expand", () => {
         const effectiveCommand = effectiveAuthorityCommandSchema.parse(input.expand()) as EffectiveAuthorityCommandV1;

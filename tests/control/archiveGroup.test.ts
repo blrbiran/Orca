@@ -283,6 +283,8 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "accept-no-change": { call: (s, c) => s.acceptNoChange(c), target: "group", payload: { taskId: "a", runId: "run-a", note: "n" } },
   "verify-saved-result": { call: (s, c) => s.verifySavedResult(c), target: "task", payload: { sourceRunId: "run-a", sourceAttempt: 1, capsuleHash: "a".repeat(64) } },
   "archive-group": { call: (s, c) => s.archiveGroup(c), target: "group", payload: {} },
+  // Ruling (2026-11-19 #355/#357): 「这次批准改写所有必要的判据」 -- unclose-group undoes only a closed mark, so an archived group refuses it.
+  "unclose-group": { call: (s, c) => s.uncloseGroup(c), target: "group", payload: {} },
   "approve-pending-decision": { call: (s, c) => s.approvePendingDecision(c), target: "group", payload: { pendingId: "pending-run-a-0", undoHow: `git revert --no-edit ${"e".repeat(40)}` } },
   "reject-pending-decision": { call: (s, c) => s.rejectPendingDecision(c), target: "group", payload: { pendingId: "pending-run-a-0" } },
   "ratify-flagged-decision": { call: (s, c) => s.ratifyFlaggedDecision(c), target: "group", payload: { decisionId: "run-a/agent-0" } },
@@ -298,7 +300,9 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
 
 describe("an archived group refuses every group-targeted command but unarchive-group (spec §6.3)", () => {
   it("covers every group-targeted verb the protocol knows, so a new verb cannot slip past", () => {
-    const expected = commandVerbSchema.options.filter((verb) => !NOT_GROUP.includes(verb) && verb !== "unarchive-group").sort();
+    // Ruling (2026-11-19 #355/#357): 「这次批准改写所有必要的判据」 -- the gate admits close-group on an archived group (a done
+    // one converts to closed, human ruling 「同意允许互转」), so it is exempt beside unarchive-group; archiveGroupClosed.test.ts pins it.
+    const expected = commandVerbSchema.options.filter((verb) => !NOT_GROUP.includes(verb) && verb !== "unarchive-group" && verb !== "close-group").sort();
     expect(Object.keys(CALLS).sort()).toEqual(expected);
   });
 
@@ -338,6 +342,43 @@ describe("an archived group refuses every group-targeted command but unarchive-g
       service.archiveGroup(h.command("archive-group", {}));
       expect(service.unarchiveGroup(h.command("unarchive-group", {}))).toMatchObject({ result: { kind: "unarchived", paused: true } });
       expect(await service.resumeDispatch(h.command("resume-dispatch", {}))).toMatchObject({ result: { kind: "scheduled", operation: "resume-dispatch" } });
+    } finally { await h.dispose(); }
+  });
+});
+
+// Tester #355: a closed group is frozen as an archived one, by its own code; it takes unclose-group and archive-group (which
+// converts it), and close-group again is the gate's refusal too.
+describe("a closed group refuses every group-targeted command but unclose-group and archive-group (tester #355)", () => {
+  const closedVerbs = [...Object.keys(CALLS).filter((verb) => verb !== "archive-group" && verb !== "unclose-group"), "close-group"];
+  const CLOSE: { call: Call; target: "group"; payload: unknown } = { call: (s, c) => s.closeGroup(c), target: "group", payload: {} };
+  it.each(closedVerbs)("refuses %s with group-closed, durably, and changes nothing", async (verb) => {
+    const { h, service } = await confirmed();
+    try {
+      writeBody(h, { ...body(h), status: "done" });
+      expect(service.closeGroup(h.command("close-group", {}))).toMatchObject({ result: { kind: "closed" } });
+      const before = JSON.stringify(body(h));
+      const entry = verb === "close-group" ? CLOSE : CALLS[verb]!;
+      const target = entry.target === "task" ? { kind: "task", groupId: "g", taskId: "a" } : { kind: "group", groupId: "g" };
+      const command = h.rawCommand(`c-${verb}`, revisionOf(h), verb as never, target as never, entry.payload) as never;
+      // mutation: terminalGateRefusal answers group-archived for a closed mark too -> red here
+      expect(await entry.call(service, command)).toMatchObject({ error: { code: "group-closed" } });
+      expect(lookupCommandResult(h.store, "g", `c-${verb}`)!.body).toMatchObject({ error: { code: "group-closed" } });
+      expect(JSON.stringify(body(h))).toBe(before);
+    } finally { await h.dispose(); }
+  });
+
+  it("refuses unarchive-group on a closed group with group-closed, and books it before preparation", async () => {
+    const { h, service } = await confirmed();
+    try {
+      writeBody(h, { ...body(h), status: "done" });
+      service.closeGroup(h.command("close-group", {}));
+      expect(service.unarchiveGroup(h.rawCommand("c-unarchive", revisionOf(h), "unarchive-group", { kind: "group", groupId: "g" }, {}) as never))
+        .toMatchObject({ error: { code: "group-closed" } });
+      // mutation: preflight keeps `rawCommand.verb !== "unarchive-group" && isGroupArchived` -> start is booked group-archived, red here
+      expect(preflightWebCommand(h.store, h.rawCommand("c-start", revisionOf(h), "start", { kind: "group", groupId: "g" }, {}) as never))
+        .toMatchObject({ status: 409, body: { error: { code: "group-closed" } } });
+      expect(preflightWebCommand(h.store, h.command("unclose-group", {}) as never)).toBeNull();
+      expect(preflightWebCommand(h.store, h.command("archive-group", {}) as never)).toBeNull();
     } finally { await h.dispose(); }
   });
 });

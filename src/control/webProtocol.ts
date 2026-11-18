@@ -703,6 +703,9 @@ export const commandVerbSchema = z.enum([
   "revoke-allowance",
   "archive-group",
   "unarchive-group",
+  // Tester #355: close a done group (the terminal mark's closed kind) and undo it.
+  "close-group",
+  "unclose-group",
   "approve-pending-decision",
   "reject-pending-decision",
   "ratify-flagged-decision",
@@ -1410,6 +1413,9 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   // Issue-fixes spec §6.3: archive and unarchive, group target, empty payload.
   z.object({ ...rawCommandFields, verb: z.literal("archive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  // Tester #355: close and unclose, group target, empty payload.
+  z.object({ ...rawCommandFields, verb: z.literal("close-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("unclose-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("approve-pending-decision"), target: groupCommandTargetSchema, payload: approvePendingDecisionPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("ratify-flagged-decision"), target: groupCommandTargetSchema, payload: ratifyFlaggedDecisionPayloadSchema }).strict(),
@@ -1526,6 +1532,9 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   // Issue-fixes spec §6.3: archive and unarchive, group target, empty payload.
   z.object({ ...effectiveCommandFields, verb: z.literal("archive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  // Tester #355: close and unclose, group target, empty payload.
+  z.object({ ...effectiveCommandFields, verb: z.literal("close-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("unclose-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("approve-pending-decision"), target: groupCommandTargetSchema, payload: approvePendingDecisionPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("reject-pending-decision"), target: groupCommandTargetSchema, payload: rejectPendingDecisionPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("ratify-flagged-decision"), target: groupCommandTargetSchema, payload: ratifyFlaggedDecisionPayloadSchema }).strict(),
@@ -1684,6 +1693,9 @@ export const groupSummarySchema = z
     counts: z.object({ idle: safeInteger, running: safeInteger, waiting: safeInteger, blocked: safeInteger, done: safeInteger, settling: safeInteger.optional() }).strict().optional(),
     updatedAt: safeInteger.nullable().optional(),
     archived: z.boolean().optional(),
+    // Tester #355: which terminal mark `archived` is -- present (with `archived: true`) on every group carrying one. A
+    // closed group is frozen exactly as an archived one, so every reader of `archived` treats it alike.
+    archiveKind: z.enum(["archived", "closed"]).optional(),
     // Feedback #53: a start wake is undelivered or a task is executing (an active run or a busy work status). A
     // Web-started group stays `ready` through its first run, so this, not `state`, says it is not startable.
     // Given for every group with a plan; optional on the wire so older fixtures still parse.
@@ -2097,6 +2109,8 @@ export const activityKindSchema = z.enum([
   "off-plan-write",
   // Pre-existing failures spec L2 (#341): a run's agent reported a required check already failing before its change.
   "preexisting-failure",
+  // Tester #355: a done group closed, and the close undone.
+  "closed", "unclosed",
 ]);
 export const activityEntrySchema = z
   .object({
@@ -2721,6 +2735,9 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   // Tester #370 (correction 2026-11-18): present (true) only when the unarchive paused a group that would otherwise run on
   // its own (archiveGroup.ts wouldRunOnUnarchive); `orca group resume` starts it.
   z.object({ kind: z.literal("unarchived"), groupId: idSchema, paused: z.literal(true).optional() }).strict(),
+  // Tester #355: `at` is the closed mark's time; an unclose pauses a group that would run on its own, as an unarchive does.
+  z.object({ kind: z.literal("closed"), groupId: idSchema, at: safeInteger }).strict(),
+  z.object({ kind: z.literal("unclosed"), groupId: idSchema, paused: z.literal(true).optional() }).strict(),
   z.object({ kind: z.literal("pending-decision-approved"), pendingId: idSchema, decisionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("pending-decision-rejected"), pendingId: idSchema, correctionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("flagged-decision-ratified"), decisionId: nonemptyString }).strict(),

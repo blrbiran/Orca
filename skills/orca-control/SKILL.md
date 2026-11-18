@@ -69,7 +69,7 @@ any command (`--json`: as data; ask for one domain, the whole list is large); `o
 | import a plan file as a group | `orca project register-plan <path>`, then `orca group import <plan>` | references/project.md, group.md |
 | review or edit the proposal (budgets, agents, tasks) | `orca proposal show <g>`, `proposal set-budget / set-agent / replace` | references/proposal.md |
 | get budgets estimated, apply them, then confirm | `orca group estimate <g>`, `orca group apply-estimate <g> [--dry-run]` (an estimate changes nothing until applied), `orca group confirm <g> [--hold]` | references/group.md |
-| start, pause, resume, stop or archive a group | `orca group start / pause / resume / stop-handoff / resume-handoff / archive / unarchive <g>` | references/group.md |
+| start, pause, resume, stop, archive or close a group (close: a done one, to hide it; not `close-run`) | `orca group start / pause / resume / stop-handoff / resume-handoff / archive / unarchive / close / unclose <g>` | references/group.md |
 | set a group's limit or where its work goes | `orca group set-limit`, `orca group set-integration`, `retry-integration`, `resolve-integration` | references/group.md |
 | answer a stopped folder placement or multi landing | `orca group folder-change <g> --take-folder / --recheck / --withhold`, `orca group multi-land <g> --retry-rest / --mark-resolved` | references/group.md |
 | make one group wait for another | `orca group depend <g> --on <other>`, `orca group undepend …` | references/group.md |

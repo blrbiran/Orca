@@ -104,6 +104,8 @@ export type GroupSummaryV1 = {
   counts?: Record<WorkItemCategoryV1, number> & { settling?: number };
   updatedAt?: number | null;
   archived?: boolean;
+  /** Tester #355: which terminal mark `archived` is; a closed group is frozen as an archived one is. */
+  archiveKind?: "archived" | "closed";
   /** Feedback #53: a start wake is undelivered or a task is executing; a Web-started group stays `ready` meanwhile. */
   executionPending?: boolean;
   /** Session 3cfc2e73 D2: present (true) only when the group is not blocked and a non-estimate run went over its grant. */
@@ -808,6 +810,7 @@ export const WEB_ACTIVITY_KINDS = [
   "run-abandon-requested",
   "off-plan-write",
   "preexisting-failure",
+  "closed", "unclosed",
 ] as const;
 export type ActivityKindV1 = (typeof WEB_ACTIVITY_KINDS)[number];
 export type ActivityEntryV1 = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKindV1; body: Record<string, unknown> };
@@ -935,7 +938,7 @@ export type CommandSuccessV1 = {
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-draft-edit" | "requirement-clarify-more" | "requirement-classify" | "requirement-revise" | "requirement-set-agent"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "integrate-now" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "answer-preexisting-failure" | "review-accept" | "review-rerun" | "review-fix"
     | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "integrate-now" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "allow-request" | "revoke-allowance"
-    | "archive-group" | "unarchive-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
+    | "archive-group" | "unarchive-group" | "close-group" | "unclose-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
     | "correction-record" | "correction-close" | "correction-withdraw"
     | "set-check-settings" | "set-scheduled-check" | "set-check-locks" | "run-check-now" | "resume-check"
     | "set-flow-settings" | "set-flow-locks"
@@ -1016,6 +1019,8 @@ export type CommandSuccessV1 = {
     | { kind: "attempt-accept-requested"; runId: string; taskId: string }
     | { kind: "run-abandon-requested"; runId: string; taskId: string; stop: "not-started" | "live-ceiling" | "no-live-ceiling" }
     | { kind: "unarchived"; groupId: string; paused?: true }
+    | { kind: "closed"; groupId: string; at: number }
+    | { kind: "unclosed"; groupId: string; paused?: true }
     | { kind: "pending-decision-approved"; pendingId: string; decisionId: string }
     | { kind: "pending-decision-rejected"; pendingId: string; correctionId: string }
     | { kind: "flagged-decision-ratified"; decisionId: string }

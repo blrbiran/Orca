@@ -176,6 +176,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `group-already-exists` | 409 |
 | `group-archived` | 409 |
 | `group-budget-unavailable` | 422 |
+| `group-closed` | 409 |
 | `group-deadline-expired` | 422 |
 | `group-dependency-unmet` | 409 |
 | `group-edge-cycle` | 409 |
@@ -187,6 +188,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `group-edge-stack-ambiguous` | 409 |
 | `group-execution-pending` | 409 |
 | `group-graph-conflict` | 409 |
+| `group-not-done` | 409 |
 | `group-not-found` | 404 |
 | `group-project-binding-required` | 422 |
 | `group-project-conflict` | 409 |

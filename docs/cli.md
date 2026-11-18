@@ -62,8 +62,10 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca group resume <group>` — dispatch again after a pause
 - `orca group stop-handoff <group> [--deadline <deadline>]` — stop: running tasks hand off and stop
 - `orca group resume-handoff <group> [--continue <continue>] [--note <note>] [--note-scope <note-scope>]` — resume after a completed handoff; --continue <task> continues that task from its checkpoint
-- `orca group archive <group>` — archive a group: records stay, it refuses every command but unarchive
+- `orca group archive <group>` — archive a group (set it aside, abandoned or not wanted): records stay, it refuses every command but unarchive and close; a closed group archived becomes archived
 - `orca group unarchive <group>` — unarchive a group (one that would run on its own is paused: orca group resume lets it run)
+- `orca group close <group>` — close a done group (finished, hide it): records stay, it refuses every command but unclose and archive; an archived done group closed becomes closed. Not close-run
+- `orca group unclose <group>` — unclose a closed group: it is done and listed again
 - `orca group close-run <group> --run <run>` — close a proved terminal failed run's accounting (it stays failed; retry or archive next)
 - `orca group set-limit <group> --limit <limit>` — set the group's budget limit (person token)
 - `orca group cap <group> --tokens <tokens>` — lower a draft group's token ceiling; raising or removing it requires a person

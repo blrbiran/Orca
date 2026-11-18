@@ -72,7 +72,7 @@ import { attemptReviewOf, type AttemptReview } from "./attemptReview.js";
 import { readGroupIntegration } from "../control/integrationScheme.js";
 import { historyAcceptanceRecordSchema, historySatisfied } from "../control/historyAcceptance.js";
 import { readSchedule } from "../control/schedules/store.js";
-import { archivedMarkOf } from "../control/archivedMark.js";
+import { archivedMarkOf, terminalKindOf } from "../control/archivedMark.js";
 import { workItemCategory, type WorkItemCategory } from "../control/workItemCategory.js";
 import { workBranchRef } from "../control/workspace.js";
 import { orchestrationSummary } from "../control/orchestration.js";
@@ -858,6 +858,8 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     branch: workBranchRef(groupId).slice("refs/heads/".length),
     updatedAt: latestGroupActivityAt(store, groupId),
     archived: archivedMarkOf(body) !== null,
+    // Tester #355: the mark's kind beside it (absent `kind` on the stored mark is archived).
+    ...((kind) => kind === null ? {} : { archiveKind: kind })(terminalKindOf(body)),
     ...(executing === undefined ? {} : { executionPending: executing }),
     ...(archived !== null && overGrantUnblocked(body.status, readSnapshot!) ? { overGrant: true } : {}),
     ...(requirementBlock ? { requirement: requirementSummaryFromSnapshot(store, groupId, readSnapshot) } : {}),

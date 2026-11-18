@@ -90,6 +90,9 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   // Issue-fixes spec §6.3: archiving hides and freezes a group but deletes nothing; any principal may do it and undo it.
   "archive-group": "any",
   "unarchive-group": "any",
+  // Tester #355 (the person's semantics 2: 「由人或 agent … 显式执行」): closing a done group and undoing it, like archive.
+  "close-group": "any",
+  "unclose-group": "any",
   // Control run decisions plan Task 9: approving a refused decision writes a ledger line in an owner's name.
   "approve-pending-decision": "human-only",
   "ratify-flagged-decision": "human-only",

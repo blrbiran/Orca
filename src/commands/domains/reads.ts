@@ -95,7 +95,7 @@ function probeVerdictLines(run: { purpose?: string; probeVerdict?: ProbeVerdictV
 let proposalNote: string[] = [];
 
 interface GroupView { summary: { groupId: string; repoId?: string; state?: string; commandRevision: number; completion?: { done: number; total: number }; counts?: Record<string, number>; stopState?: string | null; executionPending?: boolean; overGrant?: boolean; archived?: boolean; recoveryBlockerCount?: number; projectionSeq?: number }; proposal: unknown; allocations: unknown[]; ledger: { groupLimit: unknown }; workItems: Array<{ taskId: string }>; runs: Array<{ runId: string; taskId: string | null }> }
-interface Summary { groups: Array<{ groupId: string; repoId?: string; state?: string; storedState?: string; commandRevision?: number; goal?: string; counts?: { running?: number; blocked?: number; done?: number; idle?: number; waiting?: number; settling?: number }; completion?: { done: number; total: number }; stopState?: string | null; overGrant?: boolean; archived?: boolean }> }
+interface Summary { groups: Array<{ groupId: string; repoId?: string; state?: string; storedState?: string; commandRevision?: number; goal?: string; counts?: { running?: number; blocked?: number; done?: number; idle?: number; waiting?: number; settling?: number }; completion?: { done: number; total: number }; stopState?: string | null; overGrant?: boolean; archived?: boolean; archiveKind?: "archived" | "closed" }> }
 
 /**
  * Spec §14 R6: the group holding a run -- the one --group names, else the first group whose view lists it.
@@ -214,7 +214,7 @@ async function listFields(c: WriteContext): Promise<string[] | null> {
 }
 
 const groupList = (body: unknown): string => {
-  // Tester #370: archived groups are listed (Issue 151), last; the order is otherwise the panel's.
+  // Tester #370: archived groups are listed (Issue 151), last; the order is otherwise the panel's. Tester #355: closed ones too.
   const groups = [...((body as Summary).groups ?? [])].sort((a, b) => Number(a.archived === true) - Number(b.archived === true));
   return groups.length === 0 ? "no groups" : groups.map((g) => {
     const count = g.counts?.running ?? 0, settling = g.counts?.settling ?? 0;
@@ -224,7 +224,8 @@ const groupList = (body: unknown): string => {
       : count > 0 && (g.state === "ready" || g.state === "review") ? `${g.state} · running ${count} task${count === 1 ? "" : "s"}` : g.state ?? "";
     // Tester #370: an archived group's stored state is not what it is now; it reads `archived (was <state>)` -- the stored
     // state (#361 review I4), never the derived `running`.
-    const state = g.archived === true ? `archived (was ${g.storedState ?? g.state ?? "?"})` : live;
+    // Tester #355: a closed group is done by definition, so it reads `closed` alone.
+    const state = g.archived !== true ? live : g.archiveKind === "closed" ? "closed" : `archived (was ${g.storedState ?? g.state ?? "?"})`;
     // Tester #166: the list used to hide a paused, over-grant or blocked group behind its state word.
     const flags = [
       g.stopState !== null && g.stopState !== undefined ? (g.stopState === "paused" ? "paused" : `stopping (${g.stopState})`) : "",

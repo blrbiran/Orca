@@ -964,6 +964,9 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     // Issue-fixes spec §6.3: archive and unarchive; the ledger key is the group's.
     { path: "/api/control/groups/:groupId/archive", verb: "archive-group", target: fromParams },
     { path: "/api/control/groups/:groupId/unarchive", verb: "unarchive-group", target: fromParams },
+    // Tester #355: close a done group and undo it.
+    { path: "/api/control/groups/:groupId/close", verb: "close-group", target: fromParams },
+    { path: "/api/control/groups/:groupId/unclose", verb: "unclose-group", target: fromParams },
     // Control run decisions plan Task 9: an owner approves a refused decision with an executable undo.how.
     { path: "/api/control/groups/:groupId/decisions/approve", verb: "approve-pending-decision", target: fromParams },
     { path: "/api/control/groups/:groupId/decisions/ratify", verb: "ratify-flagged-decision", target: fromParams },
@@ -1125,6 +1128,8 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "multi-dir-landing": service.multiDirLanding(command); break;
           case "archive-group": service.archiveGroup(command); break;
           case "unarchive-group": service.unarchiveGroup(command); break;
+          case "close-group": service.closeGroup(command); break;
+          case "unclose-group": service.uncloseGroup(command); break;
           case "approve-pending-decision": await service.approvePendingDecision(command); break;
           case "ratify-flagged-decision": service.ratifyFlaggedDecision(command); break;
           case "allow-request": await service.allowRequest(command); break;

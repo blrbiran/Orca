@@ -57,7 +57,7 @@ function operatorNote(c: WriteContext): { text: string; scope: typeof NOTE_SCOPE
 
 type RoundView = ClarifyRoundView;
 interface RequirementView {
-  summary: { archived?: boolean; requirement?: { roundNo: number | null; draftNo: number | null } };
+  summary: { archived?: boolean; archiveKind?: "archived" | "closed"; requirement?: { roundNo: number | null; draftNo: number | null } };
   rounds?: RoundView[]; drafts: Array<{ draftNo: number; draftHash: string | null; output?: { requirementConflicts?: unknown[] } | null }>;
 }
 const requirement = async (c: WriteContext): Promise<RequirementView> => await c.read(`groups/${group(c)}/requirement`) as RequirementView;
@@ -66,7 +66,11 @@ const requirement = async (c: WriteContext): Promise<RequirementView> => await c
  * group that refusal names the archive (the panel's own code), not the missing round or draft.
  */
 function missing(c: WriteContext, view: RequirementView, code: string, message: string): EntryRejection {
-  if (view.summary.archived === true) return new EntryRejection("group-archived", `${group(c)} is archived; orca group unarchive ${group(c)} first`);
+  if (view.summary.archived === true) {
+    // Tester #355: a closed group is refused by the panel as group-closed, so this pin's refusal names it too.
+    return view.summary.archiveKind === "closed" ? new EntryRejection("group-closed", `${group(c)} is closed; orca group unclose ${group(c)} first`)
+      : new EntryRejection("group-archived", `${group(c)} is archived; orca group unarchive ${group(c)} first`);
+  }
   return new EntryRejection(code, message);
 }
 async function roundNo(c: WriteContext): Promise<number> {
@@ -200,8 +204,9 @@ const empty = (domain: string, action: string, summary: string, verbName: Parame
 /** Tester #370 (correction 2026-11-18): an unarchive that paused the group says how to let it run. */
 const unarchiveFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) => {
   const result = (body as { result?: { kind?: unknown; groupId?: unknown; paused?: unknown } } | null)?.result;
-  return result?.kind === "unarchived" && result.paused === true
-    ? `unarchived ${String(result.groupId)}; paused so it does not run on its own -- let it run with: orca group resume ${String(result.groupId)}` : row.format(body);
+  // Tester #355: an unclose pauses the same way.
+  return (result?.kind === "unarchived" || result?.kind === "unclosed") && result.paused === true
+    ? `${result.kind} ${String(result.groupId)}; paused so it does not run on its own -- let it run with: orca group resume ${String(result.groupId)}` : row.format(body);
 } });
 
 const queuedFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) => {
@@ -623,8 +628,11 @@ export const WORK_ROWS: CommandDef[] = [
       }
       return { selections };
     } }),
-  empty("group", "archive", "archive a group: records stay, it refuses every command but unarchive", "archive-group", "archive"),
+  empty("group", "archive", "archive a group (set it aside, abandoned or not wanted): records stay, it refuses every command but unarchive and close; a closed group archived becomes archived", "archive-group", "archive"),
   unarchiveFormat(empty("group", "unarchive", "unarchive a group (one that would run on its own is paused: orca group resume lets it run)", "unarchive-group", "unarchive")),
+  // Tester #355: close is the done group's terminal mark -- not close-run, which closes one failed run's accounting.
+  empty("group", "close", "close a done group (finished, hide it): records stay, it refuses every command but unclose and archive; an archived done group closed becomes closed. Not close-run", "close-group", "close"),
+  unarchiveFormat(empty("group", "unclose", "unclose a closed group: it is done and listed again", "unclose-group", "unclose")),
   // Terminal run closure #169: a proved terminal failure's accounting ends without accepting its work; then archive works.
   verb({ domain: "group", action: "close-run", summary: "close a proved terminal failed run's accounting (it stays failed; retry or archive next)", verb: "close-run", positionals: [GROUP],
     flags: [{ name: "run", type: "string", required: true, summary: "the run to close (orca run show <run> names it)" }],

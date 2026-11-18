@@ -63,6 +63,8 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "integrate-now": emptyPayloadSchema,
   "resolve-integration-conflict": emptyPayloadSchema,
   "archive-group": emptyPayloadSchema, "unarchive-group": emptyPayloadSchema,
+  // Ruling (2026-11-19 #355/#357): 「这次批准改写所有必要的判据」 -- the two new terminal-mark verbs take an empty payload too.
+  "close-group": emptyPayloadSchema, "unclose-group": emptyPayloadSchema,
   "verify-saved-result": verifySavedResultPayloadSchema, "close-run": closeRunPayloadSchema,
   // Reviewed acceptance (spec 2026-11-11 §7): an owner's accept-attempt (human-only, socket tier token).
   "accept-attempt": acceptAttemptPayloadSchema,

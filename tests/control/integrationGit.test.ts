@@ -716,4 +716,20 @@ describe("an archived group is not integrated (issue-fixes spec §6.3)", { timeo
       expect(w.remote("orca/g")).toBe(tip);
     } finally { await w.dispose(); }
   });
+
+  // Tester #355: a closed group is frozen alike -- its landed work waits until it is unclosed.
+  it("skips a closed group's landed work, and integrates it once unclosed", async () => {
+    const w = await world(PB); try {
+      const tip = w.land({ "a.txt": "a\n" });
+      writeGroupBody(w.store, { ...groupBody(w.store), status: "done" });
+      const closed = w.service.closeGroup(w.command("close-group", {}));
+      if ("error" in closed) throw new Error(JSON.stringify(closed));
+      // mutation: integrationPass skips only a mark without kind -> the closed group integrates, red here
+      expect(await w.pass()).toBe(false);
+      expect(w.remote("orca/g")).toBeNull();
+      w.service.uncloseGroup(w.command("unclose-group", {}));
+      expect(await w.pass()).toBe(true);
+      expect(w.remote("orca/g")).toBe(tip);
+    } finally { await w.dispose(); }
+  });
 });

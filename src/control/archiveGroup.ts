@@ -1,5 +1,5 @@
 import { recordActivity } from "./activity.js";
-import { archivedMarkOf } from "./archivedMark.js";
+import { terminalKindOf } from "./archivedMark.js";
 import { applyWebCommand, type WebCommandContext } from "./commandLedger.js";
 import { ArchiveRunActiveError, ControlError, type ActiveRunRef } from "./errors.js";
 import { recoveryRetryCommand, resumableBlockedRun } from "./driveRecord.js";
@@ -17,6 +17,12 @@ import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from
 /** Issue-fixes spec §6.3 (ruling H4): a group is archived, never deleted; it keeps every record and takes no new work. */
 export type ArchiveGroupCommand = Extract<RawAuthorityCommandV1, { verb: "archive-group" }>;
 export type UnarchiveGroupCommand = Extract<RawAuthorityCommandV1, { verb: "unarchive-group" }>;
+/**
+ * Tester #355 (human ruling 2026-11-19 「同意该方案，同意允许互转」): a done group is closed -- the same terminal mark with
+ * `kind: "closed"`, frozen alike -- and unclosed; an archived done group closes (converting), a closed one archives.
+ */
+export type CloseGroupCommand = Extract<RawAuthorityCommandV1, { verb: "close-group" }>;
+export type UncloseGroupCommand = Extract<RawAuthorityCommandV1, { verb: "unclose-group" }>;
 
 function success(context: WebCommandContext, result: CommandSuccessV1["result"]): { status: number; body: CommandSuccessV1 } {
   return { status: 200, body: {
@@ -100,7 +106,11 @@ function interruptParkedCall(store: ControlStore, groupId: string, target: Requi
   else writeDraft(store, groupId, { ...readDraft(store, groupId, target.no), state: "interrupted", waiting: null });
 }
 
-/** Spec §6.3: marks the body `archived: { at, actor }` and writes an `archived` activity row in the same transaction. */
+/**
+ * Spec §6.3: marks the body `archived: { at, actor }` and writes an `archived` activity row in the same transaction.
+ * Tester #355: on a closed group (the ledger admits archive-group there) the same write converts it to archived, after the
+ * same refusals.
+ */
 export function applyArchiveGroup(deps: { store: ControlStore }, command: ArchiveGroupCommand): CommandSuccessV1 | CommandErrorBodyV1 {
   return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
     rawCommand: command,
@@ -149,6 +159,64 @@ function wouldRunOnUnarchive(store: ControlStore, groupId: string, group: Record
 }
 
 /**
+ * Tester #355: marks a done group `archived: { at, actor, kind: "closed" }` and writes a `closed` activity row. Only a done
+ * group closes (group-not-done otherwise); the archive refusals apply as well, so a closed group has nothing in motion.
+ * On an archived done group (the ledger admits close-group there) it converts the mark to closed.
+ */
+export function applyCloseGroup(deps: { store: ControlStore }, command: CloseGroupCommand): CommandSuccessV1 | CommandErrorBodyV1 {
+  return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
+    rawCommand: command,
+    expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+    apply: (context) => {
+      const groupId = command.target.groupId;
+      const group = groupBody(deps.store, groupId);
+      if (group.status !== "done") throw new ControlError("group-not-done", String(group.status));
+      refuseArchive(deps.store, groupId, group);
+      const at = deps.store.now();
+      group.archived = { at, actor: context.rawCommand.actorId, kind: "closed" };
+      deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+      recordActivity(deps.store, { groupId, kind: "closed", body: {} });
+      return success(context, { kind: "closed", groupId, at });
+    },
+  }).body;
+}
+
+/**
+ * Spec §6.3 and the #370 correction below: removes a terminal mark of the given kind (refused no-op-command when the group
+ * has none; the ledger refuses the other kind by its own code before this), pausing a group that would run on its own.
+ */
+function removeTerminalMark(store: ControlStore, context: WebCommandContext, groupId: string, kind: "archived" | "closed"): boolean {
+  const group = groupBody(store, groupId);
+  if (terminalKindOf(group) !== kind) throw new ControlError("no-op-command");
+  delete group.archived;
+  const pause = wouldRunOnUnarchive(store, groupId, group);
+  if (pause) {
+    saveStopIntent(store, groupId, "pause", context.nextCommandRevision, { mode: "pause", state: "paused", frozenRunIds: [], acceptedAt: null, deadlineAt: null });
+    recordActivity(store, { groupId, kind: "stop", body: { mode: "pause" } });
+    group.stopped = true;
+  }
+  store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+  recordActivity(store, { groupId, kind: kind === "closed" ? "unclosed" : "unarchived", body: {} });
+  return pause;
+}
+
+/**
+ * Tester #355: removes a closed mark and writes an `unclosed` activity row; the group is done again. The #370 pause rule
+ * holds here too (a done group normally has nothing to run, but the same path decides).
+ */
+export function applyUncloseGroup(deps: { store: ControlStore }, command: UncloseGroupCommand): CommandSuccessV1 | CommandErrorBodyV1 {
+  return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
+    rawCommand: command,
+    expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
+    apply: (context) => {
+      const groupId = command.target.groupId;
+      const pause = removeTerminalMark(deps.store, context, groupId, "closed");
+      return success(context, { kind: "unclosed", groupId, ...(pause ? { paused: true as const } : {}) });
+    },
+  }).body;
+}
+
+/**
  * Spec §6.3: removes the mark (refused no-op-command when there is none) and writes an `unarchived` activity row.
  * Correction 2026-11-18 (#370, human ruling 「unarchive 一个 ready 组时，不应该自动开跑」): a group that would run on its own
  * once unarchived (wouldRunOnUnarchive) is paused in this transaction -- the same pause intent `pause-dispatch` writes, so
@@ -161,17 +229,7 @@ export function applyUnarchiveGroup(deps: { store: ControlStore }, command: Unar
     expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
     apply: (context) => {
       const groupId = command.target.groupId;
-      const group = groupBody(deps.store, groupId);
-      if (archivedMarkOf(group) === null) throw new ControlError("no-op-command");
-      delete group.archived;
-      const pause = wouldRunOnUnarchive(deps.store, groupId, group);
-      if (pause) {
-        saveStopIntent(deps.store, groupId, "pause", context.nextCommandRevision, { mode: "pause", state: "paused", frozenRunIds: [], acceptedAt: null, deadlineAt: null });
-        recordActivity(deps.store, { groupId, kind: "stop", body: { mode: "pause" } });
-        group.stopped = true;
-      }
-      deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
-      recordActivity(deps.store, { groupId, kind: "unarchived", body: {} });
+      const pause = removeTerminalMark(deps.store, context, groupId, "archived");
       return success(context, { kind: "unarchived", groupId, ...(pause ? { paused: true as const } : {}) });
     },
   }).body;

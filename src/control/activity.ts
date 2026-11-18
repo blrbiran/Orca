@@ -42,7 +42,9 @@ export type ActivityKind = "usage-settled" | "command" | "run-claimed" | "run-st
   // Off-plan writes spec W3 (#346): a landed run's paths outside its task's targetPaths (information only).
   | "off-plan-write"
   // Pre-existing failures spec L2 (#341): a run's agent reported a required check already failing before its change.
-  | "preexisting-failure";
+  | "preexisting-failure"
+  // Tester #355: a done group closed, and the close undone (archiveGroup.ts).
+  | "closed" | "unclosed";
 export const ACTIVITY_KINDS = [
   "usage-settled", "command", "run-claimed", "run-started", "phase", "run-blocked", "run-resumed", "run-settled", "task-retried", "saved-result-top-up", "integration", "stop", "stop-cleared", "archived", "unarchived", "correction-closed", "debug-open-failed", "ladder-skipped", "group-done", "quota-probe",
   // Delivery tail spec 2026-11-17 (#333/#336): a backoff said, a person's integrate-now, the acceptance on the delivered commit.
@@ -58,6 +60,7 @@ export const ACTIVITY_KINDS = [
   "run-abandon-requested",
   "off-plan-write",
   "preexisting-failure",
+  "closed", "unclosed",
 ] as const satisfies readonly ActivityKind[];
 export type ActivityRow = { groupId: string; taskId?: string | null; runId?: string | null; kind: ActivityKind; body: Record<string, unknown> };
 export type ActivityEntry = { seq: number; groupId: string; taskId: string | null; runId: string | null; at: number; kind: ActivityKind; body: Record<string, unknown> };

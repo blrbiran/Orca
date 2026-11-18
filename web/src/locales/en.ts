@@ -118,6 +118,7 @@ const activityKind = {
   "run-abandon-requested": "abandon requested",
   "off-plan-write": "off-plan writes",
   "preexisting-failure": "pre-existing failure",
+  closed: "closed", unclosed: "unclosed",
 } as const satisfies Record<ActivityKindV1, string>;
 
 const proposalState = { editable: "editable", confirmed: "confirmed" } as const satisfies Record<GroupViewV1["proposal"]["state"], string>;
@@ -268,8 +269,8 @@ export const en = {
     viewBoard: "Board",
     empty: "Nothing on the board yet.",
     viewGraph: "Group graph",
-    showArchived: "Show archived",
-    dropHint: { "pause-dispatch": "Drop to pause", "resume-dispatch": "Drop to resume", "archive-group": "Drop to archive", "unarchive-group": "Drop to unarchive" },
+    showArchived: "Show closed and archived",
+    dropHint: { "pause-dispatch": "Drop to pause", "resume-dispatch": "Drop to resume", "archive-group": "Drop to archive", "unarchive-group": "Drop to unarchive", "unclose-group": "Drop to unclose" },
     dropRefused: "{{groupId}} cannot be moved to {{column}}: only pause, resume, archive and unarchive can be done by dragging.",
     column: { clarifying: "Clarifying", "awaiting-confirmation": "Awaiting confirmation", queued: "Queued", running: "Running", "needs-you": "Needs you", done: "Done", archived: "Archived" },
     card: {
@@ -514,11 +515,22 @@ export const en = {
     startFromRequirement: "Start one from a requirement",
     groupDone: " · {{done}}/{{total}} done",
     groupBlockers: " · {{n}} blocker(s)",
-    groupCategory: { "not-started": "Not started", running: "Running", attention: "Needs attention", done: "Done", archived: "Archived" },
+    groupCategory: { "not-started": "Not started", running: "Running", attention: "Needs attention", done: "Done", closed: "Closed", archived: "Archived" },
+    // Tester #357: the list's selection toolbar.
+    groupBulk: {
+      region: "Selected groups", select: "Select {{groupId}}", selected: "{{n}} selected", clear: "Clear selection",
+      archive: "Archive", close: "Close", closeNeedsDone: "Close takes done groups only; deselect the others.", outcomes: "What each group did",
+      outcome: {
+        succeeded: { "archive-group": "{{groupId}}: archived", "close-group": "{{groupId}}: closed" },
+        skipped: { "archive-group": "{{groupId}}: already archived or changed; nothing sent", "close-group": "{{groupId}}: already closed or changed; nothing sent" },
+        refused: { "archive-group": "{{groupId}}: not archived", "close-group": "{{groupId}}: not closed" },
+      },
+    },
     groupFilter: { region: "Show groups", all: "All", empty: "No group matches this filter." },
     groupCard: {
       progress: "{{done}} of {{total}} tasks done",
       archivedWas: "archived (was {{state}})",
+      closed: "closed",
       attention: "needs you",
       updated: "updated {{minutes}} min ago",
       updatedNow: "updated just now",
@@ -693,6 +705,11 @@ export const en = {
       archivedBanner: "This group is archived: it keeps every record and takes no new work.",
       unarchive: "Unarchive",
       archive: "Archive group",
+      // Tester #355: a done group's other terminal mark.
+      closedRegion: "Closed",
+      closedBanner: "This group is closed: it is done, keeps every record and takes no new work.",
+      close: "Close group",
+      unclose: "Unclose",
     },
     task: {
       region: "Task {{taskId}}",
@@ -2722,6 +2739,8 @@ export const enErrors: Record<string, string> = {
   "graph-version-conflict": "The task graph changed since it was read. Read the group again, then try again.",
   "group-already-exists": "This group already exists.",
   "group-archived": "This group is archived: it keeps every record but takes no new work. Unarchive it to change or run it.",
+  "group-closed": "This group is closed: it is done, keeps every record and takes no new work. Unclose it (or archive it) first.",
+  "group-not-done": "Only a done group can be closed. To set aside a group that is not done, archive it.",
   "group-budget-unavailable": "The group's budget is not enough.",
   "retry-top-up-unsupported": "This task's retry cannot carry extra work ({{detail}}): only a task under the optional token policy takes a top-up. Retry it without one.",
   "retry-top-up-empty": "The top-up adds nothing: give at least one dimension above 0.",

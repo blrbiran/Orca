@@ -47,4 +47,18 @@ describe("orca group list shows what the state word hides (tester #166)", () => 
     // mutation: archived (was ${g.state}) -> "archived (was running)", red here
     expect(out.stdout).toBe("g-old  repo-1  archived (was ready)  rev 3  old\n");
   });
+  // Tester #355: a closed group is done by definition; it reads `closed`, listed after the live ones with the archived.
+  it("a closed group reads closed, after the live groups", async () => {
+    const w = await world({}, {
+      "GET summary": { status: 200, body: { schema: "orca-control-summary-v1", epoch: "e", changeSeq: 9, resetRequired: true, groups: [
+        { groupId: "g-shut", repoId: "repo-1", state: "done", archived: true, archiveKind: "closed", commandRevision: 5, goal: "shut", completion: { done: 1, total: 1 } },
+        { groupId: "g-old", repoId: "repo-1", state: "ready", archived: true, archiveKind: "archived", commandRevision: 3, goal: "old" },
+        { groupId: "g-live", repoId: "repo-1", state: "done", commandRevision: 2, goal: "live", completion: { done: 1, total: 1 } },
+      ] } },
+    });
+    const out = await cli(["group", "list"], w.dir);
+    expect(out.code, out.stderr).toBe(0);
+    // mutation: drop the closed branch of groupList -> "archived (was done)", red here
+    expect(out.stdout).toBe("g-live  repo-1  done  done 1/1  rev 2  live\ng-shut  repo-1  closed  done 1/1  rev 5  shut\ng-old  repo-1  archived (was ready)  rev 3  old\n");
+  });
 });

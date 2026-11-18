@@ -14,6 +14,9 @@ const NEXT: Readonly<Record<string, string>> = {
   "group-state-invalid": "the group is not in a state this command accepts; orca group brief <group> shows its state",
   "no-op-command": "nothing to change: it is already as this command would set it",
   "group-archived": "the group is archived and refuses every command but unarchive; orca group unarchive <group> first",
+  // Tester #355: a closed group takes unclose (and archive, which converts it); only a done group closes.
+  "group-closed": "the group is closed and refuses every command but unclose and archive; orca group unclose <group> first",
+  "group-not-done": "only a done group closes; to set aside a group that is not done, orca group archive <group>",
 };
 
 /** Fix wave m-6: `<group>` is the group's id when the CLI knows it. */
