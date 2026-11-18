@@ -427,4 +427,25 @@ describe("control poll request snapshots", () => {
     } finally { counter.restore(); await h.dispose(); }
   });
 
+  // Off-plan writes #346 W4, Task 5 fix round 1 (controller ruling, Orca session 4389b15f, 2026-11-18): a run stopped on a
+  // parallel sibling's claim carries the claim on its drive record, so the group view diagnoses N such runs with no
+  // confirmed-execution read -- that read scans every work item body (validateRetryGrantSource), so one per run would
+  // break the one-body-scan bound below.
+  it("diagnoses runs stopped on sibling claims within the poll bounds (no confirmed-execution read per run)", async () => {
+    const ids = ["a", "b", "c"], next = (id: string) => ids[(ids.indexOf(id) + 1) % ids.length]!;
+    const t = await driverHarness(ids.map(taskId => ({ taskId })), { behaviour: () => "blocked-waiting-human", stopReason: (id) => `denylist match: ${next(id)}` });
+    try {
+      const driver = t.driver();
+      for (const _ of ids) { const runId = await t.claim(); await t.until(driver, () => t.body(runId).state === "blocked"); }
+      const counter = installControlReadCounters(t.h.store);
+      try {
+        counter.reset(); const view = readControlGroup(counter.store, "e", "g");
+        expect(view.runs.map(r => [r.taskId, r.diagnosis?.cause, r.diagnosis?.siblings]).sort())
+          .toEqual(ids.map(id => [id, "parallel-claim", [next(id)]]));
+        // mutation: the view classifies per run against the confirmed execution (first round) -> 1 + N work-item scans, red
+        bounds(counter.snapshot(), true);
+      } finally { counter.restore(); }
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+
 });

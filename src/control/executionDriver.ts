@@ -74,6 +74,7 @@ import { noteAbandonUnresolved, openRequestOf, settleAbandonedUnstarted, settleP
 import { settleAbandonedRunInTransaction } from "./stopIntent.js";
 import { type Reconciliation } from "../scheduler/harvest.js";
 import { boundedHarvest, extraHarvestBound, primaryHarvestBound } from "./harvestBound.js";
+import { DENYLIST_STOP, parallelClaimOf, type ParallelClaim } from "./parallelClaims.js";
 import { taskWrites } from "./requirementRecords.js";
 import { ingestRunHandoff, prepareRunHandoff } from "./taskHandoffs.js";
 import { noteLiveNoteDeliveries, settleLiveNotes, writeRunLiveNotes } from "./liveNotes.js";
@@ -313,6 +314,12 @@ export const archiveAdmission = (deps: Pick<ExecutionDriverDeps, "admissionGate"
 /** Every synchronous write the driver makes: admitted, then one transaction (spec §2.1). */
 export function write<T>(deps: Pick<ExecutionDriverDeps, "store" | "admissionGate">, action: () => T): T {
   return admitted(deps, () => deps.store.transaction(action));
+}
+
+/** `{ parallelClaim }` when `reason` is a stop on one of the task's frozen sibling claims (parallelClaimOf), else `{}`. */
+function parallelClaimField(reason: string, confirmed: Pick<ReturnType<typeof readConfirmedTaskExecution>, "contract" | "siblings">, primaryDirKey?: string): { parallelClaim?: ParallelClaim } {
+  const claim = parallelClaimOf(reason, confirmed.contract, confirmed.siblings, primaryDirKey);
+  return claim === null ? {} : { parallelClaim: claim };
 }
 
 /** spec §2.2: a run that cannot move on its own is blocked alone, with the step and the reason. */
@@ -1078,12 +1085,20 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     // ccloop per-contract tool rules spec §5: the run's tool-rule report goes with them, so a violation can be read back.
     const failure = { ...(report.terminal.failureCause !== undefined ? { failureCause: report.terminal.failureCause } : {}), ...(report.terminal.lastFailure !== undefined ? { lastFailure: report.terminal.lastFailure } : {}), ...(report.terminal.budgetSnapshot !== undefined ? { budgetSnapshot: report.terminal.budgetSnapshot } : {}), ...(report.toolRules !== undefined ? { toolRules: report.toolRules } : {}), ...(report.pathPolicyMisses !== undefined ? { pathPolicyMisses: report.pathPolicyMisses } : {}) };
     const catalogMiss = report.terminal.failureCause?.cause === "rate-limited" ? await rateLimitedCatalogMiss(deps, run) : {};
-    blockRun(deps, runId, "C", report.terminal.stopReason?.includes("codex-skills-") ? report.terminal.stopReason : `terminal:${outcome}`, { outcome, ...stopReason, ...failure, ...catalogMiss });
+    // Off-plan writes W4 (#346, Task 5 fix round 1): a ccloop denylist stop on a parallel sibling's frozen claim is
+    // classified here, once, against the task's confirmed contract and frozen siblings; read only for that stop's shape.
+    const claimed = report.terminal.stopReason?.startsWith(DENYLIST_STOP) === true
+      ? parallelClaimField(report.terminal.stopReason, readConfirmedTaskExecution(store, run.groupId, run.taskId)) : {};
+    blockRun(deps, runId, "C", report.terminal.stopReason?.includes("codex-skills-") ? report.terminal.stopReason : `terminal:${outcome}`, { outcome, ...stopReason, ...failure, ...catalogMiss, ...claimed });
     if(run.mode==="verify-saved-result"||run.recoveryOf!==undefined)await retainSavedInterruption(deps,runId);
     return true;
   }
   let attemptSha: string;
-  const contract = readConfirmedTaskExecution(store, run.groupId, run.taskId).contract;
+  const confirmed = readConfirmedTaskExecution(store, run.groupId, run.taskId), contract = confirmed.contract;
+  // Off-plan writes W4 (#346, Task 5 fix round 1): Orca's own out-of-bounds block classifies a write into a parallel
+  // sibling's frozen claim as it records the block. `primaryDirKey` is the multi run's first directory's key.
+  const blockOutOfBounds = (reason: string, patch: Partial<DriveRecord>, primaryDirKey?: string) =>
+    blockRun(deps, runId, "C", reason, { ...patch, ...parallelClaimField(reason, confirmed, primaryDirKey) });
   // Multi-directory projects spec §7.2: one attempt commit and one harvest per written directory, each with its own
   // claims. The primary's sha stays in drive.attemptSha; every directory's sha is kept in drive.dirs[].
   const multi = isMultiGroup(store, run.groupId);
@@ -1097,7 +1112,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     // Off-plan writes #346 (Task 4b ruling): a v4 contract is bounded by its denylist, a v≤3 one by its write set.
     measured = await boundedHarvest({ runId, workdir: drive.sourceDir, outcome: "succeeded", attemptSha }, drive.base!, primaryHarvestBound(contract));
     if (measured.outOfBounds.length > 0) {
-      blockRun(deps, runId, "C", `out-of-bounds:${measured.outOfBounds.join(",")}`, { outcome, attemptSha });
+      blockOutOfBounds(`out-of-bounds:${measured.outOfBounds.join(",")}`, { outcome, attemptSha });
       return true;
     }
   } else {
@@ -1115,7 +1130,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     if (offending.length > 0) {
       // The runs that were committed stay named on the blocked run, as the primary's sha is.
       const dirs = multiDirs.map((dir, index) => ({ ...dir, ...(dirAttempts[index] === undefined ? {} : { attemptSha: dirAttempts[index]! }) }));
-      blockRun(deps, runId, "C", `out-of-bounds:${offending.join(";")}`, { outcome, attemptSha, dirs });
+      blockOutOfBounds(`out-of-bounds:${offending.join(";")}`, { outcome, attemptSha, dirs }, multiDirs[0]!.key);
       return true;
     }
   }

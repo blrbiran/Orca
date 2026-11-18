@@ -29,6 +29,22 @@ describe("run failure diagnosis", () => {
   });
 });
 
+// Off-plan writes #346 W4 (Task 5 fix round 1, controller ruling, Orca session 4389b15f, 2026-11-18): a stop on a
+// parallel sibling's claim names that task in the command, so it can be copied.
+describe("parallel-claim diagnosis", () => {
+  afterEach(async () => { await i18n.changeLanguage("en"); });
+  const claimed = run({ runId: "run-p", state: "blocked", outcome: "blocked_waiting_human", stopReason: "denylist match: b", diagnosis: { phase: "work", step: null, cause: "parallel-claim", siblings: ["b", "c"], attempt: 1 } });
+
+  it("fills the first sibling into the retry command, in English and Chinese", async () => {
+    const html = renderToStaticMarkup(<RunReason run={claimed} />);
+    expect(html).toContain("The run wrote a file another task of this group is changing at the same time");
+    // mutation: the sibling is not passed to the next-step text -> `--after ` with nothing (or {{task}}), red
+    expect(html).toContain("Orca retries it after that task lands (orca task retry --after b)");
+    await i18n.changeLanguage("zh");
+    expect(renderToStaticMarkup(<RunReason run={claimed} />)).toContain("Orca 会在那个任务合入后重试它（orca task retry --after b）");
+  });
+});
+
 // Failure-cause spec 2026-10-21 §5: ccloop's typed cause is worded with what to do next, in the reader's language, before
 // the diagnosis; a cause this panel does not know reads as unknown; automatic retries are counted. Texts written out here.
 describe("run failure cause (failure-cause spec §5)", () => {

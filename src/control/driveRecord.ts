@@ -183,6 +183,10 @@ export const driveRecordSchema = z.object({
   // in every drive record written before it existed; the v9 store keeps an older Orca from reading one.
   stopReason: z.string().min(1).optional(),
   pathPolicyMisses: pathPolicyMissesSchema.optional(),
+  // Off-plan writes W4 (#346, Task 5 fix round 1): the parallel sibling's claim the run was stopped on, classified once
+  // when the block was recorded (parallelClaims.ts parallelClaimOf), so a later change to the task's frozen siblings does
+  // not rewrite why this run stopped. Absent when the stop is on no sibling's claim and in every older drive record.
+  parallelClaim: z.object({ path: z.string().min(1), repoKey: z.string().min(1).nullable(), siblingIds: z.array(idSchema).min(1) }).strict().optional(),
   // Failure-cause spec 2026-10-21 §3 and ccloop priorFailures spec §3: ccloop's run-level cause and the terminal's last
   // recorded rejection, stored with `stopReason` when the run blocks on a terminal other than `succeeded`. Optional: absent
   // when ccloop stated none (an older ccloop, or a run with no rejection) and in every drive record written before them.

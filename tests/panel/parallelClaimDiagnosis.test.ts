@@ -10,10 +10,9 @@ import { describe, expect, it } from "vitest";
 import type { z } from "zod";
 import type { SiblingClaims } from "../../src/control/parallelClaims.js";
 import type { ControlStore } from "../../src/control/store.js";
-import { parallelClaimOf, readRunDiagnosis } from "../../src/panel/runDiagnosis.js";
+import { parallelClaimOf } from "../../src/control/parallelClaims.js";
+import { readRunDiagnosis } from "../../src/panel/runDiagnosis.js";
 import type { taskContractSchema } from "../../src/scheduler/planFile.js";
-import { driverHarness } from "../control/fixtures/driverHarness.js";
-import { profileSnapshot, webFixture } from "../control/fixtures/web.js";
 
 type TaskContract = z.infer<typeof taskContractSchema>;
 
@@ -80,48 +79,28 @@ describe("parallelClaimOf: Orca's harvest bound at collect", () => {
 const LADEN = { groupId: "g", workItemId: "a", taskId: "a", runId: "r1", generation: 1, graphVersion: 1, targetVersion: 1, executionId: null,
   phase: "work" as const, progress: null, providerAttemptOrdinal: 1, failureCode: null };
 const run = (drive: Record<string, unknown>, extra: Record<string, unknown> = {}) => ({ ...LADEN, ...extra, drive });
-const STOPPED = { blockedAt: "C", blockedReason: "terminal:blocked_waiting_human" };
+const STOPPED = { blockedAt: "C", blockedReason: "terminal:blocked_waiting_human", stopReason: "denylist match: b" };
+const CLAIM = { path: "b", repoKey: null, siblingIds: ["b"] };
 
-describe("readRunDiagnosis: a stop on a frozen sibling claim is parallel-claim", { timeout: 60_000 }, () => {
-  it("v4: ccloop's denylist stop and Orca's out-of-bounds stop on b's claim name b; a protected path does not", async () => {
-    // a and b run in parallel: b's claim `b` is frozen into a's denylist; `.env` is a's own protected path.
-    const t = await driverHarness([{ taskId: "a", safetyPolicy: { denylistPaths: [".env"] } }, { taskId: "b" }]); try {
-      // mutation: readRunDiagnosis never sets parallel-claim (or drops `siblings`) -> red
-      expect(readRunDiagnosis(t.h.store, run({ ...STOPPED, stopReason: "denylist match: b" })))
-        .toEqual({ phase: "work", step: null, cause: "parallel-claim", siblings: ["b"], attempt: 1 });
-      // mutation: only stopReason is read (blockedReason's out-of-bounds form is not) -> unknown, red
-      expect(readRunDiagnosis(t.h.store, run({ blockedAt: "C", blockedReason: "out-of-bounds:b" })))
-        .toEqual({ phase: "work", step: null, cause: "parallel-claim", siblings: ["b"], attempt: 1 });
-      // A multi-directory run's form, keyed by its first directory (its primary).
-      // mutation: the run's drive.dirs[0].key is not passed -> `main:b` read as one primary path, unknown, red
-      expect(readRunDiagnosis(t.h.store, run({ blockedAt: "C", blockedReason: "out-of-bounds:main:b", dirs: [{ key: "main" }] })).siblings).toEqual(["b"]);
-      expect(readRunDiagnosis(t.h.store, run({ ...STOPPED, stopReason: "denylist match: .env" }))).toEqual({ phase: "work", step: null, cause: "unknown", attempt: 1 });
-      // A sibling's claim is the reason, so it wins over observed allowlist misses (a retry allowing them would stop again).
-      // mutation: path-policy is decided first -> path-policy, red
-      expect(readRunDiagnosis(t.h.store, run({ ...STOPPED, stopReason: "denylist match: b", pathPolicyMisses: [{ repoKey: null, path: "x" }] })).cause).toBe("parallel-claim");
-      // A cause already read from evidence stays.
-      // mutation: parallel-claim overrides any cause -> parallel-claim, red
-      expect(readRunDiagnosis(t.h.store, run({ ...STOPPED, stopReason: "denylist match: b" }, { failureCode: "usage-unsettled" })).cause).toBe("usage-unsettled");
-    } finally { await t.h.dispose(); }
+// Fix round 1 (controller ruling, Orca session 4389b15f, 2026-11-18): the claim is classified once, when the driver records
+// the block, and kept on the drive record (`drive.parallelClaim`); the view reads only that. These criteria replace this
+// task's first-round ones, which read the confirmed execution per view. `{}` is a store with no database: any read throws.
+describe("readRunDiagnosis reads the claim the driver stored, and nothing else", () => {
+  it("a stored claim is parallel-claim naming its siblings, with no store read", () => {
+    // mutation: readRunDiagnosis never sets parallel-claim (or drops `siblings`) -> red
+    expect(readRunDiagnosis({} as ControlStore, run({ ...STOPPED, parallelClaim: CLAIM })))
+      .toEqual({ phase: "work", step: null, cause: "parallel-claim", siblings: ["b"], attempt: 1 });
   });
 
-  it("v3: a denylist stop on the same path keeps today's cause (a v3 task has no frozen siblings)", async () => {
-    const t = await driverHarness([{ taskId: "a", safetyPolicy: { allowlistPaths: ["a"], denylistPaths: ["b"] } }, { taskId: "b" }]); try {
-      expect(readRunDiagnosis(t.h.store, run({ ...STOPPED, stopReason: "denylist match: b" }))).toEqual({ phase: "work", step: null, cause: "unknown", attempt: 1 });
-    } finally { await t.h.dispose(); }
+  it("a run blocked before the claim was stored keeps today's diagnosis (no backfill)", () => {
+    expect(readRunDiagnosis({} as ControlStore, run(STOPPED))).toEqual({ phase: "work", step: null, cause: "unknown", attempt: 1 });
   });
 
-  it("a group with no confirmed execution answers unknown, never throws", async () => {
-    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }, { taskId: "b" }]); try {
-      // mutation: the confirmed-execution read is not guarded -> throws group-state-invalid, red
-      expect(readRunDiagnosis(h.store, run({ ...STOPPED, stopReason: "denylist match: b" })).cause).toBe("unknown");
-    } finally { await h.dispose(); }
-  });
-
-  it("a stop of no claim-bearing shape reads no confirmed execution", () => {
-    // `{}` has no database: any read throws a TypeError, which the guard does not swallow.
-    // mutation: the read is not gated on the stop's shape -> TypeError, red
-    expect(readRunDiagnosis({} as ControlStore, run({ ...STOPPED, stopReason: "allowlist miss: b" })).cause).toBe("unknown");
-    expect(readRunDiagnosis({} as ControlStore, run({ ...STOPPED, stopReason: "denylist match: b" }, { taskId: null })).cause).toBe("unknown");
+  it("the claim wins over observed allowlist misses; an evidence-backed cause stays", () => {
+    // A sibling's claim is the reason, so a retry allowing the misses would stop again.
+    // mutation: path-policy is decided first -> path-policy, red
+    expect(readRunDiagnosis({} as ControlStore, run({ ...STOPPED, parallelClaim: CLAIM, pathPolicyMisses: [{ repoKey: null, path: "x" }] })).cause).toBe("parallel-claim");
+    // mutation: parallel-claim overrides any cause -> parallel-claim, red
+    expect(readRunDiagnosis({} as ControlStore, run({ ...STOPPED, parallelClaim: CLAIM }, { failureCode: "usage-unsettled" })).cause).toBe("usage-unsettled");
   });
 });

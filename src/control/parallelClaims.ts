@@ -1,6 +1,7 @@
 import { posix } from "node:path";
 import type { z } from "zod";
 import { intersect } from "../scheduler/pathTrie.js";
+import { denylistMatches } from "./harvestBound.js";
 import type { taskContractSchema } from "../scheduler/planFile.js";
 import { normalizeClaim, writeSetOf, type ClaimedPath } from "../scheduler/writeSet.js";
 
@@ -135,4 +136,53 @@ function declaredClaims(byDirectory: Map<Directory, ClaimedPath[]>, receiverKeys
     for (const claim of claims) unique.set(`${repoKey ?? ""}\0${claim.declared}`, { repoKey, path: claim.declared });
   }
   return [...unique.values()].sort((a, b) => compareText(a.repoKey ?? "", b.repoKey ?? "") || compareText(a.path, b.path));
+}
+
+/** A stop on a parallel sibling's claim: the path, its repository (receiver-relative, as the claims are), the siblings. */
+export interface ParallelClaim { path: string; repoKey: string | null; siblingIds: string[] }
+
+export const DENYLIST_STOP = "denylist match: ";
+const OUT_OF_BOUNDS_STOP = "out-of-bounds:";
+
+/**
+ * Off-plan writes W4 (#346, plan Task 5; moved here from src/panel/runDiagnosis.ts in fix round 1, so the driver that
+ * records the block classifies it without importing the panel): the path a v4 run was stopped on for writing a parallel sibling's frozen claim,
+ * and the siblings whose claim it is -- matched with ccloop's denylist rule (exact, `<dir>/**` by prefix, `**`), in the
+ * repository the stop names. `null` when the stop is of neither shape below, or names only paths no sibling claims (a
+ * protected path: that stop keeps its own diagnosis).
+ *
+ * The two stops are read so:
+ * - ccloop's gate, `denylist match: <path>`, or `denylist match: <key>:<path>` for an extra repository (ccloop's runLoop
+ *   prefixes the extra's key). The key is relative to the receiving task (as `siblings`' claims are), so it is read as a
+ *   key only when it is one of `contract`'s `additionalRepos[].key`; otherwise the whole is a primary path that holds `:`.
+ * - Orca's harvest bound at collect (executionDriver), `out-of-bounds:<paths>` for one directory and, in a multi-directory
+ *   run, `out-of-bounds:<key>:<paths>;<key>:<paths>...` keyed by the run's `drive.dirs[].key`. `primaryDirKey` is that run's
+ *   first directory's key (its primary, which the receiver keys `null`); it is given exactly for a multi-directory run.
+ *   A segment keyed by neither it nor an extra key of `contract`'s is skipped. Paths are joined by `,` and segments by `;`
+ *   as the producer joins them; a path that itself holds `,` (or, multi-directory, `;`) is misread as several, and a
+ *   piece that matches no claim is simply not a parallel claim.
+ * Where several paths qualify, the first in the stop's order answers.
+ */
+export function parallelClaimOf(stopReason: string | undefined, contract: TaskContract, siblings: readonly SiblingClaims[], primaryDirKey?: string): ParallelClaim | null {
+  const extraKeys = new Set((contract.context.additionalRepos ?? []).map(repo => repo.key));
+  let candidates: Array<{ repoKey: string | null; path: string }>;
+  if (stopReason?.startsWith(DENYLIST_STOP) === true) {
+    const named = stopReason.slice(DENYLIST_STOP.length), colon = named.indexOf(":");
+    const key = colon < 0 ? null : named.slice(0, colon);
+    candidates = [key !== null && extraKeys.has(key) ? { repoKey: key, path: named.slice(colon + 1) } : { repoKey: null, path: named }];
+  } else if (stopReason?.startsWith(OUT_OF_BOUNDS_STOP) === true) {
+    const listed = stopReason.slice(OUT_OF_BOUNDS_STOP.length);
+    candidates = primaryDirKey === undefined ? listed.split(",").map(path => ({ repoKey: null, path }))
+      : listed.split(";").flatMap(segment => {
+        const colon = segment.indexOf(":"), key = segment.slice(0, colon);
+        const repoKey = colon < 0 ? undefined : key === primaryDirKey ? null : extraKeys.has(key) ? key : undefined;
+        return repoKey === undefined ? [] : segment.slice(colon + 1).split(",").map(path => ({ repoKey, path }));
+      });
+  } else return null;
+  for (const candidate of candidates) {
+    const siblingIds = siblings.filter(sibling => sibling.claims.some(claim => claim.repoKey === candidate.repoKey && denylistMatches(claim.path, candidate.path)))
+      .map(sibling => sibling.siblingId);
+    if (siblingIds.length > 0) return { ...candidate, siblingIds };
+  }
+  return null;
 }

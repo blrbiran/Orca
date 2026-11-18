@@ -48,7 +48,8 @@ export function RunReason(props: { run: RunViewV1; ladderSkipped?: LadderSkipRea
   const diagnosis = props.run.diagnosis ?? { phase: props.run.phase, step: null, cause: "unknown" as const, attempt: props.run.providerAttemptOrdinal };
   const phase = t(`control.diagnosis.phase.${diagnosis.phase}`);
   const cause = t(`control.diagnosis.cause.${diagnosis.cause}`);
-  const next = t(`control.diagnosis.next.${diagnosis.cause}`);
+  // Off-plan writes #346 W4: a parallel-claim stop names the first sibling in its retry command, so it can be copied.
+  const next = t(`control.diagnosis.next.${diagnosis.cause}`, { task: diagnosis.siblings?.[0] ?? "" });
   // Tester #235 (follow-up K): ccloop's repeated-failure stop ends `exhausted` while attempts remain; it is not a budget running out.
   const text = raw === null ? null : raw === REPEATED_FAILURE_STOP ? t("control.repeatedFailureStop") : explainRunReason(reasonCode(raw));
   // ccloop's typed cause, when it stated one, with what to do next (en/zh); the raw reason stays beside it.
