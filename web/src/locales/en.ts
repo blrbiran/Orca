@@ -2872,7 +2872,7 @@ export const enErrors: Record<string, string> = {
   "login-required": "Log in to this panel first.",
   "loop-plan-invalid": "The loop plan's input is not valid: {{detail}}",
   "no-op-command": "This command would change nothing.",
-  "requirement-already-accepted": "A split draft of this requirement was accepted: change it with feedback on the group or a correction, not by revising a round.",
+  "requirement-already-accepted": "A split draft of this requirement was accepted, so its rounds and drafts no longer change. To change the plan before confirm, save the accepted draft to the plan library, edit it there, import it as a new group and archive this one; for a folder or multi-directory project, open a new requirement and archive this group.",
   "requirement-limit-too-low": "This limit cannot pay for even one clarification call. Raise each dimension named here to at least the value shown (for example tokens:1000000), or leave the limit empty.",
   "flow-dir-unregistered": "A flow runs only on the folder of a registered folder project: add the folder to the projects file with kind \"dir\", then start the flow there.",
   "flow-child-managed": "This group is a step of a flow run, settled by the run itself: retry the step from the run's page, not the group.",

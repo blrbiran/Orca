@@ -478,8 +478,12 @@ requirement-already-accepted and names the plan-library route (#379)`.
    module in the other's `targetPaths` ran the pair one after the other (#268's implicit edge); `apply-parallel` drops
    only declared edges and `narrow-path` only narrows a claim, so the only remedy was another split call. CLI:
    `orca requirement drop-path <group> --task <t> --path <p>`. No Web control (its sibling `narrow-path` has none).
-   Until the implied-paths half of #353(c) is on the same branch, a path a task's success condition names is added back
-   by the re-evaluation (spec 2026-11-16), so dropping such a path changes nothing.
+   Since #353(c) (on `main` before this branch was rebased) a path a task's success condition names is a hint only, never
+   added by the re-evaluation, so the tester's split -- whose success conditions name the sibling file to say it is not
+   imported -- runs the pair together after the two drops. A path the task's **goal** names that the base commit lacks
+   and no task claims is still added back (#345, `applyGoalPaths`); an edit the re-validation so undoes (the edited
+   draft's hash equals the reviewed draft's) is refused `no-op-command` with detail `draft-edit-no-change` and writes no
+   draft (#379-381 review).
 2. **No reopen of an accepted split (#379); the refusal says so.** §9.1 makes accept one transaction that freezes the
    document, queues its export (the driver commits it into the target repository), imports the tasks and queues their
    estimate (a model call, with `estimate: "preflight"`). Reopening would have to undo a commit outside the store and an
@@ -488,5 +492,8 @@ requirement-already-accepted and names the plan-library route (#379)`.
    `requirement-already-accepted` with detail `draft-edits-closed:<acceptedDraftNo>` (it was `group-state-invalid:
    not-clarifying`, which named no way forward). The CLI rows of those edits say that draft edits are closed and give,
    as `next`, the supported way to change the plan before confirm: `orca plan save --requirement <g> --draft <n>`,
-   `orca plan export`, `orca plan import … --entry … --as-person`, `orca group import --library <entry>`, then
-   `orca group archive <g>`.
+   `orca plan export`, editing the file's `tasks[].dependsOn` / `targetPaths`, `orca plan import … --entry … --as-person`,
+   `orca group import --library <entry>`, then `orca group archive <g>`. A folder or multi-directory project's plan cannot
+   take that route (plan import refuses it: `dir-project-plan-import-unsupported`, `multi-dir-plan-import-unsupported`), so
+   for a requirement on one the `next` lines are a new `orca requirement open … --project <key>` and `orca group archive
+   <g>` (#379-381 review).

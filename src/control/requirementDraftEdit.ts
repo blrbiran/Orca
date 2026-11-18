@@ -146,6 +146,10 @@ export async function applyRequirementDraftEdit(deps: RequirementDraftEditDeps, 
       const evalDeps = { store: deps.store, resolveRepository: multi ? deps.resolveRepository! : () => stored.targetRepo, ccloopBin: stored.ccloopBin, roots: { runsRoot: stored.runsDir } };
       evaluation = await evaluateSplit(evalDeps as unknown as SingleCallPrepareDeps, judgedRun(deps.store, id, draft.draftNo), edited.output);
       if (!evaluation.ok) invalid(`draft-edit-invalid:${evaluation.reasons.join("; ")}`);
+      // #379-381 review: an edit the re-validation undoes (a dropped path the task's goal names, which the split adds back
+      // as a new file -- applyGoalPaths) leaves the reviewed draft's hash; it is refused as changing nothing rather than
+      // written as a next draft that is the same split.
+      if (evaluation.draftHash === command.payload.draftHash) throw new ControlError("no-op-command", "draft-edit-no-change");
     } catch (error) {
       return applyWebCommand<Result>(deps.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
     }

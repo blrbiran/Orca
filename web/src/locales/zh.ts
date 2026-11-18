@@ -2750,7 +2750,7 @@ export const zhErrors: Record<string, string> = {
   "login-required": "请先登录这个面板。",
   "loop-plan-invalid": "做法的输入不合法：{{message}}",
   "no-op-command": "这条命令不会改变任何东西。",
-  "requirement-already-accepted": "这条需求的拆分草稿已被接受：请对任务组提反馈或记一条更正，而不是修改某一轮。",
+  "requirement-already-accepted": "这条需求的拆分草稿已被接受，它的各轮与草稿不再改变。要在确认前改计划：把接受的草稿存进计划库，在那里修改，导入成新的任务组，再归档这个组；文件夹或多目录项目则新开一条需求，再归档这个组。",
   "requirement-limit-too-low": "这个上限连一次澄清调用都付不起。请把这里列出的每一项提高到所示的最小值（例如 tokens:1000000），或者留空不设上限。",
   "flow-dir-unregistered": "流程只能在已登记的文件夹项目上运行：先把这个文件夹以 kind \"dir\" 加进项目文件，再在那里启动流程。",
   "flow-child-managed": "这个任务组是某次流程运行里的一步，由流程自己收尾：请在流程运行页重试这一步，而不是重试这个任务组。",

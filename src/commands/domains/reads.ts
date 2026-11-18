@@ -124,7 +124,7 @@ async function groupOfRun(context: WriteContext, runId: string): Promise<string>
  * (controlViews.ts readRequirementView) are spelled out after the body; --json is the body as served.
  */
 function requirementShow(body: unknown): string {
-  const drafts = (field(body, "drafts") ?? []) as Array<{ draftNo: number; layers: string[][] | null; parallelCandidates?: Array<{ before: string; after: string }>; impliedPathsOutsideTargets?: ImpliedPathOutsideTargets[]; goalPathsOutsideTargets?: GoalPathOutsideTargets[]; impliedPathsAdded?: ImpliedPathAddition[] | null; overlapSerialized?: Array<{ a: string; b: string; paths: string[] }>; output?: { requirementConflicts?: Array<{ criterion: string; feedback?: string; why: string }> } | null }>;
+  const drafts = (field(body, "drafts") ?? []) as Array<{ draftNo: number; layers: string[][] | null; parallelCandidates?: Array<{ before: string; after: string }>; impliedPathsOutsideTargets?: ImpliedPathOutsideTargets[]; goalPathsOutsideTargets?: GoalPathOutsideTargets[]; impliedPathsAdded?: ImpliedPathAddition[] | null; overlapSerialized?: Array<{ a: string; b: string; paths: string[] }>; implicitEdges?: Array<{ from: string; to: string; conflicts: Array<{ a: string; b: string }> }> | null; output?: { tasks?: Array<object>; requirementConflicts?: Array<{ criterion: string; feedback?: string; why: string }> } | null }>;
   const lines = drafts.flatMap((draft) => [
     ...(draft.layers === null ? [] : [`draft ${draft.draftNo} layers: ${draft.layers.map((layer) => `[${layer.join(", ")}]`).join(" -> ")}`]),
     ...((draft.parallelCandidates ?? []).length === 0 ? [] : [`draft ${draft.draftNo} could run in parallel (a dependsOn edge is all that orders each pair; no file the earlier writes is written, checked or mentioned by the later; orca requirement apply-parallel drops the edges, or send feedback): ${draft.parallelCandidates!.map((pair) => `${pair.before} ∥ ${pair.after}`).join(", ")}`]),
@@ -135,6 +135,12 @@ function requirementShow(body: unknown): string {
     ...(draft.goalPathsOutsideTargets ?? []).map((entry) => `draft ${draft.draftNo} ${goalPathLine(entry)} (if ${entry.taskId} must change it, send feedback to give it the file)`),
     // Tester #335: a pair no dependency orders, serialised only by an overlapping broad claim; narrow-path frees it.
     ...(draft.overlapSerialized ?? []).map((entry) => `draft ${draft.draftNo} ${entry.a} and ${entry.b} run one after the other only because their target paths overlap (${entry.paths.join(", ")}); orca requirement narrow-path <group> --task <task> --path <path> --to <file> lets them run together`),
+    // #379-381 review (M3): a pair the write-set rule orders because both tasks list one file (an implicit edge, #268);
+    // drop-path frees it when one of them only reads the file. A multi split's claim is `<dir>:<path>`.
+    ...(draft.implicitEdges ?? []).flatMap((edge) => [...new Set(edge.conflicts.filter((c) => c.a === c.b && !c.a.endsWith("**")).map((c) => c.a))].map((claim) => {
+      const path = (draft.output?.tasks ?? []).some((t) => "writes" in t) ? claim.slice(claim.indexOf(":") + 1) : claim;
+      return `draft ${draft.draftNo} ${edge.from} and ${edge.to} run one after the other because both list ${claim} as a target path; if one of them only reads it, orca requirement drop-path <group> --task <${edge.from}|${edge.to}> --path ${path} lets them run together`;
+    })),
     ...(draft.impliedPathsAdded ?? []).map((entry) => `draft ${draft.draftNo} ${impliedPathAddedLine(entry)}`),
     // #351 addendum: where the split itself reports its draft does not meet the requirement as written (not checked by code).
     ...(draft.output?.requirementConflicts ?? []).map((entry) => `draft ${draft.draftNo} requirement-conflict: ${entry.criterion} -- ${entry.why}${entry.feedback === undefined ? "" : ` (feedback: "${entry.feedback}")`}`),

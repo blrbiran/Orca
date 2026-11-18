@@ -304,11 +304,63 @@ describe("a person drops a stray target path from a draft task (#380)", () => {
   });
 });
 
+// #379-381 review (I1 c): the tester's own #380 shape -- each task's success condition names the sibling's file only to say
+// it is not imported. Since #353 (c) such a path is a hint, never added by the split, so after the two drops the pair runs
+// together and stays together.
+const HEALTH_380 = { tasks: [
+  task("health-model", ["src/health/model.js", "test/health-model.test.js", "src/health/report.js"], [], { successCondition: "the model test passes and src/health/model.js does not import src/health/report.js." }),
+  task("health-report", ["src/health/report.js", "test/health-report.test.js", "src/health/model.js"], [], { successCondition: "the report test passes and src/health/report.js does not import src/health/model.js." }),
+], notes: "" };
+
+describe("drop-path on the tester's #380 split, whose success conditions name the sibling file (#379-381 review)", () => {
+  it("two drops make the pair parallel; the named sibling file stays a hint and is not added back", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: HEALTH_380 }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "awaiting-review", layers: [["health-model"], ["health-report"]] });
+      expect(await edit(x, 1, { kind: "drop-target-path", taskId: "health-model", path: "src/health/report.js" })).toMatchObject({ result: { nextDraftNo: 2 } });
+      expect(await edit(x, 2, { kind: "drop-target-path", taskId: "health-report", path: "src/health/model.js" })).toMatchObject({ result: { nextDraftNo: 3 } });
+      const third = readDraft(x.store, "r", 3);
+      // mutation: evaluateSplit adds a success condition's path again (impliedPathsOutsideTargets pushed into targetPaths)
+      // -> the drop is undone, serial (or refused as no change), red
+      expect(third).toMatchObject({ state: "awaiting-review", reasons: [], layers: [["health-model", "health-report"]], implicitEdges: [], impliedPathsAdded: null });
+      expect(targetsOf(third.output, "health-model")).toEqual(["src/health/model.js", "test/health-model.test.js"]);
+      expect(targetsOf(third.output, "health-report")).toEqual(["src/health/report.js", "test/health-report.test.js"]);
+      // The sibling file each condition names is listed as a hint only.
+      expect(readRequirementView(x.store, "e", "r").drafts.find((d) => d.draftNo === 3)).toMatchObject({ impliedPathsOutsideTargets: [
+        { taskId: "health-model", path: "src/health/report.js", writers: ["health-report"] }, { taskId: "health-report", path: "src/health/model.js", writers: ["health-model"] },
+      ] });
+    } finally { await x.dispose(); }
+  });
+});
+
+// #379-381 review (I1 b): an edit the re-validation undoes wrote a next draft identical to the reviewed one -- a silent
+// no-op the person read as done. A path the task's goal names that the base commit lacks (src/fresh.ts; the harness has
+// README.md and src/a.ts) is added back by the split's goal step (applyGoalPaths), so dropping it changes nothing.
+describe("an edit that changes nothing once re-validated is refused (#379-381 review)", () => {
+  it("drop-path of a goal-named new file is refused no-op-command:draft-edit-no-change, writing no draft", async () => {
+    const split = { tasks: [task("make", ["src/a.ts", "src/fresh.ts"], [], { goal: "Create src/fresh.ts and use it from src/a.ts." }), task("docs", ["README.md"], [])], notes: "" };
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: split }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
+      const first = readDraft(x.store, "r", 1);
+      expect(first).toMatchObject({ state: "awaiting-review", impliedPathsAdded: null });
+      // mutation: drop the hash comparison in applyRequirementDraftEdit -> draft 2 is written, the same split, red
+      expect(await edit(x, 1, { kind: "drop-target-path", taskId: "make", path: "src/fresh.ts" }))
+        .toMatchObject({ error: { code: "no-op-command", message: "no-op-command:draft-edit-no-change" } });
+      expect(readDraft(x.store, "r", 1)).toEqual(first);
+      expect(() => readDraft(x.store, "r", 2)).toThrow();
+      // An edit that does change the split still goes through.
+      expect(await edit(x, 1, { kind: "drop-target-path", taskId: "make", path: "src/a.ts" })).toMatchObject({ result: { kind: "requirement-draft-edited", nextDraftNo: 2 } });
+    } finally { await x.dispose(); }
+  });
+});
+
 // Tester #379: after accept, every draft edit was refused as `group-state-invalid:not-clarifying`, which read as "wrong
 // state, try later" -- while no later state takes a draft edit. Reopening an accepted split is not built: accept froze
 // and queued the document's export (a commit in the target repository), imported the tasks and queued their estimate (a
-// model call), so a reopen would have to undo work outside the store (spec 2026-11-18 split-feedback-conflicts,
-// Correction 2026-11-19). The refusal now names that the split was accepted and which draft.
+// model call), so a reopen would have to undo work outside the store (spec 2026-10-02 requirement-to-split, Correction
+// "tester #379, #380", item 2). The refusal now names that the split was accepted and which draft.
 describe("a draft edit after the split was accepted (#379)", () => {
   it("feedback and every requirement-draft-edit are refused as requirement-already-accepted, naming the accepted draft, changing nothing", async () => {
     const x = await requirementHarness({ answers: [{ purpose: "split", output: HEALTH }], startAt: "split" });

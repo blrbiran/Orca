@@ -126,19 +126,62 @@ async function latestDraft(c: WriteContext): Promise<RequirementView["drafts"][n
  * Tester #379: a draft edit on a group whose split was accepted is refused (`requirement-already-accepted:
  * draft-edits-closed:<n>`); no state takes one again. The supported way to change the plan before confirm is the accepted
  * draft through the plan library into a new group, then archiving this one -- named as the refusal's next commands.
+ * #379-381 review (I2): a folder or multi-directory project's plan cannot take that route (planImport.ts refuses its
+ * import: dir-project-plan-import-unsupported, multi-dir-plan-import-unsupported), so for one the next commands are a new
+ * requirement and archiving this group. The project is the one the requirement names; unknown, the plan-library route.
  */
 const acceptedDraftOf = (error: { code: string; message: string }): string | null =>
   error.code === "requirement-already-accepted" ? /(^|:)draft-edits-closed:(\d+)$/.exec(error.message)?.[2] ?? null : null;
+type GroupProject = { kind: "repo" | "dir" | "multi"; projectKey: string | null };
+const projectsOfGroups = new WeakMap<WriteContext, Promise<GroupProject>>();
+function projectOfGroup(c: WriteContext): Promise<GroupProject> {
+  let found = projectsOfGroups.get(c);
+  if (found === undefined) {
+    found = (async (): Promise<GroupProject> => {
+      try {
+        const repoId = (await requirement(c) as { requirement?: { repoId?: unknown } }).requirement?.repoId;
+        const rows = (await c.read("projects") as { projects: Array<{ projectKey: string; controlRepoId: string | null; kind?: "dir" | "multi" }> }).projects;
+        const row = rows.find((candidate) => candidate.controlRepoId !== null && candidate.controlRepoId === repoId);
+        return { kind: row?.kind ?? "repo", projectKey: row?.projectKey ?? null };
+      } catch { return { kind: "repo", projectKey: null }; }
+    })();
+    projectsOfGroups.set(c, found);
+  }
+  return found;
+}
+/** #379-381 review (I1 b): an edit the re-validation undoes is refused as changing nothing (requirementDraftEdit.ts). */
+const noChangeHint = "nothing changed: once re-validated, the edited split is the draft you reviewed (a file the task's goal names as new is added back to that task); orca requirement feedback asks for a different split";
 const acceptedSplit = {
-  hint: (error: { code: string; message: string }): string | undefined => {
+  hint: async (error: { code: string; message: string }, c?: WriteContext): Promise<string | undefined> => {
+    if (error.code === "no-op-command" && error.message === "no-op-command:draft-edit-no-change") return noChangeHint;
     const draftNo = acceptedDraftOf(error);
-    return draftNo === null ? undefined : `the split was accepted (draft ${draftNo}), so draft edits are closed; to change the plan before confirm, save the accepted draft to the plan library, edit it there, import it as a new group and archive this one (the next lines). orca task set-loop changes one task's target paths and checks, not what it depends on`;
+    if (draftNo === null) return undefined;
+    const closed = `the split was accepted (draft ${draftNo}), so draft edits are closed`;
+    const project = c === undefined ? { kind: "repo" as const } : await projectOfGroup(c);
+    if (project.kind !== "repo") {
+      return `${closed}; a ${project.kind === "dir" ? "folder" : "multi-directory"} project's plan cannot go through the plan library (plan import refuses it), so to change the plan before confirm, open a new requirement with the change and archive this group (the next lines)`;
+    }
+    return `${closed}; to change the plan before confirm, save the accepted draft to the plan library, edit its tasks there, import it as a new group and archive this one (the next lines). orca task set-loop changes one task's target paths and checks, not what it depends on`;
   },
-  next: (error: { code: string; message: string }, c: WriteContext): string[] | undefined => {
+  next: async (error: { code: string; message: string }, c: WriteContext): Promise<string[] | undefined> => {
     const draftNo = acceptedDraftOf(error);
-    return draftNo === null ? undefined : [`orca plan save --requirement ${group(c)} --draft ${draftNo}`, "orca plan export <entry> --out <file>",
-      "orca plan import <file> --entry <entry> --as-person", "orca group import --library <entry>", `orca group archive ${group(c)}`];
+    if (draftNo === null) return undefined;
+    const project = await projectOfGroup(c);
+    if (project.kind !== "repo") return [`orca requirement open --idea "<the requirement, changed>" --project ${project.projectKey ?? "<project>"}`, `orca group archive ${group(c)}`];
+    return [`orca plan save --requirement ${group(c)} --draft ${draftNo}`, "orca plan export <entry> --out <file>",
+      "edit <file>: tasks[].dependsOn / targetPaths", "orca plan import <file> --entry <entry> --as-person", "orca group import --library <entry>", `orca group archive ${group(c)}`];
   },
+};
+/**
+ * #379-381 review (M3): apply-parallel drops only declared edges; a pair ordered because both tasks list the same file
+ * (an implicit edge; requirement show names it) is freed by dropping the file from the task that only reads it.
+ */
+const applyParallelRefusals = {
+  ...acceptedSplit,
+  hint: async (error: { code: string; message: string }, c?: WriteContext): Promise<string | undefined> =>
+    error.message === "group-state-invalid:draft-edit-no-parallel-candidates"
+      ? `no declared dependsOn edge is a parallel candidate; two tasks that run one after the other because both list the same file as a target path (requirement show names them) run together after orca requirement drop-path ${c === undefined ? "<group>" : group(c)} --task <task> --path <file> on the one that only reads it`
+      : await acceptedSplit.hint(error, c),
 };
 const decision = (value: string, flag: string): { id: string; accept: boolean } => {
   const at = value.lastIndexOf("=");
@@ -447,7 +490,7 @@ export const WORK_ROWS: CommandDef[] = [
   verb({ domain: "requirement", action: "apply-parallel", summary: "drop the dependsOn edges the current draft lists as parallel candidates; the result is the next draft", verb: "requirement-draft-edit", positionals: [GROUP],
     route: (c) => `groups/${group(c)}/requirement/edit`,
     payload: async (c) => { const d = await latestDraft(c); if (d.draftHash === null) throw missing(c, await requirement(c), "requirement-no-draft", `draft ${d.draftNo} has no output yet`); return { draftNo: d.draftNo, draftHash: d.draftHash, edit: { kind: "apply-parallel-candidates" } }; },
-    examples: ["orca requirement show g1   # lists 'could run in parallel'", "orca requirement apply-parallel g1"], ...acceptedSplit }),
+    examples: ["orca requirement show g1   # lists 'could run in parallel'", "orca requirement apply-parallel g1"], ...applyParallelRefusals }),
   verb({ domain: "requirement", action: "add-implied-path", summary: "add a path the current draft lists as implied to that task's target paths; the result is the next draft", verb: "requirement-draft-edit", positionals: [GROUP],
     flags: [{ name: "task", type: "string", required: true, summary: "the task whose success condition names the path" }, { name: "path", type: "string", required: true, summary: "the path, as requirement show lists it" }],
     route: (c) => `groups/${group(c)}/requirement/edit`,
