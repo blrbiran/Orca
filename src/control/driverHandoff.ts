@@ -409,8 +409,11 @@ async function settleAbandonedUnderStop(deps: ExecutionDriverDeps, run: DriverRu
     const current = readDriverRun(store, run.runId);
     const request = abandonOf(current);
     if (current.state !== run.state || current.drive === undefined || request === null) return false;
-    // Nothing is left for stepCleanupFailed: the evidence is archived and the workspace went above.
-    current.drive = { ...current.drive, outcome: current.drive.outcome ?? "stopped", blockedAt: "C", blockedReason: RUN_ABANDONED, cleanedUp: true, cleanupError };
+    // Change-sized runs spec 2026-11-19 §5.6 (P0 review I2): the evidence is archived and the workspace went above, but
+    // <sourceDir>/repo is still here. `cleanedUp: false` hands the rest to stepCleanupFailed on the next round: it skips
+    // the archive a complete row already holds, repeats the (idempotent) workspace cleanup, removes the copy, and only
+    // then writes `cleanedUp: true` -- so a crash anywhere in between is finished by a later round.
+    current.drive = { ...current.drive, outcome: current.drive.outcome ?? "stopped", blockedAt: "C", blockedReason: RUN_ABANDONED, cleanedUp: false, cleanupError };
     saveDriverRun(store, current);
     settleAbandonedRunInTransaction(store, current.groupId, run.runId, abandonSettlementOf(request));
     return true;

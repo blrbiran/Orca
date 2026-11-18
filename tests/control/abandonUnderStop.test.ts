@@ -5,9 +5,11 @@
 // for a handoff-unresolved run offered `run abandon` after the run was abandoned (finding 8). Controller's decision: abandon
 // wins -- the request closes `settled-unrecoverable` (`run-abandoned`) and the run settles as every abandoned run does.
 // Named mutations (each seen red in a clone, Rule 9) are written beside the assertion they turn red.
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { withCommandContext } from "../../src/control/commandClient.js";
-import { createExecutionDriver, readStartEnvelope, stepA1, stepA2 } from "../../src/control/executionDriver.js";
+import { createExecutionDriver, DriverCrash, readStartEnvelope, stepA1, stepA2 } from "../../src/control/executionDriver.js";
 import type { LiveCeilingWire } from "../../src/control/executionPort.js";
 import { readBudgetProposal, readGroup, readWork } from "../../src/control/queries.js";
 import { groupStopState, readHandoffRequest } from "../../src/control/stopIntent.js";
@@ -340,6 +342,10 @@ describe("an abandoned run ccloop answers with a handoff checkpoint (Correction 
       await t.until(driver, () => active(t, runId) === 0);
       // mutation: drop the abandoned settle from deliverAndCollect's checkpoint branch -> settled-recoverable / held, red
       expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+      // Ruling (2026-11-19 change-sized runs P0 review): the abandoned settle now writes `cleanedUp: false` and the next
+      // round's stepCleanupFailed removes the result copy, then writes `cleanedUp: true` (spec §5.6 Correction, review I2).
+      // Intent kept: the run ends cleaned up with outcome `stopped` and no checkpoint; it is judged once that round ran.
+      await t.until(driver, () => t.body(runId).drive.cleanedUp === true);
       // mutation: leave the drive outcome null -> red here (and task retry below would refuse outcome:none)
       expect([t.body(runId).drive.outcome, t.body(runId).drive.cleanedUp, t.body(runId).checkpointId]).toEqual(["stopped", true, null]);
       expect([requestBody(t, requestId!).state, requestBody(t, requestId!).failureCode]).toEqual(["settled-unrecoverable", "run-abandoned"]);
@@ -406,6 +412,64 @@ describe("an abandoned run ccloop answers with a handoff checkpoint (Correction 
       // mutation: drop the abandon refusal from settlementAdmission -> recovered: settled-recoverable, task held, red
       expect(settled).toMatchObject({ error: { code: "run-usage-not-settleable", message: "run-usage-not-settleable:abandoned" } });
       expect([t.body(runId).state, readWork(t.h.store, "g", "a").status]).toEqual(["settled-unrecoverable", "blocked"]);
+    } finally { await t.h.dispose(); }
+  });
+});
+
+/**
+ * Change-sized runs spec 2026-11-19 §5.6 (P0 review I2): the abandoned settle under a stop archived the run and removed its
+ * workspace, but wrote `cleanedUp: true` with <sourceDir>/repo still there, so nothing ever removed it. It now writes
+ * `cleanedUp: false`, and stepCleanupFailed finishes the run: no second archive (the row is complete), the copy removed,
+ * then `cleanedUp: true` -- resumable across a crash anywhere between.
+ */
+describe("an abandoned run settled under a stop loses its result copy (change-sized runs §5.6, P0 review I2)", { timeout: 240_000 }, () => {
+  const archiveCount = (t: T, runId: string): number => Number(t.h.store.db.prepare("SELECT count(*) AS n FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=?").get(runId)!.n);
+
+  // mutation I2: write `cleanedUp: true` in settleAbandonedUnderStop again -> stepCleanupFailed never runs, repo stays, red
+  it("after the next round the copy is gone and cleanedUp is true, with no second archive", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", modelVersion: "followup-g", sealedOwnerProof: true, behaviour: () => "stoppable" });
+    try {
+      const driver = t.driver();
+      const runId = await t.claim();
+      await t.until(driver, () => t.body(runId).state === "accepted");
+      abandon(t, runId);
+      await stop(t);
+      await t.until(driver, () => active(t, runId) === 0);
+      const repo = join(t.body(runId).drive.sourceDir, "repo");
+      expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+      // What the settle leaves: archived, workspace gone, the copy still here for stepCleanupFailed.
+      expect([t.body(runId).drive.cleanedUp, existsSync(t.body(runId).drive.workspacePath), existsSync(repo)]).toEqual([false, false, true]);
+      const archived = archiveCount(t, runId);
+      expect(archived).toBeGreaterThan(0);
+      await t.until(driver, () => t.body(runId).drive.cleanedUp === true);
+      expect(t.body(runId).drive).toMatchObject({ outcome: "stopped", cleanedUp: true, cleanupError: null });
+      expect(existsSync(repo)).toBe(false);
+      expect(existsSync(t.body(runId).drive.sourceDir)).toBe(true);
+      expect(archiveCount(t, runId)).toBe(archived);
+      expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+    } finally { await t.h.dispose(); }
+  });
+
+  // The crash leaves the copy removed and `cleanedUp: false`; the next driver skips the archive (the latest row is
+  // complete), finds nothing left to remove and writes `cleanedUp: true`. mutation: archive unconditionally in
+  // stepCleanupFailed -> the resumed round reads the removed copy (ENOENT), cleanupError set, red.
+  it("a crash between the removal and the cleanedUp write is finished by the next driver", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { tokenPolicy: "optional-v1", modelVersion: "followup-g", sealedOwnerProof: true, behaviour: () => "stoppable" });
+    try {
+      const crashing = createExecutionDriver({ ...t.deps, crash: (point: string) => { if (point === "cleanup-failed-after-result-copies") throw new DriverCrash(point as never); } });
+      const runId = await t.claim();
+      await t.until(crashing, () => t.body(runId).state === "accepted");
+      abandon(t, runId);
+      await stop(t);
+      await t.until(crashing, () => crashing.crashed !== null);
+      const repo = join(t.body(runId).drive.sourceDir, "repo");
+      expect(settledAbandoned(t, runId)).toEqual(ABANDONED);
+      expect([t.body(runId).drive.cleanedUp, existsSync(repo)]).toEqual([false, false]);
+      const archived = archiveCount(t, runId);
+      await crashing.stop();
+      await t.until(t.driver(), () => t.body(runId).drive.cleanedUp === true);
+      expect(t.body(runId).drive).toMatchObject({ cleanedUp: true, cleanupError: null });
+      expect(archiveCount(t, runId)).toBe(archived);
     } finally { await t.h.dispose(); }
   });
 });
