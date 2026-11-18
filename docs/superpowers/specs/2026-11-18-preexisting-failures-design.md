@@ -104,3 +104,153 @@ required check) at exactly this group's base commit, its result is shown on the 
 Exact activity body fields, en/zh strings, where the cache lives (a control-store table or a canonical record keyed by
 the triple), and which plan version carries the L2 line (with #346 landing v4 first, the line rides v4 if #346 is not
 yet released, otherwise v5).
+
+## Correction 1 (plan 2026-11-18)
+
+Written by a subagent of Orca session ca534c51 (2026-11-18), following commit `265cf1fd`. The text above is unchanged; this
+section records what the build decided and where it differs from or fills in the design. Sources: the SDD ledger
+`.superpowers/sdd/2026-11-18-preexisting-failures/progress.md` and the task 1-4 reports in the same directory.
+
+### 1. Build order and sources
+
+- **What:** the tasks were built 1 -> 3 -> 4 -> 2, not 1 -> 2 -> 3 -> 4. L4 reads the L3 table as its second source.
+  L2's problem row has two sources: `agent` (a reported decision) and `base-check` (a red L3 row).
+- **Why:** Task 2 needed #346's v4 plan contract, which was not on main yet; the human asked for independent work to run
+  in parallel. The branch was rebased onto #346 before Task 2.
+- **Cost / limit:** one rebase with a conflict in `executionDriver` step C, resolved by keeping #346's parallel-claim
+  classification and L3's `requestBaseCheck`. Task 3 therefore stores each red-at-base result durably (see item 3) so
+  Tasks 4 and 2 can read it.
+
+### 2. L1: clarify instruction version 4
+
+- **What:** `CLARIFY_PROMPT_HEAD` now says "instruction version 4" and "Which questions are the person's" carries the L1
+  rule (ask once how a failure already in the repository is handled, only when the requirement forbids changing existing
+  behaviour/contracts/documents AND requires a whole check to pass). `FEEDBACK_CLARIFY_INSTRUCTION`
+  (`flow/feedback/host.ts`) inherits the v4 head but not the L1 rule.
+- **Why:** the head is shared; the rule belongs only to the clarify round for a requirement.
+- **Cost / limit:** the feedback clarify says "version 4" without the rule (harmless, unpinned). The trailing "ask it only
+  when both ..." sentence is pinned only by the golden file. Constant names still say V3.
+
+### 3. L3: the cache
+
+- **What:** a control-store table `base_check_results` (schema migration 24 -> 25), primary key (repository id, base,
+  command); columns include `result` in `pending` / `red` / `green` / `unknown`, `tail`, `why`, asker group/task/run,
+  `requested_at`, `at`, `attempts`. Only a command in the failing task's confirmed required checks is run. Step C writes a
+  `pending` row for a work run that ended `required-check-failed` (not saved-result verifies, not recovery runs).
+- **Why:** a canonical record is content-addressed and cannot be keyed by the triple; `check_state` is strictly parsed and
+  would block on a foreign row; activity rows are not queryable by key. Only failures that settle after this change ask,
+  so earlier groups get nothing new.
+- **Cost / limit:** `attempts` was edited into the unreleased schema-25 DDL in place; a store migrated by the first
+  Task 3 commit would lack it (none is known). Multi-directory, dir and dir-flow groups get no row; archived groups ask
+  nothing.
+
+### 4. L3: ownership, retry and unknown results
+
+- **What:** the newest asker owns a `pending` row. `unknown` carries a `why`: one that starts `error:` is re-run when a
+  different run asks, up to 2 attempts; `timeout`, `setup-failed` and `not-runnable` stay cached. Exit 126/127 gives
+  `unknown` with `not-runnable` (not red). An answered red/green row is never re-run.
+- **Why:** an archived or stopped group's pending row must not block the triple for everyone; a transient git error must
+  not poison it for good.
+- **Cost / limit:** at most 2 extra base runs per triple; attribution on a pending row shows the latest asker.
+
+### 5. L3: where it runs, what bounds it, which setup
+
+- **What:** the driver pass `checkBases` runs after the landing watch, off the round (it starts a run and returns), one run
+  in flight per repository, each command bounded by the failing task's `executionPolicy.perAttemptTimeoutMs`; `stop()`
+  aborts it and waits for the worktree to be removed. It uses the failing task's own `setupCommands`, not the group's
+  union.
+- **Why:** a union may include setup that only works after another task landed; the settle lane must not be held.
+- **Cost / limit:** a one-line change to revert the setup choice. The tail shown is cut from the front, with an
+  omitted-bytes marker (4096 B for prior failures, 2048 B for live notes).
+
+### 6. L3: reaching a running attempt, and the second group
+
+- **What:** when a base result arrives red and the task has a live run, the evidence line is queued as a live note
+  (`by: "orca"`, id `orca-base-check-<runId>`). Later attempts get it through prior failures as the design says. No wait
+  at dispatch, no retry-rule change. A second group asking an already-red triple gets prior failures only, no live note.
+- **Why:** the spec forbids changing retry rules.
+- **Cost / limit:** the note arrives at the agent's next phase start, not at the attempt's start. If the next attempt is
+  prepared before the base run ends, that attempt is told nothing.
+
+### 7. L4: the brief and the base rule
+
+- **What:** `group brief` gains `knownRedAtBase` (absent when empty); the CLI prints the spec's line. The group's base is
+  the base its first work run recorded; before any run, a flow child's composition commit or a `done` stacked
+  prerequisite's accepted tip. The latter two are not checked against git. Facts come from other groups' recorded
+  acceptances on the same repository and from `base_check_results`; per (repository, base, command) the latest record
+  wins, so a later green cancels an earlier red. Timeouts, exit 126/127 and signals answer nothing. The brief route
+  spawns no process.
+- **Why:** the human's ruling forbids running a check before a start.
+- **Cost / limit:** the stacked prediction assumes the prerequisite's branch is still at its accepted tip. The brief's
+  groups read scans `groups.body` with `json_extract` (a prefilter bounds the rows read, not scanned). Delivered
+  acceptances and the group's own acceptance are not read as sources.
+
+### 8. L4: the confirm step
+
+- **What:** the design's premise that a base exists at confirm was false for a group that starts at its target's HEAD. A
+  separate route `GET /api/control/groups/:groupId/confirm-known-red` serves the confirm note. It may run ONE
+  `git rev-parse` of the target HEAD, only when: single tree, no recorded base and no unreadable run body, not stacked
+  and not a flow child, every prerequisite `done`, and the store already holds a red record for that repository. The line
+  is worded as a prediction: "At the target's current HEAD (`abc1234`), ... was red".
+- **Why:** the ruling forbids running checks, not a rev-parse; the confirm screen is where L4 matters.
+- **Cost / limit:** the prediction is stale if HEAD moves before the first run (the brief self-corrects at the real
+  base). Route errors map to 5xx and the web swallows them.
+
+### 9. L2: plan version carrying the constraint line
+
+- **What:** the marker/constraint line rides loop plan v4 (same gate as #346's off-plan line); v1-v3 bytes are unchanged.
+- **Why:** #346 is unreleased (last tag v0.1.1; the panel has not been reinstalled since), so no stored v4 recipe should
+  exist.
+- **Cost / limit:** if a stored v4 recipe exists, its group view blocks with `loop-plan-recipe-mismatch`. Reinstall the
+  panel only after #341 merges.
+
+### 10. L2: recording
+
+- **What:** one `preexisting-failure` activity row per command per run, recorded once at step C for every terminal outcome
+  (landed or not); saved-result verifications and recovery runs are excluded; recording never fails the collect. A
+  decision counts only if major (absent importance reads as major) and its question starts `Pre-existing failure:`;
+  the command is trimmed with one pair of enclosing backticks dropped; bounds: command 1024 B, chose 2048 B, 16 per run.
+- **Why:** one site reading the report just saved covers "lands or ends".
+- **Cost / limit:** the same command repeated across runs shows each run as a reporter (per-run repeats not collapsed).
+
+### 11. L2: the command and what an answer does
+
+- **What:** verb `answer-preexisting-failure` (route `POST groups/:groupId/preexisting-failure`, CLI
+  `orca group preexisting-failure <g> --command <cmd> --answer allow-fix|relative|edit-requirement`), human-only (socket
+  tier token, as waive-acceptance). An answer only adds a line to the requirement review's facts ("What Orca recorded
+  beyond the diff"). It changes no acceptance rule, retry rule, verdict rule or `checkConflict`.
+- **Why:** spec: each answer is "a recorded answer the review reads".
+- **Cost / limit:** an answer given after the review has run needs a rerun of the review; the UI does not say so.
+
+### 12. L2: rows, refusals and storage
+
+- **What:** a row is `answerable` only for a group whose requirement review runs and which is not multi-directory or dir;
+  otherwise it is information only. Refusal codes: `preexisting-failure-not-reported`,
+  `preexisting-failure-person-required`, `preexisting-failure-not-answerable` (409). Answers live in the group body field
+  `preexistingFailureAnswers[command] = {answer, by, at}` (absent until answered; a later answer replaces an earlier one).
+  An answer outlives activity-retention pruning: a stored answer with no surviving source still yields a row (`sources: []`)
+  and still reaches the review facts. The view row carries `sources`, `baseCheck` and `answered`.
+- **Why:** activity keeps 500 rows per group; a pruned report must not erase a human's answer.
+- **Cost / limit:** without a surviving source the agent report can no longer be answered afresh (the command is refused
+  with not-reported); the schema allows `sources: []` with a null answer though construction prevents it.
+
+### 13. L2: edit-requirement
+
+- **What:** the design's "existing requirement edit flow" premise was false: Orca cannot change an accepted requirement
+  (`requirement-revise` and draft feedback work only while clarifying). `edit-requirement` therefore records the answer
+  for the requirement review and opens the requirement page (web, only after the command succeeds; CLI prints a next
+  line naming `orca requirement show <g>`). Wording in en, zh and the CLI says so.
+- **Why:** honesty; building an edit flow is a separate design.
+- **Cost / limit:** the human cannot actually change the accepted requirement through Orca today.
+
+### 14. Known limits (deferred minors)
+
+- Task 3: a taken-over pending row notes only the newest asker's live run, and `requested_at` bumps on takeover; the
+  abort branch in `checkBases` is unreachable (kept defensively); the recovery-blocked log re-fires per sibling row; a
+  crash between `blockRun` and the request write loses the request (nothing is claimed).
+- Task 4: `TARGET_HEAD_TIMEOUT_MS` sits inside an import block in `webService.ts`; a failed refetch leaves a stale note;
+  `acceptanceFacts(null)` parses every acceptance body per confirm refetch; the once-guard on brief failure logging is
+  per process.
+- Task 2: the answerable path is not measured by `controlPollPerformance`; `group brief` does not list the preexisting
+  failure rows (only `group show` does).
+- Tests: `criteriaBaseRun` and `acceptAttemptLanding` flaked under load in quick-tier runs; watch them at test:wide.
