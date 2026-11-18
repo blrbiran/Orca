@@ -29,7 +29,9 @@ describe("authenticated overview read", () => {
     expect(pending.steps.some(s => s.kind === "start-review" && s.groupId === GROUP)).toBe(false);
     await panel.drainWakes();
     const body = await overview(panel), activeReadyId = GROUP;
-    expect(body.groups.find(g => g.groupId === GROUP)?.state).toBe("ready");
+    // Ruling (2026-11-18 tester batch D): #361 -- the summary shows a stored-ready group with work under way as running; the
+    // stored word is storedState. What this pins (an active-ready group, by its stored status) is that word.
+    expect(body.groups.find(g => g.groupId === GROUP)).toMatchObject({ state: "running", storedState: "ready" });
     expect(body.steps.some(s => s.kind === 'start-review' && s.groupId === activeReadyId)).toBe(false);
   });
   it("owes the current awaiting-answers round even when there are zero questions", async () => {
@@ -94,7 +96,8 @@ describe("authenticated overview read", () => {
     await command(panel,`/api/control/groups/${GROUP}/start`,{commandId:"start",expectedRevision:await revision(panel),payload:{}});
     await panel.drainWakes();
     const body = await overview(panel), activeReadyId = GROUP;
-    expect(body.groups.find(g=>g.groupId===GROUP)).toMatchObject({state:"ready",counts:{idle:1,running:1,waiting:0,blocked:0,done:0}});
+    // Ruling (2026-11-18 tester batch D): #361 -- a stored-ready group with a task running shows `running`, stored `ready`.
+    expect(body.groups.find(g=>g.groupId===GROUP)).toMatchObject({state:"running",storedState:"ready",counts:{idle:1,running:1,waiting:0,blocked:0,done:0}});
     expect(panel.store.db.prepare("SELECT state FROM estimates WHERE group_id=?").all(GROUP)).toEqual([{state:"failed"}]);
     expect(panel.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id=? AND delivered=0").all(GROUP)).toEqual([]);
     expect(panel.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").all(GROUP)).toHaveLength(1);
