@@ -208,8 +208,17 @@ describe("an accepted attempt's off-plan writes (accept-attempt)", { timeout: 12
 
   it("an E-block attempt D already landed adds no row (D recorded it)", async () => {
     const { t, runId, accept } = await failedAndClosed({ a: "a\n", "notes.md": "n\n" }); try {
-      // The E-block shape (acceptAttemptCompleted.test.ts): the run's work is on the tip already.
-      const tip = git(t.repo, "rev-parse", "refs/heads/orca/g");
+      // The E-block shape (acceptAttemptCompleted.test.ts): the run's work is on the tip already -- a commit holding the
+      // attempt's files, the off-plan `notes.md` included, so recording its range again would name it.
+      const base = git(t.repo, "rev-parse", "refs/heads/orca/g");
+      const index = join(t.repo, ".git", "orca-test-eblock-index"), env = { ...process.env, GIT_INDEX_FILE: index };
+      execFileSync("git", ["read-tree", base], { cwd: t.repo, env });
+      for (const [path, text] of [["a", "a\n"], ["notes.md", "n\n"]] as const) {
+        const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], { cwd: t.repo, input: text, encoding: "utf8" }).trim();
+        execFileSync("git", ["update-index", "--add", "--cacheinfo", `100644,${blob},${path}`], { cwd: t.repo, env });
+      }
+      const tip = git(t.repo, "commit-tree", execFileSync("git", ["write-tree"], { cwd: t.repo, env, encoding: "utf8" }).trim(), "-p", base, "-m", "landed by D");
+      git(t.repo, "update-ref", "refs/heads/orca/g", tip, base);
       t.h.store.transaction(() => {
         const row = t.h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!;
         const body = JSON.parse(String(row.body)) as { drive: Record<string, unknown> };
