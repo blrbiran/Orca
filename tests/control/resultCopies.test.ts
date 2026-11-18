@@ -144,10 +144,10 @@ describe("removeResultCopies (change-sized runs §5.6)", { timeout: 30_000 }, ()
     } finally { await h.dispose(); }
   });
 
-  // P0 review M3: a source directory not named for the run is refused before anything is read in it. Dropping only the
-  // basename test leaves this green: the realpath test after it fails for the same path (archiveRun recorded a source
-  // named for the run), so the basename test is a fast path of it, not a separate guard. Dropping both -> the identity
-  // test refuses instead (cleanup-source-reused), so the assertion names the code.
+  // P0 review M3: a source directory not named for the run is refused, and nothing in it is removed. Three path tests
+  // refuse it, each alone: the basename, the parent-realpath join and the realpath after lstat (archiveRun recorded a
+  // source named for the run, so the latter two fail for any other name). Dropping one or two leaves this green (seen);
+  // M4.10: drop all three -> the identity test refuses instead (cleanup-source-reused), red on the named code.
   it("throws cleanup-path-invalid for a source directory not named for the run, and removes nothing", async () => {
     const h = await archiveCase();
     try {
