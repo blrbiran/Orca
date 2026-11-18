@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GROUP_FILTER_KEY, groupCategory, matchesGroupFilter, needsAttention, readGroupFilter, writeGroupFilter } from "../src/groupCategory.js";
+import { boardColumn, GROUP_FILTER_KEY, groupCategory, matchesGroupFilter, needsAttention, readGroupFilter, writeGroupFilter } from "../src/groupCategory.js";
 import type { GroupSummaryV1 } from "../src/controlTypes.js";
 import { requirementView } from "./fixtures/requirement.js";
 
@@ -46,6 +46,14 @@ describe("groupCategory (spec §6.4)", () => {
     expect(groupCategory(g({ counts: { ...zero, waiting: 1, idle: 1 } }))).toBe("running");
     expect(groupCategory(g({ state: "running" }))).toBe("running");
     expect(groupCategory(g({ state: "review" }))).toBe("running");
+  });
+  // #370 review 2 (M-d1): a ready group just started -- its start wake queued, every task still idle -- as the summary sends
+  // it; the list and the board agree it is under way.
+  it("4b: a ready group with a claim queued and no task moving is running, in the list and on the board alike", () => {
+    const started = g({ executionPending: true, orchestration: { mode: "run", state: "started", waitingFor: [], refusal: null } });
+    // mutation: drop the executionPending clause from groupCategory -> not-started, red here
+    expect(groupCategory(started)).toBe("running");
+    expect(boardColumn(started)).toBe("running");
   });
   it("5: otherwise not started (including a group with no plan tasks)", () => {
     expect(groupCategory(g())).toBe("not-started");

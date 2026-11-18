@@ -43,7 +43,10 @@ export function groupCategory(summary: GroupSummaryV1): GroupCategory {
   if (needsAttention(summary)) return "attention";
   if (summary.completion !== undefined && summary.completion.total > 0 && summary.completion.done === summary.completion.total) return "done";
   // Tester #376: a settling task (landed, waiting for its settle) is still under way.
-  if ((summary.counts?.running ?? 0) + (summary.counts?.settling ?? 0) + (summary.counts?.waiting ?? 0) > 0 || summary.state === "running" || summary.state === "review") return "running";
+  // #370 review 2 (M-d1): so is a group with a claim queued (executionPending: a start, re-arm or resume wake) and no task
+  // moving yet -- it was started; boardColumn puts it on Running, and the server's autoStartState counts it started.
+  if ((summary.counts?.running ?? 0) + (summary.counts?.settling ?? 0) + (summary.counts?.waiting ?? 0) > 0 || summary.state === "running" || summary.state === "review"
+    || summary.executionPending === true) return "running";
   return "not-started";
 }
 
