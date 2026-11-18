@@ -289,12 +289,16 @@ describe("the driver re-runs a modified check at base before landing (spec §7a.
       // The first re-run is inside its setup: the base version of scripts/setup.sh is checked out in the workspace.
       await until("the first re-run's setup to start", () => existsSync(started));
       const repo = join(t.body(runId).drive.sourceDir, "repo");
-      expect(hgit(repo, "status", "--porcelain")).not.toBe("");
+      expect(hgit(repo, "--no-optional-locks", "status", "--porcelain")).not.toBe("");
       await writeFile(gate, "");
       await first.stop();
       // stop() kills the setup but does not wait for the aborted re-run's restore; the restore is what puts the attempt's
       // scripts/setup.sh back, so the workspace being clean (and unlocked) is the state that says it finished.
-      await until("the aborted re-run's restore", () => !existsSync(join(repo, ".git", "index.lock")) && hgit(repo, "status", "--porcelain") === "");
+      // `--no-optional-locks`: a plain `git status` refreshes the index under index.lock, and polling it every 20 ms raced the
+      // restore's own `git checkout --force`, whose failure the aborted re-run swallows -- the workspace then stayed dirty
+      // and this wait timed out (2026-11-19, change-sized runs P0: timed out in 5 of 5 runs of this test after the one before
+      // it from dfeae47d on, in 0 of 3 on main 9bc6e304, and in 0 of 3 with this flag). Observing must not take the lock.
+      await until("the aborted re-run's restore", () => !existsSync(join(repo, ".git", "index.lock")) && hgit(repo, "--no-optional-locks", "status", "--porcelain") === "");
       await land(t, runId, createExecutionDriver(t.deps));
       expect({ state: t.body(runId).state, blocked: t.body(runId).drive.blockedReason }).toEqual({ state: "landed", blocked: null });
       // Mutation "the resume path's classifyCriteriaChange drops setup" -> no file reverted, the attempt's setup passes,
