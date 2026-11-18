@@ -410,7 +410,7 @@ describe("the fix task's write set takes the paths a finding says are missing (#
     // mutation: drop the trailing-slash branch -> src/sla/** missing, red
     expect(fixTaskPaths([unmet("Create src/sla/ for the modules.", [])])).toEqual(["src/sla/**"]);
     // mutation: drop the shape check (pathShapeOk) -> /abs/x.js, ../up/x.js, a//b.js, `**` and src/*.js taken, red
-    // (`npm test` is refused before the shape check: its space is outside a path's characters -- see the next test)
+    // (`npm test` is refused before the shape check: it is not path-like -- see the next test)
     expect(fixTaskPaths([unmet("Not /abs/x.js nor ../up/x.js nor a//b.js nor `npm test` nor `**` nor src/*.js nor https://example.com/x.js; a ratio 1/2.5 is no path.", [])])).toEqual([]);
     // Bare words without a slash or an extension are prose, not paths.
     expect(fixTaskPaths([unmet("The module is missing entirely.", [])])).toEqual([]);
@@ -429,9 +429,10 @@ describe("the fix task's write set takes the paths a finding says are missing (#
   // Fix round 1 (Important 2, controller ruling narrowing ruling 2): a backticked token is a path only when it looks like
   // one, as a bare token must; Minors 3 and 4: no `.git` segment and no segment starting with `-`.
   it("takes a backticked token only when it is path-like, and refuses `.git` and `-` segments", () => {
-    // mutation: accept any backticked token of a legal shape -> --json, breach(), parseConfig, test:sla, src/a.ts:12 taken, red
+    // mutation: accept any backticked token of a legal shape -> breach(), parseConfig, test:sla, src/a.ts:12 taken, red
+    // mutation: drop only the backtick character check -> src/a.ts:12 taken (it has a `/`), red
     expect(fixTaskPaths([unmet("Run `--json`, call `breach()`, see `parseConfig`, `test:sla` and `src/a.ts:12`; write `README.md`.", [])])).toEqual(["README.md"]);
-    // mutation: drop the whitespace/character check -> `npm test` taken, red
+    // `npm test` has neither a `/` nor an extension, so path-likeness refuses it (the character check would too).
     expect(fixTaskPaths([unmet("Run `npm test` again.", [])])).toEqual([]);
     // mutation: drop the .git refusal -> .git/hooks/pre-commit.sh and `.git/config.x` taken, red
     expect(fixTaskPaths([unmet("Do not touch .git/hooks/pre-commit.sh or `.git/config.x`.", [])])).toEqual([]);
@@ -467,7 +468,7 @@ describe("the fix task's write set takes the paths a finding says are missing (#
       expect(fixTaskContract(w.t.h.store, "g", round, CRITERIA, "review-fix-1", "a", "g", ["notes/x.md"]).context.targetPaths).toEqual(["notes/x.md"]);
       // Fix round 1 (Important 2): with every evidence entry `orca:` and no path in missing, the write set falls back to
       // the tasks' targetPaths, as before #352 -- never to an empty one.
-      // mutation: drop the fallback to the tasks' union -> [], red
+      // mutation: drop the fallback to the tasks' union -> [] (taskContractSchema refuses an empty targetPaths), red
       const recordsOnly = { ...round, criteria: [{ id: "AC1", verdict: "not-met" as const, evidence: [{ path: "orca:acceptance", line: null }, { path: "orca:delivery", line: null }],
         missing: "the acceptance command still fails" }] };
       const union = [...new Set(["a", "b"].flatMap((id) => readArchivedContract(w.t.h.store, "g", id).contract.context.targetPaths))];
