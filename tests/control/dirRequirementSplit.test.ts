@@ -1,6 +1,6 @@
 /**
  * Dir-requirements spec §6.3, criterion D3 (plan Task 2): a split call of a requirement on a `dir` project is judged in
- * the vault at the import its own A2 made. A target path the folder has passes and an absent one is `path:<task>:<p>`;
+ * the vault at the import its own A2 made. A target path legal at that commit passes and one through a file is `path:<task>:<p>`;
  * the stored plan's `targetRepo` is the vault path, never the folder. The folder is changed while the call is out (after
  * A2, before Ce): the judgement still reads the call's commit, not the folder as it is now.
  */

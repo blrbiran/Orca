@@ -87,7 +87,7 @@ describe("a goal naming a file no task may write (#345)", () => {
     expect(probed).toEqual(entries.slice(0, GOAL_PATH_PROBE_LIMIT).map((entry) => entry.path));
   });
 
-  it("creatableAt: a new file in a directory the commit has is creatable; an existing file or a missing directory is not", async () => {
+  it("creatableAt: a new file is creatable, its directory new or not; an existing file or a path through a file is not", async () => {
     const repo = mkdtempSync(join(tmpdir(), "orca-345-"));
     try {
       const g = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args], { cwd: repo, encoding: "utf8" }).trim();
@@ -100,15 +100,41 @@ describe("a goal naming a file no task may write (#345)", () => {
       const commit = g("rev-parse", "HEAD");
       // src/board and src/board/cli.js asked together: git must not answer for the parent with its children (or vice versa).
       // mutation: drop `!entries.has(path)` -> src/cli.js and README.md creatable, red
-      // mutation: drop the empty-parent test -> src/missing/x.js and README.md/x.js creatable, red
-      // mutation: skip the root (always list a parent) -> CHANGELOG.md not creatable, red
+      // Ruling: session 2026-11-18, human 「这次批准改写所有必要的判据」 (controller ruling, #351 follow-up to #345) -- a new
+      // file under a directory the commit lacks is creatable now (src/missing/x.js); one through a file still is not.
+      // mutation: count a path through a file as creatable -> README.md/x.js creatable, red
+      // mutation: skip the root (always ask an ancestor) -> CHANGELOG.md not creatable, red
       const got = await creatableAt(repo, commit, ["src/board/cli.js", "src/cli.js", "src/missing/x.js", "README.md", "README.md/x.js", "CHANGELOG.md", "src/board/render.js"]);
-      expect([...got].sort()).toEqual(["CHANGELOG.md", "src/board/cli.js"]);
+      expect([...got].sort()).toEqual(["CHANGELOG.md", "src/board/cli.js", "src/missing/x.js"]);
       // The field case end to end, in code: board-cli gets the file it must create, recorded as a goal addition.
       const applied = applyGoalPaths(FIELD_SPLIT, await creatableAt(repo, commit, goalPathsToProbe(goalPathsOutsideTargets(FIELD_SPLIT))));
       expect(applied.added).toEqual([{ taskId: "board-cli", path: "src/board/cli.js", writers: [], source: "goal" }]);
       expect(applied.output.tasks[1]!.targetPaths).toEqual(["src/cli.js", "test/board-cli.test.js", "src/board/cli.js"]);
       expect(goalPathsOutsideTargets(applied.output)).toEqual([]);
+    } finally { rmSync(repo, { recursive: true, force: true }); }
+  });
+
+  // #351 follow-up to #345 (controller ruling, session 2026-11-18): the tester's goal named src/sla/model.js with src/ in the
+  // commit and src/sla/ not; creatableAt asked for an existing parent, so the file stayed a hint and the task could not
+  // write it. A goal's new path is creatable by overviewPathExists's rule: its nearest existing ancestor is a directory.
+  it("a goal's new file under a new subdirectory is added; one through an existing file is not (#351)", async () => {
+    const repo = mkdtempSync(join(tmpdir(), "orca-351-"));
+    try {
+      const g = (...args: string[]) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.hooksPath=/dev/null", ...args], { cwd: repo, encoding: "utf8" }).trim();
+      g("init", "-q", "-b", "main");
+      mkdirSync(join(repo, "src"), { recursive: true });
+      writeFileSync(join(repo, "src", "cli.js"), "export {};\n");
+      g("add", "-A"); g("commit", "-qm", "base");
+      const commit = g("rev-parse", "HEAD");
+      const split = { tasks: [
+        task("sla-model", ["test/sla-model.test.js"], "Create src/sla/model.js with the SLA record."),
+        task("sla-bad", ["test/sla-bad.test.js"], "Create src/cli.js/x.js beside it."),
+      ], notes: "" };
+      // mutation: creatableAt back to "the parent must exist" -> src/sla/model.js not added, red
+      // mutation: count a path through a file as creatable -> src/cli.js/x.js added, red
+      const applied = applyGoalPaths(split, await creatableAt(repo, commit, goalPathsToProbe(goalPathsOutsideTargets(split))));
+      expect(applied.added).toEqual([{ taskId: "sla-model", path: "src/sla/model.js", writers: [], source: "goal" }]);
+      expect(applied.output.tasks.map((t) => t.targetPaths)).toEqual([["test/sla-model.test.js", "src/sla/model.js"], ["test/sla-bad.test.js"]]);
     } finally { rmSync(repo, { recursive: true, force: true }); }
   });
 
@@ -166,7 +192,7 @@ describe("a goal naming a file no task may write (#345)", () => {
       task("board-render", ["src/board/render.js"], "Write the board renderer in src/board/render.js.", "src/board/render.js renders the board."),
       task("board-cli", ["src/cli.js", "test/board-cli.test.js"], "Create src/board/cli.js with the board add and list commands, change src/cli.js to register them, and read the note format from src/a.ts.",
         "src/cli.js registers board add and list.", ["board-render"]),
-      task("docs", ["README.md"], "Document the commands; src/later/plan.md is out of scope.", "README.md documents the board commands.", ["board-cli"]),
+      task("docs", ["README.md"], "Document the commands; src/a.ts/plan.md is out of scope.", "README.md documents the board commands.", ["board-cli"]),
     ], notes: "" };
     const x = await requirementHarness({ answers: [{ purpose: "split", output: split }], startAt: "split" });
     try {
@@ -181,11 +207,14 @@ describe("a goal naming a file no task may write (#345)", () => {
       expect(draft).toMatchObject({ state: "awaiting-review", reasons: [], impliedPathsAdded: [{ taskId: "board-cli", path: "src/board/cli.js", writers: [], source: "goal" }] });
       const cli = (draft.output as { tasks: Array<{ taskId: string; targetPaths: string[] }> }).tasks.find((t) => t.taskId === "board-cli")!;
       expect(cli.targetPaths).toEqual(["src/cli.js", "test/board-cli.test.js", "src/board/cli.js"]);
-      // src/a.ts exists at base (read, not added); src/later/plan.md is under a directory the base lacks (validation would
+      // src/a.ts exists at base (read, not added); src/a.ts/plan.md goes through a file the base has (validation would
       // refuse it as a target), so it is a hint too.
+      // Ruling: session 2026-11-18, human 「这次批准改写所有必要的判据」 (controller ruling, #351 follow-up to #345) -- this
+      // was src/later/plan.md (a directory the base lacks), which is creatable now and so added; the refused shape is a
+      // path through a file.
       // mutation: drop goalPathsOutsideTargets from the view -> red
       const view = readRequirementView(x.store, "e", "r");
-      expect(view.drafts[0]).toMatchObject({ goalPathsOutsideTargets: [{ taskId: "board-cli", path: "src/a.ts" }, { taskId: "docs", path: "src/later/plan.md" }] });
+      expect(view.drafts[0]).toMatchObject({ goalPathsOutsideTargets: [{ taskId: "board-cli", path: "src/a.ts" }, { taskId: "docs", path: "src/a.ts/plan.md" }] });
       // mutation: drop goalPathsOutsideTargets from the protocol's draft -> strict parse fails, red
       expect(requirementViewSchema.safeParse(view).success).toBe(true);
       const accepted = await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: draft.draftHash }));

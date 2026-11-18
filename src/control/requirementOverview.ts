@@ -310,9 +310,7 @@ export async function buildRepositoryOverview(input: {
  * `src/sla/model.js` into `src/sla-model.js` against its requirement; git has no reason to refuse a new directory.
  */
 export async function overviewPathExists(repo: string, commit: string, entry: string): Promise<boolean> {
-  const typeOf = async (path: string): Promise<string | null> => {
-    try { return (await run(repo, ["cat-file", "-t", `${commit}:${path}`])).trim(); } catch { return null; }
-  };
+  const typeOf = gitTypeOf(repo, commit);
   if (entry === "**") return true;
   if (!pathShapeOk(entry)) return false;
   const directory = entry.endsWith("/**");
@@ -320,6 +318,16 @@ export async function overviewPathExists(repo: string, commit: string, entry: st
   // An entry the commit has: an exact path passes whatever it names (as before #351); `<prefix>/**` needs a directory.
   const type = await typeOf(path);
   if (type !== null) return directory ? type === "tree" : true;
+  return nearestExistingIsTree(typeOf, path);
+}
+
+/** The type git gives `path` at `commit` (`blob`, `tree`, `commit` for a submodule), null when it has none. */
+const gitTypeOf = (repo: string, commit: string) => async (path: string): Promise<string | null> => {
+  try { return (await run(repo, ["cat-file", "-t", `${commit}:${path}`])).trim(); } catch { return null; }
+};
+
+/** #351: whether the nearest ancestor of `path` the commit has is a directory; none but the root counts as one. */
+async function nearestExistingIsTree(typeOf: (path: string) => Promise<string | null>, path: string): Promise<boolean> {
   for (let at = path.lastIndexOf("/"); at > 0; at = path.lastIndexOf("/", at - 1)) {
     const ancestor = await typeOf(path.slice(0, at));
     if (ancestor !== null) return ancestor === "tree";
@@ -328,24 +336,18 @@ export async function overviewPathExists(repo: string, commit: string, entry: st
 }
 
 /**
- * Tester #345: of exact `paths`, the ones a task would create at `commit` -- no entry there, and a parent that is a
- * directory there (the root counts): overviewPathExists's "new file in an existing directory", told apart from an
- * existing file. One non-recursive `git ls-tree` per distinct parent lists its entries: the path is new when it is not
- * one of them, and the parent is a directory when it has an entry under it (git keeps no empty tree; a blob or a missing
- * parent lists nothing, a submodule's gitlink lists itself). A single ls-tree for every path and parent cannot be used: a pathspec under another one makes git list the
- * outer directory's entries instead of the directory itself. A failed read creates none of that parent's paths.
+ * Tester #345: of exact `paths`, the ones a task would create at `commit` -- no entry there, a legal shape (pathShapeOk),
+ * and (#351 follow-up, controller ruling, session 2026-11-18) the nearest existing ancestor a directory, the root
+ * counting: overviewPathExists's rule for a new path, so a goal's `src/sla/model.js` is creatable while `src/sla/` is
+ * not yet in the commit. A path through a file or a submodule (gitlink) is not. A commit that cannot be read creates none.
  */
 export async function creatableAt(repo: string, commit: string, paths: readonly string[]): Promise<Set<string>> {
-  const parentOf = (path: string): string => (path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "");
   const out = new Set<string>();
-  for (const parent of new Set(paths.map(parentOf))) {
-    let listing: string;
-    try { listing = await run(repo, ["ls-tree", "-z", "--name-only", commit, ...(parent === "" ? [] : ["--", `${parent}/`])]); } catch { continue; }
-    const entries = new Set(listing.split("\0").filter((entry) => entry !== ""));
-    // #345 review: the parent is a directory only when it lists entries under it; a submodule (gitlink) or file
-    // parent lists itself or nothing.
-    if (parent !== "" && ![...entries].some((entry) => entry.startsWith(`${parent}/`))) continue;
-    for (const path of paths) if (parentOf(path) === parent && !entries.has(path)) out.add(path);
+  try { await run(repo, ["cat-file", "-e", `${commit}^{commit}`]); } catch { return out; }
+  const typeOf = gitTypeOf(repo, commit);
+  for (const path of new Set(paths)) {
+    if (path === "**" || path.endsWith("/**") || !pathShapeOk(path) || (await typeOf(path)) !== null) continue;
+    if (await nearestExistingIsTree(typeOf, path)) out.add(path);
   }
   return out;
 }
