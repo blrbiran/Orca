@@ -39,13 +39,21 @@ const ratio = (a: Rgb, b: Rgb): number => { const [hi, lo] = [lum(a), lum(b)].so
 const norm = (block: string): string[] => block.split(";").map((d) => d.trim()).filter(Boolean).sort();
 
 describe("light theme (taste refinement spec §4)", () => {
+  // #356: since lilac became the light theme the two blocks also carry its scale (type, radii, control heights); this
+  // compares every declaration, scale included, so the system preference and the manual choice cannot drift apart.
+  // mutation: drop --radius from the system-light block only -> red here
   it("defines the manual and the system light theme with exactly the same declarations", () => {
     expect(norm(manual)).toEqual(norm(system));
   });
 
-  it("is a warm paper: the page is warmer than neutral (red channel above blue)", () => {
-    const [r, , b] = hex(tok(manual, "bg"));
-    expect(r - b).toBeGreaterThanOrEqual(5);
+  // Ruling (2026-11-18 #356): lilac replaces light, scale included
+  // (was "is a warm paper: the page is warmer than neutral (red channel above blue)"; the human dropped the warm paper)
+  it("is lilac's near-neutral page: the faintest violet tint (blue the highest channel, spread at most 6)", () => {
+    // mutation: put the warm paper #f6f4ef back -> red above blue, red here
+    const [r, g, b] = hex(tok(manual, "bg"));
+    expect(b).toBeGreaterThanOrEqual(r);
+    expect(b).toBeGreaterThanOrEqual(g);
+    expect(Math.max(r, g, b) - Math.min(r, g, b)).toBeLessThanOrEqual(6);
   });
 
   it("keeps body, secondary and accent text readable on every light surface", () => {
@@ -93,10 +101,16 @@ describe("category tints follow the palette (final review M7)", () => {
   });
 });
 
-// Human visual acceptance (session fb98aa31) asked only for lighter DARK fields; a light field stays the paper well (--bg).
+// Human visual acceptance (session fb98aa31) asked only for lighter DARK fields. Since #356 a light field is lilac's white,
+// the card's colour, so a field reads as a white box with an edge on the page and in a well.
 describe("form fields in the light theme", () => {
-  it("keeps --field on --bg in both light blocks", () => {
-    for (const block of [manual, system]) expect(tok(block, "field")).toBe("var(--bg)");
+  // Ruling (2026-11-18 #356): lilac replaces light, scale included (was "keeps --field on --bg in both light blocks")
+  it("keeps --field white, the card's colour, in both light blocks", () => {
+    // mutation: --field: var(--bg) in either block -> red here
+    for (const block of [manual, system]) {
+      expect(tok(block, "field")).toBe("#ffffff");
+      expect(tok(block, "field")).toBe(tok(block, "card"));
+    }
   });
 });
 

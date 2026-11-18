@@ -11,6 +11,14 @@ describe("theme preference (ruling U3)", () => {
     expect(readTheme(undefined)).toBe("system");
   });
 
+  // #356 (human 2026-11-18: 「同意 lilac 整体覆盖 light」): lilac became the light theme and left the picker. A browser that
+  // stored it was on a light page; the 2026-10-29 rule (a dropped id reads as system) could flip it to dark, so this one
+  // dropped id is the named exception and reads as light.
+  it("reads a stored lilac as light, the theme it became", () => {
+    // mutation: drop the lilac -> light mapping in readTheme -> lilac reads as system, red here
+    expect(readTheme({ getItem: () => "lilac" })).toBe("light");
+  });
+
   it("swallows a storage that refuses writes", () => {
     expect(() => writeTheme({ setItem: () => { throw new Error("QuotaExceededError"); } }, "light")).not.toThrow();
   });

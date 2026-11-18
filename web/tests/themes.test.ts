@@ -22,6 +22,8 @@ const OPENER: Record<string, string> = { dark: ":root {", light: ':root[data-the
 const openerOf = (theme: string): string => OPENER[theme] ?? `:root[data-theme="${theme}"] {`;
 const PINNED = THEME_PREFS.filter((pref) => pref !== "system");
 const NEW = PINNED.filter((pref) => pref !== "light" && pref !== "dark");
+// #356: the light theme sets its own scale (lilac's), so it is held to the same scale rules as the candidates.
+const SCALED = [...NEW, "light"];
 
 type Rgb = [number, number, number];
 const tokens = (theme: string): Map<string, string> => {
@@ -67,7 +69,8 @@ describe("the theme list (session e236bbe4)", () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (session 2026-10-29: kept 霜白，深色，浅色，蔷薇，紫夜，暮色，余烬, 「其他可以删掉」).
     // Ruling (2026-11-11, tester follow-up E): 「这次批准改写所有必要的判据」 — #200 (human: 「加」) adds the light candidate
     // `lilac` (丁香) after the other light candidates; this now encodes that order with it.
-    expect(THEME_PREFS).toEqual(["system", "light", "dark", "frost", "rose", "lilac", "violet", "dusk", "ember"]);
+    // Ruling (2026-11-18 #356): lilac replaces light, scale included -- `lilac` leaves the list; `light` now wears its look.
+    expect(THEME_PREFS).toEqual(["system", "light", "dark", "frost", "rose", "violet", "dusk", "ember"]);
   });
 
   // The five dropped ids were stored by browsers that picked them; such a browser must land on a working theme (system),
@@ -79,6 +82,14 @@ describe("the theme list (session e236bbe4)", () => {
       expect(readTheme({ getItem: () => dropped }), dropped).toBe("system");
     }
     expect(readTheme({ getItem: () => "ember" })).toBe("ember");
+  });
+
+  // #356, the named exception (web/DESIGN.md §Themes): lilac was a light theme and light now is lilac, so a browser that
+  // stored lilac stays on a light page instead of following the browser into dark.
+  it("drops lilac from the picker but reads a stored lilac as light", () => {
+    // mutation: keep "lilac" in THEME_PREFS -> red here
+    expect(THEME_PREFS as readonly string[]).not.toContain("lilac");
+    expect(readTheme({ getItem: () => "lilac" })).toBe("light");
   });
 
   it("has a stylesheet block for every pinned theme and no block the picker cannot reach", () => {
@@ -98,7 +109,10 @@ describe("the theme list (session e236bbe4)", () => {
   // A candidate block that comes before the system-light block, or misses a token, lets the browser's light preference
   // leak through (equal specificity, so the later block wins): a navy page with light-theme fields.
   it("defines every colour token the default light theme does, after the system-light block", () => {
-    const reference = [...tokens("light").keys()];
+    // Ruling (2026-11-18 #356): lilac replaces light, scale included -- the light block now also sets scale tokens, which a
+    // candidate may leave to the shared :root scale, so the reference is the light block's colour tokens only.
+    // mutation: drop --kind-1 from frost -> red here; mutation: drop this SCALE filter -> dusk (system type) has no --font, red here
+    const reference = [...tokens("light").keys()].filter((name) => !SCALE.includes(name));
     const systemLight = css.indexOf(':root:not([data-theme="dark"]) {');
     for (const theme of PINNED) {
       const t = tokens(theme);
@@ -131,13 +145,22 @@ const px = (v: string): number => {
   return Number(m[1]);
 };
 describe("each candidate theme is more than a palette", () => {
-  it("leaves the default look's scale alone: the light block sets no scale token, only :root does", () => {
-    for (const name of SCALE) expect(tokens("light").has(name), name).toBe(false);
+  // Ruling (2026-11-18 #356): lilac replaces light, scale included
+  // (was "leaves the default look's scale alone: the light block sets no scale token, only :root does"). The human:
+  // 「连字体、圆角这些尺度一起整体换」 -- the light block takes lilac's type, radii and control heights; its spacing stays the
+  // shared :root steps (lilac never set them), and :root keeps every scale token for dark.
+  it("gives the light theme lilac's scale: Inter, radii 6/10/16, controls 34/28, the shared spacing", () => {
+    const light = tokens("light");
+    // mutation: drop the scale lines from the light block -> red here
+    expect(["--font", "--mono", ...RADII, "--control-h", "--control-h-sm"].map((name) => light.get(name))).toEqual([
+      "var(--font-sans)", "var(--font-mono)", "6px", "10px", "16px", "34px", "28px",
+    ]);
+    for (const name of SPACE) expect(light.has(name), name).toBe(false);
     for (const name of SCALE) expect(tokens("dark").has(name), name).toBe(true);
   });
 
   it("sets its own corners (all three radii, small <= control <= card) and at least its type or its density", () => {
-    for (const theme of NEW) {
+    for (const theme of SCALED) {
       const t = tokens(theme);
       for (const name of RADII) expect(t.has(name), `${theme} ${name}`).toBe(true);
       const [xs, sm, card] = RADII.map((name) => px(t.get(name)!));
@@ -150,7 +173,7 @@ describe("each candidate theme is more than a palette", () => {
   // The Tailwind scale is N x --space-1 (p-6 is 6 steps); the legacy sheet reads --space-2..5 by name. A theme that set
   // only some steps, or steps off the 1-2-3-4-6 ratio, would space a migrated component unlike its legacy neighbour.
   it("sets density as a whole scale: all five steps on the 1-2-3-4-6 ratio, both control heights, the small one smaller", () => {
-    for (const theme of NEW) {
+    for (const theme of SCALED) {
       const t = tokens(theme);
       if (SPACE.some((name) => t.has(name))) {
         const unit = px(t.get("--space-1")!);
@@ -169,7 +192,7 @@ describe("each candidate theme is more than a palette", () => {
   // Only the bundled faces (fonts.css, woff2) or the system stack: a family named here that the panel does not ship
   // would fall back silently on every machine without it.
   it("chooses its type only from the bundled fonts", () => {
-    for (const theme of NEW) {
+    for (const theme of SCALED) {
       const t = tokens(theme);
       for (const name of ["--font", "--mono"]) if (t.has(name)) expect(t.get(name), `${theme} ${name}`).toMatch(/^var\(--font-(sans|mono)\)$/);
     }
@@ -275,25 +298,27 @@ describe("the page image and the lilac theme (#200)", () => {
     expect(tokens("dark").get("--page-image")).toBe("none");
     // mutation: paint only the colour -> red here
     expect(css).toMatch(/\nbody \{[^}]*background-color: var\(--bg\); background-image: var\(--page-image\);/);
-    for (const theme of PINNED.filter((p) => p !== "dark" && p !== "lilac")) expect(tokens(theme).has("--page-image"), theme).toBe(false);
+    // Ruling (2026-11-18 #356): lilac replaces light, scale included (the lilac exclusion is gone with the lilac block)
+    for (const theme of PINNED.filter((p) => p !== "dark")) expect(tokens(theme).has("--page-image"), theme).toBe(false);
   });
 
   // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据」 -- #281 (human 「可以」): lilac's lilac page and
   // its gradient glared under white cards, so the page is near-neutral (the faintest violet tint) and paints no image;
   // purple stays on the small accents. This replaces "gives lilac a gradient page whose every stop keeps the page's bar".
+  // Ruling (2026-11-18 #356): lilac replaces light, scale included -- this and the next case read the light block.
   it("gives lilac a near-neutral page with no page image; the large surfaces carry at most a faint tint", () => {
-    const { t } = palette("lilac");
+    const { t, raw } = palette("light");
     // mutation: put the gradient back -> lilac sets --page-image, red here
     expect(t.has("--page-image")).toBe(false);
     // A surface's channel spread (max - min of r, g, b) says how coloured it is: the old #f3f0fc spread 12.
-    const spread = (token: string): number => { const [r, g, b] = hex(t.get(token)!); return Math.max(r, g, b) - Math.min(r, g, b); };
+    const spread = (token: string): number => { const [r, g, b] = hex(raw(token.slice(2))); return Math.max(r, g, b) - Math.min(r, g, b); };
     // mutation: the old page #f3f0fc -> spread 12, red here
     for (const token of ["--bg", "--well", "--bg-hover"]) expect(spread(token), token).toBeLessThanOrEqual(6);
     expect([t.get("--card"), t.get("--bg-elevated")]).toEqual(["#ffffff", "#ffffff"]);
   });
 
   it("sets lilac's look: white cards, a 16px card radius, a light scheme, and #847aff's hue darkened to the bar", () => {
-    const { t, c } = palette("lilac");
+    const { t, c } = palette("light");
     expect([t.get("color-scheme"), t.get("--card"), t.get("--radius")]).toEqual(["light", "#ffffff", "16px"]);
     // #847aff itself is 3.4:1 on white -- too low for link text; the accent keeps its hue and is darker.
     expect(ratio(hex("#847aff"), hex("#ffffff"))).toBeLessThan(4.5);

@@ -10,11 +10,14 @@
  * Session 2026-10-29 (human picked 霜白，深色，浅色，蔷薇，紫夜，暮色，余烬 and 「其他可以删掉」): ink, contrast, navy, lagoon and
  * terminal were dropped; a browser that stored one of them reads it as "system" (readTheme), its stored value untouched.
  * Tester #200 (2026-11-11, tester follow-up E, human 「加」): the light candidate lilac (丁香) joins after rose.
+ * Tester #356 (2026-11-18, human 「同意 lilac 整体覆盖 light。连字体、圆角这些尺度一起整体换。」): lilac became the light theme
+ * (styles.css) and left the list. A browser that stored it reads it as "light" -- the one named exception to the
+ * 2026-10-29 rule above (web/DESIGN.md §Themes), so a lilac user stays on a light page instead of following the browser.
  */
 export const THEME_KEY = "orca.panel.theme";
 export const THEME_PREFS = [
   "system", "light", "dark",
-  "frost", "rose", "lilac",
+  "frost", "rose",
   "violet", "dusk", "ember",
 ] as const;
 export type ThemePref = (typeof THEME_PREFS)[number];
@@ -22,6 +25,7 @@ export type ThemePref = (typeof THEME_PREFS)[number];
 export function readTheme(storage: Pick<Storage, "getItem"> | undefined): ThemePref {
   try {
     const value = storage?.getItem(THEME_KEY) ?? null;
+    if (value === "lilac") return "light";
     return (THEME_PREFS as readonly string[]).includes(value ?? "") ? (value as ThemePref) : "system";
   } catch {
     return "system";

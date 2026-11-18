@@ -59,39 +59,48 @@
   --dur: 120ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --nav-width: 240px;
-  /* Tester #200: an image painted over --bg on the page (body). Optional: only a theme that wants one sets it (lilac). */
+  /* Tester #200: an image painted over --bg on the page (body). Optional: only a theme that wants one sets it (none does since #281). */
   --page-image: none;
 }
+/* light (#356, human 2026-11-18: 「同意 lilac 整体覆盖 light。连字体、圆角这些尺度一起整体换。」): the former candidate lilac
+   (#200, #281) -- a near-neutral page with the faintest violet tint and no page image, white cards with a 1px edge, the
+   roundest card corners; purple only on small accents (links, selection, tags), from #847aff darkened until links and
+   labels on it pass the bar; Inter, radii 6/10/16, controls 34/28; spacing stays the shared :root steps. The system-light
+   block below repeats it declaration for declaration (web/tests/lightTheme.test.ts). */
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg: #f6f4ef; --bg-elevated: #fffdf9; --bg-hover: #eeeae2; --card: #fffdf9;
-  --well: var(--bg); --field: var(--bg);
-  --border: #e3ddd1; --border-strong: #cfc7b8; --text: #3d3830; --text-strong: #1c1915; --muted: #6a645a;
-  --accent: #1d4ed8; --accent-subtle: rgba(29, 78, 216, 0.1);
-  --ok: #15803d; --warn: #b45309; --danger: #b91c1c; --info: #1d4ed8;
-  --kind-1: #dc2626; --kind-2: #ea580c; --kind-3: #ca8a04; --on-accent: #ffffff;
-  --cat-idle: rgba(106, 100, 90, 0.12); --cat-running: rgba(29, 78, 216, 0.14); --cat-waiting: rgba(106, 100, 90, 0.24);
-  --cat-blocked: rgba(185, 28, 28, 0.16); --cat-done: rgba(21, 128, 61, 0.16);
-  --stall: #92400e;
-  --ok-subtle: rgba(21, 128, 61, 0.08); --warn-subtle: rgba(180, 83, 9, 0.08); --danger-subtle: rgba(185, 28, 28, 0.08); --info-subtle: rgba(29, 78, 216, 0.08);
-  --shadow: 0 1px 2px rgba(28, 26, 23, 0.08);
-  --accent-hover: #1e40af; --shadow-pop: 0 8px 24px rgba(28, 26, 23, 0.12), 0 1px 3px rgba(28, 26, 23, 0.08);
+  --bg: #f7f6f9; --bg-elevated: #ffffff; --bg-hover: #efedf3; --card: #ffffff;
+  --well: var(--bg); --field: #ffffff;
+  --border: #e4e2ea; --border-strong: #b5b2c0; --text: #2a2640; --text-strong: #15122a; --muted: #5b5676;
+  --accent: #5a4ee0; --accent-subtle: rgba(132, 122, 255, 0.14); --accent-hover: #463bc2; --on-accent: #ffffff;
+  --ok: #137a3a; --warn: #a14d06; --danger: #b42318; --info: #2f5bd3;
+  --kind-1: #d92d20; --kind-2: #e2600c; --kind-3: #b88405;
+  --cat-idle: rgba(91, 86, 118, 0.12); --cat-running: rgba(47, 91, 211, 0.13); --cat-waiting: rgba(91, 86, 118, 0.24);
+  --cat-blocked: rgba(180, 35, 24, 0.14); --cat-done: rgba(19, 122, 58, 0.15);
+  --stall: #8a3c04;
+  --ok-subtle: rgba(19, 122, 58, 0.08); --warn-subtle: rgba(161, 77, 6, 0.08); --danger-subtle: rgba(180, 35, 24, 0.07); --info-subtle: rgba(47, 91, 211, 0.07);
+  --shadow: 0 1px 2px rgba(42, 38, 64, 0.05); --shadow-pop: 0 14px 36px rgba(42, 38, 64, 0.14), 0 2px 6px rgba(42, 38, 64, 0.06);
+  --font: var(--font-sans); --mono: var(--font-mono);
+  --radius-xs: 6px; --radius-sm: 10px; --radius: 16px;
+  --control-h: 34px; --control-h-sm: 28px;
 }
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     color-scheme: light;
-    --bg: #f6f4ef; --bg-elevated: #fffdf9; --bg-hover: #eeeae2; --card: #fffdf9;
-    --well: var(--bg); --field: var(--bg);
-    --border: #e3ddd1; --border-strong: #cfc7b8; --text: #3d3830; --text-strong: #1c1915; --muted: #6a645a;
-    --accent: #1d4ed8; --accent-subtle: rgba(29, 78, 216, 0.1);
-    --ok: #15803d; --warn: #b45309; --danger: #b91c1c; --info: #1d4ed8;
-    --kind-1: #dc2626; --kind-2: #ea580c; --kind-3: #ca8a04; --on-accent: #ffffff;
-    --cat-idle: rgba(106, 100, 90, 0.12); --cat-running: rgba(29, 78, 216, 0.14); --cat-waiting: rgba(106, 100, 90, 0.24);
-    --cat-blocked: rgba(185, 28, 28, 0.16); --cat-done: rgba(21, 128, 61, 0.16);
-    --stall: #92400e;
-    --ok-subtle: rgba(21, 128, 61, 0.08); --warn-subtle: rgba(180, 83, 9, 0.08); --danger-subtle: rgba(185, 28, 28, 0.08); --info-subtle: rgba(29, 78, 216, 0.08);
-    --shadow: 0 1px 2px rgba(28, 26, 23, 0.08);
-    --accent-hover: #1e40af; --shadow-pop: 0 8px 24px rgba(28, 26, 23, 0.12), 0 1px 3px rgba(28, 26, 23, 0.08);
+    --bg: #f7f6f9; --bg-elevated: #ffffff; --bg-hover: #efedf3; --card: #ffffff;
+    --well: var(--bg); --field: #ffffff;
+    --border: #e4e2ea; --border-strong: #b5b2c0; --text: #2a2640; --text-strong: #15122a; --muted: #5b5676;
+    --accent: #5a4ee0; --accent-subtle: rgba(132, 122, 255, 0.14); --accent-hover: #463bc2; --on-accent: #ffffff;
+    --ok: #137a3a; --warn: #a14d06; --danger: #b42318; --info: #2f5bd3;
+    --kind-1: #d92d20; --kind-2: #e2600c; --kind-3: #b88405;
+    --cat-idle: rgba(91, 86, 118, 0.12); --cat-running: rgba(47, 91, 211, 0.13); --cat-waiting: rgba(91, 86, 118, 0.24);
+    --cat-blocked: rgba(180, 35, 24, 0.14); --cat-done: rgba(19, 122, 58, 0.15);
+    --stall: #8a3c04;
+    --ok-subtle: rgba(19, 122, 58, 0.08); --warn-subtle: rgba(161, 77, 6, 0.08); --danger-subtle: rgba(180, 35, 24, 0.07); --info-subtle: rgba(47, 91, 211, 0.07);
+    --shadow: 0 1px 2px rgba(42, 38, 64, 0.05); --shadow-pop: 0 14px 36px rgba(42, 38, 64, 0.14), 0 2px 6px rgba(42, 38, 64, 0.06);
+    --font: var(--font-sans); --mono: var(--font-mono);
+    --radius-xs: 6px; --radius-sm: 10px; --radius: 16px;
+    --control-h: 34px; --control-h-sm: 28px;
   }
 }
 /* Selectable themes beyond the default pair (session e236bbe4; reworked and extended in the tester round 2026-10-28,
@@ -137,26 +146,6 @@
   --radius-xs: 6px; --radius-sm: 10px; --radius: 16px;
   --space-1: 5px; --space-2: 10px; --space-3: 15px; --space-4: 20px; --space-5: 30px;
   --control-h: 36px; --control-h-sm: 30px;
-}
-/* lilac (#200, human 「加」; #281, human 「可以」): a near-neutral page with the faintest violet tint and no page image,
-   white cards with a 1px edge, the roundest card corners; purple only on small accents (links, selection, tags), from
-   #847aff darkened until links and labels on it pass the bar; Inter. */
-:root[data-theme="lilac"] {
-  color-scheme: light;
-  --bg: #f7f6f9; --bg-elevated: #ffffff; --bg-hover: #efedf3; --card: #ffffff;
-  --well: #f7f6f9; --field: #ffffff;
-  --border: #e4e2ea; --border-strong: #b5b2c0; --text: #2a2640; --text-strong: #15122a; --muted: #5b5676;
-  --accent: #5a4ee0; --accent-subtle: rgba(132, 122, 255, 0.14); --accent-hover: #463bc2; --on-accent: #ffffff;
-  --ok: #137a3a; --warn: #a14d06; --danger: #b42318; --info: #2f5bd3;
-  --kind-1: #d92d20; --kind-2: #e2600c; --kind-3: #b88405;
-  --cat-idle: rgba(91, 86, 118, 0.12); --cat-running: rgba(47, 91, 211, 0.13); --cat-waiting: rgba(91, 86, 118, 0.24);
-  --cat-blocked: rgba(180, 35, 24, 0.14); --cat-done: rgba(19, 122, 58, 0.15);
-  --stall: #8a3c04;
-  --ok-subtle: rgba(19, 122, 58, 0.08); --warn-subtle: rgba(161, 77, 6, 0.08); --danger-subtle: rgba(180, 35, 24, 0.07); --info-subtle: rgba(47, 91, 211, 0.07);
-  --shadow: 0 1px 2px rgba(42, 38, 64, 0.05); --shadow-pop: 0 14px 36px rgba(42, 38, 64, 0.14), 0 2px 6px rgba(42, 38, 64, 0.06);
-  --font: var(--font-sans); --mono: var(--font-mono);
-  --radius-xs: 6px; --radius-sm: 10px; --radius: 16px;
-  --control-h: 34px; --control-h-sm: 28px;
 }
 /* violet: a Linear-style night -- near-black with a violet cast, a lilac-violet accent; Inter, small radii, compact. */
 :root[data-theme="violet"] {
