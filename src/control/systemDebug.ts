@@ -387,6 +387,27 @@ export function ladderCandidates(store: ControlStore): Array<{ groupId: string; 
   return out;
 }
 
+/**
+ * Off-plan writes W4 (#346, Task 6 fix round 1): an orchestrated group's task (the groups the worker-lost pass reads: mode
+ * `run`, not a flow child, not archived, not paused or stopped -- tester #61: a retry refused `stop-mode-conflict` would be
+ * booked as the run's one automatic retry) whose current run ccloop or Orca's bound stopped for writing a parallel
+ * sibling's claim, as the driver classified it when it recorded the block (`drive.parallelClaim`).
+ */
+export function parallelClaimCandidates(store: ControlStore): Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>> }> {
+  const out: Array<{ groupId: string; taskId: string; run: NonNullable<ReturnType<typeof terminallyFailedRun>> }> = [];
+  for (const row of store.db.prepare(`SELECT g.id AS id, o.body AS orchestration FROM groups g JOIN group_orchestration o ON o.group_id=g.id WHERE ${flowRoleSql("g")} IS NOT 'child' ORDER BY g.rowid`).all()) {
+    const groupId = String(row.id);
+    try { if ((JSON.parse(String(row.orchestration)) as { mode?: unknown }).mode !== "run") continue; } catch { continue; }
+    if (isGroupArchived(store, groupId) || groupStopped(store, groupId)) continue;
+    for (const { id: taskId } of tasksOf(store, groupId)) {
+      const run = terminallyFailedRun(store, groupId, taskId);
+      if (run === null || run.state !== "blocked" || run.drive?.blockedAt !== "C" || run.drive.outcome !== "blocked_waiting_human" || run.drive.parallelClaim === undefined) continue;
+      out.push({ groupId, taskId, run });
+    }
+  }
+  return out;
+}
+
 /** §5.4: at most this many automatic restarts of a task whose runs keep losing their worker; the next loss blocks. */
 export const WORKER_LOST_RESTARTS = 3;
 /** §5.4: the command id of orca-auto's restart of a worker-lost run; its row (applied or refused) is the record. */

@@ -483,6 +483,8 @@ export type RunViewV1 = {
   outcome?: string | null;
   /** Git-observed allowlist misses, available only from a ccloop peer that reports typed evidence. */
   pathPolicyMisses?: Array<{ repoKey: string | null; path: string }>;
+  /** Off-plan writes W4 (#346): the sibling a parallel-claim stop is retried after; absent when none would be accepted. */
+  retryAfter?: string;
   /** Off-plan writes spec W3 (#346): a landed run's paths outside its task's targetPaths (at most 64) and their count. */
   offPlanWrites?: { paths: string[]; count: number };
   /** Failure-cause spec 2026-10-21 §5: ccloop's run-level cause; optional so literal fixtures need no edit. */

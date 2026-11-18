@@ -9,7 +9,9 @@ export function ObservedPathRetry({ view, run, onCommand }: { view: GroupViewV1;
   const { t } = useTranslation();
   if (run.outcome !== "blocked_waiting_human") return null;
   // Off-plan writes #346 W4: a stop on a parallel sibling's claim is retried after that sibling, not by widening paths.
-  const sibling = run.diagnosis?.cause === "parallel-claim" ? run.diagnosis.siblings?.[0] : undefined;
+  // Fix round 1: the server names the sibling only when the retry would be accepted (not when it already waits on this task).
+  const sibling = run.retryAfter;
+  if (sibling === undefined && run.diagnosis?.cause === "parallel-claim") return null;
   if (sibling !== undefined) return <button type="button" onClick={() => onCommand({ verb: "retry-task", groupId: view.summary.groupId, expectedRevision: view.summary.commandRevision,
     payload: { taskId: String(run.taskId), runId: run.runId, after: sibling } })}>{t("control.group.retryAfter", { task: sibling })}</button>;
   const misses = run.pathPolicyMisses;

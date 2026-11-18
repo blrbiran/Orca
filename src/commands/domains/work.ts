@@ -618,7 +618,7 @@ export const WORK_ROWS: CommandDef[] = [
       const work = json(c, "work");
       if (work !== undefined && (work === null || typeof work !== "object" || Array.isArray(work))) throw invalid("--work wants a JSON object {tokens?,activeMs?,attempts?,sessions?}");
       if (work !== undefined) retryNote = await retryFundingLines(c, (work as { tokens?: unknown }).tokens ?? 0);
-      return { taskId: task(c), runId: await currentRun(c), ...(c.args.flags["allow-observed-paths"] === true ? { allowObservedPaths: true } : {}), ...(typeof c.args.flags.after === "string" ? { after: c.args.flags.after } : {}), ...(typeof c.args.flags.agent === "string" ? { agent: c.args.flags.agent } : {}), ...(work === undefined ? {} : { work }) };
+      return { taskId: task(c), runId: await currentRun(c), ...(c.args.flags["allow-observed-paths"] === true ? { allowObservedPaths: true } : {}), ...(typeof c.args.flags.after === "string" ? { after: resolveId("task", c.args.flags.after, (await groupView(c)).workItems.map((w) => w.taskId)) } : {}), ...(typeof c.args.flags.agent === "string" ? { agent: c.args.flags.agent } : {}), ...(work === undefined ? {} : { work }) };
     }, next: retryNext }),
     // Tester follow-up B T2 (#202): the fresh grant the retry's next run gets, read before the write (print-only).
     format: (body: unknown) => {

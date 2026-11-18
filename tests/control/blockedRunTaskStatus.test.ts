@@ -7,9 +7,12 @@ import { work } from "./fixtures/handoffHarness.js";
 // and recovery all read. The group view used to show that task `active` while the brief counted it blocked and the Board
 // showed it blocked (web runFacts `shownWorkStatus`, #117) -- three views, two answers. The view now derives the status a
 // person reads from the run, so `group show` says what the brief and the Board say; the stored state is untouched.
+// Ruling: human approved necessary criteria rewrites this round (session 2026-11-18). Since #346 Task 4b a v4 task's harvest
+// is bounded by its denylist, not its targets, so a write outside the targets no longer blocks; the run is blocked the way a
+// v4 task still is -- a write into its own protected (denylisted) path. What the test is about is unchanged.
 describe("a run the driver blocked reads blocked in every view (#230)", { timeout: 60_000 }, () => {
   it("group view status, its category and the brief agree, while the stored work item stays running", async () => {
-    const t = await driverHarness([{ taskId: "a" }], { files: () => ({ "elsewhere.txt": "x\n" }) }); try {
+    const t = await driverHarness([{ taskId: "a", safetyPolicy: { denylistPaths: ["elsewhere.txt"] } }], { files: () => ({ "elsewhere.txt": "x\n" }) }); try {
       const runId = await t.claim();
       await t.until(t.driver(), () => t.body(runId).state === "blocked");
       // The stored state the scheduler and the recovery verbs read stays as the driver left it.
@@ -22,7 +25,7 @@ describe("a run the driver blocked reads blocked in every view (#230)", { timeou
   });
 
   it("a recovery retry of that run still resumes it, and the view reads active again", async () => {
-    const t = await driverHarness([{ taskId: "a" }], { files: () => ({ "elsewhere.txt": "x\n" }) }); try {
+    const t = await driverHarness([{ taskId: "a", safetyPolicy: { denylistPaths: ["elsewhere.txt"] } }], { files: () => ({ "elsewhere.txt": "x\n" }) }); try {
       const runId = await t.claim();
       await t.until(t.driver(), () => t.body(runId).state === "blocked");
       const retried = await t.service.recoveryRetry(t.h.runCommand("recovery-retry", runId, { scope: "run", runId }));
@@ -37,7 +40,7 @@ describe("a run the driver blocked reads blocked in every view (#230)", { timeou
   // would route a live run into those branches. Both views derive from the same run instead (categoryOf ->
   // workItemCategory), so there is nothing to keep in step: blocked, both say blocked; resumed, both say running.
   it("the brief's counts and the group view's word move together, both ways, from the run alone", async () => {
-    const t = await driverHarness([{ taskId: "a" }], { files: () => ({ "elsewhere.txt": "x\n" }) }); try {
+    const t = await driverHarness([{ taskId: "a", safetyPolicy: { denylistPaths: ["elsewhere.txt"] } }], { files: () => ({ "elsewhere.txt": "x\n" }) }); try {
       const runId = await t.claim();
       const views = () => ({
         status: readControlGroup(t.h.store, "epoch", "g").workItems.find((entry) => entry.taskId === "a")!.status,

@@ -1,7 +1,7 @@
 import { detectCycle } from "../scheduler/graph.js";
 import { ControlError } from "./errors.js";
 import { readWebGroup, saveWebAuthority } from "./estimateSettlement.js";
-import { deriveContract, offPlanEntryOf, replaceTaskInSnapshot } from "./executionSnapshot.js";
+import { deriveContract, offPlanEntryOf, readConfirmedTaskExecution, replaceTaskInSnapshot } from "./executionSnapshot.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { readArchivedPlan, readBudgetProposal } from "./queries.js";
 import { amountSchema } from "./schema.js";
@@ -64,4 +64,6 @@ export function applyRetryAfter(store: ControlStore, groupId: string, taskId: st
   proposal.executionSnapshotHash = rebuilt.snapshotHash;
   saveWebAuthority(store, readWebGroup(store, groupId), proposal);
   recordProjectionChange(store, [groupId]);
+  // Fix round 1 (minor 5): the rewritten task passes A2 before this commits, as applyObservedPathAmendment and set-task-loop check.
+  readConfirmedTaskExecution(store, groupId, taskId);
 }

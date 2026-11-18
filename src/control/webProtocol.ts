@@ -2153,6 +2153,9 @@ export const runViewSchema = z
     // Retry-task button keys on it). Optional on the wire like `git`; the server always gives both, null when absent.
     stopReason: nonemptyString.nullable().optional(),
     pathPolicyMisses: pathPolicyMissesSchema.optional(),
+    // Off-plan writes W4 (#346): the sibling a parallel-claim stop is retried after (`retry-task --after`); omitted when that
+    // sibling already waits on this task (the retry would be refused after-cycle).
+    retryAfter: idSchema.optional(),
     // Off-plan writes spec W3 (#346): a landed run's paths outside its task's targetPaths (at most 64) and their count.
     offPlanWrites: z.object({ paths: z.array(nonemptyString).max(64), count: positiveSafeInteger }).strict().optional(),
     outcome: nonemptyString.nullable().optional(),

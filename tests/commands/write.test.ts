@@ -201,6 +201,15 @@ describe("refusals made here", () => {
     expect(w.posts()).toEqual([]);
   });
 
+  // Off-plan writes W4 (#346, Task 6 fix round 1, minor 7): --after is resolved as <task> is (exact id or unique prefix).
+  it("task retry --after naming no task of the group is refused before sending", async () => {
+    const w = await world();
+    const out = await cli(["task", "retry", "g-alpha", "t1", "--after", "nope", "--json"], w.dir);
+    // mutation: --after sent as given -> one POST with after "nope", red
+    expect([out.code, out.json().body.error?.code]).toEqual([1, "id-not-found"]);
+    expect(w.posts()).toEqual([]);
+  });
+
   // Stuck-runs spec 2026-11-17 S2: run abandon needs a run and a reason; neither missing nor blank is sent.
   it("run abandon with a blank note, or with no --run, is refused before sending", async () => {
     const w = await world();

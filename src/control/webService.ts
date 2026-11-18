@@ -76,7 +76,7 @@ import { applyCorrectionDebugOpen, archiveUnstartedDebugGroups, debugGroupIdFor,
 import { DEBUG_SETTLE_FAILED, readSystemDebugMark, stuckDebugRun, writeSystemDebugSettled, type SystemDebugMark } from "./systemDebug.js";
 import { ladderDecisionOf, type LadderSkip } from "./ladderSkip.js";
 import { claimQuotaProbeInTransaction, probeStateOf, quotaProbeWorkItemId } from "./quotaProbeCall.js";
-import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, quotaProbeCandidates, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, failoverCandidates, failoverCommandId, isFailoverGroup, SWITCHABLE_AGENT_SOURCES, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource, workerLostCandidates, workerLostCommandId, WORKER_LOST_RESTARTS } from "./systemDebug.js";
+import { allTasksDone, anyTaskFailed, applySystemDebugOpen, terminallyFailedRun, quotaProbeCandidates, ladderCandidates, ladderLevelOneCommandId, ladderFacts, quotaWaitCandidates, failoverCandidates, failoverCommandId, isFailoverGroup, SWITCHABLE_AGENT_SOURCES, settleSystemDebug, systemDebugGroupId, systemDebugGroups, type SystemDebugOpenCommand, isGroupSource, workerLostCandidates, parallelClaimCandidates, workerLostCommandId, WORKER_LOST_RESTARTS } from "./systemDebug.js";
 import { QUIET_GIT, revParse, workBranchRef } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { applySetCriteriaReview, criteriaDecisionIdOf, criteriaReviewCandidates, criteriaReviewFacts, criteriaReviewVerdict, type SetCriteriaReviewCommand } from "./criteriaReview.js";
@@ -1150,15 +1150,18 @@ export class WebControlService {
    * never stops the pass.
    */
   private parallelClaimPass(out: { redispatched: string[] }): void {
-    const rows = this.store.db.prepare("SELECT id,group_id,body FROM runs WHERE active=1 AND json_valid(body) AND json_extract(body,'$.state')='blocked' AND json_type(body,'$.drive.parallelClaim')='object' ORDER BY rowid").all();
-    for (const row of rows) {
-      const groupId = String(row.group_id), runId = String(row.id);
+    for (const candidate of parallelClaimCandidates(this.store)) {
+      const { groupId, taskId, run } = candidate, runId = run.runId, drive = run.drive!;
       try {
-        const run = JSON.parse(String(row.body)) as { taskId?: unknown; drive?: DriveRecord };
-        const drive = run.drive, taskId = run.taskId;
-        if (typeof taskId !== "string" || drive?.blockedAt !== "C" || drive.outcome !== "blocked_waiting_human" || drive.parallelClaim === undefined) continue;
+        // Fix round 1 (Important 2): what workerLostPass waits for before it sends -- usage still being folded, or unknown --
+        // so the run's one automatic retry is not booked as usage-pending / usage-unknown.
+        const body = JSON.parse(String(this.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)?.body)) as { unknown?: { work?: boolean; handoff?: boolean }; highWater?: number };
+        if (this.store.db.prepare("SELECT 1 FROM usage_events WHERE run_id=? AND seq>?").get(runId, Number(body.highWater ?? 0)) !== undefined) continue;
+        if (body.unknown?.work === true || body.unknown?.handoff === true) continue;
         const commandId = `orca-auto-parallel-claim-${taskId}-${runId}`;
         if (this.store.db.prepare("SELECT 1 FROM commands WHERE group_id=? AND id=?").get(groupId, commandId) !== undefined) continue;
+        // A run left to the person for its funding stays theirs.
+        if (this.store.db.prepare("SELECT 1 FROM activity WHERE run_id=? AND kind='ladder-skipped'").get(runId) !== undefined) continue;
         let funding: ReturnType<typeof autoRetryFundingRefusal>;
         try { funding = autoRetryFundingRefusal(this.store, groupId, taskId, runId); }
         catch (error) { if (!(error instanceof ControlError)) throw error; funding = "retry-funding-missing"; }
@@ -1166,7 +1169,7 @@ export class WebControlService {
         const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)?.revision ?? 0);
         const answer = this.retryTask({
           schema: "orca-raw-command-v1", commandId, actorId: ORCHESTRATION_ACTOR, expectedRevision: revision, verb: "retry-task",
-          target: { kind: "group", groupId }, payload: { taskId, runId, after: drive.parallelClaim.siblingIds[0]! },
+          target: { kind: "group", groupId }, payload: { taskId, runId, after: drive.parallelClaim!.siblingIds[0]! },
         });
         if (!("error" in answer)) out.redispatched.push(`${groupId}:${taskId}`);
       } catch (error) {

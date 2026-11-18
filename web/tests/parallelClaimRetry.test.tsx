@@ -13,7 +13,7 @@ import { config, run, view, workItem } from "./fixtures/board.js";
 afterEach(cleanup);
 const item = workItem({ status: "blocked", currentRunId: "run-a", lineageRunIds: ["run-a"] });
 const claimed = run({ state: "blocked", outcome: "blocked_waiting_human", stopReason: "denylist match: b",
-  diagnosis: { phase: "work", step: null, cause: "parallel-claim", siblings: ["b", "c"], attempt: 1 } });
+  diagnosis: { phase: "work", step: null, cause: "parallel-claim", siblings: ["b", "c"], attempt: 1 }, retryAfter: "b" });
 const sent = { verb: "retry-task", groupId: "g", expectedRevision: 6, payload: { taskId: "a", runId: "run-a", after: "b" } };
 
 describe("parallel-claim retry", () => {
@@ -31,5 +31,15 @@ describe("parallel-claim retry", () => {
     render(<TaskDetail view={view([item], [claimed])} item={item} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
     fireEvent.click(within(screen.getByRole("region", { name: "Task a" })).getByRole("button", { name: "Retry after b" }));
     expect(onCommand).toHaveBeenCalledWith(sent);
+  });
+
+  // Fix round 1 (minor 4): the server leaves `retryAfter` out when the sibling already waits on this task (the retry would
+  // be refused after-cycle); the diagnosis still names the sibling, but no button is offered.
+  it("offers no Retry after when the server names no sibling to retry after", () => {
+    const onCommand = vi.fn();
+    const { retryAfter: _omitted, ...cyclic } = claimed;
+    render(<ControlGroupView focus={{ kind: "group", groupId: "g", region: "runs", taskId: null, runId: null }} view={view([item], [cyclic])} config={config} uncertain={[]} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} />);
+    // mutation: the button keys on the diagnosis's siblings -> Retry after b offered, red
+    expect(screen.queryByRole("button", { name: "Retry after b" })).toBeNull();
   });
 });

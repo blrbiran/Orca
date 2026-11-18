@@ -370,6 +370,20 @@ function decodedValue(result: StoredJsonResult | undefined): unknown {
   return result.value;
 }
 
+/**
+ * Off-plan writes W4 (#346, Task 6 fix round 1): the sibling a blocked run stopped on a parallel claim is retried after (the
+ * first the driver stored), or null -- none stored, or that sibling already waits on this task, so `--after` would be
+ * refused after-cycle. Read from the summary's own snapshot (no extra body scan).
+ */
+function retryAfterSibling(snapshot: GroupReadSnapshot, taskId: string, run: { state?: unknown; drive?: { parallelClaim?: { siblingIds?: unknown } } } | null | undefined): string | null {
+  const ids = run?.drive?.parallelClaim?.siblingIds;
+  if (run?.state !== "blocked" || !Array.isArray(ids) || typeof ids[0] !== "string") return null;
+  try {
+    const sibling = decodedValue(snapshot.decodeWork(ids[0])) as { dependsOn?: unknown } | null | undefined;
+    return Array.isArray(sibling?.dependsOn) && sibling.dependsOn.includes(taskId) ? null : ids[0];
+  } catch { return null; }
+}
+
 function parseSnapshot<S extends z.ZodTypeAny>(schema: S, result: StoredJsonResult | undefined, detail: string): z.output<S> {
   if (result === undefined || !result.ok) return blocked(detail);
   const parsed = schema.safeParse(result.value);
@@ -636,7 +650,7 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
     // Tester follow-up J (#299): a model the provider does not serve is retried on another agent or model, by a person.
     const modelUnavailable = run?.drive?.failureCause?.cause === MODEL_UNAVAILABLE_CAUSE;
     // Off-plan writes W4 (#346): a stop on a parallel sibling's claim (stored at block time) is retried after that sibling.
-    const sibling = run?.state === "blocked" && Array.isArray(run.drive?.parallelClaim?.siblingIds) && typeof run.drive.parallelClaim.siblingIds[0] === "string" ? run.drive.parallelClaim.siblingIds[0] : null;
+    const sibling = retryAfterSibling(snapshot, taskId, run);
     if (cause !== null) { firstFailure = { taskId, cause: cause.slice(0, 200), ...(resumable ? { next: recoveryRetryCommand(runId as string) } : sibling !== null ? { next: retryAfterCommand(groupId, taskId, sibling) } : pathPolicy ? { next: allowObservedPathsCommand(groupId, taskId) } : modelUnavailable ? { next: modelUnavailableCommand(groupId, taskId) } : {}) }; break; }
   }
   const findings = listFlagsInvolving(store, groupId).filter((row) => row.state === "flagged");
@@ -1166,13 +1180,18 @@ function workViews(
     const contract = body.contract as { contentAddressedHash?: unknown };
     // Agent selection spec §6.4 step 4 (§12 I3): a draft has no configHash; a confirmed work item carries exactly the snapshot's selection.
     const frozenEntry = snapshot?.agents.tasks.find(entry => entry.taskId === task.taskId) ?? null;
+    // Off-plan writes W4 (#346, Task 6 fix round 1): an `--after` edge only as retry-task writes it -- another task of the
+    // group, not already a plan edge, and no longer in the task's frozen entry (the retry dropped its claims).
+    const after = body.afterDependsOn ?? [];
+    const afterValid = after.every(id => id !== task.taskId && plan.tasks.some(other => other.taskId === id) && !task.dependencyTaskIds.includes(id)
+      && snapshot !== null && !offPlanEntryOf(snapshot, task.taskId).some(sibling => sibling.siblingId === id));
     if (snapshot === null ? body.configHash !== null : frozenEntry === null || !sameFrozen(body, frozenEntry)) return blocked(`work-item-agent:${task.taskId}`);
     if (body.workItemId !== task.taskId || body.taskId !== task.taskId
       || body.targetVersion !== task.targetVersion
       || body.originalContractHash !== task.originalContractHash
       || contract?.contentAddressedHash !== task.originalContractHash
       || (snapshot !== null && body.derivedContractHash !== derivedByTask.get(task.taskId))
-      || sortedUnique(body.dependsOn).join("\0") !== sortedUnique([...task.dependencyTaskIds, ...(body.afterDependsOn ?? [])]).join("\0")) return blocked(`work-item-authority:${task.taskId}`);
+      || !afterValid || sortedUnique(body.dependsOn).join("\0") !== sortedUnique([...task.dependencyTaskIds, ...after]).join("\0")) return blocked(`work-item-authority:${task.taskId}`);
     const taskRuns = runs.filter(run => String(run.work_item_id) === task.taskId);
     const persistedRunIds = taskRuns.map(run => String(run.id));
     if (taskRuns.length > 0) {
@@ -1488,6 +1507,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       // Issue fixes spec §4.2(1), (5): ccloop's reason, and the outcome the Retry-task button keys on.
       stopReason: run.drive?.stopReason ?? null,
       ...(run.drive?.pathPolicyMisses === undefined ? {} : { pathPolicyMisses: run.drive.pathPolicyMisses }),
+      ...(() => { const after = run.taskId === null ? null : retryAfterSibling(snapshot, run.taskId, run as never); return after === null ? {} : { retryAfter: after }; })(),
       ...offPlanWritesView(offPlan.get(runId)),
       // Failure-cause spec 2026-10-21 §5: ccloop's run-level cause, for the next-step line; null when it stated none.
       failureCause: run.drive?.failureCause ?? null,
