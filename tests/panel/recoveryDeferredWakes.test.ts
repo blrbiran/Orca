@@ -35,12 +35,14 @@ describe("the recovery read names a start wake that never delivers (#171)", () =
   it("reports a global dispatch block and an archived group, and leaves a delivered wake out", async () => {
     const { store, dispose } = await storeWith([group("g-archived", JSON.stringify({ groupId: "g-archived", archived: { at: 1_760_000_000_000, actor: "person" } })), wake("w2", "g-archived", "resume"), wake("w3", "g-archived", "start")]);
     try {
+      // Ruling (2026-11-18 tester batch D): #370 -- an archived group's queued start is dropped by its unarchive, never
+      // delivered, so it is not listed as a deferred start (under either reason); its resume wake still is.
       store.dispatchBlocked = true;
-      expect(readControlRecovery(store, "epoch-test").deferredWakes).toEqual([{ groupId: "g-archived", kind: "resume", reason: "dispatch-blocked" }, { groupId: "g-archived", kind: "start", reason: "dispatch-blocked" }]);
+      expect(readControlRecovery(store, "epoch-test").deferredWakes).toEqual([{ groupId: "g-archived", kind: "resume", reason: "dispatch-blocked" }]);
       store.dispatchBlocked = false;
-      expect(readControlRecovery(store, "epoch-test").deferredWakes).toEqual([{ groupId: "g-archived", kind: "resume", reason: "group-archived" }, { groupId: "g-archived", kind: "start", reason: "group-archived" }]);
-      store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id='w3'").run();
-      expect(readControlRecovery(store, "epoch-test").deferredWakes!.map((row) => row.kind)).toEqual(["resume"]);
+      expect(readControlRecovery(store, "epoch-test").deferredWakes).toEqual([{ groupId: "g-archived", kind: "resume", reason: "group-archived" }]);
+      store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE id='w2'").run();
+      expect(readControlRecovery(store, "epoch-test")).not.toHaveProperty("deferredWakes");
     } finally { await dispose(); }
   }, 20000);
 

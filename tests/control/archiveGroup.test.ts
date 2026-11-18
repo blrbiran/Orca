@@ -353,7 +353,12 @@ describe("no claim and no wake for an archived group (spec §6.3)", () => {
       expect(await deliverScheduledStart(dispatch(h), "g")).toEqual({ kind: "blocked", reason: "group-archived" });
       expect(pending(h)).toEqual(wakes);
       expect(activeRuns(h)).toBe(0);
+      // Ruling (2026-11-18 tester batch D): #370 -- unarchiving never starts a group: the queued start is dropped, and a
+      // person's start claims.
       service.unarchiveGroup(h.command("unarchive-group", {}));
+      expect(pending(h)).toEqual([]);
+      expect(await deliverScheduledStart(dispatch(h), "g")).toEqual({ kind: "idle" });
+      await service.start(h.command("start", {}));
       expect((await deliverScheduledStart(dispatch(h), "g")).kind).toBe("claimed");
     } finally { await h.dispose(); }
   });

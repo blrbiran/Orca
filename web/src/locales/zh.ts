@@ -365,6 +365,7 @@ export const zh: Translation<typeof en> = {
     groupFilter: { region: "筛选组", all: "全部", empty: "没有符合这个筛选的组。" },
     groupCard: {
       progress: "已完成 {{done}}/{{total}} 个任务",
+      archivedWas: "已归档（原为{{state}}）",
       attention: "需要你处理",
       updated: "{{minutes}} 分钟前更新",
       updatedNow: "刚刚更新",

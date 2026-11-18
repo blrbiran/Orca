@@ -1939,6 +1939,9 @@ function deferredWakeRows(store: ControlStore): Array<{ groupId: string; kind: s
     if (!["start", "no-start", "resume", "continuation"].includes(kind)) continue;
     const group = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
     const archived = group !== undefined && archivedMarkOf(JSON.parse(String(group.body))) !== null;
+    // Tester #370 (correction 2026-11-18): an archived group's queued start is dropped by its unarchive, so it is never
+    // delivered -- not a start waiting here. Its resume wakes still are.
+    if (archived && kind === "start") continue;
     if (store.dispatchBlocked) out.push({ groupId, kind, reason: "dispatch-blocked" });
     else if (store.db.prepare("SELECT id FROM recovery_blockers WHERE group_id=? AND scope='group'").get(groupId) !== undefined) out.push({ groupId, kind, reason: "group-blocker" });
     else if (archived) out.push({ groupId, kind, reason: "group-archived" });

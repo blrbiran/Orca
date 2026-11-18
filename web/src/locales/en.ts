@@ -516,6 +516,7 @@ export const en = {
     groupFilter: { region: "Show groups", all: "All", empty: "No group matches this filter." },
     groupCard: {
       progress: "{{done}} of {{total}} tasks done",
+      archivedWas: "archived (was {{state}})",
       attention: "needs you",
       updated: "updated {{minutes}} min ago",
       updatedNow: "updated just now",

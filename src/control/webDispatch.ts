@@ -283,8 +283,9 @@ export async function deliverScheduledStart(deps: WebDispatchDeps, groupId: stri
       const claimAt = (deps.now?.() ?? new Date()).getTime();
       const still = pendingResumeWake(store, groupId) ?? pendingStartWake(store, groupId);
       if (!still) return activeWorkRun(store, groupId) ?? { kind: "idle" as const };
-      // Issue-fixes spec §6.3: an archived group takes no claim; its start and resume wakes stay pending (blocked keeps them)
-      // and are delivered once it is unarchived. deliverContinuationWake is reached only past this line.
+      // Issue-fixes spec §6.3: an archived group takes no claim; its start and resume wakes stay pending (blocked keeps them).
+      // A resume wake is delivered once it is unarchived; a start wake is dropped by the unarchive (correction 2026-11-18,
+      // #370: unarchiving never starts a group). deliverContinuationWake is reached only past this line.
       if (isGroupArchived(store, groupId)) return { kind: "blocked" as const, reason: "group-archived" };
       // `scheduleStart` refuses to arm a wake while usage is unknown; the wake outlives that
       // check, so delivery re-reads the ledger rather than claiming on an unknowable budget.

@@ -206,16 +206,18 @@ async function listFields(c: WriteContext): Promise<string[] | null> {
 }
 
 const groupList = (body: unknown): string => {
-  const groups = (body as Summary).groups ?? [];
+  // Tester #370: archived groups are listed (Issue 151), last; the order is otherwise the panel's.
+  const groups = [...((body as Summary).groups ?? [])].sort((a, b) => Number(a.archived === true) - Number(b.archived === true));
   return groups.length === 0 ? "no groups" : groups.map((g) => {
     const count = g.counts?.running ?? 0;
-    const state = count > 0 && (g.state === "ready" || g.state === "review") ? `${g.state} · running ${count} task${count === 1 ? "" : "s"}` : g.state ?? "";
+    const live = count > 0 && (g.state === "ready" || g.state === "review") ? `${g.state} · running ${count} task${count === 1 ? "" : "s"}` : g.state ?? "";
+    // Tester #370: an archived group's stored state is not what it is now; it reads `archived (was <state>)`.
+    const state = g.archived === true ? `archived (was ${g.state ?? "?"})` : live;
     // Tester #166: the list used to hide a paused, over-grant or blocked group behind its state word.
     const flags = [
       g.stopState !== null && g.stopState !== undefined ? (g.stopState === "paused" ? "paused" : `stopping (${g.stopState})`) : "",
       g.overGrant === true ? "over grant" : "",
       (g.counts?.blocked ?? 0) > 0 ? `blocked ${g.counts!.blocked}` : "",
-      g.archived === true ? "archived" : "",
     ].filter((flag) => flag !== "").join(", ");
     const completion = g.completion === undefined ? "" : `  done ${g.completion.done}/${g.completion.total}`;
     return `${g.groupId}  ${g.repoId ?? ""}  ${state}${flags === "" ? "" : ` · ${flags}`}${completion}  rev ${g.commandRevision ?? "?"}${g.goal ? `  ${g.goal}` : ""}`;

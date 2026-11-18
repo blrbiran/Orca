@@ -620,9 +620,13 @@ describe("an archived group with a queued continuation and a queued start (issue
       expect(await deliverScheduledStart(ctx.deps, "g")).toEqual({ kind: "blocked", reason: "group-archived" });
       expect(activeRunIds(h.store)).toEqual([]);
       expect(queued().map((row) => row.id).sort()).toEqual(wakes);
+      // Ruling (2026-11-18 tester batch D): #370 -- the unarchive drops the queued start (unarchiving never starts a group);
+      // the resume wake carrying a's continuation is still delivered.
+      const startIds = queued().filter((row) => row.kind === "start").map((row) => row.id);
       service.unarchiveGroup(h.command("unarchive-group", {}));
+      expect(wakeRows(h.store).filter((row) => startIds.includes(row.id))).toEqual([]);
       const after = await deliverSchedulerWakes(h.store, handlers);
-      for (const id of wakes) expect(after.delivered).toContain(id);
+      for (const id of wakes.filter((id) => !startIds.includes(id))) expect(after.delivered).toContain(id);
       expect(activeRunIds(h.store).length).toBeGreaterThan(0);
     } finally { await h.dispose(); }
   });

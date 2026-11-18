@@ -113,7 +113,12 @@ export function applyArchiveGroup(deps: { store: ControlStore }, command: Archiv
   }).body;
 }
 
-/** Spec §6.3: removes the mark (refused no-op-command when there is none) and writes an `unarchived` activity row. */
+/**
+ * Spec §6.3: removes the mark (refused no-op-command when there is none) and writes an `unarchived` activity row.
+ * Correction 2026-11-18 (#370, human ruling 「unarchive 一个 ready 组时，不应该自动开跑」): a start queued before the
+ * archive (an undelivered `start` wake) is dropped in this transaction -- deleted, not marked delivered, so the driver has
+ * no start to re-arm from -- and the result says so (`startDropped`), so the receipt names `orca group start`.
+ */
 export function applyUnarchiveGroup(deps: { store: ControlStore }, command: UnarchiveGroupCommand): CommandSuccessV1 | CommandErrorBodyV1 {
   return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
     rawCommand: command,
@@ -124,8 +129,9 @@ export function applyUnarchiveGroup(deps: { store: ControlStore }, command: Unar
       if (archivedMarkOf(group) === null) throw new ControlError("no-op-command");
       delete group.archived;
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+      const dropped = Number(deps.store.db.prepare("DELETE FROM scheduler_wakes WHERE group_id=? AND kind='start' AND delivered=0").run(groupId).changes);
       recordActivity(deps.store, { groupId, kind: "unarchived", body: {} });
-      return success(context, { kind: "unarchived", groupId });
+      return success(context, { kind: "unarchived", groupId, ...(dropped > 0 ? { startDropped: true as const } : {}) });
     },
   }).body;
 }

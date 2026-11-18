@@ -158,8 +158,14 @@ describe("archived wake performance at actual entry points", () => {
       const ids = pending(h), target = countedHandlers(h, service);
       expect(await deliverSchedulerWakes(h.store, target.handlers)).toEqual({ delivered: [], deferred: ids });
       expect(target.calls()).toBe(0);
-      expect(service.unarchiveGroup(h.command("unarchive-group", {}))).toMatchObject({ result: { kind: "unarchived" } });
-      expect(await deliverSchedulerWakes(h.store, target.handlers)).toEqual({ delivered: ids, deferred: [] });
+      // Ruling (2026-11-18 tester batch D): #370 -- the unarchive drops the start queued before the archive (unarchiving never
+      // starts a group), so the start that is delivered on the first pump after it is the person's own new start.
+      expect(service.unarchiveGroup(h.command("unarchive-group", {}))).toMatchObject({ result: { kind: "unarchived", startDropped: true } });
+      expect(pending(h)).toEqual([]);
+      expect(await service.start(h.command("start", {}))).toMatchObject({ result: { kind: "scheduled" } });
+      const restarted = pending(h);
+      expect(restarted).toHaveLength(1);
+      expect(await deliverSchedulerWakes(h.store, target.handlers)).toEqual({ delivered: restarted, deferred: [] });
       expect(target.calls()).toBe(1); expect(target.probes()).toBeGreaterThan(0); expect(active(h)).toBe(1);
     } finally { await h.dispose(); }
   });

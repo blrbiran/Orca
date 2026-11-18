@@ -82,7 +82,8 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
       <span id={`${base}-name`} className={`group-card-name ${groupCardName}`}>
         {/* Ruling H8: the status light; decorative, the state is in this text. */}
         <span className="led" data-led={groupLed(group)} aria-hidden="true" />
-        {group.groupId} · {stop !== null && <><strong data-testid="group-card-stop">{t(`control.groupCard.stop.${stop}` as const)}</strong> · </>}{enumText("groupState", group.state)}
+        {/* Tester #370: an archived group's stored state is not what it is now. */}
+        {group.groupId} · {stop !== null && <><strong data-testid="group-card-stop">{t(`control.groupCard.stop.${stop}` as const)}</strong> · </>}{group.archived === true ? t("control.groupCard.archivedWas", { state: enumText("groupState", group.state) }) : enumText("groupState", group.state)}
         {group.completion !== undefined ? t("control.groupDone", { done: group.completion.done, total: group.completion.total }) : ""}
         {group.recoveryBlockerCount > 0 ? t("control.groupBlockers", { n: group.recoveryBlockerCount }) : ""}
       </span>

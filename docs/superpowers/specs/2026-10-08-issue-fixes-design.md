@@ -483,3 +483,28 @@ in place; dispositions:
   archive; archived refuses every group command except `unarchive-group`; wake paths named.
 - Minors accepted: multi-row changes stated; attention defined; `held` is attention; `updatedAt` from the newest row; the
   run-activity route's scope checks; linear delivery order.
+
+## Correction 2026-11-18 — unarchive never starts a group; an archived group reads `archived (was <state>)` (#370)
+
+Recorded by the Track V implementer of plan `docs/superpowers/plans/2026-11-18-tester-batch-d.md` (Task V3), on branch
+`fix/batchd-v` over Orca `5220b1c1`. §6.3 above is kept as written; this section amends it.
+
+- **Human ruling (2026-11-18, quoted from `.superpowers/sdd/2026-11-18-tester-pm/progress.md`):** asked
+  「unarchive 一个 ready 组时是不是不应该自动开跑？」, the human answered 「同意」: unarchiving a ready group must not start it;
+  the queued start is dropped and the receipt says to `orca group start`.
+- **What changed.** Until now a start wake queued before the archive stayed pending while the group was archived
+  (`deliverScheduledStart` answers `blocked: group-archived` and keeps it) and was delivered on the first pump after
+  `unarchive-group` -- so unarchiving a ready group started it. Now `unarchive-group` deletes the group's undelivered
+  `start` wakes in its own transaction (deleted, not marked delivered: `replenishStartWakes` re-arms from the last `start`
+  row it finds) and its result carries `startDropped: true` when it dropped one; the CLI receipt then reads
+  `unarchived <g>; its queued start was dropped -- start it with: orca group start <g>`. A `resume` wake (a continuation
+  armed by resume-from-handoff) is not a start and is still delivered after unarchive, as before. Archiving itself is
+  unchanged.
+- **Recovery list.** `deferredWakes` no longer lists an archived group's `start` wakes (under any reason): they are never
+  delivered. Its `resume` wakes are still listed.
+- **Display.** The summary's `state` is unchanged for an archived group (no status enum change, ruling H4); the CLI
+  `group list` and the Web card read `archived (was <state>)` for it, and the CLI lists archived groups last (they are
+  still listed by default, Issue 151). `orca status` still excludes archived groups (#222).
+- **Not covered (left for the human).** A group already started -- an earlier `start` wake was delivered -- that is
+  archived between claims is still re-armed by `replenishStartWakes` after unarchive when a task is claimable, and so
+  continues. Changing that needs a stored mark or a change to the replenish rule; the ruling named the queued start only.
