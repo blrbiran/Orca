@@ -94,9 +94,14 @@ function filledAnswer(c: WriteContext, round: RoundView | undefined) {
  * drops that round's glossary entries and ADRs from the document. The Web confirms it first (Issue 88); the CLI refuses it
  * unless --unanswered says the person means it.
  */
-function unansweredRefusal(roundNo: number, round: RoundView | undefined): EntryRejection | null {
+function unansweredRefusal(groupId: string, roundNo: number, round: RoundView | undefined): EntryRejection | null {
   if (round?.state !== "awaiting-answers" || round.result === undefined || round.result === null) return null;
   const { questions, glossary, adrs } = round.result;
+  const entries = `${glossary.length} glossary entr${glossary.length === 1 ? "y" : "ies"} and ${adrs.length} ADR(s)`;
+  // Tester #354: a round with no questions still waits on its glossary entries and ADRs; answering it keeps them. With
+  // nothing to decide either, consensus drops nothing (the Web sends it as is).
+  if (questions.length === 0 && glossary.length + adrs.length === 0) return null;
+  if (questions.length === 0) return new EntryRejection("requirement-round-unanswered", `round ${roundNo} has no questions, but its ${entries} wait for a decision; consensus now drops them from the document. orca requirement answer ${groupId} --finish accepts them (--glossary/--adr <id>=reject drops one) and closes clarification; or pass --unanswered to agree without them`);
   return new EntryRejection("requirement-round-unanswered", `round ${roundNo} has ${questions.length} unanswered question(s); consensus now closes it unanswered and drops its ${glossary.length} glossary entr${glossary.length === 1 ? "y" : "ies"} and ${adrs.length} ADR(s) from the document. Answer it (orca requirement answer), or pass --unanswered to agree as it stands`);
 }
 /** #231: the panel's answer-set refusal (`group-state-invalid:<kind>:missing=…;extra=…`), one readable line per kind. */
@@ -353,7 +358,7 @@ export const WORK_ROWS: CommandDef[] = [
     route: (c) => `groups/${group(c)}/requirement/consensus`,
     payload: async (c) => {
       const round = await currentRound(c);
-      const refusal = c.args.flags.unanswered === true ? null : unansweredRefusal(round.roundNo, round.row);
+      const refusal = c.args.flags.unanswered === true ? null : unansweredRefusal(group(c), round.roundNo, round.row);
       if (refusal !== null) throw refusal;
       return { roundNo: round.roundNo };
     },

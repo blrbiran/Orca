@@ -81,6 +81,40 @@ describe("the Requirements section (N1 spec §11.2)", () => {
     expect(onCommand).toHaveBeenCalledWith({ verb: "requirement-consensus", groupId: "r", expectedRevision: 3, payload: { roundNo: 1 } });
   });
 
+  // Tester #354 (batch D C3): consensus on a round with no questions wrote empty glossary and ADR decisions, so they fell
+  // out of the document. With no questions and any glossary entry or ADR, "We agree" finishes by answering the round
+  // (each accepted, as the round form's default), which closes clarification in the same command.
+  describe("a round with no questions (#354)", () => {
+    const zeroQuestions = (openBranches: string[], keepDecisions = true): RequirementViewV1 => {
+      const base = requirementView("awaiting-answers");
+      const result = { ...base.rounds[0]!.result!, questions: [], openBranches, ...(keepDecisions ? {} : { glossary: [], adrs: [] }) };
+      return { ...base, rounds: [{ ...base.rounds[0]!, result }] };
+    };
+    const FINISH = { verb: "requirement-answer", groupId: "r", expectedRevision: 3, payload: {
+      finish: true, roundNo: 1, answers: [], glossaryDecisions: [{ id: "R1.G1", accept: true }], adrDecisions: [{ id: "R1.ADR1", accept: true }] } };
+
+    it("We agree answers the round with finish: true, accepting its glossary entries and ADRs", () => {
+      const onCommand = mount(zeroQuestions([]));
+      fireEvent.click(screen.getByRole("button", { name: "We agree" }));
+      // mutation: keep the old consensus send -> requirement-consensus {roundNo: 1}, red here.
+      expect(onCommand).toHaveBeenCalledWith(FINISH);
+    });
+
+    it("still asks first when open branches remain, then finishes the same way", () => {
+      const onCommand = mount(zeroQuestions(["sync to a cloud drive"]));
+      fireEvent.click(screen.getByRole("button", { name: "We agree" }));
+      expect(onCommand).not.toHaveBeenCalled();
+      fireEvent.click(within(screen.getByRole("dialog", { name: "The model still lists open branches" })).getByRole("button", { name: "Agree anyway" }));
+      expect(onCommand).toHaveBeenCalledWith(FINISH);
+    });
+
+    it("with nothing to decide either, it is consensus as before", () => {
+      const onCommand = mount(zeroQuestions([], false));
+      fireEvent.click(screen.getByRole("button", { name: "We agree" }));
+      expect(onCommand).toHaveBeenCalledWith({ verb: "requirement-consensus", groupId: "r", expectedRevision: 3, payload: { roundNo: 1 } });
+    });
+  });
+
   // Issue 89: a split that failed shows why, and both ways on -- retry the split, or archive the requirement.
   it("shows a failed split's reasons with Retry and Archive", () => {
     const base = requirementView("awaiting-review");

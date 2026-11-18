@@ -75,6 +75,26 @@ describe("requirement consensus on an open round (#240)", () => {
     expect(w.posts().map((post) => [post.path, post.payload])).toEqual([["groups/g-alpha/requirement/consensus", { roundNo: 2 }]]);
   });
 
+  // Tester #354 (batch D C3): a round with no questions still waits on its glossary and ADRs; "0 unanswered question(s)"
+  // and --unanswered led the person to drop them. The refusal names them and the command that keeps them.
+  it("a round with no questions names its waiting glossary entries and ADRs and answer --finish, and sends nothing", async () => {
+    const w = await world({}, view({ ...ROUND, result: { ...ROUND.result, questions: [] } }));
+    const out = await cli(["requirement", "consensus", "g-alpha", "--json"], w.dir);
+    expect(out.code).toBe(1);
+    expect(out.json().body.error.code).toBe("requirement-round-unanswered");
+    const message = out.json().body.error.message as string;
+    // mutation: keep the old text for a zero-question round -> "0 unanswered question(s)", red here.
+    expect(message).not.toContain("unanswered question");
+    expect(message).toMatch(/round 2 has no questions.*2 glossary entries and 1 ADR.*orca requirement answer g-alpha --finish/);
+    expect(w.posts()).toEqual([]);
+  });
+
+  it("a round with nothing to decide at all needs no --unanswered", async () => {
+    const w = await world({}, view({ ...ROUND, result: { questions: [], glossary: [], adrs: [] } }));
+    expect((await cli(["requirement", "consensus", "g-alpha", "--json"], w.dir)).code).toBe(0);
+    expect(w.posts().map((post) => [post.path, post.payload])).toEqual([["groups/g-alpha/requirement/consensus", { roundNo: 2 }]]);
+  });
+
   it("an answered round needs no --unanswered", async () => {
     const w = await world({}, view({ ...ROUND, state: "answered" }));
     expect((await cli(["requirement", "consensus", "g-alpha", "--json"], w.dir)).code).toBe(0);

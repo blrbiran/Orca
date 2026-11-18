@@ -330,7 +330,14 @@ function Consensus(props: { view: View; round: Round; onCommand: (a: ControlActi
   // lists them as not answered beside their recommended answers; nothing makes the split take those answers.
   const unanswered = props.round.state === "awaiting-answers" ? props.round.result?.questions.length ?? 0 : 0;
   const unansweredTitle = t("requirements.consensusUnansweredTitle", { count: unanswered, round: props.round.roundNo });
-  const send = () => props.onCommand({ verb: "requirement-consensus", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: { roundNo: props.round.roundNo } });
+  // Tester #354: consensus writes no glossary or ADR decision, so a round with no questions would drop them from the
+  // document. Such a round is finished by answering it instead -- each accepted, as the round form's default.
+  const result = props.round.state === "awaiting-answers" ? props.round.result : null;
+  const finishes = result != null && result.questions.length === 0 && result.glossary.length + result.adrs.length > 0;
+  const send = () => props.onCommand(finishes ? { verb: "requirement-answer", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: {
+    finish: true, roundNo: props.round.roundNo, answers: [],
+    glossaryDecisions: result.glossary.map((entry) => ({ id: entry.id, accept: true })), adrDecisions: result.adrs.map((adr) => ({ id: adr.id, accept: true })),
+  } } : { verb: "requirement-consensus", groupId: props.view.summary.groupId, expectedRevision: revisionOf(props.view), payload: { roundNo: props.round.roundNo } });
   return (
     <>
       <button type="button" onClick={() => (branches.length > 0 || unanswered > 0 ? setAsking(true) : send())}>{t("requirements.consensus")}</button>
