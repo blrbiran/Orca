@@ -157,6 +157,7 @@ export const zh: Translation<typeof en> = {
       decisions_other: "{{count}} 条决定待审",
       failure: "{{taskId}} 失败：{{cause}}",
       failureNext: "恢复它：",
+      groupProblem: "组的问题：{{code}}。处理它：",
       copyCommand: "复制命令",
       reason: { refused: "自动开跑一直被拒", paused: "已暂停", stopping: "停止还没处理完", blocked: "有任务卡住", recovery: "恢复需要你处理" },
     },

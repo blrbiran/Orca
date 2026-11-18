@@ -307,6 +307,7 @@ export const en = {
       decisions_other: "{{count}} decisions to review",
       failure: "{{taskId}} failed: {{cause}}",
       failureNext: "To resume it:",
+      groupProblem: "Group problem: {{code}}. To answer it:",
       copyCommand: "Copy command",
       reason: { refused: "its automatic start keeps being refused", paused: "paused", stopping: "a stop is still settling", blocked: "a task is blocked", recovery: "recovery needs you" },
     },

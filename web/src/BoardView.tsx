@@ -153,6 +153,13 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
       {group.acceptance?.result === "failed" && (
         <p className="detail-note" data-tone="danger" data-testid="board-card-acceptance">{t("control.groupAcceptance.boardFailed", { command: group.acceptance.commands.at(-1)?.command ?? "?" })}</p>
       )}
+      {/* Tester #359 review (I3): the group's own problem, with the first command that answers it -- as firstFailure's below. */}
+      {group.groupProblem != null && (
+        <p className="detail-note" data-tone="danger" data-testid="board-card-group-problem">
+          {t("board.card.groupProblem", { code: group.groupProblem.code })} <code className="select-all">{group.groupProblem.next[0]}</code>{" "}
+          <button type="button" className="btn-quiet" onClick={() => { void navigator.clipboard?.writeText(group.groupProblem!.next[0]!); }}>{t("board.card.copyCommand")}</button>
+        </p>
+      )}
       {group.stopState !== null && <span className={`badge ${cardBadge}`}>{enumText("stopState", group.stopState)}</span>}
       {waiting !== null && <p className="detail-note">{waiting}</p>}
       {reason !== null && <p className="detail-note" data-testid="board-card-reason">{t(`board.card.reason.${reason}` as const)}</p>}

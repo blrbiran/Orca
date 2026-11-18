@@ -78,6 +78,11 @@ export type GroupSummaryV1 = {
   /** Project filtering spec §4: the group's repository, from its plan or its requirement. */
   repoId: string;
   state: "clarifying" | "draft" | "ready" | "running" | "review" | "done" | "blocked";
+  /**
+   * Tester #359: the group's own problem (a failed group or delivered acceptance, a review that did not pass), beside
+   * card.firstFailure, which stays the tasks' own; `next` lists the commands that answer it, the first one first.
+   */
+  groupProblem?: { code: string; why: string; next: string[] } | null;
   /** Tester #361: the stored status, present only when the shown `state` (running: work under way) differs from it. */
   storedState?: "clarifying" | "draft" | "ready" | "running" | "review" | "done" | "blocked";
   commandRevision: number;
