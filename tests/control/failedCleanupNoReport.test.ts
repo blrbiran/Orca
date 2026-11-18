@@ -33,7 +33,9 @@ async function failedWithoutReport(shape: "never-accepted" | "alive" | "proved-s
   for (const row of t.h.store.db.prepare("SELECT id, body FROM outbox WHERE kind='archive'").all())
     if (JSON.parse(String(row.body)).runId === id) t.h.store.db.prepare("DELETE FROM outbox WHERE id=?").run(String(row.id));
   if (shape === "never-accepted") saveDriverRun(t.h.store, { ...t.body(id), executionId: null });
-  if (shape === "alive") alive.value = true;
+  // A run ccloop never accepted has nothing to collect either: no terminal, no stop proof. Only `executionId === null`
+  // can tell it from a live one.
+  if (shape === "alive" || shape === "never-accepted") alive.value = true;
   const run = t.body(id);
   expect(run).toMatchObject({ state: "settled-failed", drive: { cleanedUp: false } });
   expect(t.h.store.db.prepare("SELECT 1 FROM outbox WHERE id=?").get(`report:${id}`)).toBeUndefined();
