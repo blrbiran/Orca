@@ -1167,6 +1167,8 @@ export const requirementDraftEditPayloadSchema = z.object({
     z.object({ kind: z.literal("add-implied-path"), taskId: nonemptyString, path: nonemptyString }).strict(),
     // Tester #335: one claim replaced by paths inside it (requirementDraftEdit.ts narrowedSplit).
     z.object({ kind: z.literal("narrow-target-path"), taskId: nonemptyString, path: nonemptyString, to: z.array(nonemptyString).min(1).max(16) }).strict(),
+    // Tester #380: one target path of one task removed (requirementDraftEdit.ts droppedSplit).
+    z.object({ kind: z.literal("drop-target-path"), taskId: nonemptyString, path: nonemptyString }).strict(),
   ]),
 }).strict();
 // Clarify caps spec 2026-10-21 §3.1, §3.3: the person grants one more round after the latest one, or sets the class.

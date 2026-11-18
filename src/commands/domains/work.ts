@@ -443,6 +443,13 @@ export const WORK_ROWS: CommandDef[] = [
     route: (c) => `groups/${group(c)}/requirement/edit`,
     payload: async (c) => { const d = await latestDraft(c); if (d.draftHash === null) throw missing(c, await requirement(c), "requirement-no-draft", `draft ${d.draftNo} has no output yet`); return { draftNo: d.draftNo, draftHash: d.draftHash, edit: { kind: "narrow-target-path", taskId: str(c, "task"), path: str(c, "path"), to: list(c, "to") } }; },
     examples: ["orca requirement show g1   # lists 'run one after the other only because their target paths overlap'", "orca requirement narrow-path g1 --task velocity --path 'src/**' --to src/report/velocity.js"] }),
+  // Tester #380: a task the split gave a sibling's file (so their write sets intersect and the pair runs one after the
+  // other) loses that one target path. Orca re-validates the split as the next draft; the last path is never dropped.
+  verb({ domain: "requirement", action: "drop-path", summary: "remove one of a task's target paths in the current draft (never its last); the result is the next draft", verb: "requirement-draft-edit", positionals: [GROUP],
+    flags: [{ name: "task", type: "string", required: true, summary: "the task whose target path is removed" }, { name: "path", type: "string", required: true, summary: "the target path as the draft lists it" }],
+    route: (c) => `groups/${group(c)}/requirement/edit`,
+    payload: async (c) => { const d = await latestDraft(c); if (d.draftHash === null) throw missing(c, await requirement(c), "requirement-no-draft", `draft ${d.draftNo} has no output yet`); return { draftNo: d.draftNo, draftHash: d.draftHash, edit: { kind: "drop-target-path", taskId: str(c, "task"), path: str(c, "path") } }; },
+    examples: ["orca requirement show g1   # health-model lists src/health/report.js, which only health-report writes", "orca requirement drop-path g1 --task health-model --path src/health/report.js"] }),
   verb({ domain: "requirement", action: "classify", summary: "set the requirement's class (it sets the clarification caps)", verb: "requirement-classify", positionals: [GROUP],
     flags: [{ name: "scope", type: "string", required: true, summary: "small|medium|large" }, { name: "clarity", type: "string", required: true, summary: "the clarity class" }],
     route: (c) => `groups/${group(c)}/requirement/classify`, payload: (c) => ({ scope: str(c, "scope"), clarity: str(c, "clarity") }) }),

@@ -129,6 +129,21 @@ orca requirement show g1   # lists 'run one after the other only because their t
 orca requirement narrow-path g1 --task velocity --path 'src/**' --to src/report/velocity.js
 ```
 
+## `orca requirement drop-path <group> --task <task> --path <path>`
+
+remove one of a task's target paths in the current draft (never its last); the result is the next draft
+
+- What it does: sends control verb `requirement-draft-edit`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `--task <task>` (required): the task whose target path is removed
+- `--path <path>` (required): the target path as the draft lists it
+
+```
+orca requirement show g1   # health-model lists src/health/report.js, which only health-report writes
+orca requirement drop-path g1 --task health-model --path src/health/report.js
+```
+
 ## `orca requirement classify <group> --scope <scope> --clarity <clarity>`
 
 set the requirement's class (it sets the clarification caps)

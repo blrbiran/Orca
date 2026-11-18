@@ -97,6 +97,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca requirement apply-parallel <group>` — drop the dependsOn edges the current draft lists as parallel candidates; the result is the next draft
 - `orca requirement add-implied-path <group> --task <task> --path <path>` — add a path the current draft lists as implied to that task's target paths; the result is the next draft
 - `orca requirement narrow-path <group> --task <task> --path <path> --to <to>` — replace one of a task's target paths in the current draft with paths inside it; the result is the next draft
+- `orca requirement drop-path <group> --task <task> --path <path>` — remove one of a task's target paths in the current draft (never its last); the result is the next draft
 - `orca requirement classify <group> --scope <scope> --clarity <clarity>` — set the requirement's class (it sets the clarification caps)
 - `orca requirement set-agent <group> [--agent <agent>] [--model <model>]` — re-select the requirement's agent; a round or draft blocked on the old one is drafted again
 

@@ -57,6 +57,10 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
   [["requirement", "apply-parallel", "g-alpha"], "groups/g-alpha/requirement/edit", 5, { draftNo: 1, draftHash: H.draft, edit: { kind: "apply-parallel-candidates" } }],
   [["requirement", "add-implied-path", "g-alpha", "--task", "cli", "--path", "README.md"], "groups/g-alpha/requirement/edit", 5,
     { draftNo: 1, draftHash: H.draft, edit: { kind: "add-implied-path", taskId: "cli", path: "README.md" } }],
+  // Tester #380: drop one target path of one task, against the latest draft's hash.
+  // mutation: send --task as the path -> red
+  [["requirement", "drop-path", "g-alpha", "--task", "cli", "--path", "src/other.js"], "groups/g-alpha/requirement/edit", 5,
+    { draftNo: 1, draftHash: H.draft, edit: { kind: "drop-target-path", taskId: "cli", path: "src/other.js" } }],
   [["requirement", "classify", "g-alpha", "--scope", "medium", "--clarity", "fair"], "groups/g-alpha/requirement/classify", 5, { scope: "medium", clarity: "fair" }],
   [["task", "retry", "g-alpha", "t1"], "groups/g-alpha/retry-task", 5, { taskId: "t1", runId: "run-1" }],
   [["task", "retry", "g-alpha", "t1", "--allow-observed-paths"], "groups/g-alpha/retry-task", 5, { taskId: "t1", runId: "run-1", allowObservedPaths: true }],

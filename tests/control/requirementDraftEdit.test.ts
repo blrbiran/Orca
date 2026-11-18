@@ -233,3 +233,73 @@ describe("a multi-directory group's draft edit, re-validated end to end (tester 
     } finally { await x.dispose(); }
   });
 });
+
+// Tester #380 (probe-health-20261118-1): the split put each sibling module in the other's targetPaths, so their write sets
+// intersect and the re-validation's implicit edge (#268) ran them one after the other -- though the requirement says
+// neither imports the other. apply-parallel drops only declared edges and narrow-path only narrows a claim to paths
+// inside it, so nothing short of another split call could remove the stray path. drop-target-path removes one target
+// path of one task; the split is re-validated as every edit's, so the implicit edge goes only when the overlap does.
+const HEALTH = { tasks: [
+  task("health-model", ["src/health/model.js", "test/health-model.test.js", "src/health/report.js"], [], { successCondition: "the model test passes." }),
+  task("health-report", ["src/health/report.js", "test/health-report.test.js", "src/health/model.js"], [], { successCondition: "the report test passes." }),
+], notes: "" };
+const targetsOf = (output: unknown, taskId: string) => (output as typeof HEALTH).tasks.find((t) => t.taskId === taskId)!.targetPaths;
+
+describe("a person drops a stray target path from a draft task (#380)", () => {
+  it("drop-target-path removes exactly that path of that task, and refuses an unknown task, an unlisted path and the last path", () => {
+    const dropped = editedSplit(HEALTH, { kind: "drop-target-path", taskId: "health-model", path: "src/health/report.js" });
+    // mutation: filter every task's targetPaths -> health-report loses its own report.js too, red
+    expect(targetsOf(dropped.output, "health-model")).toEqual(["src/health/model.js", "test/health-model.test.js"]);
+    expect(targetsOf(dropped.output, "health-report")).toEqual(HEALTH.tasks[1]!.targetPaths);
+    expect(dropped.note).toBe("person edit: dropped src/health/report.js from health-model's target paths");
+    // The input split is not changed (the edit works on a copy).
+    expect(targetsOf(HEALTH, "health-model")).toHaveLength(3);
+    expect(() => editedSplit(HEALTH, { kind: "drop-target-path", taskId: "nope", path: "src/health/report.js" })).toThrow("draft-edit-not-a-target-path:nope:src/health/report.js");
+    expect(() => editedSplit(HEALTH, { kind: "drop-target-path", taskId: "health-model", path: "src/other.js" })).toThrow("draft-edit-not-a-target-path:health-model:src/other.js");
+    // mutation: drop the last-path refusal -> a task with no target path reaches validation, red
+    const single = { tasks: [task("only", ["src/only.js"], [])], notes: "" };
+    expect(() => editedSplit(single, { kind: "drop-target-path", taskId: "only", path: "src/only.js" })).toThrow("draft-edit-last-target-path:only:src/only.js");
+  });
+
+  it("multi-directory: drops the path from the write that declares it, and refuses emptying that write", () => {
+    const multi = (taskId: string, writes: MultiWrite[]) => ({ taskId, title: taskId, labels: ["feature"], goal: "g", successCondition: "s", writes, dependsOn: [], traces: ["AC1"] });
+    const split = { notes: "", tasks: [multi("a", [{ dir: "d1", targetPaths: ["x.js", "y.js"], checks: [] }, { dir: "d2", targetPaths: ["y.js"], checks: [] }])] };
+    // mutation: drop from the first write listing any path -> d1 loses y.js, red
+    expect((editedSplit(split, { kind: "drop-target-path", taskId: "a", path: "y.js" }).output.tasks[0] as { writes: MultiWrite[] }).writes)
+      .toEqual([{ dir: "d1", targetPaths: ["x.js"], checks: [] }, { dir: "d2", targetPaths: ["y.js"], checks: [] }]);
+    const lone = { notes: "", tasks: [multi("a", [{ dir: "d1", targetPaths: ["x.js"], checks: [] }])] };
+    expect(() => editedSplit(lone, { kind: "drop-target-path", taskId: "a", path: "x.js" })).toThrow("draft-edit-last-target-path:a:x.js");
+  });
+
+  it("the probe-health shape: two drops leave the sibling modules in one layer with no implicit edge", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: HEALTH }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
+      const first = readDraft(x.store, "r", 1);
+      expect(first).toMatchObject({ state: "awaiting-review", layers: [["health-model"], ["health-report"]] });
+      expect(first.implicitEdges?.map((e) => [e.from, e.to])).toEqual([["health-model", "health-report"]]);
+      // Nothing is dropped without the command, and apply-parallel has nothing to drop (no declared edge orders the pair).
+      expect(await edit(x, 1, { kind: "apply-parallel-candidates" })).toMatchObject({ error: { message: "group-state-invalid:draft-edit-no-parallel-candidates" } });
+      expect(await edit(x, 1, { kind: "drop-target-path", taskId: "health-model", path: "src/health/report.js" }))
+        .toMatchObject({ result: { kind: "requirement-draft-edited", draftNo: 1, nextDraftNo: 2 } });
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "rejected", feedback: "person edit: dropped src/health/report.js from health-model's target paths" });
+      // One stray path left: health-report still claims model.js, so the re-validation still orders the pair.
+      expect(readDraft(x.store, "r", 2)).toMatchObject({ state: "awaiting-review", layers: [["health-model"], ["health-report"]] });
+      expect(await edit(x, 2, { kind: "drop-target-path", taskId: "health-report", path: "src/health/model.js" }))
+        .toMatchObject({ result: { kind: "requirement-draft-edited", draftNo: 2, nextDraftNo: 3 } });
+      const third = readDraft(x.store, "r", 3);
+      // mutation: write the edited draft with the reviewed draft's layers/implicitEdges (no re-evaluation) -> serial, red
+      expect(third).toMatchObject({ state: "awaiting-review", reasons: [], calls: [], layers: [["health-model", "health-report"]], implicitEdges: [] });
+      expect(targetsOf(third.output, "health-model")).toEqual(["src/health/model.js", "test/health-model.test.js"]);
+      expect(targetsOf(third.output, "health-report")).toEqual(["src/health/report.js", "test/health-report.test.js"]);
+      expect(third.draftHash).not.toBe(readDraft(x.store, "r", 2).draftHash);
+      // A refused drop changes nothing.
+      expect(await edit(x, 3, { kind: "drop-target-path", taskId: "health-model", path: "src/health/report.js" }))
+        .toMatchObject({ error: { code: "group-state-invalid", message: "group-state-invalid:draft-edit-not-a-target-path:health-model:src/health/report.js" } });
+      expect(readDraft(x.store, "r", 3)).toEqual(third);
+      expect(() => readDraft(x.store, "r", 4)).toThrow();
+      // The edited draft is accepted as any other.
+      expect(await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 3, draftHash: third.draftHash }))).not.toHaveProperty("error");
+    } finally { await x.dispose(); }
+  });
+});

@@ -41,9 +41,10 @@ function reviewed(store: ControlStore, groupId: string, payload: RequirementDraf
 
 /**
  * Tester follow-up K (Rule 5: code edits, from code's own hints only): the split with every listed parallel candidate's
- * dependsOn edge dropped (#284), or with one listed implied path added to the task's targets (#265) -- in a multi split,
- * to the task's write in the directory the path's first writer lists it in (a new write there when it has none). Returns
- * the edited output and the line the superseded draft keeps as its feedback.
+ * dependsOn edge dropped (#284), one target path narrowed (#335) or dropped (#380), or with one listed implied path added
+ * to the task's targets (#265) -- in a multi split, to the task's write in the directory the path's first writer lists it
+ * in (a new write there when it has none). Returns the edited output and the line the superseded draft keeps as its
+ * feedback.
  */
 export function editedSplit(output: Output, edit: Edit): { output: Output; note: string } {
   const copy = structuredClone(output) as Output;
@@ -55,6 +56,7 @@ export function editedSplit(output: Output, edit: Edit): { output: Output; note:
     return { output: copy, note: `person edit: dropped dependsOn ${pairs.map((pair) => `${pair.before} -> ${pair.after}`).join(", ")} (parallel candidates)` };
   }
   if (edit.kind === "narrow-target-path") return narrowedSplit(copy, edit);
+  if (edit.kind === "drop-target-path") return droppedSplit(copy, edit);
   const entry = impliedPathsOutsideTargets(output).find((hint) => hint.taskId === edit.taskId && hint.path === edit.path);
   if (entry === undefined) return invalid(`draft-edit-not-an-implied-path:${edit.taskId}:${edit.path}`);
   const task = tasks.find((candidate) => candidate.taskId === edit.taskId)!;
@@ -85,6 +87,23 @@ function narrowedSplit(copy: Output, edit: Extract<Edit, { kind: "narrow-target-
   const at = write.targetPaths.indexOf(edit.path);
   write.targetPaths.splice(at, 1, ...edit.to.filter((path) => !write.targetPaths.includes(path)));
   return { output: copy, note: `person edit: narrowed ${edit.taskId}'s target path ${edit.path} to ${edit.to.join(", ")}` };
+}
+
+/**
+ * Tester #380: one target path of a task removed -- a sibling's module the split put in the task's claim, which makes the
+ * two write sets intersect and so orders the pair (#268). Never the task's last path (the schema's minItems 1; in a multi
+ * split, the declaring write's last path); the split is re-validated afterwards, so an overlap that remains still orders
+ * the pair. In a multi split, the write that declares the path.
+ */
+function droppedSplit(copy: Output, edit: Extract<Edit, { kind: "drop-target-path" }>): { output: Output; note: string } {
+  const task = (copy.tasks as Array<Output["tasks"][number]>).find((candidate) => candidate.taskId === edit.taskId);
+  const writes: Array<{ targetPaths: string[] }> = task === undefined ? [] : "writes" in task ? task.writes : [task];
+  const write = writes.find((candidate) => candidate.targetPaths.includes(edit.path));
+  if (write === undefined) return invalid(`draft-edit-not-a-target-path:${edit.taskId}:${edit.path}`);
+  const kept = write.targetPaths.filter((path) => path !== edit.path);
+  if (kept.length === 0) return invalid(`draft-edit-last-target-path:${edit.taskId}:${edit.path}`);
+  write.targetPaths = kept;
+  return { output: copy, note: `person edit: dropped ${edit.path} from ${edit.taskId}'s target paths` };
 }
 
 /**
