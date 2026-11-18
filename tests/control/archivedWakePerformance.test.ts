@@ -158,15 +158,16 @@ describe("archived wake performance at actual entry points", () => {
       const ids = pending(h), target = countedHandlers(h, service);
       expect(await deliverSchedulerWakes(h.store, target.handlers)).toEqual({ delivered: [], deferred: ids });
       expect(target.calls()).toBe(0);
-      // Ruling (2026-11-18 tester batch D): #370 -- the unarchive drops the start queued before the archive (unarchiving never
-      // starts a group), so the start that is delivered on the first pump after it is the person's own new start.
-      expect(service.unarchiveGroup(h.command("unarchive-group", {}))).toMatchObject({ result: { kind: "unarchived", startDropped: true } });
-      expect(pending(h)).toEqual([]);
-      expect(await service.start(h.command("start", {}))).toMatchObject({ result: { kind: "scheduled" } });
-      const restarted = pending(h);
-      expect(restarted).toHaveLength(1);
-      expect(await deliverSchedulerWakes(h.store, target.handlers)).toEqual({ delivered: restarted, deferred: [] });
-      expect(target.calls()).toBe(1); expect(target.probes()).toBeGreaterThan(0); expect(active(h)).toBe(1);
+      // Ruling (2026-11-18 tester batch D review): #370 -- the unarchive pauses the group (unarchiving never starts a group)
+      // and keeps the start queued before the archive; the first pump after the person's resume delivers it.
+      expect(service.unarchiveGroup(h.command("unarchive-group", {}))).toMatchObject({ result: { kind: "unarchived", paused: true } });
+      expect(pending(h)).toEqual(ids);
+      expect(await service.resumeDispatch(h.command("resume-dispatch", {}))).toMatchObject({ result: { kind: "scheduled" } });
+      const resumed = pending(h);
+      expect(resumed.slice(0, ids.length)).toEqual(ids);
+      expect(await deliverSchedulerWakes(h.store, target.handlers)).toEqual({ delivered: resumed, deferred: [] });
+      // Each start wake reaches the handler once (the resume's own one finds the task claimed); one claim.
+      expect(target.calls()).toBe(resumed.length); expect(target.probes()).toBeGreaterThan(0); expect(active(h)).toBe(1);
     } finally { await h.dispose(); }
   });
 
@@ -180,7 +181,10 @@ describe("archived wake performance at actual entry points", () => {
       const target = countedHandlers(h, service);
       target.handlers["budget-estimate"] = async () => {
         await Promise.resolve();
-        expect(service.unarchiveGroup(h.command("unarchive-group", {}))).toMatchObject({ result: { kind: "unarchived" } });
+        // Ruling (2026-11-18 tester batch D review): #370 -- the unarchive pauses the group; the person's resume in the same
+        // pump is what lets its start through, so the pump must see both.
+        expect(service.unarchiveGroup(h.command("unarchive-group", {}))).toMatchObject({ result: { kind: "unarchived", paused: true } });
+        await service.resumeDispatch(h.command("resume-dispatch", {}));
         if (result === "throw") throw new Error("isolated-handler-error");
         return result === "true";
       };

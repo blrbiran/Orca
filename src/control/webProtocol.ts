@@ -2706,8 +2706,9 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   // Stuck-runs spec S2: the request is recorded; how the run is stopped -- settled by the driver (never started), its live
   // ceiling lowered, or no ceiling to lower (abandon-unresolved after the grace unless it ends first).
   z.object({ kind: z.literal("run-abandon-requested"), runId: idSchema, taskId: idSchema, stop: z.enum(["not-started", "live-ceiling", "no-live-ceiling"]) }).strict(),
-  // Tester #370 (correction 2026-11-18): present (true) only when the unarchive dropped a start queued before the archive.
-  z.object({ kind: z.literal("unarchived"), groupId: idSchema, startDropped: z.literal(true).optional() }).strict(),
+  // Tester #370 (correction 2026-11-18): present (true) only when the unarchive paused a group that would otherwise run on
+  // its own (archiveGroup.ts wouldRunOnUnarchive); `orca group resume` starts it.
+  z.object({ kind: z.literal("unarchived"), groupId: idSchema, paused: z.literal(true).optional() }).strict(),
   z.object({ kind: z.literal("pending-decision-approved"), pendingId: idSchema, decisionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("pending-decision-rejected"), pendingId: idSchema, correctionId: nonemptyString }).strict(),
   z.object({ kind: z.literal("flagged-decision-ratified"), decisionId: nonemptyString }).strict(),

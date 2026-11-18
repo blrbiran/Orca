@@ -1008,7 +1008,7 @@ export type CommandSuccessV1 = {
     | { kind: "run-closed"; runId: string; taskId: string; alreadyClosed: boolean }
     | { kind: "attempt-accept-requested"; runId: string; taskId: string }
     | { kind: "run-abandon-requested"; runId: string; taskId: string; stop: "not-started" | "live-ceiling" | "no-live-ceiling" }
-    | { kind: "unarchived"; groupId: string }
+    | { kind: "unarchived"; groupId: string; paused?: true }
     | { kind: "pending-decision-approved"; pendingId: string; decisionId: string }
     | { kind: "pending-decision-rejected"; pendingId: string; correctionId: string }
     | { kind: "flagged-decision-ratified"; decisionId: string }

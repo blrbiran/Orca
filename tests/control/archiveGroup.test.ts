@@ -353,12 +353,12 @@ describe("no claim and no wake for an archived group (spec §6.3)", () => {
       expect(await deliverScheduledStart(dispatch(h), "g")).toEqual({ kind: "blocked", reason: "group-archived" });
       expect(pending(h)).toEqual(wakes);
       expect(activeRuns(h)).toBe(0);
-      // Ruling (2026-11-18 tester batch D): #370 -- unarchiving never starts a group: the queued start is dropped, and a
-      // person's start claims.
-      service.unarchiveGroup(h.command("unarchive-group", {}));
-      expect(pending(h)).toEqual([]);
-      expect(await deliverScheduledStart(dispatch(h), "g")).toEqual({ kind: "idle" });
-      await service.start(h.command("start", {}));
+      // Ruling (2026-11-18 tester batch D review): #370 -- unarchiving never starts a group: the unarchive pauses it, its
+      // queued start stays pending, and a person's resume claims.
+      expect(service.unarchiveGroup(h.command("unarchive-group", {}))).toMatchObject({ result: { kind: "unarchived", paused: true } });
+      expect(pending(h)).toEqual(wakes);
+      expect(await deliverScheduledStart(dispatch(h), "g")).toEqual({ kind: "blocked", reason: "group-stopped" });
+      await service.resumeDispatch(h.command("resume-dispatch", {}));
       expect((await deliverScheduledStart(dispatch(h), "g")).kind).toBe("claimed");
     } finally { await h.dispose(); }
   });
@@ -373,7 +373,10 @@ describe("no claim and no wake for an archived group (spec §6.3)", () => {
       expect(replenishStartWakes({ store: h.store, admissionGate: h.deps.admissionGate })).toEqual([]);
       service.unarchiveGroup(h.command("unarchive-group", {}));
       expect(nextClaimableTask(h.store, "g")).toEqual({ workItemId: "a" });
-      expect(replenishStartWakes({ store: h.store, admissionGate: h.deps.admissionGate })).toEqual(["drive:g:1"]);
+      // Ruling (2026-11-18 tester batch D review): #370 -- the unarchive pauses a started group with a claimable task, so the
+      // driver arms nothing until a person's resume, which arms the start itself.
+      expect(replenishStartWakes({ store: h.store, admissionGate: h.deps.admissionGate })).toEqual([]);
+      expect(await service.resumeDispatch(h.command("resume-dispatch", {}))).toMatchObject({ result: { kind: "scheduled" } });
     } finally { await h.dispose(); }
   });
 

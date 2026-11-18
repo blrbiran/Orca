@@ -508,3 +508,33 @@ Recorded by the Track V implementer of plan `docs/superpowers/plans/2026-11-18-t
 - **Not covered (left for the human).** A group already started -- an earlier `start` wake was delivered -- that is
   archived between claims is still re-armed by `replenishStartWakes` after unarchive when a task is claimable, and so
   continues. Changing that needs a stored mark or a change to the replenish rule; the ruling named the queued start only.
+
+## Correction 2026-11-18 (second) — unarchive pauses a group that would run; the derived `running` (#370 review)
+
+Recorded by the Track V fix-wave implementer, on branch `fix/batchd-v` over `75f22709` (the section above is kept as
+written; this one replaces its mechanism and corrects two of its claims). An independent review of the section above found
+the deletion incomplete; the controller decided the replacement.
+
+- **What the review found.** (C1) Deleting the undelivered `start` wakes missed a queued `no-start` re-arm
+  (`settleProviderAttempt` writes one; `webDispatch.ts` `pendingStartWake` claims from `start` and `no-start` alike), so a
+  group with one still started on unarchive. (C2) The case the section above left uncovered -- a group started before
+  the archive, re-armed by `replenishStartWakes` from its earlier `start` row once a task is claimable -- also starts it,
+  against the ruling.
+- **Controller decision: pause, not delete.** `unarchive-group` now writes the same pause intent `pause-dispatch` writes
+  (stop intent `pause`, `stopped: true`, a `stop` activity row) when the group would otherwise run on its own: a status of
+  `ready`/`running`/`review`, a confirmed proposal, no stop intent already, not a flow run's child, and either an
+  undelivered `start`/`no-start`/`resume` wake or an earlier `start` row with a claimable task (`archiveGroup.ts`
+  `wouldRunOnUnarchive`). No wake is deleted; the pause holds them (`deliverScheduledStart` answers
+  `blocked: group-stopped`, `replenishStartWakes` skips a group with a stop intent) and `orca group resume` lets the group
+  run, started or never started, as any resume does. A done, draft or clarifying group, or one already paused, is left as
+  it was. The result field is `paused: true` (it replaces `startDropped`); the CLI receipt reads
+  `unarchived <g>; paused so it does not run on its own -- let it run with: orca group resume <g>`. The section above's
+  "a `resume` wake is still delivered after unarchive" no longer holds: it waits for the resume too.
+- **Recovery list.** `deferredWakes` leaves out an archived group's `start` and `no-start` wakes alike (the unarchive does
+  not start the group); its `resume` wakes are still listed.
+- **Correction to the Display claim above.** "The summary's `state` is unchanged for an archived group" was not true on
+  the branch: the derived `running` (Track V2, #361) also came from `executionPending`, so an archived group with a queued
+  start read `running` (and `archived (was running)`). The derivation now reads tasks under way only (`counts.running` or
+  `counts.settling` above zero); a start queued with nothing claimed keeps the stored word, and `executionPending` says the
+  start is queued. Every `archived (was <state>)` label (CLI `group list`, the Web card, the Board card, the group page's
+  heading) reads `storedState ?? state`.

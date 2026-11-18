@@ -6,7 +6,10 @@ import { recoveryRetryCommand, resumableBlockedRun } from "./driveRecord.js";
 import { readGroupIntegration } from "./integrationScheme.js";
 import { pendingRequirementCall, type RequirementTarget } from "./requirementCalls.js";
 import { readDraft, readRound, writeDraft, writeRound } from "./requirementRecords.js";
-import { deriveStopState, readStopIntent } from "./stopIntent.js";
+import { deriveStopState, readStopIntent, saveStopIntent } from "./stopIntent.js";
+import { flowBlockOf } from "../flow/groups.js";
+import { readBudgetProposal } from "./queries.js";
+import { nextClaimableTask } from "./webDispatch.js";
 import type { ControlStore } from "./store.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
 
@@ -113,11 +116,30 @@ export function applyArchiveGroup(deps: { store: ControlStore }, command: Archiv
   }).body;
 }
 
+/** executionDriver.ts DISPATCHABLE_GROUP_STATES (not imported: the driver module is heavy and this one is a command). */
+const DISPATCHABLE = new Set(["ready", "running", "review"]);
+
+/**
+ * Tester #370 (correction 2026-11-18, second form): whether the unarchived group would run on its own -- a dispatchable,
+ * confirmed group with a queued start, no-start re-arm or resume wake, or a started group (an earlier start wake) with a
+ * claimable task, which replenishStartWakes re-arms from. Never a flow child (its flow drives it) or a group already
+ * under a stop intent (that stop holds it already).
+ */
+function wouldRunOnUnarchive(store: ControlStore, groupId: string, group: Record<string, unknown>): boolean {
+  if (!DISPATCHABLE.has(String(group.status)) || flowBlockOf(group)?.role === "child") return false;
+  if (store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined) return false;
+  if (readBudgetProposal(store, groupId).state !== "confirmed") return false;
+  if (store.db.prepare("SELECT 1 FROM scheduler_wakes WHERE group_id=? AND kind IN ('start','no-start','resume') AND delivered=0").get(groupId) !== undefined) return true;
+  return store.db.prepare("SELECT 1 FROM scheduler_wakes WHERE group_id=? AND kind='start'").get(groupId) !== undefined
+    && nextClaimableTask(store, groupId, group) !== null;
+}
+
 /**
  * Spec §6.3: removes the mark (refused no-op-command when there is none) and writes an `unarchived` activity row.
- * Correction 2026-11-18 (#370, human ruling 「unarchive 一个 ready 组时，不应该自动开跑」): a start queued before the
- * archive (an undelivered `start` wake) is dropped in this transaction -- deleted, not marked delivered, so the driver has
- * no start to re-arm from -- and the result says so (`startDropped`), so the receipt names `orca group start`.
+ * Correction 2026-11-18 (#370, human ruling 「unarchive 一个 ready 组时，不应该自动开跑」): a group that would run on its own
+ * once unarchived (wouldRunOnUnarchive) is paused in this transaction -- the same pause intent `pause-dispatch` writes, so
+ * every wake stays (nothing is deleted) and `orca group resume` starts it the way a resume does -- and the result says
+ * so (`paused`), so the receipt names `orca group resume`.
  */
 export function applyUnarchiveGroup(deps: { store: ControlStore }, command: UnarchiveGroupCommand): CommandSuccessV1 | CommandErrorBodyV1 {
   return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
@@ -128,10 +150,15 @@ export function applyUnarchiveGroup(deps: { store: ControlStore }, command: Unar
       const group = groupBody(deps.store, groupId);
       if (archivedMarkOf(group) === null) throw new ControlError("no-op-command");
       delete group.archived;
+      const pause = wouldRunOnUnarchive(deps.store, groupId, group);
+      if (pause) {
+        saveStopIntent(deps.store, groupId, "pause", context.nextCommandRevision, { mode: "pause", state: "paused", frozenRunIds: [], acceptedAt: null, deadlineAt: null });
+        recordActivity(deps.store, { groupId, kind: "stop", body: { mode: "pause" } });
+        group.stopped = true;
+      }
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
-      const dropped = Number(deps.store.db.prepare("DELETE FROM scheduler_wakes WHERE group_id=? AND kind='start' AND delivered=0").run(groupId).changes);
       recordActivity(deps.store, { groupId, kind: "unarchived", body: {} });
-      return success(context, { kind: "unarchived", groupId, ...(dropped > 0 ? { startDropped: true as const } : {}) });
+      return success(context, { kind: "unarchived", groupId, ...(pause ? { paused: true as const } : {}) });
     },
   }).body;
 }

@@ -33,10 +33,12 @@ describe("the recovery read names a start wake that never delivers (#171)", () =
   }, 20000);
 
   it("reports a global dispatch block and an archived group, and leaves a delivered wake out", async () => {
-    const { store, dispose } = await storeWith([group("g-archived", JSON.stringify({ groupId: "g-archived", archived: { at: 1_760_000_000_000, actor: "person" } })), wake("w2", "g-archived", "resume"), wake("w3", "g-archived", "start")]);
+    const { store, dispose } = await storeWith([group("g-archived", JSON.stringify({ groupId: "g-archived", archived: { at: 1_760_000_000_000, actor: "person" } })), wake("w2", "g-archived", "resume"), wake("w3", "g-archived", "start"), wake("w4", "g-archived", "no-start")]);
     try {
-      // Ruling (2026-11-18 tester batch D): #370 -- an archived group's queued start is dropped by its unarchive, never
-      // delivered, so it is not listed as a deferred start (under either reason); its resume wake still is.
+      // Ruling (2026-11-18 tester batch D review): #370 -- an archived group's queued start, or its no-start re-arm, does not
+      // start it on unarchive (the unarchive pauses the group), so neither is listed as a start waiting on the archive (under
+      // either reason); its resume wake still is.
+      // mutation: skip only `start` for an archived group -> the no-start row is listed, red here
       store.dispatchBlocked = true;
       expect(readControlRecovery(store, "epoch-test").deferredWakes).toEqual([{ groupId: "g-archived", kind: "resume", reason: "dispatch-blocked" }]);
       store.dispatchBlocked = false;

@@ -136,11 +136,11 @@ const empty = (domain: string, action: string, summary: string, verbName: Parame
  * Review-exit spec 2026-11-05 §3.4 (D4): a start (or a never-started group's resume) answered `queued-for-slot` says so in
  * one line; every other answer prints as before.
  */
-/** Tester #370 (correction 2026-11-18): an unarchive that dropped a queued start says how to start the group. */
+/** Tester #370 (correction 2026-11-18): an unarchive that paused the group says how to let it run. */
 const unarchiveFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) => {
-  const result = (body as { result?: { kind?: unknown; groupId?: unknown; startDropped?: unknown } } | null)?.result;
-  return result?.kind === "unarchived" && result.startDropped === true
-    ? `unarchived ${String(result.groupId)}; its queued start was dropped -- start it with: orca group start ${String(result.groupId)}` : row.format(body);
+  const result = (body as { result?: { kind?: unknown; groupId?: unknown; paused?: unknown } } | null)?.result;
+  return result?.kind === "unarchived" && result.paused === true
+    ? `unarchived ${String(result.groupId)}; paused so it does not run on its own -- let it run with: orca group resume ${String(result.groupId)}` : row.format(body);
 } });
 
 const queuedFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) => {
@@ -533,7 +533,7 @@ export const WORK_ROWS: CommandDef[] = [
       return { selections };
     } }),
   empty("group", "archive", "archive a group: records stay, it refuses every command but unarchive", "archive-group", "archive"),
-  unarchiveFormat(empty("group", "unarchive", "unarchive a group (a start queued before the archive is dropped: start it again)", "unarchive-group", "unarchive")),
+  unarchiveFormat(empty("group", "unarchive", "unarchive a group (one that would run on its own is paused: orca group resume lets it run)", "unarchive-group", "unarchive")),
   // Terminal run closure #169: a proved terminal failure's accounting ends without accepting its work; then archive works.
   verb({ domain: "group", action: "close-run", summary: "close a proved terminal failed run's accounting (it stays failed; retry or archive next)", verb: "close-run", positionals: [GROUP],
     flags: [{ name: "run", type: "string", required: true, summary: "the run to close (orca run show <run> names it)" }],
