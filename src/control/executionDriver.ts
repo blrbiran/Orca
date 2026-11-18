@@ -20,6 +20,7 @@ import { classifyCeilingStop } from "./usagePause.js";
 import { createTaskResultCollector,type TaskResultCollector } from './taskResultCollector.js';
 import { createHash } from "node:crypto";
 import { mkdir, realpath, readFile, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { z } from "zod";
 import { join } from "node:path";
 import { archiveRun, readArtifact, writeArtifact } from "./archive.js";
@@ -1684,18 +1685,48 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string, lane?: { w
   return true;
 }
 
+/** Tester #360: the `cleanupError` of a settled-failed run with no saved report that ccloop may still be running. */
+export const CLEANUP_AWAITING_STOP = "cleanup-awaiting-stop";
+
 /**
  * Issue fixes spec §4.2(2): a run retry-task settled as failed keeps its evidence and loses its workspace. Its saved
  * terminal report is the stop proof (stepC wrote it before blocking). Like stepE's cleanup it never blocks: a failure is
  * recorded in `cleanupError` by the round and retried next round, and the task's new run has its own workspace.
+ * Tester #360 (Correction to §4.2(2)): a run with no saved report is archived without a stop proof and cleaned when ccloop
+ * never accepted it or proves it stopped; otherwise it keeps its workspace under `cleanup-awaiting-stop`.
  */
 export async function stepCleanupFailed(deps: ExecutionDriverDeps, runId: string): Promise<boolean> {
   const { store } = deps;
   const run = readDriverRun(store, runId);
   if (run.state !== "settled-failed" || run.drive === undefined || run.drive.cleanedUp) return false;
   const drive = run.drive;
-  const report = await savedReport(store, runId);
-  await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: report.candidate?.stopProof ?? null }, archiveAdmission(deps));
+  if (store.db.prepare("SELECT 1 FROM outbox WHERE id=? AND kind='report'").get(`report:${runId}`) !== undefined) {
+    const report = await savedReport(store, runId);
+    await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: report.candidate?.stopProof ?? null }, archiveAdmission(deps));
+  } else {
+    // Tester #360 (plan 2026-11-18 batch D, D1): no saved report is a legal shape -- a run blocked before C wrote one, then
+    // retried. Its workspace goes only when no agent can still be writing into it: ccloop never accepted the run, or ccloop
+    // proves it stopped (a terminal or a stop proof at collect). Otherwise the workspace is kept and the wait is named once.
+    if (run.executionId !== null) {
+      const collected = await portFor(deps, run).collect(readStartEnvelope(store, run), run.highWater);
+      if (collected.terminal === null && !collected.candidate?.stopProof) {
+        if (drive.cleanupError !== CLEANUP_AWAITING_STOP) {
+          write(deps, () => {
+            const current = readDriverRun(store, runId);
+            if (current.state !== "settled-failed" || current.drive === undefined || current.drive.cleanedUp) return;
+            current.drive = { ...current.drive, cleanupError: CLEANUP_AWAITING_STOP };
+            saveDriverRun(store, current);
+          });
+          process.stderr.write(`orca-driver: ${runId}: ${CLEANUP_AWAITING_STOP} (no saved report; its workspace is kept until ccloop proves the run stopped)\n`);
+        }
+        return false;
+      }
+    }
+    // Archived without a stop proof (archiveRun records `stop-unconfirmed`). A run ccloop never accepted may have no result
+    // repository at all; there is nothing of ccloop's to archive then.
+    if (existsSync(join(drive.sourceDir, "repo")))
+      await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: null }, archiveAdmission(deps));
+  }
   await cleanupRunWorkspace(deps.resolveRepository(cleanupRepoIdOf(store, run)), deps.roots, runId, workspaceOf(drive));
   for (const dir of drive.dirs?.slice(1) ?? []) await cleanupExtraWorkspace(dir.targetRepo, deps.roots, runId, dir.key);
   write(deps, () => {
@@ -1935,7 +1966,8 @@ export async function recordStepFailure(deps: ExecutionDriverDeps, context: Driv
           saveDriverRun(deps.store, current);
         }
       });
-      process.stderr.write(`orca-driver: ${runId}: ${logError(error)}\n`);
+      // Tester #360: the same failure on every round is logged once, when it is first recorded (or changes).
+      if (run.drive?.cleanupError !== describeError(error)) process.stderr.write(`orca-driver: ${runId}: ${logError(error)}\n`);
       return "next";
     }
     if (run.drive === undefined) { process.stderr.write(`orca-driver: ${runId}: ${logError(error)}\n`); return "next"; }

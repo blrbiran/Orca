@@ -538,3 +538,24 @@ the deletion incomplete; the controller decided the replacement.
   `counts.settling` above zero); a start queued with nothing claimed keeps the stored word, and `executionPending` says the
   start is queued. Every `archived (was <state>)` label (CLI `group list`, the Web card, the Board card, the group page's
   heading) reads `storedState ?? state`.
+
+## Correction (2026-11-18, tester batch D, task D1 — #360, #364 a)
+
+Who / when / base: Track D implementer subagent (Claude Opus 5.5) of the Orca session running plan
+`docs/superpowers/plans/2026-11-18-tester-batch-d.md`, 2026-11-18, on `5220b1c1`. Source: triage
+`.superpowers/sdd/2026-11-18-tester-pm/g2-runs-settle-storage.md` (#360, #364). The paragraph of §4.2(2) beginning
+"The execution driver's `driverRunIds` also visits `settled-failed` runs" stays as written; it is corrected here.
+
+1. "the saved terminal report is the stop proof" assumed every settled-failed run has a saved `report:<runId>`. It does
+   not: a run blocked before step C wrote one (A2, B, B′, or C's `candidate-without-terminal`) and then retried has none,
+   and the driver threw `control-terminal-pending` on it every round, for ever. Now, with no saved report:
+   - ccloop never accepted the run (`executionId === null`), or ccloop's collect answers a terminal or a stop proof ⇒ the
+     run is archived with `stopProof: null` (the archive records `missing: ["stop-unconfirmed"]`; skipped when ccloop left
+     no `<sourceDir>/repo`), its workspace is removed and `cleanedUp = true`;
+   - otherwise ccloop may still be running an agent in that workspace ⇒ the workspace is **kept**, `cleanupError` is set to
+     `cleanup-awaiting-stop`, one stderr line is written when it is first set, and the next round asks ccloop again.
+2. "a failure is recorded in the existing `drive.cleanupError` and retried next round" stands; the stderr line for a
+   settled or settled-failed run's step failure is now written only when its `cleanupError` changes.
+3. An artifact publication's temp file in `<stateDir>/staging/` is removed when the publication fails (a copy, an open or
+   an fsync that threw), not only when it is renamed into place (`archive.ts` `withTemp`). Start-up cleanup of entries
+   left by a killed panel (#364 b) is not part of this correction.

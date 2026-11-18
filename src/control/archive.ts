@@ -127,20 +127,31 @@ async function publishOnce(store:ControlStore,id:string,temp:string,hash:string,
   await readArtifact(store,ref);return ref;
  } finally {await rm(stagedDir,{recursive:true,force:true});}
 }
+/**
+ * Tester #364 (a): a temp file in staging/ is removed whatever happens to its publication. After a successful one it was
+ * renamed away and the removal finds nothing; after a failed one (a copy, an open or an fsync that threw) it would leak.
+ */
+async function withTemp<T>(temp:string,work:()=>Promise<T>):Promise<T> {
+ try {return await work();} finally {await rm(temp,{force:true});}
+}
 export async function writeArtifact(store:ControlStore,id:string,bytes:Buffer,deps:ArchiveDependencies={}):Promise<ArtifactRef> {
  idSchema.parse(id);const temp=join(privateDirectory(join(store.stateDir,"staging")),randomUUID());
- const fd=await open(temp,"wx",0o600);try{await fd.writeFile(bytes);}finally{await fd.close();}
- return publish(store,id,temp,createHash("sha256").update(bytes).digest("hex"),deps);
+ return withTemp(temp,async()=>{
+  const fd=await open(temp,"wx",0o600);try{await fd.writeFile(bytes);}finally{await fd.close();}
+  return publish(store,id,temp,createHash("sha256").update(bytes).digest("hex"),deps);
+ });
 }
 export async function archiveFile(store:ControlStore,path:string,deps:ArchiveDependencies={}):Promise<ArtifactRef> {
  const temp=join(privateDirectory(join(store.stateDir,"staging")),randomUUID());
  const hash=createHash("sha256");
  const source=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW);
  const stat=await source.stat();if(!stat.isFile()){await source.close();throw new ControlError("archive-not-regular");}
- try {
-  await pipeline(source.createReadStream({autoClose:false}),new Transform({transform(chunk,_enc,done){hash.update(chunk);done(null,chunk);}}),createWriteStream(temp,{flags:"wx",mode:0o600}));
- }finally{await source.close();}
- const value=hash.digest("hex");return publish(store,"sha256-"+value,temp,value,deps);
+ return withTemp(temp,async()=>{
+  try {
+   await pipeline(source.createReadStream({autoClose:false}),new Transform({transform(chunk,_enc,done){hash.update(chunk);done(null,chunk);}}),createWriteStream(temp,{flags:"wx",mode:0o600}));
+  }finally{await source.close();}
+  const value=hash.digest("hex");return publish(store,"sha256-"+value,temp,value,deps);
+ });
 }
 export async function readArtifact(store:ControlStore,ref:ArtifactRef):Promise<Buffer> {
  idSchema.parse(ref.artifactId);
