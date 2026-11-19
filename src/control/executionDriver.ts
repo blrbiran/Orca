@@ -457,7 +457,7 @@ export async function archiveDriveRun(deps: ExecutionDriverDeps, runId: string, 
   const attempt = await attemptOfDrive(deps, run, report);
   const archived = await archiveRunV2(deps.store, { runId, sourceDir: drive.sourceDir, stopProof, repositories: [attempt] }, archiveAdmission(deps));
   const primary = archived.pins.find((pin) => pin.key === null);
-  if (primary !== undefined) recordRunRef(deps, runId, primary, attempt);
+  if (primary !== undefined) recordRunRef(deps, runId, { ref: primary.ref, sha: primary.sha }, attempt);
   return archived;
 }
 

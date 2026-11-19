@@ -15,6 +15,7 @@ import { toStartEnvelope } from "../../src/control/startEnvelope.js";
 import { dispatchEnvelopeSchema } from "../../src/control/webProtocol.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { attemptReviewOf } from "../../src/panel/attemptReview.js";
+import { persistedRunProblem } from "../../src/panel/controlViews.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
 import { requestState, stop } from "./fixtures/handoffHarness.js";
 
@@ -116,6 +117,10 @@ describe("continuation of a v2 predecessor (§5.5.3, §5.8)", { timeout: 120_000
     const { t, predecessor } = await parkedPredecessor({ v2: true }); try {
       const snapshot = await snapshotOf(t, predecessor);
       expect(snapshot).toMatchObject({ version: 2, source: "orca-commit" });
+      // The pin recorded by the archive (no step C here) keeps the run body readable by every group read (strict schema).
+      // Mutation: record the archive's pin entry as it is ({key, ref, sha}) -> run-invalid, red (seen against real ccloop P1).
+      expect(t.body(predecessor).drive.runRef).toEqual({ ref: `refs/orca/runs/${predecessor}`, sha: snapshot.attempt });
+      expect(persistedRunProblem(t.body(predecessor))).toBeNull();
       const sourceDir = join(await realpath(await mkdtemp(join(tmpdir(), "orca-resume-"))), "run-next");
       const input = await exportResumeBundle(t.h.store, { predecessorRunId: predecessor, newSourceDir: sourceDir });
       const manifest = JSON.parse(readFileSync(join(input.bundlePath, "resume-bundle.json"), "utf8")) as { artifacts: Array<{ ref: { artifactId: string }; file: string }> };
