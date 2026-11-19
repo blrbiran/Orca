@@ -644,3 +644,27 @@ is kept as written; this one corrects it where they differ.
   is never drawn over a refused card's notice. A project-scope change clears the selection and the outcomes. Archive is
   offered only while some selected group is not archived already. A command sent with no answer is listed as unknown
   ("no answer -- it may or may not be archived; check the group"), not as refused.
+
+## Correction (2026-11-19, session 3ba26002) — start-up sweep of `<stateDir>/staging` (#364 b)
+
+Who/when: the Track C implementer (Claude Opus 5.5, a subagent of Orca session `3ba26002`), 2026-11-19, branch `fix/g-cli`
+from `main` `4f53a087`. The sections above are kept verbatim (Rule 13); this one completes the D1 Correction's item 3,
+which left "start-up cleanup of entries left by a killed panel (#364 b)" out.
+
+Out-of-repo deleter, registered per `CLAUDE.md` Rule 17:
+
+- **Path.** Every entry directly in `<stateDir>/staging` (default `~/.orca/control/panel/staging`; moved with the state
+  directory by `ORCA_CONTROL_DIR`, which every criterion sets to a temp directory). Entries are temp files and staged
+  directories of an artifact publication (`archive.ts`) and git bundles/blobs (`snapshot.ts`). Nothing outside
+  `staging` is touched: a `staging` that is a symlink or not a directory is not swept, and an entry is removed with
+  `rmSync`, which removes a symlink itself, never its target. Nothing is created.
+- **Trigger.** `openControlStore` (`src/control/store.ts`), i.e. the panel's start (`controlAssembly.ts`), after the
+  service lock is this process's and the database opened. No live operation can own an entry then: staging is written
+  only through an open store, a second open of the same state directory is refused (`control-writer-active`) while one is
+  open, and a previous owner is proved dead (`definitelyDead`) before its lock is retired. Bounded: at most 100,000 entries
+  per start (`STAGING_SWEEP_MAX_ENTRIES`); the rest wait for the next start. The panel writes one stderr line with the
+  counts (entries, bytes, failed, left) when it removed or left anything.
+- **Residue on failure.** An entry that cannot be removed stays and is counted (`failed`); a `staging` that cannot be read
+  is reported (`staging-unreadable`) and left. The sweep never keeps the store from opening; the next start tries again.
+
+Code: `src/control/stagingSweep.ts`; criteria `tests/control/stagingSweep.test.ts`.

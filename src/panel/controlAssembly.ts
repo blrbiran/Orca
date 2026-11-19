@@ -21,6 +21,7 @@ import { resolveAstGrepBin } from "../control/requirementOverview.js";
 import { createExecutionProfileRouter, resolveProfile, type ExecutionProfileRouter, type FrozenProfile } from "../control/profiles.js";
 import { openControlStore, type ControlStore } from "../control/store.js";
 import { recordSoftLoopSince } from "../control/softLoopSince.js";
+import { stagingSweepLine } from "../control/stagingSweep.js";
 import { WebControlService, type WebCommandResult } from "../control/webService.js";
 import { firedGroupId } from "../control/schedules/model.js";
 import type { ImportCommand, ImportOrigin } from "../control/planImport.js";
@@ -214,6 +215,9 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     }
     throw error;
   }
+  // Tester #364 (b): once, what opening the store swept from staging (an interrupted archive's leftovers).
+  const swept = store.stagingSweep === undefined ? null : stagingSweepLine(join(store.stateDir, "staging"), store.stagingSweep);
+  if (swept !== null) process.stderr.write(swept);
   // Spec 2026-11-06 soft-mode loop run settlement §3.6 (Q1): the first start of this version marks the cutoff, once.
   recordSoftLoopSince(store, Date.now());
   // The store canonicalises its own directory; its siblings are built from that rather than from

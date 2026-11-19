@@ -8,6 +8,7 @@ import { ControlError } from "./errors.js";
 import { assertRegular, privateDirectory, syncDirectory } from "./paths.js";
 import { initialSchema, migrateSchema, schemaVersion } from "./migrations.js";
 import { beginProjectionTransaction, finishProjectionTransaction } from "./projectionJournal.js";
+import { sweepStaging, type StagingSweep } from "./stagingSweep.js";
 
 interface Owner { nonce:string; pid:number; started:string; host:string; path:string }
 function machineIdentity(): string {
@@ -41,6 +42,8 @@ export interface ControlStore {
   now():number;
   transaction<T>(fn:()=>T):T;
   assertOwner():void;
+  /** Tester #364 (b): what opening the store removed from `<stateDir>/staging` (stagingSweep.ts). */
+  stagingSweep?:StagingSweep;
   beginOperation():()=>void;
   close():void;
 }
@@ -121,12 +124,15 @@ export async function openControlStore(options:{stateDir:string;recovery?:boolea
         }
       }
     });
+    // Tester #364 (b): the service lock is this process's and the database opened, so nothing can be archiving into
+    // staging (stagingSweep.ts): what is there was left by a killed process.
+    const stagingSweep = sweepStaging(stateDir);
     let closed = false;
     let inTransaction = false;
     let operationActive = false;
     const assertOwner=()=>{if(closed || readOwner(ownerFile).nonce!==owner.nonce) throw new ControlError("control-owner-changed");};
     const store:ControlStore = {
-      stateDir, db:connection, dispatchBlocked:recovered || !!connection.prepare("SELECT id FROM runs WHERE active=1 LIMIT 1").get(),
+      stateDir, db:connection, stagingSweep, dispatchBlocked:recovered || !!connection.prepare("SELECT id FROM runs WHERE active=1 LIMIT 1").get(),
       now:options.now ?? Date.now,
       assertOwner,
       beginOperation() {
