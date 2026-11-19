@@ -49,7 +49,7 @@ describe("the split draft's note after a re-draft that left the feedback unrepor
     cleanup();
     await i18n.changeLanguage("zh");
     expect(show(withDraft({ feedbackAfterRedraft: { ...CARRY, conflictsBefore: [] } })).querySelector("[data-feedback-after-redraft]")?.textContent)
-      .toBe(`这一稿来自 Orca 对第 3 稿的重新拆分（第 3 稿是按你对第 2 稿的反馈「Drop the test file.」写的）。第 ${draftNo} 稿没有报告与该反馈的冲突：请检查它是否仍按反馈来做，如果没有，请再发一次反馈。`);
+      .toBe(`这一稿来自 Orca 对第 3 稿的重新拆分（那一稿是按你对第 2 稿的反馈「Drop the test file.」写的）。第 ${draftNo} 稿没有报告与该反馈的冲突：请检查它是否仍按反馈来做，如果没有，请再发一次反馈。`);
     cleanup();
     expect(show(withDraft({})).querySelector("[data-feedback-after-redraft]")).toBeNull();
   });

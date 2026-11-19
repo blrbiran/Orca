@@ -144,3 +144,32 @@ describe("the re-draft note's boundaries in the requirement view (review M1, M3)
     } finally { await x.dispose(); }
   });
 });
+
+describe("the review fixes' wiring (review M1 prepare, M4 wording)", () => {
+  it("the split call's prepare passes the revision boundary: feedback on a draft before it is not carried", async () => {
+    const { readRequirementGroup, saveRequirementGroup } = await import("../../src/control/requirementRecords.js");
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: VALID_SPLIT }, { purpose: "split", output: { ...INVALID_SPLIT, requirementConflicts: CONFLICTS } }, { purpose: "split", output: VALID_SPLIT }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      await x.service.requirementDraftFeedback(x.command("requirement-draft-feedback", { draftNo: 1, feedback: FEEDBACK }));
+      // As a revision that withdrew a consensus while draft 1 was the latest would record it.
+      const group = readRequirementGroup(x.store, "r");
+      group.requirement = { ...group.requirement, consensusWithdrawn: { at: "2026-11-19T00:00:00.000Z", by: "human", revisedRound: 1, lastDraftNo: 1 } };
+      saveRequirementGroup(x.store, group);
+      await x.until(() => { try { return readDraft(x.store, "r", 3).state === "awaiting-review"; } catch { return false; } });
+      const prompts = x.fake.calls.accept.map((envelope) => (envelope.work as { prompt: string }).prompt);
+      // mutation: prepare passes no revisionBoundary -> draft 1's feedback carried into draft 3's block -> red
+      expect(block(prompts[2]!)).toMatchObject({ draftNo: 2, feedback: null });
+      expect(block(prompts[2]!)).not.toHaveProperty("feedbackOnDraft");
+    } finally { await x.dispose(); }
+  });
+
+  it("requirement show names the first re-drafted draft as the one that answered the feedback, then the later ones", async () => {
+    const { findCommand } = await import("../../src/commands/registry.js");
+    const found = findCommand(["requirement", "show"]);
+    if (!("def" in found)) throw new Error("no requirement show row");
+    const body = { drafts: [{ draftNo: 4, layers: null, feedbackAfterRedraft: { feedbackDraftNo: 1, feedback: FEEDBACK, redrafts: [2, 3], conflictsBefore: [] } }] };
+    // mutation: name the last re-drafted draft instead of the first -> red
+    expect(found.def.format(body)).toContain(`draft 4 came from Orca re-drafting draft 2, which answered your feedback on draft 1 ("${FEEDBACK}") (then re-drafting draft 3); draft 4 reports no conflict with that feedback, so check that it still follows it. If it does not, send the feedback again`);
+  });
+});
