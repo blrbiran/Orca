@@ -52,11 +52,13 @@ describe.skipIf(!realBinary)("parked allowance settlement in a held group (#213)
       expect(readWork(runtime.store, "g", "a").status).toBe("ready");
       expect(world.calls()).toEqual(["plan"]);
       expect(workRuns(runtime)).toHaveLength(1);
-      // Change-sized runs spec 2026-11-19 §5.4.1 (P0-3, O7): an allowance park keeps ccloop's attempt worktree under
-      // <sourceDir>/run/worktrees; the run's newest archive files none of it as logs. Mutation M3.1: drop the exclusion, red.
+      // Change-sized runs spec 2026-11-19 §5.4.1 (P0-3, O7): the new archive files nothing of <sourceDir>/run/worktrees
+      // as logs. Ruling (2026-11-20, repin to ccloop P1 b81f2fc): with attempt-delivery "ref-v1" the park's worktree is
+      // recorded and then removed, so the premise that one is kept no longer holds -- the directory exists and is empty.
+      // Mutation M3.1: drop the exclusion, red.
       const parked = workRuns(runtime)[0]!;
       const sourceDir = (parked.body.drive as { sourceDir: string }).sourceDir;
-      expect(readdirSync(join(sourceDir, "run", "worktrees")).length).toBeGreaterThan(0);
+      expect(readdirSync(join(sourceDir, "run", "worktrees"))).toEqual([]);
       const archiveRow = runtime.store.db.prepare("SELECT body FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=? ORDER BY rowid DESC LIMIT 1").get(parked.runId) as { body: string };
       const manifestRef = (JSON.parse(archiveRow.body) as { artifacts: ArtifactRef[] }).artifacts.find(ref => ref.artifactId.startsWith("archive-"))!;
       const manifest = JSON.parse((await readArtifact(runtime.store, manifestRef)).toString()) as { logs: Array<{ path: string }> };

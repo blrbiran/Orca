@@ -114,7 +114,7 @@ import { recordActivity } from "./activity.js";
 import { DISPATCHED_PERSON_DIRNAME, commandClientFor, commandContextFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
 import { applyApprovePendingDecision, applyRatifyFlaggedDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RatifyFlaggedDecisionCommand, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
 import { readCorrections } from "../corrections/store.js";
-import { autoConfirmBlocker, autoConfirmCommandId, workingTreeDefaultCopy } from "./autoConfirm.js";
+import { autoConfirmBlocker, autoConfirmCommandId, selectionOperatorOf, workingTreeDefaultCopy } from "./autoConfirm.js";
 import { autoStartPass, ORCHESTRATION_ACTOR, readOrchestrationSettings, recordConfirmed, type PrerequisiteReader } from "./orchestration.js";
 import { applySetOrchestrationSettings, type SetOrchestrationSettingsCommand } from "./orchestrationCommands.js";
 import { applyAddGroupDependency, applyRemoveGroupDependency, prerequisiteDone, waitingPrerequisites, type AddGroupDependencyCommand, type RemoveGroupDependencyCommand } from "./groupEdges.js";
@@ -932,7 +932,7 @@ export class WebControlService {
         let selectionsHash: string | null;
         // Review I1: only a resolution that answers "unresolved" is booked; a thrown one (a transient port failure) books
         // nothing, so the next pass tries again.
-        try { selectionsHash = (await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId, ORCHESTRATION_ACTOR)).selectionsHash; }
+        try { selectionsHash = (await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId, selectionOperatorOf(this.store, body) ?? ORCHESTRATION_ACTOR)).selectionsHash; }
         catch (error) { process.stderr.write(`orca-control: automatic confirm of ${groupId} skipped: ${describeError(error)}\n`); continue; }
         const revision = Number(this.store.db.prepare("SELECT revision FROM groups WHERE id=?").get(groupId)!.revision);
         command = {
@@ -1532,7 +1532,9 @@ export class WebControlService {
     const commandId = `orca-auto-confirm-v${proposal.proposalVersion}`;
     if (this.store.db.prepare("SELECT 1 FROM commands WHERE group_id=? AND id=?").get(groupId, commandId) !== undefined) return "confirm-already-refused";
     let selectionsHash: string | null;
-    try { selectionsHash = (await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId, ORCHESTRATION_ACTOR)).selectionsHash; }
+    // #388: the debug run inherits the source group's creator preferences, not an empty `orca-auto` layer.
+    const sourceBody = JSON.parse(String(this.store.db.prepare("SELECT body FROM groups WHERE id=?").get(sourceGroupId)!.body)) as Record<string, unknown>;
+    try { selectionsHash = (await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId, selectionOperatorOf(this.store, sourceBody) ?? ORCHESTRATION_ACTOR)).selectionsHash; }
     catch (error) { return describeError(error); }
     if (selectionsHash === null) return "agent-selection-rejected";
     const row = this.store.db.prepare("SELECT revision, body FROM groups WHERE id=?").get(groupId)!;
@@ -2493,7 +2495,11 @@ export class WebControlService {
     const release = this.deps.admissionGate?.enter();
     try {
       const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
-      const prepared: GroupSelectionResolution | { failure: unknown } = await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId(command), command.actorId, "confirm")
+      // #388: a pass-made confirm resolves the slots under the group creator's preferences (the operator whose layer the
+      // automatic pass used), so the resolution and the in-transaction layer check share this one value. A person's own
+      // confirm keeps its actor.
+      const resolvedFor = command.actorId === ORCHESTRATION_ACTOR ? selectionOperatorOf(this.store, readWebGroup(this.store, groupId(command)) as unknown as Record<string, unknown>) ?? command.actorId : command.actorId;
+      const prepared: GroupSelectionResolution | { failure: unknown } = await resolveGroupSelections({ store: this.store, port: this.deps.port }, groupId(command), resolvedFor, "confirm")
         .catch((failure: unknown) => ({ failure }));
       let optionalSupported=true,featureError:unknown=null;
       try {
@@ -2547,8 +2553,9 @@ export class WebControlService {
           const rejected = resolution.slots.find(slot => slot.outcome.kind === "rejected");
           if (rejected && rejected.outcome.kind === "rejected") throw new ControlError("agent-selection-rejected", `${rejected.taskId ?? RECONCILE_SLOT_KEY}:${rejected.outcome.code}`);
           // Step 3: what was resolved is what the operator saw, and the layers have not moved since (checked inside the transaction).
+          // #388: the layer check runs under the same operator the resolution used (see `resolvedFor` above).
           if (payload.selectionsHash !== resolution.selectionsHash || resolution.proposalVersion !== proposal.proposalVersion
-            || !canonicalBytes(answeredPartials(resolution)).equals(canonicalBytes(currentPartials(this.store, id, command.actorId)))) throw new ControlError("agent-selection-changed");
+            || !canonicalBytes(answeredPartials(resolution)).equals(canonicalBytes(currentPartials(this.store, id, resolvedFor)))) throw new ControlError("agent-selection-changed");
           const frozenOf = (key: string) => {
             const slot = resolution.slots.find(entry => entry.key === key);
             if (!slot || slot.outcome.kind !== "resolved") throw new ControlError("recovery-blocked", `slot-missing:${key}`);

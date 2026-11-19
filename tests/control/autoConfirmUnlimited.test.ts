@@ -12,7 +12,7 @@ import { WebControlService } from "../../src/control/webService.js";
 import type { ImportDefaults } from "../../src/control/planImport.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { readDraft } from "../../src/control/requirementRecords.js";
-import { FIXTURE_AGENT_ID } from "./fixtures/agents.js";
+import { FIXTURE_AGENT_ID, seedPreferences } from "./fixtures/agents.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
 import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 import { profileSnapshot, webFixture, type WebFixtureOptions } from "./fixtures/web.js";
@@ -212,9 +212,26 @@ describe("H4: the automatic confirm of unlimited-token groups", () => {
     }
   });
 
+  it("#388: the automatic confirm resolves against the creator's preferences, not an empty orca-auto layer", async () => {
+    // The lock group's shape: the person chose a model per agent (`perAgent.codex.model`) and the group auto-confirmed
+    // without a person touching confirm. Resolved as `orca-auto` the model fell to the descriptor default
+    // (`fixture-model` here, `gpt-6-sol` in the report) which the provider refused; the creator's layer has to be the one
+    // confirm uses. The plan names the group agent so the reconcile slot resolves too (spec T10's fixture shape).
+    const picked = { defaultAgent: FIXTURE_AGENT_ID, perAgent: { [FIXTURE_AGENT_ID]: { model: "operator-pick" } } };
+    const h = await webFixture(undefined, [{ taskId: "a" }], { tokenPolicy: "optional-v1", importContext: PERSON, ...PLAN_AGENT }); try {
+      seedPreferences(h.store, PERSON.principal, picked);
+      const service = new WebControlService(h.deps);
+      expect((await passWithPredicate(h, service)).result).toEqual({ confirmed: ["g"], refused: [] });
+      const work = JSON.parse(String(h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body));
+      expect(work.agent).toMatchObject({ agent: FIXTURE_AGENT_ID, model: "operator-pick" });
+      expect(work.agentProvenance).toMatchObject({ model: "operator-agent" });
+    } finally { await h.dispose(); }
+  });
+
   it("C22c: an unresolved slot is booked once, shown, and not re-resolved; the predicate then names condition 9", async () => {
-    // No plan agent: orca-auto has no operator default, so the slots do not resolve.
-    const h = await webFixture(undefined, [{ taskId: "a" }], { tokenPolicy: "optional-v1", importContext: PERSON }); try {
+    // No plan agent and no operator preferences at all (#388: the creator is the operator now): no layer names a model,
+    // so the slots do not resolve.
+    const h = await webFixture(undefined, [{ taskId: "a" }], { tokenPolicy: "optional-v1", importContext: PERSON, preferences: null }); try {
       const service = new WebControlService(h.deps);
       const { blocker, result } = await passWithPredicate(h, service);
       expect(blocker).toBeNull();

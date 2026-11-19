@@ -70,6 +70,21 @@ export function workingTreeDefaultCopy(store: ControlStore, group: Body): string
   return integrationChosen(store, repoId) && canonicalBytes(readIntegrationDefault(store, repoId).scheme).equals(canonicalBytes(record.scheme)) ? record.schemeHash : null;
 }
 
+/**
+ * #388: the operator whose preferences the automatic confirm resolves against. The pass used to resolve as `orca-auto`,
+ * which holds no `agent_preferences` row, so every `perAgent` model choice fell back to the descriptor default (lock
+ * group: `gpt-6-sol`, a model the provider refuses). A person-created group takes its creator's principal; the panel's
+ * own recordings take the panel operator (its preferences are the ones `set-agent-preferences` writes there). Null when
+ * neither can be named, and the caller keeps resolving as `orca-auto`, as before.
+ */
+export function selectionOperatorOf(store: ControlStore, group: Body): string | null {
+  const row = store.db.prepare("SELECT principal FROM commands WHERE group_id=? AND verb IN ('import-plan','requirement-draft-accept') AND original_status < 400 ORDER BY rowid LIMIT 1").get(groupIdOf(group));
+  const principal = row === undefined || row.principal === null ? null : String(row.principal);
+  if (principal !== null && principal.startsWith("user:")) return principal;
+  const panel = store.db.prepare("SELECT value FROM meta WHERE key='panelOperatorId'").get();
+  return panel === undefined ? null : String(panel.value);
+}
+
 const CHECKS: ReadonlyArray<readonly [AutoConfirmBlocker["condition"], Check]> = [
   [1, (_store, group) => group.status === "draft" && Object.hasOwn(group, "planHash") ? null : { condition: 1, code: "not-draft" }],
   [2, (_store, group) => (group.limit as { tokens?: unknown } | undefined)?.tokens === null ? null : { condition: 2, code: "limited" }],
