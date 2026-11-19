@@ -12,7 +12,8 @@
  * `handoff-request:<runId>`) is set delivered when that run ends `settled` (another end leaves it at 0). A stop's or a context threshold's request (stopIntent.ts,
  * contextControl.ts, id = the desired request id) is set delivered only by stopIntent.ts `deliverHandoffStop`, which no
  * production path calls today; the request's own state lives in `handoff_requests`, and those outbox rows stay at 0 after
- * the request settled. So for this kind `delivered=0` does not mean "still to deliver": read the request's state instead.
+ * the request settled. So for this kind `delivered=0` does not mean "still to deliver": read the request's state instead
+ * (and, for a run's own request, whether its run is still active; controlViews.ts undeliveredHandoffRows, read side only).
  */
 export const OUTBOX_QUEUE_KINDS: readonly string[] = ["projection", "task-handoff", "group-handoff", "cleanup", "handoff-request", "landing"];
 /** Kinds that are records read by id; `delivered` carries no meaning for them. */

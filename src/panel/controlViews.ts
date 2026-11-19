@@ -1969,7 +1969,11 @@ function undeliveredHandoffRows(store: ControlStore): Array<{ outboxId: string; 
     const requestId = typeof candidate === "string" && candidate.length > 0 ? candidate : null;
     const record = requestId === null ? undefined : store.db.prepare("SELECT state FROM handoff_requests WHERE id=?").get(requestId);
     const requestState = typeof record?.state === "string" ? record.state : null;
-    const delivery = requestState?.startsWith("settled-") ? "finished"
+    // Tester #170 (read side only): a run's own request is marked delivered only when that run ends settled; once the run
+    // has ended any other way (no longer active), its row has nothing left to deliver.
+    const serviceRunId = serviceRecord ? serviceRequest.runId : undefined;
+    const serviceRunEnded = typeof serviceRunId === "string" && Number(store.db.prepare("SELECT active FROM runs WHERE id=?").get(serviceRunId)?.active ?? 1) === 0;
+    const delivery = requestState?.startsWith("settled-") || serviceRunEnded ? "finished"
       : serviceRecord ? "service-record"
       : requestState === "request-pending" ? "open-request"
       : requestState === "latched" || requestState === "collecting" || requestState === "outcome-unknown" ? "in-progress" : "unknown";
