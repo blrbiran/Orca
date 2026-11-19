@@ -48,9 +48,13 @@ async function seedDirectories(w: World, dirs: string[]): Promise<void> {
   g(w.repo, "add", ...dirs.map((dir) => `${dir}/.gitkeep`));
   g(w.repo, "commit", "-qm", "directories");
 }
-/** Orca acts on its own only in a group it orchestrates (`run`); startGroup confirms "only" (hold), as a person drives it. */
-const orchestrate = (runtime: ControlRuntime): void => {
-  runtime.store.db.prepare("UPDATE group_orchestration SET body=json_set(body,'$.mode','run') WHERE group_id='g'").run();
+/**
+ * Orca acts on its own only in a group it orchestrates (`run`). startGroup confirms "only" (hold), but its start records
+ * `run` (orchestration.ts recordStarted), so a started group is orchestrated until set back to `hold`; a held group's
+ * started tasks still dispatch, only the orca-auto passes (systemDebug.ts) pass it over.
+ */
+const orchestrate = (runtime: ControlRuntime, mode: "run" | "hold" = "run"): void => {
+  runtime.store.db.prepare("UPDATE group_orchestration SET body=json_set(body,'$.mode',?) WHERE group_id='g'").run(mode);
 };
 
 describe.skipIf(!realBinary)("off-plan writes through the real ccloop binary (#346 acceptance 3-5)", { timeout: 600_000 }, () => {
@@ -92,7 +96,11 @@ describe.skipIf(!realBinary)("off-plan writes through the real ccloop binary (#3
     const runtime = await w.boot();
     try {
       await startGroup(runtime, w.repoId, 1_000_000);
-      orchestrate(runtime);
+      // Ruling (session 3ba26002, human: 「这次批准改写所有必要的判据」): setup only, the assertions are unchanged.
+      // Held until the stop is read: orchestrated, the parallel-claim pass retries a's stop on the next pump (~60-130 ms
+      // after it, measured), and that retry's `--after b` drops b's claim from a's confirmed contract -- a 100 ms poll could
+      // miss the stop and read the denylist already without b.txt.
+      orchestrate(runtime, "hold");
       runtime.startPump(50);
       // mutation: Task 3's derivation off (no sibling claim denied) -> a lands with b.txt instead of stopping, red here
       await until(() => {
@@ -106,6 +114,7 @@ describe.skipIf(!realBinary)("off-plan writes through the real ccloop binary (#3
       // Read after the stop, so the mutation below is seen at the landing, not short-circuited by this line.
       expect(readConfirmedTaskExecution(runtime.store, "g", "a").contract.safetyPolicy.denylistPaths).toContain("b.txt");
       expect(readControlGroup(runtime.store, runtime.epoch, "g").runs.find((run) => run.runId === first.runId)?.diagnosis).toMatchObject({ cause: "parallel-claim", siblings: ["b"] });
+      orchestrate(runtime);
 
       // Orca's own retry, once for this run: the command row is its record. The order each was first seen in: the retry
       // (while b still runs, so the wait is not trivial), b's landing commit, a's second run. a's second run must never be
