@@ -97,7 +97,7 @@ describe("the requirement review panel (tester follow-up G §3.3)", () => {
     expect(show(notPassed).panel.querySelector("[data-relative-pass]")).toBeNull();
     cleanup();
     await i18n.changeLanguage("zh");
-    expect(show(passed).panel.querySelector("[data-relative-pass]")!.textContent).toBe("AC2：相对通过——npm test 在本次结果上退出 1, 1，在任务组起点上退出 1, 1，任务组开始前就已失败；不计为未满足。");
+    expect(show(passed).panel.querySelector("[data-relative-pass]")!.textContent).toBe("AC2：相对通过——npm test 在本次评审的提交上退出 1, 1，在任务组起点上退出 1, 1，任务组开始前就已失败；不计为未满足。");
   });
 
   it("none on an archived group or a passed review; zh words", async () => {

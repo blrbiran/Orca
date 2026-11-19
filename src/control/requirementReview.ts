@@ -476,21 +476,43 @@ const sha256 = (bytes: Buffer): string => createHash("sha256").update(bytes).dig
  * the acceptance record (none a delivered file), its agreed text names the full-suite command, the acceptance on this tip
  * is `passed-relative` with a base run, every suite run on the tip exited non-zero with an exit the base also gave (the
  * base red on every run), every other command on the tip exited 0, and no person answered that command's pre-existing
- * failure `allow-fix`. Orca keeps no failing-test identities, so exits are all it can compare.
+ * failure `allow-fix`. Orca keeps no failing-test identities, so exits are all it can compare. Review of #377: the text
+ * must name the command as a whole (namesCommand), and only numeric exits qualify.
  */
 export function relativePasses(body: unknown, tip: string, criteria: ReadonlyArray<CriterionVerdict>, texts: ReadonlyArray<{ id: string; text: string }>): RelativePass[] {
   const accepted = acceptanceOf(body);
   if (accepted === null || accepted.tip !== tip || accepted.result !== "passed-relative") return [];
   const suite = accepted.fullSuite, command = suite?.command, base = suite?.baseline;
   if (typeof command !== "string" || command.trim() === "" || base === undefined) return [];
-  if (base.exits.length === 0 || base.exits.some((exit) => exit === "0")) return [];
-  if (suite!.exits.length === 0 || suite!.exits.some((exit) => exit === "0" || !base.exits.includes(exit))) return [];
+  // Review of #377 (M5): only numeric non-zero exits qualify, on either side -- a timeout is not "the same failure".
+  const red = (exit: string): boolean => /^[0-9]+$/.test(exit) && exit !== "0";
+  if (base.exits.length === 0 || !base.exits.every(red)) return [];
+  if (suite!.exits.length === 0 || suite!.exits.some((exit) => !red(exit) || !base.exits.includes(exit))) return [];
   if (accepted.commands.some((c) => c.command !== command && !c.command.startsWith("baseline: ") && c.exit !== "0")) return [];
   const answers = (body as { preexistingFailureAnswers?: Record<string, { answer?: unknown } | undefined> } | null)?.preexistingFailureAnswers;
   if (answers?.[command]?.answer === "allow-fix") return [];
   return criteria.filter((c) => c.verdict === "not-met" && c.evidence.length > 0 && c.evidence.every((e) => e.path === "orca:acceptance")
-    && (texts.find((t) => t.id === c.id)?.text ?? "").includes(command))
+    && namesCommand(texts.find((t) => t.id === c.id)?.text ?? "", command))
     .map((c) => ({ criterionId: c.id, command, tipExits: [...suite!.exits], baseExits: [...base.exits] }));
+}
+
+/**
+ * Review of #377 (I1): whether `text` names `command` as a whole. Before it: the start, whitespace, a backtick, a quote or
+ * an opening bracket -- never a letter, digit, `:`, `-`, `/` or `.` (`pnpm test` does not name `npm test`). After it: the
+ * end, a backtick, a closing quote or bracket, sentence punctuation that ends there (followed by the end, whitespace or a
+ * closing mark -- so `test:e2e` and `test.js` do not qualify), or whitespace and then a word of letters only (prose such as
+ * "exits"; an argument such as `-- file`, `tests/x.py` or `2>&1` does not qualify).
+ */
+export function namesCommand(text: string, command: string): boolean {
+  const closing = "`\"'”」）)";
+  for (let at = text.indexOf(command); at !== -1; at = text.indexOf(command, at + 1)) {
+    if (at > 0 && !/[\s`"'“「（(]/u.test(text[at - 1]!)) continue;
+    const rest = text.slice(at + command.length);
+    if (rest === "" || closing.includes(rest[0]!)) return true;
+    if (/^[.,;:!?。，；：！？](?:$|\s|[`"'”」）)])/u.test(rest)) return true;
+    if (/^\s+\p{L}+(?:$|\s|[.,;:!?。，；：！？`"'”」）)])/u.test(rest)) return true;
+  }
+  return false;
 }
 
 /**

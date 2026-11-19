@@ -791,7 +791,7 @@ export const zh: Translation<typeof en> = {
         person: "{{ids}}：只有你能决定——按现状接受，或附说明重新复核。",
       },
       // Tester #377: a not-met criterion red only because the group's base was red too.
-      relative: "{{id}}：相对通过——{{command}} 在本次结果上退出 {{tip}}，在任务组起点上退出 {{base}}，任务组开始前就已失败；不计为未满足。",
+      relative: "{{id}}：相对通过——{{command}} 在本次评审的提交上退出 {{tip}}，在任务组起点上退出 {{base}}，任务组开始前就已失败；不计为未满足。",
     },
     noChange: {
       chip: "无改动",

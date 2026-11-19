@@ -29,7 +29,29 @@ const AC1: CriterionVerdict = { id: "AC1", verdict: "met", evidence: [{ path: "s
 const TEXTS = [{ id: "AC1", text: "login works" }, { id: "AC9", text: "npm test exit 0" }];
 const PASS = [{ criterionId: "AC9", command: "npm test", tipExits: ["1", "1"], baseExits: ["1", "1"] }];
 
+/** The same red-at-base acceptance for another suite command (its tip and base runs named by it). */
+const acceptanceFor = (command: string) => {
+  const a = acceptance({}, { command });
+  return { ...a, commands: a.commands.map((c) => ({ ...c, command: c.command.replace("npm test", command) })) };
+};
+const passesFor = (command: string, text: string) => relativePasses({ acceptance: acceptanceFor(command) }, TIP, [AC9], [{ id: "AC9", text }]);
+
 describe("which not-met criterion is a relative pass (#377)", () => {
+  // Review of #377 (I1): the criterion must name the suite's command as a whole -- not a longer command it is a part of,
+  // and not the command with further arguments.
+  it("the criterion names the suite command as a whole, not a longer command or the command with arguments", () => {
+    // mutation: match the command by substring -> each of these four passes, red
+    expect(passesFor("npm run test", "`npm run test:e2e` exits 0")).toEqual([]);
+    expect(passesFor("pytest", "`pytest tests/test_login.py` passes")).toEqual([]);
+    expect(passesFor("npm test", "`npm test -- test/login.test.js` exits 0")).toEqual([]);
+    expect(passesFor("npm test", "pnpm test exits 0")).toEqual([]);
+    // The whole command, bare, backticked, at the end of a sentence or in Chinese words, still qualifies.
+    for (const text of ["npm test exit 0", "`npm test` exits 0", "The suite passes: npm test.", "`npm test` 退出码为 0", "npm test"]) {
+      expect(passesFor("npm test", text)).toHaveLength(1);
+    }
+    expect(passesFor("npm run test", "`npm run test` exits 0")).toHaveLength(1);
+  });
+
   it("the tester's AC9: its only evidence is the acceptance record, its text names the suite, the suite was red at the base too", () => {
     expect(relativePasses({ acceptance: acceptance() }, TIP, [AC1, AC9], TEXTS)).toEqual(PASS);
     // A person's `relative` answer to the pre-existing failure leaves the rule to apply.
@@ -69,6 +91,11 @@ describe("which not-met criterion is a relative pass (#377)", () => {
     // mutation: drop the every-base-exit-is-red test -> PASS, red
     expect(relativePasses({ acceptance: acceptance({}, { baseline: { tip: BASE, exits: ["1", "0"] } }) }, TIP, [AC9], TEXTS)).toEqual([]);
     expect(relativePasses({ acceptance: acceptance({}, { exits: [] }) }, TIP, [AC9], TEXTS)).toEqual([]);
+    // Review of #377 (M5): an exit that is not a number (a timeout) never qualifies, even when the base gave the same one.
+    const timedOut = "timeout 600000 ms";
+    // mutation: drop the numeric-exit test -> PASS for two timeouts, red
+    expect(relativePasses({ acceptance: acceptance({}, { exits: [timedOut, timedOut], baseline: { tip: BASE, exits: [timedOut, timedOut] } }) }, TIP, [AC9], TEXTS)).toEqual([]);
+    expect(relativePasses({ acceptance: acceptance({}, { exits: ["1", "1"], baseline: { tip: BASE, exits: ["1", timedOut] } }) }, TIP, [AC9], TEXTS)).toEqual([]);
   });
 
   it("not when anything other than the suite was red on the tip", () => {
