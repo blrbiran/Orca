@@ -9,8 +9,9 @@ import { fixtureResolutionFor } from "./fixtures/agents.js";
 
 // #381 (session 3ba26002, human rulings 2 and 3): Orca decides the estimate instruction -- always the newest it holds,
 // whatever the profile names -- and every request and contract records the one it used. maxOutputTokens,
-// framingTokenOverhead and tokenizer come from the profile when it has them, else Orca's default (64000, 17, the utf8
-// upper bound 2/3 with proofRef "proof": the README's sample profile and every acceptance script use exactly these).
+// framingTokenOverhead and tokenizer come from the profile when it has them, else Orca's default (64000 and the utf8 upper
+// bound 2/3 with proofRef "proof", as the README's sample profile and every acceptance script use; framing 12000, the
+// human-ruled measured value -- see the ruling below).
 const contract = { objective: { taskId: "a", goal: "ship" } };
 const plan = {
   schema: "orca-control-plan-v1", repoId: "repo", planId: "plan", goal: "ship", successConditions: ["passes"],
@@ -42,6 +43,8 @@ describe("estimator settings read at launch (#381)", () => {
     expect(estimatorCompatibility(observation, "soft").reasonCodes).not.toContain("instruction-unknown");
   });
 
+  // Ruling (session 3ba26002, controller on the human's 「先按你的建议执行」; criteria rewrite approved: 「这次批准改写所有必要的判据」):
+  // the framingTokenOverhead default is 12000, the human-ruled measured value of the live profile. (Was: 17.)
   it("a preflight block with no fields parses and launches with Orca's defaults", () => {
     const snapshot = profileSnapshot() as unknown as { profile: Record<string, unknown> };
     snapshot.profile.estimatorPreflight = {};
@@ -49,16 +52,32 @@ describe("estimator settings read at launch (#381)", () => {
     expect(parsed.success).toBe(true);
     const result = build(parsed.data!);
     expect(result.contract).toMatchObject({
-      instructionVersion: "4", responseSchemaVersion: "budget-estimate-v1", maxOutputTokens: 64000, framingTokenOverhead: 17,
+      instructionVersion: "4", responseSchemaVersion: "budget-estimate-v1", maxOutputTokens: 64000, framingTokenOverhead: 12000,
       tokenizer: { kind: "utf8-upper-bound", numerator: 2, denominator: 3, proofRef: "proof" },
     });
   });
 
+  it("an absent estimatorPreflight key means Orca's defaults; an explicit null still opts out (preflight-unavailable)", () => {
+    // Controller ruling (session 3ba26002, on the human's 「先按你的建议执行」): null is the explicit opt-out, absence is defaults.
+    const absent = profileSnapshot() as unknown as { profile: Record<string, unknown> };
+    delete absent.profile.estimatorPreflight;
+    const parsed = executionProfileSnapshotSchema.safeParse(absent);
+    expect(parsed.success).toBe(true);
+    // mutation: treat an absent block as null -> blocked-capability, red
+    expect(build(parsed.data!).contract).toMatchObject({ instructionVersion: "4", maxOutputTokens: 64000, framingTokenOverhead: 12000 });
+    const off = profileSnapshot();
+    off.profile.estimatorPreflight = null;
+    const profile = resolveProfile(off);
+    const observation = { profile, observed: off.profile.capabilities, probeFailureCode: null, resolution: fixtureResolutionFor(off.profile.capabilities, "v1") };
+    expect(estimatorCompatibility(observation, "soft").reasonCodes).toContain("preflight-unavailable");
+    expect(build(off).state).toBe("blocked-capability");
+  });
+
   it("the profile's own maxOutputTokens, framingTokenOverhead and tokenizer win when present", () => {
     const snapshot = profileSnapshot();
-    snapshot.profile.estimatorPreflight = { ...snapshot.profile.estimatorPreflight!, maxOutputTokens: 8000, framingTokenOverhead: 12000,
+    snapshot.profile.estimatorPreflight = { ...snapshot.profile.estimatorPreflight!, maxOutputTokens: 8000, framingTokenOverhead: 9000,
       tokenizer: { kind: "utf8-upper-bound", numerator: 1, denominator: 1, proofRef: "measured" } };
-    expect(build(snapshot).contract).toMatchObject({ maxOutputTokens: 8000, framingTokenOverhead: 12000,
+    expect(build(snapshot).contract).toMatchObject({ maxOutputTokens: 8000, framingTokenOverhead: 9000,
       tokenizer: { kind: "utf8-upper-bound", numerator: 1, denominator: 1, proofRef: "measured" } });
   });
 

@@ -165,7 +165,9 @@ describe("Web control protocol", () => {
       resolved: { proofDocumentContentHashes: [], tokenizerArtifactHashes: [{ purpose: "context", contentHash: hash }], secretValueHashes: [] },
     };
     expect(executionProfileSnapshotSchema.parse(snapshot)).toEqual(snapshot);
-    expect(executionProfileSnapshotSchema.safeParse({ ...snapshot, profile: { ...snapshot.profile, estimatorPreflight: undefined } }).success).toBe(false);
+    // Ruling (session 3ba26002, #381; controller on the human's 「先按你的建议执行」, criteria rewrite 「这次批准改写所有必要的判据」): an
+    // absent estimatorPreflight key is accepted and means Orca's defaults (null stays the opt-out). (Was: refused.)
+    expect(executionProfileSnapshotSchema.safeParse({ ...snapshot, profile: { ...snapshot.profile, estimatorPreflight: undefined } }).success).toBe(true);
     expect(executionProfileSnapshotSchema.safeParse({ ...snapshot, profile: { ...snapshot.profile, allowedWorkKinds: ["task", "task"] } }).success).toBe(false);
     expect(executionProfileSnapshotSchema.safeParse({ ...snapshot, schema: "orca-execution-profile-snapshot-v1" }).success).toBe(false);
     expect(executionProfileSnapshotSchema.safeParse({ ...snapshot, profile: { ...snapshot.profile, adapter: "codex" } }).success).toBe(false);

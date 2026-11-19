@@ -6,11 +6,13 @@ import type { EstimateExecutionContractV1 } from "./webProtocol.js";
 
 /**
  * #381 (session 3ba26002, human ruling 3): what an estimate or requirement call uses when the profile's preflight leaves a
- * field out -- the values of the README's sample profile and of every acceptance script (scripts/live-*-acceptance.ts).
+ * field out -- maxOutputTokens and tokenizer are the README sample's and every acceptance script's
+ * (scripts/live-*-acceptance.ts); framingTokenOverhead is the human-ruled measured 12000.
  */
 export const ESTIMATOR_DEFAULTS: Readonly<{ maxOutputTokens: number; framingTokenOverhead: number; tokenizer: EstimateExecutionContractV1["tokenizer"] }> = Object.freeze({
   maxOutputTokens: 64_000,
-  framingTokenOverhead: 17,
+  // #381 review (controller ruling on the human's 「先按你的建议执行」): the human-ruled measured framing of the live profile.
+  framingTokenOverhead: 12_000,
   tokenizer: Object.freeze({ kind: "utf8-upper-bound" as const, numerator: 2, denominator: 3, proofRef: "proof" }),
 });
 
@@ -25,12 +27,13 @@ export interface EstimatorSettings {
 /**
  * #381 (session 3ba26002, human rulings 1-3): the estimator settings a call reads at launch and freezes in its own
  * contract. The instruction is always the newest Orca holds (the profile's instructionVersion and schemaVersion are read
- * by nothing); the rest is the profile's when present, else ESTIMATOR_DEFAULTS. Null when the profile has no preflight
- * block at all (estimatorPreflight: null), as before.
+ * by nothing); the rest is the profile's when present, else ESTIMATOR_DEFAULTS. Null when the profile opts out with
+ * `estimatorPreflight: null`, as before; an absent key is all defaults.
  */
 export function estimatorSettings(profile: Pick<FrozenProfile, "snapshot">): EstimatorSettings | null {
-  const preflight = profile.snapshot.profile.estimatorPreflight;
-  if (preflight === null) return null;
+  const declared = profile.snapshot.profile.estimatorPreflight;
+  if (declared === null) return null;
+  const preflight = declared ?? {};
   return {
     instructionVersion: String(NEWEST_ESTIMATE_INSTRUCTION),
     schemaVersion: "budget-estimate-v1",

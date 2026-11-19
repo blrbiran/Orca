@@ -199,7 +199,9 @@ export const executionProfileSnapshotSchema = z
             tokenizer: tokenizerSchema.optional(),
           })
           .strict()
-          .nullable(),
+          .nullable()
+          // #381 review (controller ruling on the human's 「先按你的建议执行」): an absent key means Orca's defaults; null opts out.
+          .optional(),
       })
       .strict(),
     resolved: z
