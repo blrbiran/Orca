@@ -644,3 +644,22 @@ remaining not-met criteria are routed as before (fixableBy, automatic fix), and 
 relative passes out. `group show` / `group brief` print one line per relative pass, and the Web review panel shows it
 next to the criterion. `orca status` shows a passed review nowhere today and is unchanged; the base-red suite is already
 the acceptance's `full-suite-pre-existing` warning.
+
+## Correction 2 (2026-11-19, session 3ba26002): the relative-pass rule after its review (#377 review I1, M5, M3, M1)
+
+The Correction above stands, with these changes (the original text is kept as written):
+
+- **Condition 2, the command as a whole (I1).** "Contains the full-suite command literally" matched substrings, so
+  `npm run test` matched `npm run test:e2e`, `pytest` matched `pytest tests/test_login.py`, and `npm test` matched
+  `npm test -- test/login.test.js` and `pnpm test`. The text must now name the command as a whole
+  (`requirementReview.ts` `namesCommand`): the character before it is the start, whitespace, a backtick, a quote or an
+  opening bracket (never a letter, digit, `:`, `-`, `/` or `.`); after it comes the end, a closing backtick, quote or
+  bracket, sentence punctuation that ends there (followed by the end, whitespace or a closing mark), or whitespace and a
+  word of letters only (prose such as "exits"). A command followed by arguments (`-- file`, `tests/x.py`, `2>&1`) does
+  not qualify. Limit: a bare argument made only of letters (`pytest tests`) reads as prose and qualifies.
+- **Condition 4, numeric exits (M5).** Only numeric non-zero exits qualify, at the tip and at the base; an exit that is
+  not a number (a timeout) never does, even when the base gave the same one.
+- **A person's fix (M3).** The automatic fix leaves relative passes out; a person's `review-fix` keeps them in scope by
+  design -- the person chose to fix, and every not-met criterion of the round is in their fix task's goal.
+- **Funding (M1).** As the stuck-runs spec's Correction of 2026-11-19 says: a small positive remainder still opens the
+  automatic fix with that cap; there is no minimum below the 1M floor.

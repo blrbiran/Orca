@@ -844,7 +844,8 @@ export function openFixTask(store: ControlStore, groupId: string, round: ReviewR
   const body = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body));
   const criteria = reviewInputsOf(store, groupId, body).criteria;
   const auto = by === "auto";
-  // Tester #377: nor does it cover a relative pass (red only because the base was red).
+  // Tester #377: nor does it cover a relative pass (red only because the base was red). A person's `review-fix` keeps
+  // relative passes in scope by design (review of #377, M3): the person chose to fix, and every not-met criterion is theirs.
   const scope: ReviewRound = auto ? { ...round, criteria: round.criteria.filter((c) => c.verdict !== "not-met" || ((c.fixableBy ?? "work") === "work" && !isRelativePass(round, c.id))) } : round;
   const sourceId = fixSourceTaskId(store, groupId, scope);
   const taskId = fixTaskIdOf(store, groupId, round.roundNo);
