@@ -775,7 +775,9 @@ export class WebControlService {
           const currentPlan = readArchivedPlan(this.store, id).plan;
           const currentPrefs = readAgentPreferences(this.store, command.actorId).preferences;
           if (estimatorLayerAuthority(currentPrefs, readGroupAgentOverrides(group), currentPlan.agent) !== layerAuthority) throw new ControlError("agent-selection-changed");
-          this.deps.profileRouter.resolve("budget-estimate", command.payload.estimatorProfileId, command.payload.estimatorProfileHash);
+          // #381 review C1: the payload may name the profile by a legacy hash (the budget editor sends the last estimate's);
+          // the record names the binding hash its request and contract froze, as every read of the group checks.
+          const resolvedProfile = this.deps.profileRouter.resolve("budget-estimate", command.payload.estimatorProfileId, command.payload.estimatorProfileHash);
           // Issue #144: an estimator that does not resolve gives the same blocked estimate every time; while nothing has
           // changed (proposal version, profile, mode, reason), answer with the newest one instead of adding a version.
           if (prepared.request === null && prepared.reasonCode?.startsWith("agent-selection-rejected:estimator:") === true) {
@@ -799,7 +801,7 @@ export class WebControlService {
             group.ledger.committedRemaining = sumAmounts([group.reserved, grant]);
             setReserve(proposal, residual(group.limit, group.used, group.ledger.committedRemaining));
           }
-          const estimate = { estimateId, estimateVersion, state: prepared.state, profile: { profileId: command.payload.estimatorProfileId, profileHash: command.payload.estimatorProfileHash }, mode: command.payload.estimateMode,
+          const estimate = { estimateId, estimateVersion, state: prepared.state, profile: { profileId: command.payload.estimatorProfileId, profileHash: resolvedProfile.profileHash }, mode: command.payload.estimateMode,
             requestHash: prepared.requestHash, request: prepared.request, outputHash: null, output: null, reasonCode: prepared.reasonCode,
             ...(prepared.compatibilityReasonCodes === undefined ? {} : { compatibilityReasonCodes: prepared.compatibilityReasonCodes }), grant, estimatorSlot, proposalVersion: proposal.proposalVersion };
           this.store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES (?,?,?,?,?)").run(id, estimateId, estimateVersion, prepared.state, canonicalBytes(estimate).toString("utf8"));

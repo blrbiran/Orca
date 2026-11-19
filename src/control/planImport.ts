@@ -456,7 +456,8 @@ export function writeImportedPlan(deps: ImportDeps, input: ImportedPlanWrite, ca
   const frozen = preflightFrozen;
   const estimate = {
     estimateId, estimateVersion: 1, state: frozen.state,
-    profile: estimatorProfile === null ? null : { profileId: input.estimatorProfileId, profileHash: input.estimatorProfileHash }, mode: input.estimateMode,
+    // #381 review C1: the binding hash the request froze, not the input's (which may be a legacy hash accepted by alias).
+    profile: estimatorProfile === null ? null : { profileId: input.estimatorProfileId, profileHash: estimatorProfile.profileHash }, mode: input.estimateMode,
     requestHash: frozen.requestHash, request: frozen.request, outputHash: null, output: null, reasonCode: frozen.reasonCode,
     ...(frozen.compatibilityReasonCodes === undefined ? {} : { compatibilityReasonCodes: frozen.compatibilityReasonCodes }),
     grant: estimateGrant, estimatorSlot, proposalVersion: 1,
