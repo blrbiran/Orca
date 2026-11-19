@@ -58,3 +58,21 @@ describe("run show reads a clarifying group's requirement call (#374 c)", () => 
     expect(out.stderr).toContain(`run ${RUN} is not in group other`);
   });
 });
+
+// Fix wave (review I1, session 3ba26002): the MCP server runs tool calls concurrently in one process, so what `run show`
+// located in its paths step must stay with its own call. Two concurrent run show calls each print their own run.
+describe("two run show calls at once in one process (review I1)", () => {
+  it("each composes its own run's entry, activity and evidence", async () => {
+    const entry = (runId: string, groupId: string) => ({ status: 200, body: { schema: "orca-run-entry-v1", groupId, run: { runId, taskId: "t1", phase: "work", state: "running" } } });
+    const reads = (runId: string) => ({
+      [`GET runs/${runId}/activity`]: { status: 200, body: { schema: "orca-run-activity-v1", runId, entries: [{ kind: `act-${runId}`, at: 1, body: {} }] } },
+      [`GET runs/${runId}/evidence`]: { status: 200, body: { schema: "orca-run-evidence-v1", runId, entries: [] } },
+    });
+    const p = await fakePanel({ ...routes, "GET runs/run-a": entry("run-a", "g-a"), "GET runs/run-b": entry("run-b", "g-b"), ...reads("run-a"), ...reads("run-b") });
+    const [a, b] = await Promise.all([cli(["run", "show", "run-a", "--json"], p.dir), cli(["run", "show", "run-b", "--json"], p.dir)]);
+    // mutation: keep the located entry in a module variable -> one call crashes or takes the other's entry, red
+    expect([a.code, b.code], a.stderr + b.stderr).toEqual([0, 0]);
+    expect(a.json().body).toMatchObject({ groupId: "g-a", run: { runId: "run-a" }, activity: { entries: [{ kind: "act-run-a" }] } });
+    expect(b.json().body).toMatchObject({ groupId: "g-b", run: { runId: "run-b" }, activity: { entries: [{ kind: "act-run-b" }] } });
+  });
+});

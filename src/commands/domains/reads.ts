@@ -119,8 +119,11 @@ async function groupOfRun(context: WriteContext, runId: string): Promise<string>
   throw new EntryRejection("run-not-found", `no group lists run ${JSON.stringify(runId)}; pass --group <group>`);
 }
 
-/** Tester #374 (c): the run `run show` located in its paths step, for its compose (one command per CLI process). */
-let shownRun: { groupId: string; run: unknown } | null = null;
+/**
+ * Tester #374 (c): the run `run show` located in its paths step, for its compose, keyed by the call's context (the MCP
+ * server runs tool calls concurrently in one process; review I1).
+ */
+const shownRuns = new WeakMap<WriteContext, { groupId: string; run: unknown }>();
 /**
  * Tester #374 (c): a run's entry by its id (GET runs/:runId) -- a clarifying group's requirement call included, whose group
  * view is refused -- with no scan of the groups. A named --group must hold the run (#242), checked before the activity or
@@ -614,10 +617,10 @@ export const READ_ROWS: CommandDef[] = [
     } }),
   read({ domain: "run", action: "show", summary: "one run: its entry in the group view, the newest 10 activity rows, the evidence summary",
     positionals: [RUN], flags: [{ name: "group", type: "string", summary: "the run's group, checked to hold the run (default: the run's own group)" }],
-    paths: async (c) => { shownRun = await runEntryOf(c, ids(c, "run")); return [`runs/${ids(c, "run")}/activity`, `runs/${ids(c, "run")}/evidence`]; },
+    paths: async (c) => { shownRuns.set(c, await runEntryOf(c, ids(c, "run"))); return [`runs/${ids(c, "run")}/activity`, `runs/${ids(c, "run")}/evidence`]; },
     compose: async ([activity, evidence], c) => {
-      const located = shownRun!;
-      shownRun = null;
+      const located = shownRuns.get(c)!;
+      shownRuns.delete(c);
       const entries = (field(activity, "entries") as unknown[] | undefined) ?? [];
       const manifest = (field(evidence, "entries") as Array<{ evidenceId: string; kind: string; byteLength: number }> | undefined) ?? [];
       // Tester #285: the transcript's last write, when the listing gives one; a refused or older listing adds nothing.
