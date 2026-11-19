@@ -230,3 +230,8 @@ cap is what the group has left. Only when that is zero or less (or another dimen
 does not fit) does the fix stay `unfunded`, shown with its existing next steps. A group with no token limit (reserve
 tokens `null`) is not clamped. A person's `review-fix` keeps the source's grant as before. A positive but very small
 remainder still opens a fix task with that cap (no minimum below the floor); see the build report.
+
+## Correction (2026-11-19, implementer of #337, session `3ba26002`): the fixableBy sentence names the folder
+
+S5's prompt sentence for `fixableBy: "work"` now reads "changing files in the repository (or, for a folder group, the
+folder)" (`2026-11-19-review-folder-multi-groups-design.md` §6). The routing is unchanged.

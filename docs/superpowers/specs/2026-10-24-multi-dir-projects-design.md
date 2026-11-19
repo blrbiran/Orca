@@ -1179,3 +1179,11 @@ Appended; the text above stays as written (Rule 13). Where this section and the 
 | 3 | §9.7: the verbs on a stopped landing | A `mark-resolved` accepted while a `retry-rest` pre-check is in flight wins: the pass's result is dropped and nothing is journaled; the next round applies `mark-resolved`. | `multiDirPartial.test.ts` "keeps a mark-resolved accepted during a retry-rest pre-check …" |
 | 4 | §9.9: done ⇔ `lastLanded[key]` equals the tip (DB only) | Realised by reopening a `landed` record as `idle` in the same write that moves a multi group's work branch (`markLanded`; E's empty-result ledger commit), so the DB-only check never answers done between a landing and the pass that carries it. | `multiDirDue.test.ts` "is not done between a landing that moved a work branch …" |
 | 5 | §11.6: result repositories at `repos/<key>` | Orca's port refuses a collect answer whose `dirs[].resultRepo` is not `repos/<key>` (`control-response-invalid`). | `multiDirCollectPort.test.ts` |
+
+## 23. Correction (2026-11-19, implementer of #337 under Orca session `3ba26002`, branch `feat/review-337`; the text above is kept as written): a review fix task's `writes`
+
+A requirement review's fix task in a multi group is not made by a split. Its `writes` (stored on its work item, as §6.1
+says a task's are) and its contract's `repoKey` / `additionalRepos` are built from stored records only, as `2026-11-19-review-folder-multi-groups-design.md` §5.3
+says: per member, the paths the review's findings name (`<key>:<path>`), else the tasks' stored targetPaths; each
+member's checks are the union of the tasks' `writes[].checks` for it; the primary (the first written member in
+registered order) must have checks, or the fix is refused `multi-fix-checks:<key>`.

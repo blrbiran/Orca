@@ -663,3 +663,12 @@ The Correction above stands, with these changes (the original text is kept as wr
   design -- the person chose to fix, and every not-met criterion of the round is in their fix task's goal.
 - **Funding (M1).** As the stuck-runs spec's Correction of 2026-11-19 says: a small positive remainder still opens the
   automatic fix with that cap; there is no minimum below the 1M floor.
+
+## Correction 3 (2026-11-19, implementer of #337 under Orca session `3ba26002`, branch `feat/review-337`; the text above is kept as written): folder and multi-directory groups are reviewed, and end `noted` (#337)
+
+§3 items 5-6 (a folder or multi-directory group's review is `not-run`, satisfied at once) are superseded by `2026-11-19-review-folder-multi-groups-design.md`
+(human: 「不要卡在」; ruling 2 「同意」). These groups now get the agent review and the automatic fix rounds, as a repository
+group does. A review of theirs that does not pass after those rounds -- and a work branch that is gone, a claim error no
+retry changes, an unfunded or unprepared call -- ends in the new satisfied state `noted`: shown (a `review-note` row, a
+note in `group show`, a warn tone on the Web) but not "needs you", and the group reaches done. An existing `not-run`
+record stays satisfied (no backfill).

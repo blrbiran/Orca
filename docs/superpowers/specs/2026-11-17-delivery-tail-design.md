@@ -251,3 +251,9 @@ extracted, dir / multi-directory groups stay `not-run`).
    and the prompt says so.
 3. **Metadata shows only itself**: the prompt's evidence framing and its `met` form both say a file's listed metadata
    (size, hash, type, stored pixel size) shows only those facts, never what its unshown content says.
+
+### Correction 6 (2026-11-19, implementer of #337 under Orca session `3ba26002`, branch `feat/review-337`; the text above is kept as written)
+
+`:47` and `:241-242` (a folder or multi-directory group's review is not run) are superseded by `2026-11-19-review-folder-multi-groups-design.md` §4 and §9: these
+groups are reviewed on their work branches (a folder group in its vault, a multi group one section per member), with
+their own acceptance and delivery lines; the Web's `not-run` label now names a group finished before that review existed.
