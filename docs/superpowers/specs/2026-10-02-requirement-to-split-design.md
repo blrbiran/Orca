@@ -507,3 +507,9 @@ multi-directory project a new requirement and archiving the group) -- is superse
 `requirement-resplit` that copies the clarified requirement into a new clarifying group (its next draft a new split
 call carrying the feedback) and archives the old group, for an accepted, unconfirmed group only. The design is spec
 `2026-11-19-resplit-as-new-group-design.md` (human ruling 「同意」 to the controller's proposal, session 3ba26002).
+
+## Correction (review of the #379 re-split; Orca session 3ba26002, 2026-11-19; the text above is kept as written)
+
+In the correction above, the re-split command's flag is `--text`, not `--feedback`: the refused draft edit's `next` is
+`orca requirement resplit <g> --text "<what was wrong with the split>"` (spec `2026-11-19-resplit-as-new-group-design.md`,
+Correction 1).

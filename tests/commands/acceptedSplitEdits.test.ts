@@ -14,7 +14,9 @@ const refused = (route: string, message: string, code = "requirement-already-acc
 // Ruling (session 3ba26002, 2026-11-19, human 「这次批准改写所有必要的判据」; spec 2026-11-19 resplit-as-new-group §6): the
 // way forward is now one command that splits the clarified requirement again as a new group and archives this one. (Was:
 // the six plan-library commands, plan save .. group archive.) This criterion now encodes that the refusal names resplit.
-const NEXT = ["orca requirement resplit g-alpha --feedback \"<what was wrong with the split>\""];
+// Ruling (session 3ba26002, 2026-11-19, human 「这次批准改写所有必要的判据」; controller ruling, Rule 11): resplit's flag is
+// `--text`, as `orca requirement feedback` names it. (Was: `--feedback`.)
+const NEXT = ["orca requirement resplit g-alpha --text \"<what was wrong with the split>\""];
 
 describe("a draft edit refused after accept says what changes the plan instead (#379)", () => {
   it.each([

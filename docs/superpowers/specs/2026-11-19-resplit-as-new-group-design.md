@@ -114,3 +114,11 @@ route serve both people and agents.
 - `npx vitest run tests/commands/requirementResplitCli.test.ts` -- the CLI payload and the refusals' `next` naming resplit.
 - `npx vitest run tests/entry/skill.test.ts tests/commands/drift.test.ts tests/panel/requirementRoutes.test.ts` -- verb
   schema, generated docs and the route.
+
+## Correction 1 (review of `afee7245`; a review subagent (Claude Opus 5.5) of Orca session `3ba26002`, 2026-11-19; the text above is kept as written)
+
+The CLI flag is `--text`, not `--feedback` (controller ruling, Rule 11): the sibling `orca requirement feedback <group>
+--text <text>` names the same "what was wrong" text that way. The payload key stays `feedback`, as that sibling's payload
+(`requirement-draft-feedback`'s `{ draftNo, feedback }`) names it. So §2's command reads
+`orca requirement resplit <group> --text "<what was wrong with the split>" [--group <new>]`, and §6's `next` line
+`orca requirement resplit <group> --text "<what was wrong>"`.
