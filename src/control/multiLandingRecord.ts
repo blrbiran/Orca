@@ -13,7 +13,7 @@ import type { ControlStore } from "./store.js";
 const placeScheme = z.object({ delivery: z.literal("place") }).strict();
 const landingSchemeSchema = z.union([integrationSchemeSchema, placeScheme]);
 export type LandingScheme = z.infer<typeof landingSchemeSchema>;
-/** §9.2: what a member's delivery may be. `push-branch` / `github-pr` are refused at accept. */
+/** §9.2: what a member's delivery may be. `push-branch` / `github-pr` / `working-tree` are refused at accept. */
 export type PublishableScheme = Extract<IntegrationScheme, { delivery: "local" | "push-target" }>;
 export type CarriedScheme = PublishableScheme | Extract<LandingScheme, { delivery: "place" }>;
 
@@ -26,7 +26,7 @@ export type MultiPlanEntry = z.infer<typeof planEntrySchema>;
 export const landingSchema = z.object({
   delivery: z.array(z.object({ key: z.string().min(1), scheme: landingSchemeSchema }).strict()).superRefine((entries, context) => {
     entries.forEach((entry, index) => {
-      if (entry.scheme.delivery === "push-branch" || entry.scheme.delivery === "github-pr") {
+      if (entry.scheme.delivery === "push-branch" || entry.scheme.delivery === "github-pr" || entry.scheme.delivery === "working-tree") {
         context.addIssue({ code: z.ZodIssueCode.custom, path: [index, "scheme"], message: "multi-dir-delivery-unsupported" });
       }
     });

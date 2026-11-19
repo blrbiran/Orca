@@ -373,6 +373,21 @@ describe("a multi split accepted and exported (§6.4, M6)", () => {
     } finally { await x.dispose(); }
   });
 
+  // Working-tree delivery spec 2026-11-19 §4.5 (#365): a member whose default is working-tree is refused at accept too --
+  // a multi landing has no working-tree delivery (N2).
+  it("refuses to accept a project whose member repository defaults to working-tree, and changes nothing", async () => {
+    const x = await multiHarness({ answers: [{ purpose: "split", output: MULTI_SPLIT }], startAt: "split" });
+    try {
+      writeRepositorySettingsBody(x.store, controlRepoKey("alpha"), { workspaceMode: "worktree", revision: 1, integration: { delivery: "working-tree" } });
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      const answer = await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 1, draftHash: readDraft(x.store, "r", 1).draftHash! }));
+      // mutation: drop working-tree from the accept's refusal -> the accept succeeds (or fails another way), red
+      expect(answer).toMatchObject({ error: { code: "multi-dir-delivery-unsupported", message: "multi-dir-delivery-unsupported:alpha" } });
+      expect(readDraft(x.store, "r", 1).state).toBe("awaiting-review");
+      expect(x.body().multiDir).toMatchObject({ landing: null });
+    } finally { await x.dispose(); }
+  });
+
   it("refuses to accept a project whose member repository defaults to a PR delivery, and changes nothing", async () => {
     const x = await multiHarness({ answers: [{ purpose: "split", output: MULTI_SPLIT }], startAt: "split" });
     try {

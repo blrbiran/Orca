@@ -526,12 +526,13 @@ export async function applyRequirementDraftAccept(
         const multi = multiDirOf(group);
         const keys = multi === null ? [] : multi.dirs.map((member) => member.key);
         // §9.2: delivery is frozen here: a folder is placed; a repository carries its default. A PR delivery on a multi
-        // project is a design of its own (N pull requests that must merge together), so it is refused by name.
+        // project is a design of its own (N pull requests that must merge together), so it is refused by name. So is a
+        // working-tree default (working-tree delivery spec 2026-11-19 §4.5): a multi landing has no working-tree delivery.
         if (multi !== null) {
           const delivery: Array<{ key: string; scheme: LandingScheme }> = multi.dirs.map((member) => {
             if (member.kind === "dir") return { key: member.key, scheme: { delivery: "place" } };
             const scheme = readIntegrationDefault(deps.store, member.repoId).scheme;
-            if (scheme.delivery === "push-branch" || scheme.delivery === "github-pr") {
+            if (scheme.delivery === "push-branch" || scheme.delivery === "github-pr" || scheme.delivery === "working-tree") {
               throw new ControlError("multi-dir-delivery-unsupported", member.key);
             }
             return { key: member.key, scheme };
