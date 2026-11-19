@@ -11,7 +11,7 @@ import { readDraft } from "../../src/control/requirementRecords.js";
 // send instruction version 6, so the fake claude queue must match that head or no draft ever arrives.
 // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) — the #351 addendum makes a new single-directory
 // split call send instruction version 7, so the fake claude queue matches that head.
-// Ruling (session 3ba26002): dogfood finding (3) and tester #362 make a new single-directory split call send instruction version 8;
+// Ruling: human 「这次批准改写所有必要的判据」 (Orca session 3ba26002, 2026-11-19): dogfood finding (3) and tester #362 make a new single-directory split call send instruction version 8;
 // the fake claude queue matches that head (this criterion still encodes: the queue answers the split call Orca sends).
 import { SPLIT_PROMPT_HEAD_V8 as SPLIT_PROMPT_HEAD } from "../../src/control/requirementSplit.js";
 import type { ControlStore } from "../../src/control/store.js";

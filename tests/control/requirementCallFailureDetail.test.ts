@@ -18,7 +18,7 @@ const failed = (purpose: "clarify" | "split", failureCause?: { cause: string; de
 
 describe("a failed requirement call keeps ccloop's failure detail (#125)", () => {
   it("clarify: the failed call records the detail, cut to 512 UTF-8 bytes; the retried valid call has none", async () => {
-    // Ruling (session 3ba26002): dogfood finding (1) ends a call typed `quota` without a retry, so this retried-call fixture
+    // Ruling: human 「这次批准改写所有必要的判据」 (Orca session 3ba26002, 2026-11-19): dogfood finding (1) ends a call typed `quota` without a retry, so this retried-call fixture
     // uses another typed cause (`transient`); it still encodes: a failed call keeps ccloop's detail.
     const x = await requirementHarness({ answers: [failed("clarify", { cause: "transient", detail: LONG }), { purpose: "clarify", output: ROUND_ONE }] });
     try {
@@ -45,7 +45,7 @@ describe("a failed requirement call keeps ccloop's failure detail (#125)", () =>
   });
 
   it("adds no key where the record names no detail: no failureCause, a null detail, an empty one", async () => {
-    // Ruling (session 3ba26002): dogfood finding (1) ends a call typed `quota` without a retry, so this retried-call fixture
+    // Ruling: human 「这次批准改写所有必要的判据」 (Orca session 3ba26002, 2026-11-19): dogfood finding (1) ends a call typed `quota` without a retry, so this retried-call fixture
     // uses another typed cause (`transient`); it still encodes: a failed call keeps ccloop's detail.
     for (const cause of [undefined, { cause: "transient", detail: null }, { cause: "transient", detail: "" }]) {
       const x = await requirementHarness({ answers: [failed("clarify", cause), { purpose: "clarify", output: ROUND_ONE }] });

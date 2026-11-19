@@ -52,7 +52,7 @@ describe("the fold before the schema (D4: codex's strict projection writes null 
 describe("split instruction version 7 (D3)", () => {
   it("the default prompt is v7 with the conflicts rule after the revision rule and the template line before notes", () => {
     const prompt = buildSplitPrompt({ document: "D.", overview: { canonicalJson: "{}", hash: "c".repeat(64) }, earlierDrafts: [] });
-    // Ruling (session 3ba26002): dogfood finding (3) and tester #362 make a new single-directory split call send instruction version 8;
+    // Ruling: human 「这次批准改写所有必要的判据」 (Orca session 3ba26002, 2026-11-19): dogfood finding (3) and tester #362 make a new single-directory split call send instruction version 8;
     // this criterion now encodes: the default prompt is the newest version, which keeps v7's conflicts rule and template line.
     expect(prompt.split("\n", 1)[0]).toBe(SPLIT_PROMPT_HEAD_V8);
     expect(SPLIT_PROMPT_HEAD_V7).toBe("Orca requirement split, instruction version 7.");
@@ -94,7 +94,7 @@ describe("a v7 answer with a conflict, after feedback (harness)", () => {
       const second = x.fake.calls.accept[1]!;
       // mutation: prepare still sends SPLIT_JSON_SCHEMA_V6 -> red
       expect(second.work.kind === "single-call" && second.work.responseSchema).toEqual(SPLIT_JSON_SCHEMA_V7);
-      // Ruling (session 3ba26002): dogfood finding (3) and tester #362 make a new single-directory split call send instruction version 8 (same answer schema, V7's).
+      // Ruling: human 「这次批准改写所有必要的判据」 (Orca session 3ba26002, 2026-11-19): dogfood finding (3) and tester #362 make a new single-directory split call send instruction version 8 (same answer schema, V7's).
       expect(second.work.kind === "single-call" && second.work.prompt.startsWith(SPLIT_PROMPT_HEAD_V8)).toBe(true);
       const draft = readDraft(x.store, "r", 2);
       expect((draft.output as { requirementConflicts?: unknown }).requirementConflicts).toEqual([CONFLICT]);
