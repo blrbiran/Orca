@@ -684,3 +684,34 @@ WT-9 and the plan's first task.
     done). A valid UTF-8 path that contains U+FFFD itself is refused too; accepted.
 - **Bug found and fixed (not of this spec):** `applySetIntegrationScheme` rebuilt the repository settings body from four
   fields, dropping a stored `criteriaReview` or `flows` whenever the delivery was set; it now carries the body over whole.
+
+## 17. Review notes (#365 review) — 2026-11-19
+
+- **Who / where:** an independent reviewer-and-fixer subagent (Claude Opus 5.5) of the Orca control session `3ba26002`,
+  branch `feat/working-tree-365`, on top of `bac70f25`. §1–§16 are unchanged; where a line there no longer holds, this
+  section says so.
+- **Fixed (each with a criterion seen red under its mutation in the `.wt-365-mut` clone):**
+  - A path a crashed or write-failed attempt wrote to `pending.tip`, which a moved tip no longer changes, is now part of
+    the set (`want` = the tip's entry = `from`'s, `was` = `pending.tip`'s): before, it stayed at the old attempt's bytes
+    while the group settled done (§4.4 step 6 widened; "Re-entry after a crash" holds for a moved tip too).
+  - The working-tree write-ahead re-reads the archived mark and the stop in its own transaction: a group archived or
+    paused after the pass read its row is dropped, never written (§4.5 "Archived / closed").
+  - `<git-dir>/orca` is `lstat`ed before staging and by the sweep: a symlink or a file there is never followed — the
+    delivery blocks `integration-working-tree-write-failed:<git-dir>/orca:not-a-directory:written 0` and the sweep logs
+    the repository (§7 Paths (b)).
+  - Steps 5–6 (reads of the checkout and git) are inside the catch: a failing read (a required clean filter, a
+    permission error) is blocked `-write-failed:-:<code>:written 0`, never a backoff (§4.4 I9 now covers steps 5–11).
+  - The panel-start sweep runs in `recover`, awaited, before its `driver.kick()` — the driver's real first round; §15's
+    "`startPump`, before `driver.start`" no longer holds (`startPump` is as on `main`).
+  - Controller ruling Q2: the group view and the brief carry `checkoutPath` (the registered path) beside the first-use
+    question or a working-tree record, only when it resolves; the Web question's button reads "Put them in <path>
+    (uncommitted)", the Web written row and the CLI's §4.6 lines name it. §16's "Web words" line is superseded.
+- **Kept (controller rulings):** Q1 store-only `waitingFor` may lag one round (§16 note stands); Q3 the landing-schema
+  refine stays as a documented redundant guard.
+- **Accepted limits found, not fixed (Minor):** O3's window also covers a leading directory swapped for a symlink between
+  the step-9 re-check and a rename (the rename would follow it); on a case-insensitive volume a tree holding two paths
+  that differ only by case at `from` can let a deletion of one remove the person's file under the other name; HFS+-only
+  ignorable code points in a `.git` component (APFS does not ignore them; checked on this machine) are not refused; a
+  second `pending` overwrite after two crashes on two moved tips reads the first attempt's paths as conflicts (refused,
+  never written); the sweep of a registered path that is no longer a repository but sits inside another one sweeps that
+  repository's `orca/deliver-*`.
