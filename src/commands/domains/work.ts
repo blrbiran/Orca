@@ -7,7 +7,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, WriteContext } from "../types.js";
 import {
-  adoptFullSuiteLine, checkpointOf, type ClarifyRoundView, config, contextHandoffLines, type EstimateHistory, FULL_SUITE_NOT_SET, currentRun, file, fillRoundAnswer, fundingLines, historyLines, instructionLines, withFunding, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, softCeilingLines, unestimatedLines, verb, workItem,
+  adoptFullSuiteLine, checkpointOf, type ClarifyRoundView, config, contextHandoffLines, type EstimateHistory, FULL_SUITE_NOT_SET, currentRun, file, fillRoundAnswer, fundingLines, historyLines, withFunding, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, softCeilingLines, unestimatedLines, verb, workItem,
 } from "./verbs.js";
 import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
 import { SYSTEM_LABELS } from "../../control/labels.js";
@@ -389,8 +389,9 @@ const estimateFormat = (row: CommandDef, reasonField: "estimateReasonCode" | "re
 } });
 
 /**
- * Tester follow-up F §4 (#173): the older-estimate-instruction warning (instructionLines) the payload of `group estimate`
- * or `group confirm` found, for --json: the answer's body gains `warnings` (only-add; absent when there is none).
+ * Tester follow-up F §4 (#173): the warnings the payload of `group estimate` or `group confirm` found, for --json: the
+ * answer's body gains `warnings` (only-add; absent when there is none). #381 (session 3ba26002, human ruling 2): the
+ * older-instruction warning that began this is gone; only confirm's full-suite line is left.
  */
 let instructionWarnings: string[] = [];
 /** Issue #212: the funding preview `group confirm` read, for --json's `funding` (withFunding; only-add). */
@@ -598,8 +599,10 @@ export const WORK_ROWS: CommandDef[] = [
       const binding = named !== undefined ? await profileBinding(c, named) : defaults === null ? null : { profileId: defaults.estimatorProfileId, profileHash: defaults.estimatorProfileHash };
       const mode = str(c, "mode") ?? defaults?.estimateMode;
       if (binding === null || mode === undefined) throw new EntryRejection("estimator-unconfigured", "the panel has no estimator default; pass --estimator-profile and --mode");
-      estimateNote = instructionLines(view, binding.profileId);
-      instructionWarnings = estimateNote;
+      // #381 (session 3ba26002, human ruling 2): Orca always estimates with its newest instruction, so the
+      // older-instruction warning is gone; nothing else fills these for an estimate.
+      estimateNote = [];
+      instructionWarnings = [];
       return { proposalVersion: (await groupView(c)).proposal.proposalVersion, estimatorProfileId: binding.profileId, estimatorProfileHash: binding.profileHash, estimateMode: mode };
     } }), "reasonCode"))),
   withWarnings({ ...verb({ domain: "group", action: "confirm", summary: "confirm the task plan as shown now; it starts when a slot is free unless --hold", verb: "confirm", positionals: [GROUP],
@@ -974,8 +977,8 @@ async function confirmPayload(c: WriteContext): Promise<unknown> {
     return defaults === null ? null : { profileId: defaults.estimatorProfileId, profileHash: defaults.estimatorProfileHash };
   };
   const bindings = { estimator: await bind("estimator"), worker: await bind("worker"), handoff: await bind("handoff"), goalReview: await bind("goalReview") };
-  instructionWarnings = instructionLines(await config(c), bindings.estimator?.profileId);
-  confirmNote.push(...instructionWarnings);
+  // #381 ruling 2: no older-instruction warning; `warnings` now carries only the full-suite line below.
+  instructionWarnings = [];
   for (const kind of ["worker", "handoff", "goalReview"] as const) {
     if (bindings[kind] === null) throw new EntryRejection("confirm-profile-missing", `no ${kind} profile; pass --${flagFor[kind]} <id>`);
   }

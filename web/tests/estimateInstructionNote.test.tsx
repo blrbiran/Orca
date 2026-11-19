@@ -2,6 +2,7 @@
 /**
  * Tester follow-up F §4 (#173): an estimator profile pinned to an older estimate instruction was named only in the CLI's
  * human output of `group estimate` / `group confirm`. The budget editor, where the estimate is shown, names it too.
+ * #381 (session 3ba26002): no longer -- Orca always uses its newest instruction; see the ruling below.
  */
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -35,18 +36,14 @@ const view: GroupViewV1 = {
 
 afterEach(cleanup);
 
-describe("an older estimate instruction in the budget editor (#173)", () => {
-  it("names the estimator profile, its instruction and the newest", () => {
-    render(<BudgetEditor view={view} config={config("1")} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
-    expect(screen.getByTestId("budget-older-instruction").textContent)
-      // Ruling (2026-11-19 #379-381 review): I3 -- editing estimatorPreflight.instructionVersion in place changes the profile's
-      // hash, so every group bound to it is refused profile-changed; the note names the safe route, a new profile beside it.
-      // (Was: "...; update the profile's estimatorPreflight.instructionVersion to use the newest.")
-      .toBe(`Estimator profile est uses estimate instruction 1; the newest is ${NEWEST_ESTIMATE_INSTRUCTION}. Its estimates follow the older instruction. To use the newest, load a copy of the profile with a new profileId and instructionVersion "${NEWEST_ESTIMATE_INSTRUCTION}" beside it and select it with --estimator-profile; never edit this profile in place while groups use it (they would be refused profile-changed). README: "Moving to a newer estimate instruction".`);
-  });
-
-  it.each([["the newest", String(NEWEST_ESTIMATE_INSTRUCTION)], ["no preflight", null], ["an older panel", undefined]] as const)("says nothing under %s", (_label, version) => {
+// Ruling (session 3ba26002, human #381): Orca always estimates with its newest instruction, so the budget editor names no
+// older one. (Was: a note naming the profile, its instruction and the newest under instruction 1, none otherwise.)
+// Fed a config that still names instruction 1 (as an older panel would send), so the criterion is not empty.
+describe("no older-instruction note in the budget editor (#381)", () => {
+  it.each([["instruction 1", "1"], ["the newest", String(NEWEST_ESTIMATE_INSTRUCTION)], ["no preflight", null], ["an older panel", undefined]] as const)("says nothing under %s", (_label, version) => {
     render(<BudgetEditor view={view} config={config(version)} drafts={{}} onDraft={vi.fn()} onCommand={vi.fn()} />);
+    // mutation: restore the note -> red under instruction 1
     expect(screen.queryByTestId("budget-older-instruction")).toBeNull();
+    expect(document.body.textContent).not.toContain("uses estimate instruction");
   });
 });

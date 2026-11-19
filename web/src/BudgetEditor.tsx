@@ -24,7 +24,6 @@ import {
   DIMENSIONS, MIN_APPLIED_WORK_ATTEMPTS, adviceOf as sharedAdviceOf, appliedWorkAttempts, budgetFieldKey, estimateIsAdvisory, loopOwned, suggestedLoopActions as sharedSuggestedLoopActions,
   suggestedOperations as sharedSuggestedOperations, suggestionActions as sharedSuggestionActions, targetOf,
 } from "../../src/control/budgetSuggestions.js";
-import { NEWEST_ESTIMATE_INSTRUCTION, olderEstimateInstruction } from "../../src/control/estimateInstructionAge.js";
 import { Select } from "./ui/Select.js";
 import { localDateTime } from "./ui/localTime.js";
 import type {
@@ -235,10 +234,6 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
   const manual: ManualConfirmChoice = { mode: manualMode, profiles: manualProfiles };
   const mode = confirmModeOf(view, config, manual);
   const confirmProfile = (kind: "estimator" | "worker" | "handoff" | "goalReview"): ProfileBindingV1 | null => confirmProfileOf(view, config, manual, kind);
-  // Tester follow-up F §4 (#173): the estimator profile the shown estimate came from (else the one confirm binds) pinned to
-  // an older estimate instruction is named, as `orca group estimate` / `group confirm` name it.
-  const estimatorProfileId = estimator?.profile?.profileId ?? confirmProfile("estimator")?.profileId ?? null;
-  const olderInstruction = olderEstimateInstruction(config.profiles.find((profile) => profile.profileId === estimatorProfileId)?.estimatorInstructionVersion);
   const shownSelectionsHash = props.selectionsHash ?? null;
   const blockers = confirmBlockers(view, config, shownSelectionsHash, mayLimit, drafts, manual);
   // Tester round 2 §7.3, §7.4 item 3: an unlimited-token group Orca may confirm on its own (absent autoConfirm: never).
@@ -454,7 +449,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         </section>
       ))}
       {advice?.stale === true && <p role="note">{t("budget.staleEstimate")}</p>}
-      {olderInstruction !== null && <p role="note" data-testid="budget-older-instruction">{t("budget.olderInstruction", { profileId: estimatorProfileId ?? "", version: olderInstruction, newest: NEWEST_ESTIMATE_INSTRUCTION })}</p>}
+      {/* #381 (session 3ba26002, human ruling 2): no older-instruction note -- Orca always estimates with its newest instruction. */}
       {/* Tester #173/#224/#266 (follow-up L): this repository's median task spend and each estimate's multiple of it (the view's, before confirm). */}
       {view.estimateHistory !== undefined && (
         <div role="note" data-testid="budget-history">

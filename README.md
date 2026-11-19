@@ -221,19 +221,22 @@ window either does the estimate end in state **`blocked-capability`**: no model 
 starts from default budget allocations that you edit by hand in Task control. Use it with
 `--estimator-profile all --estimate-mode soft`. In `soft` mode an overrun is settled after the fact, not prevented.
 
-#### Moving to a newer estimate instruction
+#### What a profile binds, and what you may edit
 
-`orca group estimate`, `group confirm` and the budget editor warn when the estimator profile uses an estimate
-instruction older than the newest Orca holds. Do **not** edit `estimatorPreflight.instructionVersion` in the profile
-file in place: every group bound to that profile froze its hash, and after the next panel start each of them is refused
-`profile-changed`. Instead copy the file, give the copy a new `profile.profileId` (for example `all-v4`) and the newest
-`instructionVersion`, and start the panel with both files, selecting the new one for estimates:
+Every field of `estimatorPreflight` is optional, and none of it binds anything. Orca always estimates with the newest
+estimate instruction it holds; `instructionVersion` and `schemaVersion` are read by nothing (a group view still says when
+a group's newest estimate request used an older instruction). `maxOutputTokens`, `framingTokenOverhead` and `tokenizer`
+are taken from the file when present, else Orca's defaults (64000, 17, and the utf8 upper bound 2/3 with
+`proofRef` `"proof"`, the values above). Each estimate reads them when it is made and records what it used, so an
+estimate already queued settles as it was made. The secret value hashes do not bind either; a panel start notes once on
+stderr when they changed since the last start.
 
-```
---profile all.json --profile all-v4.json --estimator-profile all-v4 --estimate-mode soft
-```
-
-Groups already bound to the old profile keep it; new estimates use the new one.
+What groups, runs and estimate requests are bound to is the rest: `profileId`, `allowedWorkKinds`, `capabilities`,
+`contextTokenizer` (and its `context` tokenizer artifact hash), `workMaxOutputTokens` and the proof document hashes.
+Change any of those and every group bound to the file is refused `profile-changed` after the next panel start; edit
+the estimator preflight or a secret freely. Groups bound before this rule (an older Orca hashed the whole file) keep
+resolving: each panel start records the loaded file's old hash beside its new one in the control database, after one
+copy `control.sqlite.bak.<epoch ms>` (mode 0600) beside it, and only when there is something new to record.
 
 ### 4. Repositories and where state lives
 

@@ -27,10 +27,21 @@ function seedEstimate(store: ControlStore, instructionVersion: string | null): v
   store.db.prepare("INSERT INTO estimates(group_id,id,estimate_version,state,body) VALUES('g',?,?,?,?)").run(estimateId, version, record.state, canonicalBytes(record).toString("utf8"));
 }
 
+/**
+ * Ruling (session 3ba26002, human #381): the import's estimate is made with Orca's newest instruction whatever the profile
+ * names, so a group estimated under an older one (before #381) is made by rewriting its first estimate's recorded request
+ * to that instruction. (Was: the fixture profile's instructionVersion chose it.) What the criteria encode is unchanged.
+ */
+function recordFirstEstimateAs(store: ControlStore, instructionVersion: string): void {
+  const first = store.db.prepare("SELECT id,body FROM estimates WHERE group_id='g' ORDER BY estimate_version ASC").get()!;
+  const body = JSON.parse(String(first.body)) as Record<string, unknown> & { request: Record<string, unknown> };
+  const request = { ...body.request, instructionVersion };
+  store.db.prepare("UPDATE estimates SET body=? WHERE group_id='g' AND id=?").run(canonicalBytes({ ...body, request, requestHash: sha256Canonical(request) }).toString("utf8"), first.id);
+}
+
 async function reads(instructionVersion: string, seeded: Array<string | null> = []): Promise<{ brief: Record<string, unknown>; show: Record<string, unknown> }> {
-  const snapshot = profileSnapshot();
-  snapshot.profile.estimatorPreflight!.instructionVersion = instructionVersion;
-  const h = await webFixture(snapshot);
+  const h = await webFixture(profileSnapshot());
+  recordFirstEstimateAs(h.store, instructionVersion);
   for (const version of seeded) seedEstimate(h.store, version);
   const server = createServer((() => { const app = express(); app.use(express.json());
     registerControlReadRoutes(app, { store: h.store, epoch: "epoch", config: { readView: async () => ({}) } as never }, "web"); return app; })());
@@ -82,10 +93,9 @@ describe("which estimate the fact reads (#379-381 review)", () => {
   });
 
   it("a done group carries none", async () => {
-    const snapshot = profileSnapshot();
-    snapshot.profile.estimatorPreflight!.instructionVersion = "1";
-    const h = await webFixture(snapshot);
+    const h = await webFixture(profileSnapshot());
     try {
+      recordFirstEstimateAs(h.store, "1");
       expect(estimatorInstructionOf(h.store, "g", "draft")).toEqual({ used: 1, newest: NEWEST_ESTIMATE_INSTRUCTION });
       // mutation: drop the done check -> present, red
       expect(estimatorInstructionOf(h.store, "g", "done")).toBeNull();

@@ -12,7 +12,6 @@ import { phaseEndBudgetLines, phaseEndOfRuns, type UsageRun } from "./usageLines
 import { groupUsageDetailLines, type UsageDetailLine } from "./usageDetailLines.js";
 import { adviceOf, usedRatio, type SuggestionView } from "../../control/budgetSuggestions.js";
 import { USAGE_PAUSE_FRESH_START } from "../../control/driveRecord.js";
-import { NEWEST_ESTIMATE_INSTRUCTION, olderEstimateInstruction } from "../../control/estimateInstructionAge.js";
 
 export const GROUP: PositionalDef = { name: "group", summary: "a group id or a unique prefix", required: true };
 export const TASK: PositionalDef = { name: "task", summary: "a task id or a unique prefix", required: true };
@@ -94,21 +93,8 @@ export interface GroupView {
 }
 export interface ConfigView {
   plans: Array<{ planId: string; repoId: string }>;
-  profiles: Array<{ profileId: string; profileHash: string; estimatorInstructionVersion?: string | null }>;
+  profiles: Array<{ profileId: string; profileHash: string }>;
   defaults: { estimatorProfileId: string; estimatorProfileHash: string; estimateMode: "strict" | "soft" } | null;
-}
-
-/**
- * Tester follow-up B T3 (#224): a line naming an estimator profile pinned to an estimate instruction older than the newest
- * this Orca holds (estimateInstructionAge.ts); none when it is the newest, unknown or not reported.
- * Tester follow-up F §4 (#173): the same words reach --json, as the answer's `warnings` (withWarnings, work.ts).
- */
-export function instructionLines(view: ConfigView, profileId: string | null | undefined): string[] {
-  const version = olderEstimateInstruction(view.profiles.find((p) => p.profileId === profileId)?.estimatorInstructionVersion);
-  if (version === null) return [];
-  // #379-381 review (I3): the safe route is a new profile beside the old one; editing the old file in place changes its hash,
-  // so every group bound to it is refused profile-changed after the next panel start (profiles.ts resolve).
-  return [`warning: estimator profile ${profileId} uses estimate instruction ${version}; the newest is ${NEWEST_ESTIMATE_INSTRUCTION}. Its estimates follow the older instruction. To use the newest, load a copy with a new profileId and instructionVersion "${NEWEST_ESTIMATE_INSTRUCTION}" beside it (--profile <old> --profile <new> --estimator-profile <new id>); never edit this profile in place while groups use it (profile-changed). README: "Moving to a newer estimate instruction"`];
 }
 
 /**

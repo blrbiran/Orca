@@ -91,9 +91,9 @@ describe("trusted panel control config", () => {
     expect(serialized).not.toContain("agentsTablePath");
   });
 
-  // Tester follow-up B T3 (#224): the view names each profile's estimate instruction version (null without a preflight),
-  // so a client can warn when it is older than the newest the panel holds.
-  it("names each profile's estimator instruction version", async () => {
+  // Ruling (session 3ba26002, human #381): Orca always estimates with its newest instruction and nothing warns of an older
+  // one, so the view no longer names a profile's instruction version. (Was: it named each one, null without a preflight.)
+  it("no longer names a profile's estimator instruction version", async () => {
     const h = await setup();
     const preflight = { instructionVersion: "2", schemaVersion: "budget-estimate-v1" as const, maxOutputTokens: 64_000, framingTokenOverhead: 17, tokenizer: { kind: "utf8-upper-bound" as const, numerator: 2, denominator: 3, proofRef: "proof" } };
     const older = resolveProfile({ ...h.snapshot, profile: { ...h.snapshot.profile, profileId: "older", estimatorPreflight: preflight } }, h.port);
@@ -104,8 +104,8 @@ describe("trusted panel control config", () => {
       defaultEstimatorProfileId: "estimator", defaultEstimateMode: "soft",
     }, createExecutionProfileRouter([h.frozen, older]));
     const view = await config.readView({ agent: "codex" });
-    // Mutation "field not written" -> red: undefined for both.
-    expect(view.profiles.map((p) => [p.profileId, p.estimatorInstructionVersion])).toEqual([["estimator", null], ["older", "2"]]);
+    // mutation: write the field again -> red
+    expect(view.profiles.map((p) => [p.profileId, Object.hasOwn(p, "estimatorInstructionVersion")])).toEqual([["estimator", false], ["older", false]]);
   });
 
   it("rejects allowlisted plan escapes and symlinked path components at startup", async () => {
