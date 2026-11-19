@@ -1149,3 +1149,38 @@ the target's history was rewritten and pruned; the `!record` gate on a saved-res
 `-v2` / `-v1` kinds and `saved-result-source-v2-unsupported` before the source port is asked). Fixture change, not a
 criterion: the synthetic ccloop (`driverPort.ts`) records keyed extras as ccloop P1's `recordExtras` does and answers
 `dirs[]` (option `extraFiles`); without the key it is unchanged.
+
+## Correction (2026-11-19, change-sized runs P2 review)
+
+Appended by the P2 review-and-fix wave (Orca session `3ba26002`, branch `feat/change-sized-p2`, worktree `.wt-p2`, over
+`95f30d04`). Human approval for the criteria: 「同意这样大改，并且同意改所有必要的判据」. The text above, the two P2 Corrections
+included, is unchanged; where it and this section differ, this section is what ships.
+
+**"A gap the criteria cannot see" (second-wave Correction) -- the measurement is wrong, and the gap is closed.** The cause
+is not the git configuration. `git fetch <path> +<oid>:<ref>`, whose only source is an exact object id, lists no remote
+refs; when `<oid>` is already in the repository and connected (`rev-list --objects --stdin --not --all` finds nothing
+missing) fetch's quickfetch never connects to `<path>`, so a missing path exits 0. Measured with `/usr/bin/git` 2.50.1 in
+a scratch repository at this wave's base (`95f30d04`): `git fetch --no-tags <missing>/repo "+${OID}:refs/x/q"` exits 0
+under the person's own configuration and under `GIT_CONFIG_GLOBAL=/dev/null` alike, also for a present but unreferenced
+commit; `GIT_TRACE=1` inside a criterion shows only the `rev-list` connectivity check and no `git-upload-pack`. The exit
+128 reported "under the person's own HOME" was not reproduced; the same command typed as `$OID:refs/...` in zsh exits 128
+because zsh reads `:r` as a history modifier and git receives `<oid>efs/...` (observed in this wave). Consequences: the
+landing's `update-ref` branch is not needed for correctness (the old fetch of a pinned attempt would also succeed), and it
+is kept as the direct form. Criteria now see it: `tests/control/fixtures/gitSpy.ts` records every git child's argv, and
+`changeSizedDriver.test.ts` / `changeSizedMulti.test.ts` assert no fetch from the run's source directory and one incoming
+`update-ref` per directory's attempt (mutation "never take the update-ref branch" in `driverLanding.ts`: red in both).
+
+**§6.2, the report a run saves.** As first built, collect's `dirs[]` was copied into every `ExecutionReport`, so under the
+pinned ccloop a multi-directory run's saved report (an artifact whose id hashes the report) differed from the one it saved
+before P2. It is copied only for a keyed run, the only one whose step C reads it.
+
+**§5.3 / §9, the check worktree.** "Removed on the next round or restart; at settle at the latest" was built without the
+last part: a run that left `accepted` while its check was in flight, or whose marker write lost a race after the worktree
+was made, kept `<workspacesRoot>/check-<runId>` and its registration in the target for ever. `cleanupRunWorkspace` now
+removes it when it exists, so every settle and cleanup path does; a v1 run never has one and its cleanup is unchanged.
+
+**Rule 17 (§9), first P2 Correction's last sentence.** "Every new command in a person's repository carries `-c gc.auto=0
+-c maintenance.auto=false`" is not exact: the landings' `update-ref refs/orca/incoming/<runId>` (`driverLanding.ts`,
+`acceptAttemptDriver.ts`) and the read-only commands (`rev-parse`, `cat-file`, `merge-base`, `diff`, `ls-tree`) carry no
+such flags. None of them starts an automatic gc or maintenance; the commands that can (`fetch` -- the trace above shows
+`git maintenance run --auto` after it -- and the check `worktree add`, `bundle create`/`verify`) carry them.
