@@ -18,7 +18,8 @@ afterEach(() => { cleanup(); window.localStorage.clear(); window.sessionStorage.
 function setup() {
  const panel = installFakePanel(); const base = globalThis.fetch;
  globalThis.fetch = (async (input, init) => {
-  if (String(input) === "/api/control/overview") { panel.requests.push("GET /api/control/overview"); return json(overview); }
+  // Tester #393(d): the poll may carry ?sinceChangeSeq=; this fake answers both spellings, as the route does.
+  if (String(input).startsWith("/api/control/overview")) { panel.requests.push("GET /api/control/overview"); return json(overview); }
   if (String(input) === "/api/metrics" && metricsFail) return json({ code: "metrics-unavailable", message: "metrics unavailable" }, 503);
   return base(input, init);
  }) as typeof fetch;

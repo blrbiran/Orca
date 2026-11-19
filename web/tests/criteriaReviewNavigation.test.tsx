@@ -16,7 +16,7 @@ beforeEach(() => { panel = installFakePanel(); });
 /** The overview route the fixture does not serve; the real one lists no archived group, so callers pass the live ones. */
 function serveOverview(groups: GroupSummaryV1[]): void {
   const base = globalThis.fetch;
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => String(input) === "/api/control/overview"
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => String(input).startsWith("/api/control/overview")
     ? new Response(JSON.stringify({ schema: "orca-control-overview-v1", epoch: panel.summary.epoch, changeSeq: panel.summary.changeSeq, groups, steps: [], issues: [] }), { status: 200, headers: { "content-type": "application/json" } })
     : base(input, init)) as typeof fetch;
 }

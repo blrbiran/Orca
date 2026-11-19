@@ -54,7 +54,7 @@ function setup(): FakePanel {
   const base = globalThis.fetch;
   globalThis.fetch = (async (input, init) => {
     const url = String(input);
-    if (url === "/api/control/overview") { panel.requests.push("GET /api/control/overview"); if (overviewGate !== null) await overviewGate; return json(overview); }
+    if (url.startsWith("/api/control/overview")) { panel.requests.push("GET /api/control/overview"); if (overviewGate !== null) await overviewGate; return json(overview); }
     if (url === "/api/control/groups/g/decisions") return json(groupDecisions);
     if (url === "/api/control/flows") return json({ schema: "orca-flow-list-v1", runs: [] });
     return base(input, init);

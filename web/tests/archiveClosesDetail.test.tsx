@@ -96,7 +96,7 @@ describe("archiving closes the detail open on that group (tester #63)", () => {
     // Opened by its URL (as from the Board or Overview): the list itself selects without writing one. A route waits for
     // the overview to name its owner (routeApp.test.tsx), so the overview read answers with this requirement.
     const fake = globalThis.fetch;
-    globalThis.fetch = (async (input: RequestInfo | URL, request?: RequestInit): Promise<Response> => String(input) === "/api/control/overview"
+    globalThis.fetch = (async (input: RequestInfo | URL, request?: RequestInit): Promise<Response> => String(input).startsWith("/api/control/overview")
       ? new Response(JSON.stringify({ schema: "orca-control-overview-v1", epoch: "epoch-a", changeSeq: 1, groups: [ra.summary], steps: [], issues: [] }), { status: 200, headers: { "content-type": "application/json" } })
       : fake(input, request)) as typeof fetch;
     window.location.hash = "#requirements/ra";

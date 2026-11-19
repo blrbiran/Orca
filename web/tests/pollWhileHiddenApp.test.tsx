@@ -24,7 +24,7 @@ it("pauses the summary, todo, overview and recovery polls while hidden, and read
   const requests: string[] = [];
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     requests.push(`${init?.method ?? "GET"} ${String(input)}`);
-    if (String(input) === "/api/control/overview") return json(overview);
+    if (String(input).startsWith("/api/control/overview")) return json(overview);
     return inner(input, init);
   }) as typeof fetch;
   const count = (path: string): number => requests.filter((request) => request.startsWith(`GET ${path}`)).length;

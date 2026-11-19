@@ -14,7 +14,8 @@ function setup() {
  const panel = installFakePanel(); const base = globalThis.fetch;
  let todoFail = false; let hold: Promise<Response> | null = null;
  globalThis.fetch = (async (input, init) => {
-  if (String(input) === "/api/control/overview") return json({ schema: "orca-control-overview-v1", epoch: panel.summary.epoch, changeSeq: panel.summary.changeSeq, groups: [], steps: [], issues: [] });
+  // Tester #393(d): a poll may carry ?sinceChangeSeq=; the fake answers both spellings, as the route does.
+  if (String(input).startsWith("/api/control/overview")) return json({ schema: "orca-control-overview-v1", epoch: panel.summary.epoch, changeSeq: panel.summary.changeSeq, groups: [], steps: [], issues: [] });
   if (String(input) === "/api/todo" && hold) { panel.requests.push("GET /api/todo"); return hold; }
   if (String(input) === "/api/todo" && todoFail) return json({ code: "todo-failed", message: "todo failed" }, 503);
   return base(input, init);
@@ -82,7 +83,7 @@ it("latest successful refresh wins over an older late request in the same scope"
 it.each(["progress", "recovery"])("%s failures retain stale facts while independent decision work stays visible", async (kind) => {
  const source = setup(); source.panel.todo = [decisionRow("alpha", "independent")]; const base = globalThis.fetch; let fail = false;
  globalThis.fetch = (async (input, init) => {
-  if (String(input) === (kind === "progress" ? "/api/control/overview" : "/api/control/recovery") && fail) return json({ code: "source-failed", message: "source failed" }, 503);
+  if ((kind === "progress" ? String(input).startsWith("/api/control/overview") : String(input) === "/api/control/recovery") && fail) return json({ code: "source-failed", message: "source failed" }, 503);
   return base(input, init);
  }) as typeof fetch;
  render(<App />); await flush(); fail = true; await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
@@ -94,7 +95,7 @@ it.each(["progress", "recovery"])("%s failures retain stale facts while independ
 it.each(["progress", "recovery"])("drops late %s replies across epoch change rather than displacing current source", async (kind) => {
  const source = setup(); const base = globalThis.fetch; let held: Promise<Response> | null = null; let holds = 0;
  globalThis.fetch = (async (input, init) => {
-  if (String(input) === (kind === "progress" ? "/api/control/overview" : "/api/control/recovery") && held && holds++ === (kind === "recovery" ? 1 : 0)) return held;
+  if ((kind === "progress" ? String(input).startsWith("/api/control/overview") : String(input) === "/api/control/recovery") && held && holds++ === (kind === "recovery" ? 1 : 0)) return held;
   return base(input, init);
  }) as typeof fetch;
  render(<App />); await flush(); let release!: (value: Response) => void;
@@ -118,7 +119,7 @@ it("an older failed todo request cannot mark the latest successful source stale"
 });
 it("a lower overview changeSeq cannot replace the most recently accepted projection", async () => {
  const source = setup(); const base = globalThis.fetch; let seq = 10;
- globalThis.fetch = (async (input, init) => String(input) === "/api/control/overview"
+ globalThis.fetch = (async (input, init) => String(input).startsWith("/api/control/overview")
   ? json({ schema: "orca-control-overview-v1", epoch: "epoch-a", changeSeq: seq, groups: [], steps: [], issues: [{ groupId: null, repoId: null, reason: "projection-" + seq }] }) : base(input, init)) as typeof fetch;
  render(<App />); await flush(); seq = 9; await act(async () => { await vi.advanceTimersByTimeAsync(2000); });
  const page = within(screen.getByRole("region", { name: "Overview" }));

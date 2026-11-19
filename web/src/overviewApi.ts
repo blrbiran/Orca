@@ -1,4 +1,5 @@
 import { getJson } from "./api.js";
 import type { OverviewV1 } from "./controlTypes.js";
-/** Authenticated GET only. Uses the panel's existing session/error handling. */
-export const fetchOverview = (): Promise<OverviewV1> => getJson<OverviewV1>("/api/control/overview");
+/** GET /api/control/overview -- with `sinceChangeSeq` the answer lists only what moved since it (Tester #393). */
+export const fetchOverview = (sinceChangeSeq?: number): Promise<OverviewV1> =>
+  getJson<OverviewV1>(sinceChangeSeq === undefined ? "/api/control/overview" : `/api/control/overview?sinceChangeSeq=${sinceChangeSeq}`);

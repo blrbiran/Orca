@@ -1070,10 +1070,23 @@ export function App(): JSX.Element {
   };
   const readOverview = async (): Promise<void> => {
     const identity = sourceIdentityNow.current, epoch = controlNow.current.epoch, seq = ++overviewSeq.current;
+    // Tester #393(d): with a prior projection of this identity/epoch, a poll asks only for what moved.
+    const known = overviewNow.current.data;
+    const since = known !== null && (epoch === null || known.epoch === epoch) ? known.changeSeq : undefined;
     try {
-      const value = await fetchOverview();
+      const value = await fetchOverview(since);
       if (identity !== sourceIdentityNow.current || seq !== overviewSeq.current || (epoch !== null && value.epoch !== epoch)) return;
-      setOverviewSource((prior) => prior.identity === identity && prior.data !== null && prior.data.changeSeq > value.changeSeq ? prior : { identity, status: "available", data: value, error: null });
+      if (since !== undefined && value.groups.length === 0 && value.steps.length === 0 && value.issues.length === 0) {
+        // Unchanged: the answer carries no list, so the prior one stays and only its cursor is adopted.
+        setOverviewSource((stored) => stored.identity === identity && stored.data !== null
+          ? { identity, status: "available", data: { ...stored.data, changeSeq: Math.max(stored.data.changeSeq, value.changeSeq) }, error: null }
+          : stored);
+        return;
+      }
+      // A changed-only answer names only what moved; read the whole projection once rather than let it replace the list.
+      const full = since === undefined ? value : await fetchOverview();
+      if (identity !== sourceIdentityNow.current || seq !== overviewSeq.current || (epoch !== null && full.epoch !== epoch)) return;
+      setOverviewSource((prior) => prior.identity === identity && prior.data !== null && prior.data.changeSeq > full.changeSeq ? prior : { identity, status: "available", data: full, error: null });
     } catch (err) {
       if (identity !== sourceIdentityNow.current || seq !== overviewSeq.current) return;
       setOverviewSource((prior) => ({ ...sourceFailure(prior.identity === identity ? prior : loadingSource(), failureFrom(err).message), identity }));
