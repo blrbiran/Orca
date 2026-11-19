@@ -1,0 +1,44 @@
+{
+  "v": 1,
+  "runId": "orca-dev-9299e610",
+  "runtime": "claude-code",
+  "sessionRef": "9299e610-74ae-450a-90fe-c3fb2b962b12",
+  "writtenAt": "2026-11-19T14:45:27.428Z",
+  "head": "7071f56df9a2c9712206442284ca9fa9964d60d9",
+  "level": {
+    "kind": "reading",
+    "level": 335955,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "Wave 1 implementers (#400,#393,#390) running in worktrees",
+    "review and merge Wave 1",
+    "dispatch Wave 2 (#389,#370,#383)",
+    "brainstorm #369/#385 from the research memo",
+    "run quick/wide gates and update handoff"
+  ],
+  "open": [
+    "Wave 1 results pending",
+    "#387 waits for the tester's package.json diff"
+  ],
+  "awaitingHuman": [],
+  "measurements": [
+    {
+      "command": "TMPDIR=/tmp npm test",
+      "exitCode": 0,
+      "commit": "7071f56df9a2c9712206442284ca9fa9964d60d9",
+      "observedAt": "2026-11-19T14:44:42.233Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-9299e610-Dih51p/1.txt"
+    },
+    {
+      "command": "npm run test:wide",
+      "exitCode": 0,
+      "commit": "7071f56df9a2c9712206442284ca9fa9964d60d9",
+      "observedAt": "2026-11-19T14:45:27.365Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-9299e610-Dih51p/2.txt"
+    }
+  ]
+}
