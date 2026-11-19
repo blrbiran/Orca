@@ -746,7 +746,8 @@ export type EvidenceManifestV1 = {
 /** Tester follow-up E §5 (#241): a group's acceptance on its final tip (src/control/groupAcceptanceRecord.ts). */
 /** Tester follow-up G spec §3.3: a requirement group's review against its acceptance criteria. */
 export type RequirementReviewV1 = {
-  state: "pending" | "reviewing" | "passed" | "fixing" | "not-passed" | "accepted" | "not-run";
+  /** #337: `noted` -- a folder or multi-directory group's review that did not pass; it does not hold the group. */
+  state: "pending" | "reviewing" | "passed" | "fixing" | "not-passed" | "accepted" | "not-run" | "noted";
   why?: "multi-repo" | "dir" | "unfunded" | "invalid" | "cannot-judge" | "rounds-exhausted" | "failed" | "check-conflict" | "not-fixable-by-work";
   rounds: Array<{ roundNo: number; tip: string; runId: string | null; at: number; result: "passed" | "not-met" | "cannot-judge" | "invalid" | "failed" | "unfunded";
     criteria: Array<{ id: string; verdict: "met" | "not-met" | "cannot-judge"; evidence: Array<{ path: string; line: number | null }>; missing: string | null;
@@ -763,6 +764,8 @@ export type RequirementReviewV1 = {
   accepted?: { by: string; note: string; at: number };
   rerun?: { by: string; note: string; at: number };
   problem?: string;
+  /** #337: `requirement-review-noted:<why>` for a noted review. */
+  note?: string;
 };
 export type GroupAcceptanceV1 = {
   tip: string | null; result: "passed" | "passed-relative" | "failed" | "not-needed" | "not-run" | "waived"; why?: "single-landing" | "multi-repo" | "dir" | "work-branch-missing"; landings?: number;
@@ -1304,7 +1307,7 @@ export type OverviewDestinationV1 =
   | { kind: "recovery" };
 export interface OverviewStepV1 {
   key: string; groupId: string | null; repoId: string | null; taskId: string | null; runId: string | null;
-  kind: "requirement-answer" | "requirement-review" | "requirement-attention" | "budget-review" | "start-review" | "task-attention" | "stop-review" | "recovery-review" | "integration-review" | "acceptance-warning";
+  kind: "requirement-answer" | "requirement-review" | "requirement-attention" | "budget-review" | "start-review" | "task-attention" | "stop-review" | "recovery-review" | "integration-review" | "acceptance-warning" | "review-note";
   reason: string; ownerRequired: boolean; destination: OverviewDestinationV1;
 }
 export interface OverviewIssueV1 { groupId: string | null; repoId: string | null; reason: string }

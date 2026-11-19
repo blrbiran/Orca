@@ -17,6 +17,8 @@ const UNKNOWN_RUN = new Set(["unknown", "attempt-unknown", "attempt-proof-invali
 const PRIORITY: Record<OverviewStepV1["kind"], number> = {
   "requirement-attention": 0, "task-attention": 0, "stop-review": 0, "recovery-review": 0, "integration-review": 0,
   "requirement-answer": 1, "requirement-review": 1, "budget-review": 2, "start-review": 3, "acceptance-warning": 4,
+  // #337 §5.5: a noted review is shown like an acceptance warning -- a row, never "needs you".
+  "review-note": 4,
 };
 
 /**
@@ -134,6 +136,10 @@ function groupSteps(store: ControlStore, source: Source, add: Add) {
     if (deliveredProblem !== null) add("task-attention", groupId, repoId, deliveredProblem, groupDestination("problem"), "delivered-acceptance-failed");
     const reviewProblemCode = summary.requirementReview?.problem;
     if (reviewProblemCode !== undefined) add("task-attention", groupId, repoId, reviewProblemCode, groupDestination("problem"), "requirement-review-not-passed");
+    // #337 §5.5 (human: 「不要卡在」): a folder or multi-directory group's review that did not pass is noted -- a warn row in
+    // the group's Problems region, not in PROBLEM_KINDS: nothing waits on the person, and the group is not held.
+    const reviewNoteCode = summary.requirementReview?.note;
+    if (reviewNoteCode !== undefined) add("review-note", groupId, repoId, reviewNoteCode, groupDestination("problem"), "requirement-review-noted");
     // Tester #328 residual: a decision a task's agent recorded that the landing refused to tier 0 waits for a person to
     // approve or reject it (the task's decisions, or `orca decision approve|reject`); the row names how many, per task.
     for (const { taskId, count } of summary.card?.tier0Pending ?? []) add("task-attention", groupId, repoId, `decision-tier0-pending:${count}`, groupDestination("problem", taskId), `tier0-decisions:${taskId ?? ""}`, taskId);

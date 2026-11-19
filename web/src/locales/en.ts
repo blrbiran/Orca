@@ -258,7 +258,7 @@ export const en = {
     noProgress: "No active groups. Start one with New requirement or Import plan above.", nextMark: "Next", noAttention: "Nothing needs your attention.", viewAllDecisions: "View all {{n}} decisions", tasks: "Tasks: {{done}} / {{total}}", taskProgress: "Plan task completion",
     requirementProgress: "Requirement round {{round}} · {{questions}} open questions", taskCountsUnavailable: "Task counts unavailable", goalReview: "goal review is in progress", tasksBlocked: "tasks are blocked", deliverySeparate: "Git delivery is separate", completed: "Completed ({{n}})",
     source: { progress: "Progress", decisions: "Decisions", recovery: "Recovery" }, status: { loading: "loading", available: "available", stale: "stale", unavailable: "unavailable" },
-    step: { "requirement-answer": "Answer requirement", "requirement-review": "Review split", "requirement-attention": "Review requirement problem", "budget-review": "Review budget", "start-review": "Review start", "task-attention": "Review task problem", "stop-review": "Review stopped work", "recovery-review": "Review recovery", "integration-review": "Review integration", "acceptance-warning": "Check full suite", "decision-review": "Review decision", "command-unknown": "Check command outcome" },
+    step: { "requirement-answer": "Answer requirement", "requirement-review": "Review split", "requirement-attention": "Review requirement problem", "budget-review": "Review budget", "start-review": "Review start", "task-attention": "Review task problem", "stop-review": "Review stopped work", "recovery-review": "Review recovery", "integration-review": "Review integration", "acceptance-warning": "Check full suite", "review-note": "Read review note", "decision-review": "Review decision", "command-unknown": "Check command outcome" },
     usageSettlement: "Settle usage",
     forTask: "task {{taskId}}",
   },
@@ -925,7 +925,8 @@ export const en = {
     // Tester follow-up G spec §3.3, §3.5: a requirement group's review and its exits.
     review: {
       heading: "Requirement review",
-      state: { pending: "review requested", reviewing: "reviewing", passed: "review passed", fixing: "a fix task is open for the review", "not-passed": "review not passed", accepted: "accepted as it is", "not-run": "not reviewed (Orca cannot review folder or multi-repository groups yet)" },
+      state: { pending: "review requested", reviewing: "reviewing", passed: "review passed", fixing: "a fix task is open for the review", "not-passed": "review not passed", accepted: "accepted as it is", "not-run": "not reviewed (finished before Orca reviewed folder or multi-directory groups)",
+        noted: "review not passed; the group finished anyway (folder or multi-directory group)" },
       verdict: { met: "met", "not-met": "not met", "cannot-judge": "cannot judge" },
       criteria: "Acceptance criteria",
       acceptedBy: "Accepted by {{by}}: {{note}}",

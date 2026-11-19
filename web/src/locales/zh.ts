@@ -107,7 +107,7 @@ export const zh: Translation<typeof en> = {
     noProgress: "没有活跃的任务组。用上方的「新建需求」或「导入计划」开始。", nextMark: "下一步", noAttention: "目前没有需要你处理的事项。", viewAllDecisions: "查看全部 {{n}} 条决策", tasks: "任务：{{done}} / {{total}}", taskProgress: "计划任务完成度",
     requirementProgress: "需求第 {{round}} 轮 · {{questions}} 个待答问题", taskCountsUnavailable: "任务计数不可用", goalReview: "正在验收目标", tasksBlocked: "有任务被阻塞", deliverySeparate: "Git 交付状态单独查看", completed: "已完成（{{n}}）",
     source: { progress: "进展", decisions: "决策", recovery: "恢复" }, status: { loading: "加载中", available: "可用", stale: "尚未刷新", unavailable: "不可用" },
-    step: { "requirement-answer": "回答需求问题", "requirement-review": "审阅拆分", "requirement-attention": "查看需求问题", "budget-review": "审阅预算", "start-review": "查看启动条件", "task-attention": "查看任务问题", "stop-review": "查看已停止工作", "recovery-review": "查看恢复", "integration-review": "查看集成", "acceptance-warning": "查看全量测试", "decision-review": "审阅决策", "command-unknown": "核对命令结果" },
+    step: { "requirement-answer": "回答需求问题", "requirement-review": "审阅拆分", "requirement-attention": "查看需求问题", "budget-review": "审阅预算", "start-review": "查看启动条件", "task-attention": "查看任务问题", "stop-review": "查看已停止工作", "recovery-review": "查看恢复", "integration-review": "查看集成", "acceptance-warning": "查看全量测试", "review-note": "查看复核备注", "decision-review": "审阅决策", "command-unknown": "核对命令结果" },
     usageSettlement: "结算用量",
     forTask: "任务 {{taskId}}",
   },
@@ -765,7 +765,8 @@ export const zh: Translation<typeof en> = {
     },
     review: {
       heading: "需求复核",
-      state: { pending: "已请求复核", reviewing: "复核中", passed: "复核通过", fixing: "已为复核开了修复任务", "not-passed": "复核未通过", accepted: "已按现状接受", "not-run": "未复核（Orca 暂时还不能复核文件夹或多仓库的任务组）" },
+      state: { pending: "已请求复核", reviewing: "复核中", passed: "复核通过", fixing: "已为复核开了修复任务", "not-passed": "复核未通过", accepted: "已按现状接受", "not-run": "未复核（该组在 Orca 开始复核文件夹和多目录组之前就已完成）",
+        noted: "复核未通过；该组仍已完成（文件夹或多目录组）" },
       verdict: { met: "满足", "not-met": "未满足", "cannot-judge": "无法判断" },
       criteria: "验收标准",
       acceptedBy: "由 {{by}} 接受：{{note}}",

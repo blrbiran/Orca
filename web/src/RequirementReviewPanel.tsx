@@ -33,8 +33,9 @@ export function RequirementReviewPanel(props: { groupId: string; review: Require
   return (
     <section data-requirement-review={props.groupId} aria-label={t("control.review.heading")}>
       <h4>{t("control.review.heading")}</h4>
-      <p data-tone={review.state === "not-passed" ? "danger" : review.state === "passed" || review.state === "accepted" ? "ok" : "info"}>
-        {t(`control.review.state.${review.state}`)}{review.problem !== undefined && <> <code>{review.problem}</code></>}
+      {/* #337 §5.5: a noted review (a folder or multi-directory group's) is a warning -- it does not hold the group. */}
+      <p data-tone={review.state === "not-passed" ? "danger" : review.state === "noted" ? "warn" : review.state === "passed" || review.state === "accepted" ? "ok" : "info"}>
+        {t(`control.review.state.${review.state}`)}{review.problem !== undefined && <> <code>{review.problem}</code></>}{review.note !== undefined && <> <code>{review.note}</code></>}
       </p>
       {review.accepted !== undefined && <p>{t("control.review.acceptedBy", { by: review.accepted.by, note: review.accepted.note })}</p>}
       {last !== undefined && last.criteria.length > 0 && (
@@ -74,10 +75,11 @@ export function RequirementReviewPanel(props: { groupId: string; review: Require
         </div>
       )}
       {last !== undefined && last.summary !== "" && <p className="detail-note">{last.summary}</p>}
-      {review.state === "not-passed" && !props.archived && (open === null ? (
+      {(review.state === "not-passed" || review.state === "noted") && !props.archived && (open === null ? (
         <>
-          <button type="button" onClick={() => setOpen("review-fix")}>{t("control.review.fix")}</button>
-          <button type="button" onClick={() => setOpen("review-rerun")}>{t("control.review.rerun")}</button>
+          {/* #337 §5.7: a noted review answers accept only; rerun and fix would reopen a group that may be done. */}
+          {review.state === "not-passed" && <button type="button" onClick={() => setOpen("review-fix")}>{t("control.review.fix")}</button>}
+          {review.state === "not-passed" && <button type="button" onClick={() => setOpen("review-rerun")}>{t("control.review.rerun")}</button>}
           <button type="button" onClick={() => setOpen("review-accept")}>{t("control.review.accept")}</button>
         </>
       ) : (

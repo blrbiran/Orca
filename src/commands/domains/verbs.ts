@@ -315,7 +315,7 @@ export function acceptanceLines(groupId: string, a: AcceptanceView | undefined):
 
 /** Tester follow-up G spec §3.3: the requirement review as the group summary sends it. */
 export interface ReviewView {
-  state: string; why?: string; problem?: string; autoFixRounds?: number;
+  state: string; why?: string; problem?: string; note?: string; autoFixRounds?: number;
   rounds: Array<{ roundNo: number; tip: string; result: string; summary?: string; criteria: Array<{ id: string; verdict: string; evidence: Array<{ path: string; line: number | null }>; missing: string | null; fixableBy?: string }>; fixTaskId?: string;
     checkConflict?: { criterionId: string; requiredCheck: string; because: string }; leftToPerson?: string[];
     relativePass?: Array<{ criterionId: string; command: string; tipExits: string[]; baseExits: string[] }> }>;
@@ -385,6 +385,15 @@ export function reviewLines(groupId: string, review: ReviewView | undefined): st
   const left = leftToPerson(last);
   const leftLine = left.length === 0 ? [] : [`left to a person (no change to files can meet them): ${left.map((c) => `${c.id} (${c.by})`).join(", ")}`];
   if (review.state === "fixing") return [`review: fixing (task ${last?.fixTaskId ?? "?"}, round ${last?.roundNo ?? "?"})`, ...relativePassLines(last), ...leftLine];
+  // #337 §5.5, §5.7: a folder or multi-directory group's review that did not pass is noted -- the group is not held; the
+  // person may accept it, and further work is a new requirement on the project (rerun and fix are refused on it).
+  if (review.state === "noted") return [
+    `review: noted (${review.why ?? "?"})`,
+    `note: ${review.note ?? `requirement-review-noted:${review.why ?? "?"}`}`,
+    ...(last?.summary ? [`review: ${last.summary}`] : []),
+    ...(last?.criteria ?? []).map((c) => `  ${c.id} ${c.verdict}: ${c.missing ?? c.evidence[0]?.path ?? ""}`),
+    ...answerLines([`orca group review-accept ${groupId} --note '<why accept as is>'`, "open a new requirement on the project for further work"]),
+  ];
   if (review.state !== "not-passed") return [`review: ${review.state}${review.why === undefined ? "" : ` (${review.why})`}`];
   if (review.why === "not-fixable-by-work") return [
     `problem: ${review.problem ?? "requirement-review-not-passed:not-fixable-by-work"}`,

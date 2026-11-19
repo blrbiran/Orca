@@ -111,15 +111,39 @@ describe("the requirement review panel (tester follow-up G §3.3)", () => {
 
   // Tester #337: the review Orca does not run on a folder or multi-repository group is named in words a person without git
   // knows, not "no single tree". What counts as satisfied is unchanged (a not-run review still lets the group finish).
+  // Ruling (session 3ba26002, human: 「这次批准改写所有必要的判据」): #337 now reviews folder and multi-directory groups, so
+  // only a group finished before that keeps a not-run record; the label says that (spec 2026-11-19 §9). It still encodes
+  // plain words with no "tree".
   it("a review not run on a folder or multi-repository group says why in plain words (#337)", async () => {
     const notRun: RequirementReviewV1 = { state: "not-run", why: "dir", rounds: [], autoFixRounds: 0 };
     const en = show(notRun).panel.textContent;
-    expect(en).toContain("not reviewed (Orca cannot review folder or multi-repository groups yet)");
+    expect(en).toContain("not reviewed (finished before Orca reviewed folder or multi-directory groups)");
     expect(en).not.toContain("tree");
     cleanup();
     await i18n.changeLanguage("zh");
     const zh = show(notRun).panel.textContent;
-    expect(zh).toContain("未复核（Orca 暂时还不能复核文件夹或多仓库的任务组）");
+    expect(zh).toContain("未复核（该组在 Orca 开始复核文件夹和多目录组之前就已完成）");
     expect(zh).not.toContain("代码树");
+  });
+
+  // #337 (spec 2026-11-19 §5.5, §5.7, criterion C6): a folder or multi-directory group's review that did not pass is noted --
+  // a warning that does not hold the group; the person may accept it, and nothing else (rerun and fix are refused there).
+  it("a noted review is a warning with its note and offers accept only (#337 C6)", async () => {
+    const noted: RequirementReviewV1 = { ...notPassed, state: "noted", why: "rounds-exhausted", problem: undefined, note: "requirement-review-noted:rounds-exhausted" };
+    const { panel, onCommand } = show(noted);
+    expect(panel.querySelector("p")!.getAttribute("data-tone")).toBe("warn");
+    expect(panel.textContent).toContain("review not passed; the group finished anyway (folder or multi-directory group)");
+    expect(panel.textContent).toContain("requirement-review-noted:rounds-exhausted");
+    // mutation M25: render the not-passed buttons for noted -> three buttons, red
+    expect(within(panel).getAllByRole("button").map((button) => button.textContent)).toEqual(["Accept as it is"]);
+    fireEvent.click(within(panel).getByRole("button", { name: "Accept as it is" }));
+    fireEvent.change(within(panel).getByLabelText(/Note/), { target: { value: "fine as it is" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Send" }));
+    expect(onCommand).toHaveBeenLastCalledWith({ verb: "review-accept", groupId: "g", expectedRevision: 7, payload: { note: "fine as it is" } });
+    cleanup();
+    expect(within(show(noted, true).panel).queryAllByRole("button")).toEqual([]);
+    cleanup();
+    await i18n.changeLanguage("zh");
+    expect(show(noted).panel.textContent).toContain("复核未通过；该组仍已完成（文件夹或多目录组）");
   });
 });
