@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { copyFile, chmod, mkdir, mkdtemp, realpath, rm, unlink, writeFile } from "node:fs/promises";
 import { existsSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -73,6 +74,25 @@ describe("the execution driver in the panel's assembly (spec §2.1)", () => {
     const stop = vi.spyOn(runtime.driver!, "stop");
     runtime.close();
     expect(stop).not.toHaveBeenCalled();
+  });
+
+  // Working-tree delivery spec §7 (ruling Q4): the staging sweep runs at panel start and finishes before the driver's
+  // first round -- no pass may stage while it sweeps. Measured at the moment `driver.start` is called, not afterwards.
+  it("sweeps every registered repository's working-tree staging before it starts the driver", async () => {
+    const runtime = await assembled(true); try {
+      const repo = runtime.config.listRepositories()[0]!.path;
+      execFileSync("git", ["init", "-q", repo]);
+      const staging = join(repo, ".git", "orca", "deliver-g1");
+      await mkdir(join(staging, "tree"), { recursive: true });
+      await writeFile(join(staging, "index"), "stale");
+      const seenAtStart: boolean[] = [];
+      const start = vi.spyOn(runtime.driver!, "start").mockImplementation(() => { seenAtStart.push(existsSync(staging)); return true; });
+      expect(runtime.startPump(60_000)).toBe(true);
+      await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
+      // Mutations: drop the sweep -> [true]; start the driver beside the sweep instead of after it -> [true]. Both red.
+      expect(seenAtStart).toEqual([false]);
+      expect(start).toHaveBeenCalledWith(60_000);
+    } finally { await runtime.shutdown(); runtime.close(); }
   });
 
   // Scoped fix (re-review item 2): the ladder pass collects a held run again through the service's scheduleTaskResults,
