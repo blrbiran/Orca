@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { replenishStartWakes } from "../../src/control/executionDriver.js";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
-import { classifyReviewOutput, multiFixPaths } from "../../src/control/requirementReview.js";
+import { classifyReviewOutput, multiFixPaths, multiFixTask } from "../../src/control/requirementReview.js";
 import { taskWrites } from "../../src/control/requirementRecords.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import type { LoopWork } from "../../src/control/executionPort.js";
@@ -12,7 +12,7 @@ import { flowVaultRepoId } from "../../src/flow/groups.js";
 import { vaultKeyOf } from "../../src/flow/vault/paths.js";
 import { git } from "./fixtures/driverHarness.js";
 import { editGroup, reviewActivities } from "./fixtures/folderReviewWorld.js";
-import { reviewWorld, type ReviewWorld } from "./fixtures/reviewWorld.js";
+import { CRITERIA, reviewWorld, type ReviewWorld } from "./fixtures/reviewWorld.js";
 import type { SingleCallAnswer, SingleCallSeen } from "./fixtures/singleCallAnswers.js";
 
 /**
@@ -142,6 +142,34 @@ describe("a multi-directory group's requirement review (#337 C2)", () => {
       expect(prompt).toContain("(Directory docs: the diff was cut at 100000 bytes; the rest was not shown to you.)");
       expect(prompt).toContain("+++ b/guide.md");
       expect(Buffer.byteLength(prompt, "utf8")).toBeLessThan(200_000 + 20_000);
+    } finally { await w.t.h.dispose(); }
+  }, 400000);
+  // Verification of #337 (session 3ba26002): four branches the M list does not name, each seen red by its own mutation.
+  it("judges an unkeyed answer invalid in the pass, leaves the primary's ledger out, and builds a fix from the named member only", async () => {
+    const w = await multiWorld(() => ({ outcome: "complete", output: {
+      criteria: [{ id: "AC1", verdict: "met", evidence: [{ path: "a", line: 1 }], missing: null, fixableBy: "work" },
+        { id: "AC2", verdict: "met", evidence: [{ path: "docs:guide.md", line: 1 }], missing: null, fixableBy: "work" }], summary: "fine" } }),
+    (id): Record<string, string | null> => (id === "a" ? { a: "a\n", ".decisions/run-1.jsonl": "{}\n" } : { "guide.md": "guide\n" }));
+    try {
+      makeMulti(w);
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "passed" || w.review()?.state === "noted", 120);
+      // mutation X1: evaluate does not hand the member keys to classifyReviewOutput -> passed, red
+      expect(w.review()).toMatchObject({ state: "noted", why: "invalid", rounds: [expect.objectContaining({ result: "invalid" })] });
+      const prompt = w.calls[0]!.prompt;
+      expect(prompt).toContain("\n- A a 2 ");
+      // mutation X4: the `.decisions/` filter only for folder members -> the primary's ledger is listed, red
+      expect(prompt).not.toContain("\n- A .decisions/run-1.jsonl ");
+      const round = { roundNo: 1, tip: "t", runId: null, at: 0, result: "not-met" as const, summary: "s",
+        criteria: [{ id: "AC1", verdict: "not-met" as const, evidence: [{ path: "docs:guide.md", line: 1 }], missing: "`docs:guide.md` is short", fixableBy: "work" as const },
+          { id: "AC2", verdict: "met" as const, evidence: [{ path: "docs:guide.md", line: 1 }], missing: null, fixableBy: "work" as const }] };
+      const built = multiFixTask(w.t.h.store, "g", round, CRITERIA, "review-fix-9", "b");
+      // mutation X8: ignore the named paths and take every member's stored writes -> main is in the write set too, red
+      expect("writes" in built && built.writes).toEqual([{ dir: "docs", targetPaths: ["guide.md"], checks: ["test -f guide.md"] }]);
+      const row = w.t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='b'").get()!;
+      w.t.h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id='b'").run(JSON.stringify({ ...JSON.parse(String(row.body)), writes: [{ dir: "docs", targetPaths: ["guide.md"], checks: [] }] }));
+      // mutation X2: drop the primary-checks refusal -> a fix task whose primary has no check is built, red
+      expect(multiFixTask(w.t.h.store, "g", round, CRITERIA, "review-fix-9", "b")).toEqual({ refused: "multi-fix-checks:docs" });
     } finally { await w.t.h.dispose(); }
   }, 400000);
 });
