@@ -37,6 +37,11 @@ export function controlWorkspaceRoots(stateDir: string): WorkspaceRoots {
 export const sourceDirOf = (roots: WorkspaceRoots, runId: string): string => join(roots.runsRoot, runId);
 export const workspacePathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, runId);
 export const landingPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `landing-${runId}`);
+/**
+ * Change-sized runs spec 2026-11-19 §5.3 (P2): where a v2 run's debug or criteria-base check runs its commands -- a
+ * detached worktree of the target at the attempt, a direct child of the workspaces root (Rule 17, spec §9).
+ */
+export const checkPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `check-${runId}`);
 /** Multi-directory projects spec §7.1: one flat leaf per written directory beyond the primary (`assertOwnPath` unchanged). */
 export const extraWorkspacePathOf = (roots: WorkspaceRoots, runId: string, key: string): string => join(roots.workspacesRoot, `${runId}.dir-${key}`);
 export const extraLandingPathOf = (roots: WorkspaceRoots, runId: string, key: string): string => join(roots.workspacesRoot, `landing-${runId}.dir-${key}`);
@@ -220,6 +225,11 @@ export async function removeSkillsSnapshot(targetRepo: string, roots: WorkspaceR
 export async function cleanupRunWorkspace(targetRepo: string, roots: WorkspaceRoots, runId: string, workspacePath: string): Promise<void> {
   if (basename(workspacePath) !== runId) throw new Error(`orca: refusing to clean ${workspacePath}, which is not named after ${runId}`);
   await removeOwnPath(targetRepo, roots, workspacePath);
+  // Change-sized runs §5.3, §9 (P2 review): a v2 run's check worktree is removed after its verdict and remade on a restart;
+  // one a run left behind (it left `accepted` while the check ran) goes here at the latest. A v1 run never has one, and the
+  // existence test keeps its cleanup exactly as it was (no extra git call).
+  const check = checkPathOf(roots, runId);
+  if (existsSync(check)) await removeOwnPath(targetRepo, roots, check);
   await removeSkillsSnapshot(targetRepo, roots, runId);
   await git(targetRepo, [...QUIET_GIT, "update-ref", "-d", incomingRefOf(runId)]).catch(() => undefined);
 }

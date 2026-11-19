@@ -111,6 +111,26 @@ describe("ccloop P1 (features.attemptRef v1): the attempt is a pinned ref (§5.3
   }, 60_000);
 });
 
+describe("a check worktree never outlives its run (§5.3, §9)", () => {
+  // P2 review: check-<runId> is a full checkout registered in the person's repository. It is removed after the verdict and
+  // remade on a restart, but a run that leaves `accepted` while its check is in flight (or whose marker write lost a race
+  // after the worktree was made) never reaches either; spec §9 promises "at settle at the latest". Planted here as such a
+  // run leaves it. Mutation: drop the check worktree's removal from cleanupRunWorkspace -> it is still there and still
+  // registered in the target after cleanedUp, red.
+  it("removes a check worktree the run left behind when the run's workspace is cleaned up", async () => {
+    const t = await driverHarness([{ taskId: "a", tokenBudget: 4_000_000 }], { tokenPolicy: "optional-v1", attemptRef: true }); try {
+      const runId = await t.claim();
+      const check = checkPathOf(t.deps.roots, runId);
+      git(t.repo, "worktree", "add", "-q", "--detach", check, "HEAD");
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).drive?.cleanedUp === true);
+      expect(t.body(runId).state).toBe("settled");
+      expect(existsSync(check)).toBe(false);
+      expect(git(t.repo, "worktree", "list", "--porcelain")).not.toContain(`check-${runId}`);
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+});
+
 describe("a v2 run's check commands run in a check worktree of the target (§5.3)", () => {
   async function settle(driver: ExecutionDriver, predicate: () => boolean, ms = 60_000): Promise<void> {
     const deadline = Date.now() + ms;

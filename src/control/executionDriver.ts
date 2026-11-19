@@ -62,7 +62,7 @@ import { approximateUsageApplies, bookApproximateFloorInTransaction } from "./ap
 import { noteTranscriptListing } from "../agentTranscript/listing.js";
 import { singleCallHandler } from "./singleCallPurposes.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
-import { cleanupExtraWorkspace, cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, extraWorkspacePathOf, makeReadOnly, removeOwnPath, removeSkillsSnapshot, revParse, skillsPathOf, sourceDirOf, workBranchRef, workspacePathOf, QUIET_GIT, type WorkspaceRoots } from "./workspace.js";
+import { checkPathOf, cleanupExtraWorkspace, cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, extraWorkspacePathOf, makeReadOnly, removeOwnPath, removeSkillsSnapshot, revParse, skillsPathOf, sourceDirOf, workBranchRef, workspacePathOf, QUIET_GIT, type WorkspaceRoots } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import { abortPostMergeChecks, recordEmptyResultDecisions, stepD, stepR, type PostMergeCheck } from "./driverLanding.js";
@@ -394,11 +394,8 @@ export function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: Wo
 }
 
 /** A work run's workspace; only an estimate run has none (spec §6.2), and it never reaches the steps that need one. */
-/**
- * Change-sized runs spec 2026-11-19 §5.3 (P2): where a v2 run's debug or criteria-base check runs its commands -- a
- * detached worktree of the target at the attempt, a direct child of the workspaces root (Rule 17, spec §9).
- */
-export const checkPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `check-${runId}`);
+/** Change-sized runs spec 2026-11-19 §5.3 (P2): the check worktree's path (workspace.ts, where its cleanup is). */
+export { checkPathOf };
 
 /** §5.3: the check worktree, made fresh at the attempt (a stale one from a crash or a restart is removed first). */
 async function prepareCheckWorktree(deps: ExecutionDriverDeps, targetRepo: string, runId: string, sha: string): Promise<string> {
