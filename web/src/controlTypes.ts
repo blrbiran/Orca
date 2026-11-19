@@ -1072,8 +1072,9 @@ export type CommandSuccessV1 = {
     | { kind: "requirement-clarify-more"; roundNo: number; nextRoundNo: number; wakeId: string }
     | { kind: "requirement-classified"; scope: RequirementScopeV1; clarity: RequirementClarityV1 }
     | { kind: "requirement-revised"; roundNo: number; revises: number; consensusWithdrawn: boolean; nextRoundNo: number | null; wakeId: string | null }
-    // Issue #236: the re-frozen agent slot, and the blocked round or draft drafted again (null: nothing was blocked).
+    // Tester #379: the old group archived, the new group's next draft (a split call) queued.
     | { kind: "requirement-resplit"; groupId: string; newGroupId: string; draftNo: number; wakeId: string }
+    // Issue #236: the re-frozen agent slot, and the blocked round or draft drafted again (null: nothing was blocked).
     | { kind: "requirement-agent-set"; selection: AgentSelectionV1; configHash: string; restarted: { roundNo: number; wakeId: string } | { draftNo: number; wakeId: string } | null }
     | { kind: "requirement-draft-accepted"; draftNo: number; estimateId: string | null; estimateState: "queued" | "blocked-capability" | "input-too-large" | "none"; documentSha256: string; exportWakeId: string }
     | { kind: "shutdown"; groups: Array<{ groupId: string; disposition: "created" | "strengthened-pause" | "preserved-pause" | "preserved-handoff" | "preserved-shutdown" | "blocked-inconsistent" | "skipped-driver-owned" | "unchanged-idle"; changed: boolean; commandRevision: number; projectionSeq: number; frozenRunIds: string[]; requestIds: string[]; blockerCode: string | null }> };

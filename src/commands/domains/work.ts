@@ -484,6 +484,8 @@ export const WORK_ROWS: CommandDef[] = [
         const named = [edges.prerequisites.length === 0 ? null : `it waits for ${edges.prerequisites.join(", ")}`, edges.dependents.length === 0 ? null : `${edges.dependents.join(", ")} wait${edges.dependents.length === 1 ? "s" : ""} for it`].filter((part) => part !== null).join("; ");
         return `${c === undefined ? "the group" : group(c)} has group dependencies (${named}): a re-split archives it, so a group waiting for it would wait forever and the new group would not wait for its prerequisites. Remove them, re-split, and add them on the new group (the next lines); pause a confirmed dependent first (orca group pause <group>) so it does not start in between`;
       }
+      // #379 review (M2): a group opened from a plan, not a requirement, has no clarification to copy and no draft to review.
+      if (error.code === "requirement-not-accepted" && error.message.endsWith(":no-requirement")) return `${c === undefined ? "the group" : group(c)} was not opened as a requirement (no clarification to copy), so it is not re-split; to change its tasks before confirm, archive it and import the changed plan or open a requirement`;
       return error.code === "requirement-not-accepted" ? "the split is not accepted yet: a draft under review takes orca requirement feedback <group> --text \"...\"" : undefined;
     },
     next: async (error, c) => {

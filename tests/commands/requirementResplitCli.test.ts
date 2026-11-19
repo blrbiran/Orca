@@ -62,4 +62,15 @@ describe("orca requirement resplit (#379)", () => {
     // mutation: drop the edge hint -> the generic line, red
     expect(out.stderr).toContain("orca: g-alpha has group dependencies (it waits for g-pre; g-d1, g-d2 wait for it): a re-split archives it");
   });
+
+  // #379 review (M2): a group opened from a plan has no requirement; "send feedback on the draft" would name a draft it
+  // does not have.
+  it("a group with no requirement: the hint says it was not opened as a requirement", async () => {
+    const w = await world({}, { [ROUTE]: { status: 422, body: { error: { code: "requirement-not-accepted", message: "requirement-not-accepted:no-requirement", commandRevision: 6, evidenceIds: [], retryable: false } } } });
+    const out = await cli(["requirement", "resplit", "g-alpha", "--text", "x"], w.dir);
+    expect(out.code).toBe(2);
+    // mutation: drop the no-requirement branch -> the draft-under-review hint, red
+    expect(out.stderr).toContain("orca: g-alpha was not opened as a requirement (no clarification to copy), so it is not re-split");
+    expect(out.stderr).not.toContain("a draft under review");
+  });
 });

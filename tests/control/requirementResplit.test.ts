@@ -190,6 +190,18 @@ describe("requirement-resplit refuses, changing nothing (#379)", () => {
     } finally { await x.dispose(); }
   });
 
+  // #379 review (M1): two re-splits of one group -- the ledger runs them one after the other; the second finds the group
+  // archived (the ledger's terminal gate) and makes no second group.
+  it("a second re-split of the same group: group-archived, no second new group", async () => {
+    const x = await accepted();
+    try {
+      expect(await resplit(x)).toMatchObject({ result: { kind: "requirement-resplit", newGroupId: "r2" } });
+      // mutation: drop the archive mark -> the second re-split succeeds and makes r3, red
+      expect(await resplit(x, "r3")).toMatchObject({ error: { code: "group-archived" } });
+      expect(bodyOf(x, "r3")).toBeUndefined();
+    } finally { await x.dispose(); }
+  });
+
   it("a new group id already taken: group-already-exists", async () => {
     const x = await accepted();
     try {

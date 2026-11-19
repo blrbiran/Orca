@@ -53,9 +53,9 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   "requirement-draft-accept": "any",
   // Tester follow-up K: as feedback and accept, the other things a person does with a draft.
   "requirement-draft-edit": "any",
-  // Clarify caps spec 2026-10-21 §3.3: as answer and consensus.
   // Tester #379: any principal, as the other requirement verbs.
   "requirement-resplit": "any",
+  // Clarify caps spec 2026-10-21 §3.3: as answer and consensus.
   "requirement-clarify-more": "any",
   "requirement-classify": "any",
   // Flow engine spec §10.3 (W-76): as requirement-answer -- the person answering the clarification may revise it.
