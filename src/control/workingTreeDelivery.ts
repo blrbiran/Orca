@@ -321,6 +321,9 @@ export async function integrateWorkingTree(store: ControlStore, repo: string, gr
       const staged = join(staging, "tree", path), target = join(repo, path);
       const want = set.get(path)!.want!;
       if (want.mode !== "120000") chmodSync(staged, modeFor(lstatOrNull(target), want.mode, fileMode));
+      // #400 review: with core.symlinks=false the entry materialises as a regular file, so its bits go through modeFor
+      // like any regular delivery (a symlink blob carries no exec bit); a real symlink is left exactly as staged.
+      else if (!symlinks) chmodSync(staged, modeFor(lstatOrNull(target), "100644", fileMode));
       makeParents(repo, path);
       rename(staged, target);
       written.push(path);

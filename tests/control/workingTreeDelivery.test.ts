@@ -438,6 +438,40 @@ describe("working-tree delivery (spec §4.4)", { timeout: 60_000 }, () => {
       expect(w.status()).toBe("?? link\n?? n.txt");
     } finally { await w.dispose(); }
   });
+
+  it("WT-19: with core.symlinks=false a symlink entry replacing the person's 0640 file keeps 0640 (#400 review)", async () => {
+    const w = await world(); try {
+      g(w.repo, ["config", "core.symlinks", "false"]);
+      // The person's a.txt is 0640; the group turns it into a symlink entry, materialised as a regular file.
+      chmodSync(at(w, "a.txt"), 0o640);
+      w.land({ "a.txt": { text: "d.txt", mode: "120000" } });
+      w.finish();
+      // mutation: skip chmod for a 120000 entry even when symlinks=false -> checkout-index's own 0644 lands, red
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "idle", pending: null });
+      const file = lstatSync(at(w, "a.txt"));
+      expect(file.isSymbolicLink()).toBe(false);
+      expect(file.isFile()).toBe(true);
+      expect(readFileSync(at(w, "a.txt"), "utf8")).toBe("d.txt");
+      expect((file.mode & 0o777).toString(8)).toBe("640");
+    } finally { await w.dispose(); }
+  });
+
+  it("WT-20: with core.symlinks=false a real symlink holding a regular-file entry's bytes is already at the tip (#400 review)", async () => {
+    const w = await world(); try {
+      g(w.repo, ["config", "core.symlinks", "false"]);
+      // The other direction of the rule: have is a 120000 whose blob is the target string, want a regular file of it.
+      symlinkSync("a.txt", at(w, "l"));
+      w.land({ "l": "a.txt" });
+      w.finish();
+      // mutation: drop the have=120000 arm of the symlinks clause -> l is a conflict, red
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: g(w.repo, ["rev-parse", "orca/g"]), pending: null });
+      // Judged done, so nothing is written: the person's link is left exactly as it was.
+      expect(readlinkSync(at(w, "l"))).toBe("a.txt");
+      expect(existsSync(w.staging())).toBe(false);
+    } finally { await w.dispose(); }
+  });
 });
 
 describe("working-tree delivery guard clauses (spec §4.4 steps 3-6, WT-9)", { timeout: 60_000 }, () => {
