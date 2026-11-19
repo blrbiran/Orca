@@ -71,6 +71,8 @@ async function savedReport(service:ControlService,runId:string):Promise<Executio
 }
 export async function archiveReport(service:ControlService,runId:string,report:ExecutionReport) {
  if(!report.terminal) throw new ControlError("control-terminal-pending");
+ // Change-sized runs spec 2026-11-19 §6.2 (P2): only a key run has no result repository, and the legacy bridge never sends the key (N4).
+ if(report.terminal.repoDir===null) throw new ControlError("report-path-conflict");
  return archiveRun(service.store,{runId,sourceDir:report.terminal.sourceDir,repoDir:report.terminal.repoDir,stopProof:report.candidate?.stopProof??null},{admit:operation=>service.writeAsync(operation)});
 }
 export async function disposeControlled(service:ControlService,run:TaskRun,options:DisposeOptions) {

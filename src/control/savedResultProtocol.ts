@@ -33,7 +33,7 @@ export const savedResultAdmissionSchema=z.object({
 }).strict();
 export type SavedResultAdmission=z.infer<typeof savedResultAdmissionSchema>;
 export const savedResultPackageSchema=z.object({schema:z.literal("ccloop-saved-result-package-v1"),
- authorityKind:z.enum(["execution-format-failure-v1","legacy-published-candidate-v1","execution-complete-before-verification-v1","execution-without-final-v1"]),source:artifactRefSchema,admission:artifactRefSchema,
+ authorityKind:z.enum(["execution-format-failure-v1","legacy-published-candidate-v1","execution-complete-before-verification-v1","execution-without-final-v1","legacy-published-candidate-v2"]),source:artifactRefSchema,admission:artifactRefSchema,
  artifacts:z.array(z.object({ref:artifactRefSchema,file:z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.-]*$/)}).strict()).max(20000),
 }).strict();
 export type SavedResultPackage=z.infer<typeof savedResultPackageSchema>;
@@ -101,7 +101,8 @@ export const savedResultCollectionSchema=z.object({
 export const savedResultSourcePackageSchema=savedResultPackageSchema.omit({admission:true}).extend({schema:z.literal("ccloop-saved-result-source-package-v1")}).strict();
 export type SavedResultSourcePackage=z.infer<typeof savedResultSourcePackageSchema>;
 const unavailableSchema=z.object({status:z.literal("unavailable"),reason:z.string().min(1)}).strict();
-const oldAuthorityKind=z.enum(['execution-format-failure-v1','legacy-published-candidate-v1','execution-complete-before-verification-v1']);
+// Change-sized runs spec 2026-11-19 §5.5.4 (P2): ccloop P1 answers a v2 archive's candidate as legacy-published-candidate-v2.
+const oldAuthorityKind=z.enum(['execution-format-failure-v1','legacy-published-candidate-v1','execution-complete-before-verification-v1','legacy-published-candidate-v2']);
 const sourceEligibilityFields={status:z.literal('eligible'),sourceIdentity:savedResultAdmissionSchema.shape.source,rawExecutionTokens:safe.nullable(),limitation:z.literal('published-candidate-only; current membership and settled accounting require controller admission')};
 export const savedResultSourceEligibilitySchema=z.union([unavailableSchema,
  z.object({...sourceEligibilityFields,authorityKind:oldAuthorityKind,recoveryOf:recoveryOfSchema.refine(value=>'normalizedExecutionHash' in value)}).strict(),

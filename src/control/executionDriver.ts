@@ -393,6 +393,18 @@ export function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: Wo
 }
 
 /** A work run's workspace; only an estimate run has none (spec §6.2), and it never reaches the steps that need one. */
+/**
+ * Change-sized runs spec 2026-11-19 §6.2 (P2): `ORCA_SETTLE_SLOW_MS` sets the settle wall time at or above which step E
+ * writes its timing line, so a measured run (acceptance A3) can print every settle with 0. Unset is the 5 s default; a
+ * value that is not a non-negative safe integer is refused by name rather than read as some other bound.
+ */
+export function settleSlowMsFromEnv(env: NodeJS.ProcessEnv): number | undefined {
+  const raw = env.ORCA_SETTLE_SLOW_MS;
+  if (raw === undefined || raw === "") return undefined;
+  if (!/^\d+$/.test(raw) || !Number.isSafeInteger(Number(raw))) throw new ControlError("control-trusted-config-invalid", "ORCA_SETTLE_SLOW_MS");
+  return Number(raw);
+}
+
 export function workspaceOf(drive: DriveRecord): string {
   if (drive.workspacePath === null) throw new ControlError("recovery-blocked", "workspace-missing");
   return drive.workspacePath;

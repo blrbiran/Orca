@@ -14,7 +14,7 @@ import { createUnconfiguredControlPort } from "../control/unconfiguredPort.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { deliverSchedulerWakes } from "../control/dispatch.js";
 import { recoverControl } from "../control/recovery.js";
-import { archiveAdmission, createExecutionDriver, type CrashPoint, type ExecutionDriver } from "../control/executionDriver.js";
+import { archiveAdmission, createExecutionDriver, settleSlowMsFromEnv, type CrashPoint, type ExecutionDriver } from "../control/executionDriver.js";
 import { publishPending } from "../control/projection.js";
 import { controlWorkspaceRoots } from "../control/workspace.js";
 import { createWebWakeHandlers } from "../control/webDispatch.js";
@@ -444,6 +444,8 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
       // Handoff grace: the run's frozen killGraceMs + 60 s (driverHandoff.handoffGraceMsOf, agent selection spec §6.6).
       // *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** the grace is max(killGraceMs, frozen recovery window + 5 s) + 60 s.
       kickPump: () => { void pump(); }, crash: input.driverCrash, handoffExtraGraceMs: input.handoffExtraGraceMs,
+      // Change-sized runs spec 2026-11-19 §6.2 (P2): acceptance A3 starts the panel with ORCA_SETTLE_SLOW_MS=0.
+      ...(settleSlowMsFromEnv(env) === undefined ? {} : { settleSlowMs: settleSlowMsFromEnv(env) }),
       // Syncskill integration spec §10.6: A2 injects a run's frozen skills with the same ORCA_SYNCSKILL_BIN confirm froze them with.
       syncskill: syncskillOptionsFromEnv(env),
     });

@@ -1,3 +1,4 @@
+import type { AttemptRecordV1 } from "./attemptRecord.js";
 import type { SavedResultSourcePackage,SavedResultSourceEligibility,SavedResultSettlement,RecoveryOf } from "./savedResultProtocol.js";
 import type { TokenPolicy } from "./tokenPolicy.js";
 import type { ToolRulesReport } from "./toolRules.js";
@@ -25,7 +26,7 @@ export type ExecutionStatus={kind:"absent"}|{kind:"accepted";executionId:string;
 export interface ExecutionReport {
  events:UsageEvent[];candidate:Candidate|null;
  // Tester #321 C1 review 3 (I-B): `currentAttempt` is ccloop's terminal attempt (terminalSchema); optional so the synthetic ports need no edit.
- terminal:{tokenRemainingStatus?:"known"|"unlimited"|"unknown";waitingCause?:"token-allowance";allowanceNextPhase?:"plan"|"execute"|"verify";outcome:"succeeded"|"blocked_waiting_human"|"exhausted"|"cancelled"|"failed";attemptSha:string|null;sourceDir:string;repoDir:string;stopReason?:string|null;failureCause?:RunFailureCause;lastFailure?:LastFailure;currentAttempt?:number;budgetSnapshot?:{attemptsRemaining:number;timeRemainingMs:number;tokenBudgetRemaining:number|null}}|null;
+ terminal:{tokenRemainingStatus?:"known"|"unlimited"|"unknown";waitingCause?:"token-allowance";allowanceNextPhase?:"plan"|"execute"|"verify";outcome:"succeeded"|"blocked_waiting_human"|"exhausted"|"cancelled"|"failed";attemptSha:string|null;sourceDir:string;repoDir:string|null;stopReason?:string|null;failureCause?:RunFailureCause;lastFailure?:LastFailure;currentAttempt?:number;budgetSnapshot?:{attemptsRemaining:number;timeRemainingMs:number;tokenBudgetRemaining:number|null}}|null;
  /** Labels and progress spec §3.2 (§8 R5): optional so the synthetic ports need no edit; absent reads as null. */
  progress?:RunProgress|null;
  /** Decisions the agent reported: optional like `progress`; read only through reportedDecisions.ts. */
@@ -58,6 +59,10 @@ export interface ExecutionReport {
  worker?:{state:"lost"|"undetermined";reason:string};
  /** Tester follow-up G spec §2.1: present iff ccloop stopped the run at its live ceiling (ccloop live-ceiling spec). */
  liveCeilingStop?:{revision:number;tokens:number;cause:"group"|"pause-line"|"task-cap";observedTokens:number;phase:"plan"|"execute"|"verify";at:"mid-call"|"boundary"};
+ /** Change-sized runs spec 2026-11-19 §6.1 (P2): ccloop's record of the current attempt, iff the envelope carried work.attemptDelivery. */
+ attempt?:AttemptRecordV1;
+ /** Multi-directory projects spec §7.2: one entry per extra directory as collect answered it (attemptSha from ccloop's commits.json). */
+ dirs?:Array<{key:string;resultRepo:string;changedPaths:string[];attemptSha:string|null}>;
 }
 /** Agent selection spec §4.6: `control capabilities` with `agent: null` -- the installation table as ccloop reads it. */
 export interface AgentsView { installations: Array<{ id: string; kind: string; defaults: { model: string; contextWindow: ContextWindow }; contextOptions: ContextWindow[]; version: string }> }
