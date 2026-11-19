@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { chmod, lstat, mkdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { recordActivity } from "./activity.js";
@@ -21,6 +21,9 @@ import { groupHasReconcilingRun, readWork } from "./queries.js";
 import { reportedDecisionsOf } from "./reportedDecisions.js";
 import { ccloopEvidenceString, runEvidence, writeRunLedger, type PendingEntry } from "./runLedger.js";
 import { snapshotSchema } from "./snapshot.js";
+import { snapshotV2Schema, snapshotVersionOf } from "./snapshotV2.js";
+import { NO_GC, pinAttempt } from "./attemptPin.js";
+import { privateDirectory } from "./paths.js";
 import { QUIET_GIT, compareAndSwap, incomingRefOf, landingPathOf, removeOwnPath, revParse, workBranchRef, type WorkspaceRoots } from "./workspace.js";
 import type { ArtifactRef } from "./types.js";
 import type { DecisionEvent } from "../ledger/schema.js";
@@ -131,12 +134,16 @@ async function visit(deps: ExecutionDriverDeps, run: DriverRun, intent: Operator
   const rebuilt = acceptRebuildPathOf(deps.roots, runId);
   await removeOwnPath(targetRepo, deps.roots, rebuilt);
   try {
-    const attemptSha = await restoreSnapshotAttempt(store, intent.snapshot, rebuilt, intent.at);
+    // Change-sized runs spec 2026-11-19 §5.5.1 (P2): a v2 snapshot names a commit the target keeps under the run's pin (made
+    // again from the bundle when a person deleted it): no rebuild, and every reader reads the target. v1 is rebuilt as before.
+    const pinnedAttempt = await ensureSnapshotV2Pinned(deps, targetRepo, runId, intent.snapshot);
+    const attemptRepo = pinnedAttempt === null ? rebuilt : targetRepo;
+    const attemptSha = pinnedAttempt ?? await restoreSnapshotAttempt(store, intent.snapshot, rebuilt, intent.at);
     // Off-plan writes #346 (Task 4b ruling): the same bound as C -- a v4 contract's denylist, a v≤3 one's write set.
-    const measured = await boundedHarvest({ runId, workdir: drive.sourceDir, outcome: drive.outcome as CcloopOutcome, attemptSha }, drive.base, primaryHarvestBound(contract), rebuilt);
+    const measured = await boundedHarvest({ runId, workdir: drive.sourceDir, outcome: drive.outcome as CcloopOutcome, attemptSha }, drive.base, primaryHarvestBound(contract), attemptRepo);
     if (measured.empty) throw new Refusal("empty-attempt");
     if (measured.outOfBounds.length > 0) throw new Refusal(`out-of-bounds:${measured.outOfBounds.join(",")}`.slice(0, 2048));
-    const change = await classifyCriteriaChange(rebuilt, drive.base, attemptSha, contract.verification.requiredChecks, contract.context.setupCommands);
+    const change = await classifyCriteriaChange(attemptRepo, drive.base, attemptSha, contract.verification.requiredChecks, contract.context.setupCommands);
     if (flagged(change)) throw new Refusal(`criteria-${change.kind}:${[...change.signals, ...change.files].join(", ")}`.slice(0, 2048));
     // Spec 2026-11-16: an E-block's work already landed (the archive step failed after the landing).
     // Its attempt is on the tip; do not merge it twice -- check the tip and record the acceptance there.
@@ -147,7 +154,7 @@ async function visit(deps: ExecutionDriverDeps, run: DriverRun, intent: Operator
         .then((settled) => { entry.settled = settled; }, (error: unknown) => { entry.settled = { error }; });
       return true;
     }
-    const merged = await mergeOnTip(deps, run, intent, targetRepo, rebuilt, tip, attemptSha);
+    const merged = await mergeOnTip(deps, run, intent, targetRepo, attemptRepo, tip, attemptSha);
     // A round still running when stop() was called starts nothing stop() could no longer abort; the next driver merges again.
     if (context?.stopped) return false;
     const entry: AcceptCheck = { controller: new AbortController(), old: tip, next: merged.next, attemptSha, pending: merged.pending, settled: null };
@@ -187,8 +194,10 @@ async function mergeOnTip(
   await removeOwnPath(targetRepo, deps.roots, landing);
   await git(targetRepo, [...QUIET_GIT, "worktree", "add", "--detach", landing, tip]);
   try {
-    // Into the target's shared refs: the incoming ref keeps the attempt reachable until it lands or is refused.
-    await git(landing, [...QUIET_GIT, "fetch", "--no-tags", rebuilt, `+${attemptSha}:${incomingRefOf(runId)}`]);
+    // Into the target's shared refs: the incoming ref keeps the attempt reachable until it lands or is refused. A v2
+    // attempt is already in the target (§5.5.1), so the ref is set there; a rebuilt v1 attempt is fetched from its rebuild.
+    if (rebuilt === targetRepo) await git(landing, [...QUIET_GIT, "update-ref", incomingRefOf(runId), attemptSha]);
+    else await git(landing, [...QUIET_GIT, "fetch", "--no-tags", rebuilt, `+${attemptSha}:${incomingRefOf(runId)}`]);
     try {
       await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "merge", "--no-ff", "--no-commit", incomingRefOf(runId)]);
     } catch {
@@ -323,6 +332,33 @@ function refuse(deps: ExecutionDriverDeps, runId: string, reason: string, failur
 
 async function dropIncomingRef(deps: ExecutionDriverDeps, run: DriverRun): Promise<void> {
   try { await git(deps.resolveRepository(groupRepoId(deps.store, run.groupId)), [...QUIET_GIT, "update-ref", "-d", incomingRefOf(run.runId)]); } catch { /* best effort, as cleanup's */ }
+}
+
+/**
+ * Change-sized runs spec 2026-11-19 §5.5.1 (P2), `ensurePinned`: null for a v1 snapshot. For v2, the attempt is answered
+ * once `refs/orca/runs/<runId>` holds it in the target -- already there; else pinned (create-only) from the target's own
+ * object; else the bundle artifact is fetched, through a staging file, into FETCH_HEAD only, and then pinned. A ref at
+ * another sha is refused (run-ref-conflict), never moved. prepareAcceptAttempt verified the snapshot in the target first.
+ */
+async function ensureSnapshotV2Pinned(deps: ExecutionDriverDeps, targetRepo: string, runId: string, ref: ArtifactRef): Promise<string | null> {
+  const bytes = await readArtifact(deps.store, ref);
+  if (snapshotVersionOf(bytes) !== 2) return null;
+  const snapshot = snapshotV2Schema.parse(JSON.parse(bytes.toString()));
+  if (snapshot.missing.length > 0) throw new Refusal(`snapshot-partial:${snapshot.missing.slice(0, 20).join(",")}`);
+  if (snapshot.ref !== `refs/orca/runs/${runId}`) throw new Refusal("snapshot-invalid:ref");
+  if (snapshot.bundle === null) return snapshot.attempt;
+  const present = await git(targetRepo, [...QUIET_GIT, "cat-file", "-e", `${snapshot.attempt}^{commit}`]).then(() => true, () => false);
+  if (!present) {
+    const file = join(privateDirectory(join(deps.store.stateDir, "staging")), `${randomUUID()}.bundle`);
+    try {
+      await writeFile(file, await readArtifact(deps.store, snapshot.bundle), { mode: 0o600 });
+      await git(targetRepo, [...QUIET_GIT, ...NO_GC, "fetch", "-q", "--no-tags", file, snapshot.ref]);
+    } catch { throw new Refusal("snapshot-base-unavailable"); }
+    finally { await rm(file, { force: true }); }
+  }
+  const pinned = await pinAttempt(targetRepo, targetRepo, runId, snapshot.attempt);
+  if ("refused" in pinned) throw new Refusal(pinned.refused);
+  return snapshot.attempt;
 }
 
 /**

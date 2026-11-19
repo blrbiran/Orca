@@ -6,6 +6,8 @@ import { promisify } from "node:util";
 import { latestRunSnapshot, operatorAcceptanceOf } from "../control/acceptAttempt.js";
 import { restoreSnapshotAttempt } from "../control/acceptAttemptDriver.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
+import { readArtifact } from "../control/archive.js";
+import { snapshotV2Schema, snapshotVersionOf } from "../control/snapshotV2.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import type { ControlStore } from "../control/store.js";
 
@@ -38,21 +40,39 @@ async function gitText(repo: string, args: string[]): Promise<string> {
   return stdout;
 }
 
-async function readDiff(store: ControlStore, snapshot: NonNullable<ReturnType<typeof latestRunSnapshot>>, base: string): Promise<AttemptReview["diff"]> {
+const statOf = async (repo: string, base: string, attempt: string): Promise<NonNullable<AttemptReview["diff"]>> => {
+  const shortstat = (await gitText(repo, ["diff", "--no-ext-diff", "--no-color", "--shortstat", base, attempt])).trim();
+  const stat = (await gitText(repo, ["diff", "--no-ext-diff", "--no-color", "--stat=120", base, attempt])).split("\n").filter((line) => line.length > 0);
+  return { shortstat, stat: (stat.length > STAT_LINES_MAX ? [...stat.slice(0, STAT_LINES_MAX - 1), stat.at(-1)!] : stat).map(clip) };
+};
+
+/**
+ * Change-sized runs spec 2026-11-19 §5.5.2 (P2): a v2 snapshot's attempt is a commit in the run's target -- kept by its pin,
+ * or by objects a deleted pin left until a gc. The diff is read there (0.03 s on repo L, against a 3.8 GB rebuild); when the
+ * target no longer holds the attempt the answer is null (attempt-objects-unavailable), with no alternates repository.
+ */
+async function readDiffV2(bytes: Buffer, base: string, targetRepo: string | null): Promise<AttemptReview["diff"]> {
+  const snapshot = snapshotV2Schema.parse(JSON.parse(bytes.toString()));
+  if (targetRepo === null) return null;
+  try { await gitText(targetRepo, ["cat-file", "-e", `${snapshot.attempt}^{commit}`]); } catch { return null; }
+  return statOf(targetRepo, base, snapshot.attempt);
+}
+
+async function readDiff(store: ControlStore, snapshot: NonNullable<ReturnType<typeof latestRunSnapshot>>, base: string, targetRepo: string | null): Promise<AttemptReview["diff"]> {
+  const bytes = await readArtifact(store, snapshot);
+  if (snapshotVersionOf(bytes) === 2) return readDiffV2(bytes, base, targetRepo);
   const parent = await mkdtemp(join(tmpdir(), "orca-attempt-diff-"));
   try {
     const dir = join(parent, "attempt");
     const attempt = await restoreSnapshotAttempt(store, snapshot, dir, 0);
-    const shortstat = (await gitText(dir, ["diff", "--no-ext-diff", "--no-color", "--shortstat", base, attempt])).trim();
-    const stat = (await gitText(dir, ["diff", "--no-ext-diff", "--no-color", "--stat=120", base, attempt])).split("\n").filter((line) => line.length > 0);
-    return { shortstat, stat: (stat.length > STAT_LINES_MAX ? [...stat.slice(0, STAT_LINES_MAX - 1), stat.at(-1)!] : stat).map(clip) };
+    return await statOf(dir, base, attempt);
   } finally {
     await rm(parent, { recursive: true, force: true });
   }
 }
 
 /** The diff once read; null while it is read, or when it cannot be (no snapshot, no base, a failed rebuild). */
-function diffOf(store: ControlStore, runId: string, base: string | null): AttemptReview["diff"] {
+function diffOf(store: ControlStore, runId: string, base: string | null, targetRepo: string | null): AttemptReview["diff"] {
   const snapshot = latestRunSnapshot(store, runId);
   if (snapshot === null || base === null) return null;
   const key = `${snapshot.artifactId}\0${snapshot.hash}\0${base}`;
@@ -60,13 +80,13 @@ function diffOf(store: ControlStore, runId: string, base: string | null): Attemp
   if (known !== undefined) return known === "reading" ? null : known;
   if (diffs.size >= 200) diffs.clear();
   diffs.set(key, "reading");
-  void readDiff(store, snapshot, base).then((diff) => { diffs.set(key, diff); }, () => { diffs.set(key, null); });
+  void readDiff(store, snapshot, base, targetRepo).then((diff) => { diffs.set(key, diff); }, () => { diffs.set(key, null); });
   return null;
 }
 
 type ReviewRun = {
   runId: string; groupId: string; taskId: string | null; phase: string; state: string; mode?: unknown; recoveryOf?: unknown;
-  drive?: { outcome?: string | null; base?: string | null } | undefined; abandon?: unknown;
+  drive?: { outcome?: string | null; base?: string | null; targetRepo?: string | null } | undefined; abandon?: unknown;
 };
 
 /** The review facts for a run the server could accept, else undefined (the view then carries no field). */
@@ -90,6 +110,6 @@ export function attemptReviewOf(store: ControlStore, value: ReviewRun, work: { c
   return {
     requiredChecks: [...contract.verification.requiredChecks],
     setupCommands: [...(contract.context.setupCommands ?? [])],
-    diff: diffOf(store, value.runId, value.drive?.base ?? null),
+    diff: diffOf(store, value.runId, value.drive?.base ?? null, value.drive?.targetRepo ?? null),
   };
 }

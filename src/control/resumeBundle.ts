@@ -10,6 +10,7 @@ import { readCommittedCheckpoint } from "./checkpoints.js";
 import { ControlError } from "./errors.js";
 import { privateDirectory, syncDirectory } from "./paths.js";
 import { snapshotSchema } from "./snapshot.js";
+import { snapshotV2Schema, snapshotVersionOf } from "./snapshotV2.js";
 
 export interface InputCheckpointV1 {
   predecessorRunId: string;
@@ -96,7 +97,9 @@ export async function exportResumeBundle(store: ControlStore, input: { predecess
   if (checkpoint.missing.length || !checkpoint.snapshot) throw new ControlError("resume-predecessor-unrecoverable");
 
   const snapshotBytes = await readArtifact(store, checkpoint.snapshot);
-  const parsed = snapshotSchema.safeParse(JSON.parse(snapshotBytes.toString()));
+  // Change-sized runs spec 2026-11-19 §5.5.3 (P2): a v2 snapshot's closure is the snapshot and its range bundle; ccloop P1
+  // fetches the bundle into repoPath (which holds the predecessor's base) and adds one worktree at the attempt.
+  const parsed = snapshotVersionOf(snapshotBytes) === 2 ? snapshotV2Schema.safeParse(JSON.parse(snapshotBytes.toString())) : snapshotSchema.safeParse(JSON.parse(snapshotBytes.toString()));
   if (!parsed.success) throw new ControlError("snapshot-invalid");
   if (parsed.data.missing.length) throw new ControlError("snapshot-partial");
 

@@ -43,6 +43,8 @@ export function recoveryClosure(store:ControlStore,roots:ArtifactRef[]):Map<stri
   if(ref.artifactId.startsWith('archive-')&&parsed.version===1&&Array.isArray(parsed.logs)){
     for(const log of parsed.logs)if(log.ref)visit(artifactSchema.parse(log.ref),false);if(parsed.snapshot)visit(artifactSchema.parse(parsed.snapshot));return;
   }
+  // Change-sized runs spec 2026-11-19 §5.5.4 (P2): a v2 snapshot names one artifact, its range bundle (not JSON, not expanded).
+  if(ref.artifactId.startsWith('snapshot-')&&parsed.version===2){if(parsed.bundle)visit(artifactSchema.parse(parsed.bundle),false);return;}
   if(ref.artifactId.startsWith('snapshot-')&&parsed.version===1){
     const walkSnapshot=(value:unknown):void=>{if(!value||typeof value!=='object')return;const candidate=artifactSchema.safeParse(value);if(candidate.success){visit(candidate.data,false);return;}for(const child of Object.values(value))walkSnapshot(child);};walkSnapshot(parsed);return;
   }

@@ -1,6 +1,7 @@
 import { readArtifact } from "./archive.js";
 import { add } from "./budget.js";
 import { snapshotSchema, verifySnapshot } from "./snapshot.js";
+import { snapshotVersionOf, verifySnapshotInRepository } from "./snapshotV2.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { settlingPersonFor } from "./commandClient.js";
 import { isDirGroup } from "./dirGroup.js";
@@ -71,6 +72,17 @@ export type PreparedAcceptance = { kind: "ready"; snapshot: ArtifactRef } | { ki
 export async function prepareAcceptAttempt(store: ControlStore, runId: string): Promise<PreparedAcceptance> {
   const ref = latestRunSnapshot(store, runId);
   if (ref === null) return { kind: "refused", code: "accept-attempt-snapshot-missing", detail: "no-archive-snapshot" };
+  // Change-sized runs spec 2026-11-19 §5.5.1, §7.2 (P2): a v2 snapshot is whole when it is verified in the run's target
+  // (its base there, its bundle base..attempt, its tree); a lost base is snapshot-base-unavailable, by name.
+  let bytes: Buffer;
+  try { bytes = await readArtifact(store, ref); }
+  catch (error) { return { kind: "refused", code: "accept-attempt-snapshot-missing", detail: error instanceof ControlError ? error.code : "snapshot-unreadable" }; }
+  if (snapshotVersionOf(bytes) === 2) {
+    const target = (readRunBody(store, runId) as { drive?: { targetRepo?: string | null } }).drive?.targetRepo ?? null;
+    try { await verifySnapshotInRepository(store, ref, () => { if (target === null) throw new ControlError("snapshot-repository-unavailable"); return target; }); }
+    catch (error) { return { kind: "refused", code: "accept-attempt-snapshot-partial", detail: error instanceof ControlError ? error.code : "snapshot-unverifiable" }; }
+    return { kind: "ready", snapshot: ref };
+  }
   let parsed: ReturnType<typeof snapshotSchema.safeParse>;
   try { parsed = snapshotSchema.safeParse(JSON.parse((await readArtifact(store, ref)).toString())); }
   catch (error) { return { kind: "refused", code: "accept-attempt-snapshot-missing", detail: error instanceof ControlError ? error.code : "snapshot-unreadable" }; }

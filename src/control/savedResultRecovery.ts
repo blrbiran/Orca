@@ -5,6 +5,7 @@ import {ControlError} from './errors.js';
 import {applyWebCommand,preflightWebCommand} from './commandLedger.js';
 import {readArchivedPlan,readGroup,readWork,saveWork,readBudgetProposal} from './queries.js';
 import {readCanonicalRecord} from './snapshot.js';
+import {snapshotVersionOf} from './snapshotV2.js';
 import {readConfirmedTaskExecution} from './executionSnapshot.js';
 import {createStartingRun,readFrozenSnapshot,probeBlocksDispatch} from './webDispatch.js';
 import {readStopIntent,readRunBody,saveRunBody,releaseCommitment,reserveCommitment,setAllocationStates,commandSuccess,latestRequestForRun,ADOPTABLE_STATES} from './stopIntent.js';
@@ -43,7 +44,11 @@ function sourceRecord(store:ControlStore,run:any){
  const rows=store.db.prepare("SELECT body FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=? ORDER BY rowid DESC").all(run.runId);
  for(const row of rows){const value=JSON.parse(String(row.body));const root=value.artifacts?.find((r:ArtifactRef)=>r?.artifactId.startsWith('archive-'));if(root&&value.snapshot&&value.missing?.length===0){
   const archive=JSON.parse(settlementArtifact(store,artifactSchema.parse(root)).toString());const stateRef=archive.logs.find((e:any)=>e.path==='run/loop-state.json')?.ref;if(!stateRef)continue;
-  const state=JSON.parse(settlementArtifact(store,stateRef).toString());return savedSourceSchema.parse({authorityKind:'legacy-published-candidate-v1',source:root,attempt:state.currentAttempt});
+  const state=JSON.parse(settlementArtifact(store,stateRef).toString());
+  // Change-sized runs spec 2026-11-19 §5.5.4 (P2): a v2 archive's candidate is legacy-published-candidate-v2, which ccloop P1
+  // verifies in the recovery run's repoPath (source-only eligibility: in the source's targetRepo).
+  const kind=snapshotVersionOf(settlementArtifact(store,artifactSchema.parse(value.snapshot)))===2?'legacy-published-candidate-v2':'legacy-published-candidate-v1';
+  return savedSourceSchema.parse({authorityKind:kind,source:root,attempt:state.currentAttempt});
  }}throw Error('saved-result-evidence-unavailable');
 }
 /** Re-read every current owner fact at GET completion, command admission and immediately before start. */
@@ -111,7 +116,10 @@ export async function readSavedResultEligibility(deps:StopDeps,runId:string):Pro
   if(hasSetup)return unavailable('setup-unsupported-here');
   const current=currentSavedResultSource(deps.store,runId),port=sourcePort(deps,current.run);
   if((await port.readFeatures?.())?.savedResultRecovery!=='v1'||!port.savedResultSourceEligibility)return unavailable('control-saved-result-unsupported');
-  const source=sourceRecord(deps.store,current.run);prepared=prepareRecoverySource(deps.store,source.source,source.authorityKind);
+  const source=sourceRecord(deps.store,current.run);
+  // §5.8 row 2: a ccloop that does not read snapshot v2 is not handed one, by name.
+  if(source.authorityKind==='legacy-published-candidate-v2'&&(await port.readFeatures?.())?.attemptRef!=='v1')return unavailable('saved-result-source-v2-unsupported');
+  prepared=prepareRecoverySource(deps.store,source.source,source.authorityKind);
   const answer=await port.savedResultSourceEligibility({source:current.source,sourceAttempt:source.attempt,...prepared});
   const again=currentSavedResultSource(deps.store,runId);
   if(!settlementSame(sourceRecord(deps.store,again.run),source))return unavailable('saved-result-source-stale');
