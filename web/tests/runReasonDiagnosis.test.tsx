@@ -89,18 +89,12 @@ describe("run failure cause (failure-cause spec §5)", () => {
   // Tester #369 residual: Ruling (human approval 2026-11-20 of the research recommendation) -- the stalled next step names
   // the idle limit and the dial, so an operator whose agent went silent knows what to change.
   it("tells the operator the idle limit and where to change it (#369)", async () => {
-    const html = renderToStaticMarkup(<RunReason run={failed("stalled")} />);
+    // The full visible sentence is pinned in both locales (like the setup-failed sibling below), so dropping any
+    // clause -- the idle limit, the ~/.orca/agents.json path, null=off, or the restart -- goes red, not just a fragment.
     // mutation: revert the stalled next step to the old sentence -> red here.
-    expect(html).toContain("10 minutes without output or a tool event by default");
-    expect(html).toContain("idleTimeoutMs");
-    expect(html).toContain("~/.orca/agents.json");
-    expect(html).toContain("null turns that off");
-    expect(html).toContain("restart the panel");
+    expect(renderToStaticMarkup(<RunReason run={failed("stalled")} />)).toContain("Why it stopped: the agent went silent and was stopped. Retry the task; if it stalls again, look at what it was doing in the evidence. ccloop stops a call after 10 minutes without output or a tool event by default; set `idleTimeoutMs` in `~/.orca/agents.json` (null turns that off) and restart the panel to change it.");
     await i18n.changeLanguage("zh");
-    const zh = renderToStaticMarkup(<RunReason run={failed("stalled")} />);
-    expect(zh).toContain("10 分钟没有输出或工具事件");
-    expect(zh).toContain("idleTimeoutMs");
-    expect(zh).toContain("重启面板");
+    expect(renderToStaticMarkup(<RunReason run={failed("stalled")} />)).toContain("停止原因：agent 长时间没有动静，已被停止。重试这个任务；如果再次卡住，去证据里看它当时在做什么。ccloop 默认在 10 分钟没有输出或工具事件后停下这次调用；在 `~/.orca/agents.json` 里设 `idleTimeoutMs`（设为 null 即关闭）并重启面板即可修改。");
   });
 
   it("setup-failed has its own label and next step in en and zh", async () => {
