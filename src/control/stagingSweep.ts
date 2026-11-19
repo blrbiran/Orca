@@ -6,10 +6,16 @@
  * operation can own an entry: staging is written only through an open store, a second open of the same state directory
  * is refused while one is open, and a previous owner is proved dead before its lock is retired.
  *
+ * One window remains (review M6): a panel's `close` (controlAssembly.ts) closes the store, releasing the lock, without
+ * awaiting the driver's stop unless a shutdown already did, so an archive may still be running in the dying process. A
+ * panel that opens the store in that window sweeps that archive's staging entries; the worst case is that the dying
+ * archive's publish fails (its rename finds nothing). Published artifacts live outside staging and are never touched.
+ *
  * Only inside `<stateDir>/staging`: a staging that is not a real directory (a symlink included) is not touched, and an
  * entry is removed with `rmSync`, which removes a symlink itself, never what it points to. Bounded: at most `maxEntries`
- * entries per start; the rest are counted and left for the next. An entry that cannot be removed is counted and left, and
- * a staging that cannot be read is reported, never thrown: the sweep never keeps the panel from starting.
+ * top-level entries per start (a staged directory counts once, whatever it holds); the rest are counted and left for
+ * the next. An entry that cannot be removed is counted and left, and a staging that cannot be read is reported, never
+ * thrown: the sweep never keeps the panel from starting.
  * Registered per Rule 17 in the issue-fixes spec's Correction (2026-11-19, session 3ba26002).
  */
 import { lstatSync, readdirSync, rmSync } from "node:fs";

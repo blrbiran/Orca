@@ -668,3 +668,9 @@ Out-of-repo deleter, registered per `CLAUDE.md` Rule 17:
   is reported (`staging-unreadable`) and left. The sweep never keeps the store from opening; the next start tries again.
 
 Code: `src/control/stagingSweep.ts`; criteria `tests/control/stagingSweep.test.ts`.
+
+Addendum (review M6, same session): "no live operation can own an entry then" has one exception. A panel's `close`
+(`controlAssembly.ts`) closes the store and releases the lock without awaiting the driver's stop unless a shutdown already
+did, so an archive may still run in the dying process; a panel opening the store in that window sweeps that archive's
+staging entries, and the worst case is that the dying archive's publish fails. Published artifacts are outside staging.
+The 100,000 bound counts top-level entries of `staging` (a staged directory counts once).

@@ -468,3 +468,7 @@ entry the group view lists (built and checked by that view); for a clarifying gr
 built by the same run view from the group's runs. `run show` reads it by the run id alone; a named `--group` must still
 hold the run (#242), checked before the activity or evidence is read. A panel without the route (`route-not-found`) is
 read as before. The group view's refusal of a clarifying group is unchanged.
+Exit codes (review M1, same session): `orca run show <unknown run>` now exits 2 with the panel's refusal (`run-not-found`,
+"No control run was found."); it used to exit 1 (`run-not-found: no group lists run …; pass --group <group>`). With
+`--group`, a run that does not exist exits 2 (the panel's refusal of the entry read) while a run that exists in another
+group exits 1 (the CLI's own `run-not-found: run <run> is not in group <group>`).
