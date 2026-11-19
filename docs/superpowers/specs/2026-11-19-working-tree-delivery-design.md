@@ -376,6 +376,9 @@ guard trips before step 9.
 | `integration-working-tree-busy:<op>` | merge / rebase / cherry-pick / revert / sequencer / bisect in progress | "finish or abort it, then Retry" |
 | `integration-working-tree-unsupported:<kind>:<path>` | `gitlink`, `dir` (a directory where the tip has a file), `case-rename`, `cross-device` | "take these files by hand (commands above), or use `local` delivery" |
 | `integration-working-tree-unsafe-path:<path>` | a leading component is a symlink, a file or a nested repository; or a path fails validation | "replace that component or take the files by hand" |
+| `integration-working-tree-unsafe-path:<dir>/<path>` (accepted limit, §16) | the group turns a file into a directory (`a` deleted, `a/b` added): the checkout's `a` is still a file, a leading component | "take these files by hand: `git rm a` (or move it), then `git checkout orca/<g> -- a/b`; or set this group to `keep`" |
+| `integration-working-tree-unsupported:dir:<path>` (accepted limit, §16) | the group turns a directory into a file (`a/b` deleted, `a` added): the checkout's `a` is still a directory | "take these files by hand: remove the directory `a`, then `git checkout orca/<g> -- a`; or set this group to `keep`" |
+| `integration-working-tree-unsafe-path:<path with U+FFFD>` (§16) | a path that is not valid UTF-8 (git prints raw bytes; read as UTF-8 they turn into U+FFFD), or a valid path that holds U+FFFD itself | "take that file by hand: `git checkout orca/<g> -- <path>` in a shell that passes the bytes" |
 | `integration-working-tree-prerequisite:<P>` | a prerequisite this group stacks on is not delivered to the working tree | "deliver `<P>` to the working tree, take this group's files by hand, or set it to `keep`" |
 | `integration-working-tree-write-failed:<path>:<code>` | staging or rename failed (disk full, permission, a required filter missing), or step 11 found a path not at the tip | "fix the cause, then Retry; written so far: <n> (<paths>), they are kept and skipped" |
 | `integration-invalid:working-tree-missing` | setter / confirm preflight: the registered path is not a work tree's top level | "re-register the project at its checkout" |
@@ -650,3 +653,34 @@ WT-9 and the plan's first task.
   - The Rule 17 table (§7) holds as written; staging's parent `<git-dir>/orca` is also created `0700`.
 - **Not built yet:** see the report of this run (Results question and rows on the Web, the CLI §4.6 / §4.2 lines and
   `projectDeliveryChosen`, the multi-directory refusal at accept, WT-related Web criteria).
+
+## 16. Implementation notes (P1, continued) — 2026-11-19
+
+- **Who / where:** a second implementer subagent (Claude Opus 5.5) of the Orca control session `3ba26002`, branch
+  `feat/working-tree-365` (commits named in its report). §1–§14 unchanged except the three §6 rows marked "§16" (this
+  spec is not published, so it is revised in place).
+- **Built in this round:** the Web first-use question (`web/src/DeliveryChoice.tsx`, beside the Results conclusion card,
+  which itself still sends no command), the conclusion card's working-tree row, "not chosen yet" in Project settings; the
+  CLI question lines (show, brief, after `group confirm`), brief's working-tree lines, the waiting row; the panel-start
+  sweep's wiring criterion; the fix of a settings-body loss
+  (below).
+- **Server fields (deviation from §4.6 "no new server field except `projectDeliveryChosen`"):**
+  - `projectDeliveryChosen` is sent only as `false`, only where the question is asked (a done group with no record or a
+    `keep` record, not dir, not multi, project never chosen); absent everywhere else, so every other brief / view keeps its
+    bytes. The brief carries it too.
+  - The group view's integration record gains `waitingFor` (the stacked prerequisite whose working-tree delivery comes
+    first), and the brief carries a working-tree group's record as `integration`. `waitingFor` is read from the store
+    alone (no git on a read): a prerequisite counts as written when its record is idle, has no `pending`, and its
+    `lastIntegrated` is set and equals its accepted tip — or, when its acceptance names no tip (`not-needed`, `not-run`),
+    is merely set. The pass itself still decides from `orca/<P>` (§4.4 step 1); the two can differ for one round after a
+    prerequisite's tip moved without a new acceptance.
+- **Web words:** the question says "your working tree", not the registered path: the group view does not carry the path.
+- **Accepted limits (item 6 of the round's brief):**
+  - A file turned into a directory, or a directory into a file, is refused by name (rows in §6). Orca does not remove the
+    person's old file or directory to make room: that would delete something it did not write in this attempt. Pinned by
+    criteria in `tests/control/workingTreeDelivery.test.ts` (guard clauses).
+  - A path that is not valid UTF-8 is refused `-unsafe-path` rather than written under a mangled name: `safePath` refuses
+    any path containing U+FFFD (built; criterion seen red before the fix — the pass wrote the mangled name and settled
+    done). A valid UTF-8 path that contains U+FFFD itself is refused too; accepted.
+- **Bug found and fixed (not of this spec):** `applySetIntegrationScheme` rebuilt the repository settings body from four
+  fields, dropping a stored `criteriaReview` or `flows` whenever the delivery was set; it now carries the body over whole.
