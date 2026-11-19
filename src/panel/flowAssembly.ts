@@ -18,6 +18,7 @@
 import { resolveGroupSelections } from "../control/agentFreeze.js";
 import type { AdmissionGate } from "../control/admissionGate.js";
 import { singleCallOutputBound } from "../control/estimator.js";
+import { estimatorSettings } from "../control/estimatorCompatibility.js";
 import type { ExecutionPort } from "../control/executionPort.js";
 import { ORCHESTRATION_ACTOR } from "../control/orchestration.js";
 import { estimatorSlotFor, type ImportDeps } from "../control/planImport.js";
@@ -60,7 +61,7 @@ export function createPanelFlow(input: PanelFlowInput): PanelFlow {
     } catch (error) { throw new FlowRefusal("flow-profiles-unresolved", (error as Error).message); }
     const slot = await estimatorSlotFor({ store, profileRouter: router }, run.operatorId ?? run.by ?? ORCHESTRATION_ACTOR, {}, profile);
     if (slot.outcome.kind !== "frozen") throw new FlowRefusal("flow-profiles-unresolved", `call agent: ${slot.outcome.code}`);
-    const preflight = profile.snapshot.profile.estimatorPreflight;
+    const preflight = estimatorSettings(profile); // #381: the profile's bound now, or Orca's default
     if (!preflight) throw new FlowRefusal("flow-profiles-unresolved", "the estimator profile has no single-call preflight");
     const binding = { profileId: profile.snapshot.profile.profileId, profileHash: profile.profileHash };
     return {

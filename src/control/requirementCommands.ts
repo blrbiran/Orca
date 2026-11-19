@@ -14,7 +14,7 @@ import { DirFolderMissing, freezeDirWorkspace, type FrozenDirWorkspace } from ".
 import { freezeMultiDir, dirTargetRepoId, multiDirOf, type FrozenMultiDir, type MultiDirProjectOf } from "./multiGroup.js";
 import { readIntegrationDefault } from "./integrationScheme.js";
 import { initialLanding, type LandingScheme } from "./multiLandingRecord.js";
-import { blockedOnRequirementAgent, catalogMissText, estimatorCompatibility, selectorMissOf } from "./estimatorCompatibility.js";
+import { blockedOnRequirementAgent, catalogMissText, estimatorCompatibility, estimatorSettings, selectorMissOf } from "./estimatorCompatibility.js";
 import { singleCallOutputBound } from "./estimator.js";
 import {
   estimatorSlotFor, normalizeControlPlan, writeImportedPlan, type AsyncImportDeps, type ImportDefaults, type ImportDeps, type PreparedEstimatorSlot,
@@ -153,7 +153,7 @@ export async function applyRequirementOpen(deps: RequirementCommandDeps, command
         // Issue #73: ccloop's stderr from a failed probe follows its code, as `<code>: <detail>` (web/src/ccloopCodes.ts).
         const probeDetail = slot.observation.probeFailureDetail;
         if (slot.outcome.kind !== "frozen") throw new ControlError("agent-selection-rejected", `estimator:${slot.outcome.code}${probeDetail === undefined ? "" : `: ${probeDetail}`}`);
-        const preflight = profile.snapshot.profile.estimatorPreflight;
+        const preflight = estimatorSettings(profile); // #381: read at open/set-agent and frozen as maxOutputTokens
         if (!preflight) throw new ControlError("control-estimator-unconfigured");
         // Issue #236: ccloop runs a codex single call only for an exact catalog selector, so one the catalog does not list is
         // refused here, with the selectors it does list -- before the capability codes the miss implies.
@@ -216,7 +216,7 @@ export async function applyRequirementSetAgent(deps: RequirementCommandDeps, com
         notStopped(store, clarifying(store, id));
         const probeDetail = slot.observation.probeFailureDetail;
         if (slot.outcome.kind !== "frozen") throw new ControlError("agent-selection-rejected", `estimator:${slot.outcome.code}${probeDetail === undefined ? "" : `: ${probeDetail}`}`);
-        const preflight = profile.snapshot.profile.estimatorPreflight;
+        const preflight = estimatorSettings(profile); // #381: read at open/set-agent and frozen as maxOutputTokens
         if (!preflight) throw new ControlError("control-estimator-unconfigured");
         if (miss !== null) throw new ControlError("agent-selection-invalid", catalogMissText(miss));
         const compatibility = estimatorCompatibility(slot.observation, deps.defaults()?.estimateMode ?? "soft");

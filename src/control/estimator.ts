@@ -3,8 +3,8 @@ import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
 import { buildEstimatePrompt, estimateTaskIds } from "./estimatePrompt.js";
-import { estimatorCompatibility } from "./estimatorCompatibility.js";
-import { intersectCapabilities, type FrozenProfile, type ObservedProfile } from "./profiles.js";
+import { estimatorCompatibility, estimatorSettings } from "./estimatorCompatibility.js";
+import { intersectCapabilities, sameProfileHash, type FrozenProfile, type ObservedProfile } from "./profiles.js";
 import { amountSchema } from "./schema.js";
 import type { ControlStore } from "./store.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
@@ -97,15 +97,17 @@ export interface FrozenEstimateRequest {
 }
 export function buildBudgetEstimateRequest(input: EstimateInput): FrozenEstimateRequest {
   const { profile, observation } = input;
-  if (observation.profile.profileHash !== profile.profileHash) throw new ControlError("profile-changed");
+  if (!sameProfileHash(observation.profile.profileHash, profile.profileHash, profile.aliases)) throw new ControlError("profile-changed");
   const plan = controlPlanSchema.parse(JSON.parse(input.planCanonicalJson));
   if (canonicalBytes(plan).toString("utf8") !== input.planCanonicalJson || sha256Canonical(plan) !== input.planHash) throw new ControlError("recovery-blocked");
   const observed = intersectCapabilities(profile.snapshot.profile.capabilities, observation.observed);
-  const preflight = profile.snapshot.profile.estimatorPreflight;
+  // #381 (session 3ba26002): read at launch -- Orca's newest instruction, the profile's bounds or Orca's defaults -- and
+  // frozen in this request and its contract below; settle, repair and retry read the contract, never the profile.
+  const preflight = estimatorSettings(profile);
   const blocked: FrozenEstimateRequest = { state: "blocked-capability", reasonCode: "estimate-blocked-capability", requestHash: null, request: null, contract: null, contractHash: null, inputTokens: null, requiredRequestTokens: null };
   // Active time, attempts and sessions are bounded by the accounted claim path.
   // Single-call estimate spec §4.4: the estimate runs as one ccloop single call, so ccloop must answer v1 for this
-  // selection (a failed probe has no resolution); spec §4.2: and Orca must hold the instruction the profile names.
+  // selection (a failed probe has no resolution). #381: the instruction is always the newest Orca holds (spec §4.2 correction).
   const compatibility = estimatorCompatibility(observation, input.mode);
   if (!compatibility.compatible || !preflight || observed.contextWindowTokens === null) return {
     ...blocked, ...(compatibility.reasonCodes.length === 0 ? {} : { compatibilityReasonCodes: compatibility.reasonCodes }),
@@ -154,7 +156,7 @@ export function estimateCapabilityDegraded(request: BudgetEstimateRequestV1, obs
 
 /** Local reasons for a selected estimator that no longer satisfies its queued request. */
 export function estimateCapabilityDegradationReasons(request: BudgetEstimateRequestV1, observation: Pick<ObservedProfile, "profile" | "observed" | "probeFailureCode" | "resolution">, mode: "strict" | "soft" = "strict"): string[] {
-  if (observation.profile.profileHash !== request.estimatorProfile.profileHash) throw new ControlError("profile-changed");
+  if (!sameProfileHash(request.estimatorProfile.profileHash, observation.profile.profileHash, observation.profile.aliases)) throw new ControlError("profile-changed");
   const current = intersectCapabilities(observation.profile.snapshot.profile.capabilities, observation.observed), frozen = request.estimatorCapabilities;
   const order = ["unavailable", "phase-end", "realtime"], budgetOrder = ["unavailable", "soft", "bounded"];
   const reasons: string[] = [...estimatorCompatibility(observation, mode).reasonCodes];

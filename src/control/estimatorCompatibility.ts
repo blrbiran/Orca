@@ -1,7 +1,44 @@
-import { ESTIMATE_INSTRUCTIONS } from "./estimatePrompt.js";
+import { NEWEST_ESTIMATE_INSTRUCTION } from "./estimateInstructionAge.js";
 import type { AgentResolution } from "./agentSelection.js";
 import type { ExecutionPort } from "./executionPort.js";
-import { intersectCapabilities, type ObservedProfile } from "./profiles.js";
+import { intersectCapabilities, type FrozenProfile, type ObservedProfile } from "./profiles.js";
+import type { EstimateExecutionContractV1 } from "./webProtocol.js";
+
+/**
+ * #381 (session 3ba26002, human ruling 3): what an estimate or requirement call uses when the profile's preflight leaves a
+ * field out -- the values of the README's sample profile and of every acceptance script (scripts/live-*-acceptance.ts).
+ */
+export const ESTIMATOR_DEFAULTS: Readonly<{ maxOutputTokens: number; framingTokenOverhead: number; tokenizer: EstimateExecutionContractV1["tokenizer"] }> = Object.freeze({
+  maxOutputTokens: 64_000,
+  framingTokenOverhead: 17,
+  tokenizer: Object.freeze({ kind: "utf8-upper-bound" as const, numerator: 2, denominator: 3, proofRef: "proof" }),
+});
+
+export interface EstimatorSettings {
+  instructionVersion: string;
+  schemaVersion: "budget-estimate-v1";
+  maxOutputTokens: number;
+  framingTokenOverhead: number;
+  tokenizer: EstimateExecutionContractV1["tokenizer"];
+}
+
+/**
+ * #381 (session 3ba26002, human rulings 1-3): the estimator settings a call reads at launch and freezes in its own
+ * contract. The instruction is always the newest Orca holds (the profile's instructionVersion and schemaVersion are read
+ * by nothing); the rest is the profile's when present, else ESTIMATOR_DEFAULTS. Null when the profile has no preflight
+ * block at all (estimatorPreflight: null), as before.
+ */
+export function estimatorSettings(profile: Pick<FrozenProfile, "snapshot">): EstimatorSettings | null {
+  const preflight = profile.snapshot.profile.estimatorPreflight;
+  if (preflight === null) return null;
+  return {
+    instructionVersion: String(NEWEST_ESTIMATE_INSTRUCTION),
+    schemaVersion: "budget-estimate-v1",
+    maxOutputTokens: preflight.maxOutputTokens ?? ESTIMATOR_DEFAULTS.maxOutputTokens,
+    framingTokenOverhead: preflight.framingTokenOverhead ?? ESTIMATOR_DEFAULTS.framingTokenOverhead,
+    tokenizer: preflight.tokenizer ?? ESTIMATOR_DEFAULTS.tokenizer,
+  };
+}
 
 export type EstimatorMode = "strict" | "soft";
 export type EstimatorCompatibilityReason =
@@ -76,9 +113,9 @@ export function estimatorCompatibility(
   // Spec 2026-10-15 §6.2 (R2): strict requires "v1"; soft also accepts "v1-soft", whose output bound is checked after the fact.
   const execution = resolution.resolution?.singleCallExecution;
   if (miss === null && !(execution === "v1" || (mode === "soft" && execution === "v1-soft"))) reasons.push("single-call-unavailable");
-  const preflight = resolution.profile.snapshot.profile.estimatorPreflight;
-  if (!preflight) reasons.push("preflight-unavailable");
-  else if (!Object.hasOwn(ESTIMATE_INSTRUCTIONS, preflight.instructionVersion)) reasons.push("instruction-unknown");
+  // #381 ruling 2: the instruction is Orca's newest, never the profile's, so "instruction-unknown" is no longer produced
+  // (it stays in the union: estimates recorded before carry it).
+  if (estimatorSettings(resolution.profile) === null) reasons.push("preflight-unavailable");
   const capabilities = intersectCapabilities(resolution.profile.snapshot.profile.capabilities, resolution.observed);
   // #105: ccloop answers a codex single call only for a catalog row it found (ccloop src/agents/codex.ts), so a null window
   // beside a single call is a listed model the catalog gives no window for -- what an installation's declaredContextWindow

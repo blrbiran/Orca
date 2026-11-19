@@ -34,8 +34,9 @@ import { readAgentPreferences } from "./agentPreferences.js";
 import { applyAgentSwitch, AUTO_AGENT, resolveAgentSwitch, unlockedAgent } from "./agentSwitch.js";
 import { frozenWorkAgent } from "./agentFreeze.js";
 import { failoverTargets, installationRests, installationStreaks } from "./quotaRest.js";
-import { intersectCapabilities, type ExecutionProfileRouter } from "./profiles.js";
+import { intersectCapabilities, sameProfileHash, type ExecutionProfileRouter } from "./profiles.js";
 import { estimatorLayerAuthority, type FrozenSlot } from "./agentSelection.js";
+import { estimatorSettings } from "./estimatorCompatibility.js";
 import { allWork, effectivePlanCanonicalJson, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, readWork, type BudgetProposalRecord, type EstimateRecord, type EstimateWithdrawnReason } from "./queries.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
 import { agentSelectionSchema, amountSchema } from "./schema.js";
@@ -781,7 +782,7 @@ export class WebControlService {
             const head = this.store.db.prepare("SELECT body FROM estimates WHERE group_id=? ORDER BY estimate_version DESC LIMIT 1").get(id);
             const last = head === undefined ? null : JSON.parse(String(head.body)) as { estimateId: string; estimateVersion: number; state: string; reasonCode: string | null; proposalVersion?: number; mode: string; profile: { profileId: string; profileHash: string } | null };
             if (last !== null && last.state === prepared.state && last.reasonCode === prepared.reasonCode && last.proposalVersion === proposal.proposalVersion && last.mode === command.payload.estimateMode
-              && last.profile?.profileId === command.payload.estimatorProfileId && last.profile.profileHash === command.payload.estimatorProfileHash) {
+              && last.profile?.profileId === command.payload.estimatorProfileId && sameProfileHash(last.profile.profileHash, command.payload.estimatorProfileHash, this.deps.profileRouter.aliases)) {
               return success(context, { kind: "estimate-created", estimateId: last.estimateId, estimateVersion: last.estimateVersion, estimateState: prepared.state, reasonCode: prepared.reasonCode, wakeId: null });
             }
           }
@@ -1917,7 +1918,7 @@ export class WebControlService {
     let profile: ReturnType<ExecutionProfileRouter["resolve"]>;
     try { profile = this.deps.profileRouter.resolve("budget-estimate", group.requirement.profile.profileId, group.requirement.profile.profileHash); }
     catch (error) { return kept(describeError(error)); }
-    const preflight = profile.snapshot.profile.estimatorPreflight;
+    const preflight = estimatorSettings(profile); // #381: the profile's bound now, or Orca's default
     if (preflight === null) return kept("estimator-preflight-missing");
     const observation = await this.deps.profileRouter.probe(profile, group.requirement.agentSlot.selection);
     if (observation.resolution === null) return kept(observation.probeFailureCode ?? "probe-failed");

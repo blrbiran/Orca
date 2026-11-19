@@ -187,13 +187,16 @@ export const executionProfileSnapshotSchema = z
         contextTokenizer: z.object({ tokenizerId: nonemptyString, tokenizerVersion: nonemptyString }).strict().nullable(),
         workMaxOutputTokens: positiveSafeInteger.nullable(),
         capabilities: declaredCapabilitiesSchema,
+        // #381 (session 3ba26002, human rulings 2-3): every field is optional. instructionVersion and schemaVersion are
+        // read but decided by Orca (the newest it holds); the other three default when absent (estimatorCompatibility.ts
+        // estimatorSettings). The block is out of the binding hash (profiles.ts profileBindingHash).
         estimatorPreflight: z
           .object({
-            instructionVersion: nonemptyString,
-            schemaVersion: z.literal("budget-estimate-v1"),
-            maxOutputTokens: positiveSafeInteger,
-            framingTokenOverhead: safeInteger,
-            tokenizer: tokenizerSchema,
+            instructionVersion: nonemptyString.optional(),
+            schemaVersion: z.literal("budget-estimate-v1").optional(),
+            maxOutputTokens: positiveSafeInteger.optional(),
+            framingTokenOverhead: safeInteger.optional(),
+            tokenizer: tokenizerSchema.optional(),
           })
           .strict()
           .nullable(),
@@ -224,7 +227,7 @@ export const executionProfileSnapshotSchema = z
     requireSortedUnique(resolved.secretValueHashes, (entry) => entry.name, ctx, ["resolved", "secretValueHashes"]);
     const expectedPurposes: string[] = [];
     if (profile.contextTokenizer !== null) expectedPurposes.push("context");
-    if (profile.estimatorPreflight?.tokenizer.kind === "exact") expectedPurposes.push("estimator");
+    if (profile.estimatorPreflight?.tokenizer?.kind === "exact") expectedPurposes.push("estimator");
     const actualPurposes = resolved.tokenizerArtifactHashes.map((entry) => entry.purpose);
     if (expectedPurposes.join("\0") !== actualPurposes.join("\0")) {
       issue(ctx, ["resolved", "tokenizerArtifactHashes"], "tokenizer-artifact-set-mismatch");
@@ -1611,6 +1614,8 @@ export const controlConfigSchema = z
           probeFailureCode: nonemptyString.nullable(),
           // Tester follow-up B T3 (#224): the profile's estimate instruction version (null without an estimator
           // preflight), so a client can warn when it is older than the newest the panel holds. Optional: older panels.
+          // #381 (session 3ba26002, human ruling 2): no longer sent -- Orca always uses its newest instruction, and the
+          // warning is gone; kept optional so an older panel's config still parses.
           estimatorInstructionVersion: nonemptyString.nullable().optional(),
         })
         .strict(),
