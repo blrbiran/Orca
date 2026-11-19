@@ -57,12 +57,14 @@ export function bulkCloseOpen(groups: readonly GroupSummaryV1[]): boolean {
 /**
  * Tester #357: a card's selection box, a sibling of the card's button or link (one cannot hold the other). #355 review
  * (minor 1): both sit in one positioned wrapper, so the box is placed on the card, never on a refusal notice under it.
- * Tester #390: shown only in select mode; the label is the 44px hit area, the input keeps the accessible name.
+ * Tester #390 (human ruling 2026-11-20, 「选择模式」): shown only in select mode, at the card's start in its content row;
+ * the visible short label and the 44px hit area wrap the native box, which keeps the accessible name.
  */
 function SelectBox(props: { groupId: string; checked: boolean; onChange: (checked: boolean) => void }): JSX.Element {
   const { t } = useTranslation();
   return <label className={groupSelect}>
     <input type="checkbox" checked={props.checked} onChange={(event) => props.onChange(event.currentTarget.checked)} aria-label={t("control.groupBulk.select", { groupId: props.groupId })} />
+    <span>{t("control.groupBulk.selectBox")}</span>
   </label>;
 }
 
@@ -99,6 +101,8 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
   const stop = stopLabel(group);
   const updated = group.updatedAt === undefined || group.updatedAt === null ? null : Math.max(0, Math.floor((props.now - group.updatedAt) / 60_000));
   return <GroupActionsMenu group={group} onOpen={props.onSelect} onAction={props.onAction} refusal={props.selected ? null : props.refusal} onOpenDispatch={props.onOpenDispatch}>{(onContextMenu) => (<span className={`group-card-anchor ${groupCardAnchor}`}>
+    {/* Tester #390: the box leads the row, at the card's start. */}
+    {props.selectBox}
     <button
       type="button"
       className={`group-card ${groupCard}`}
@@ -132,7 +136,6 @@ function GroupCard(props: { group: GroupSummaryV1; selected: boolean; repoText: 
       </span>
       {props.repoText !== "" && <span id={`${base}-repo`}>{props.repoText}</span>}
     </button>
-    {props.selectBox}
   </span>)}</GroupActionsMenu>;
 }
 
@@ -242,12 +245,12 @@ export function GroupList(props: GroupListProps): JSX.Element {
         {shown.map((group) => group.state === "clarifying" ? (
           // N1 spec §11.2: a clarifying group has no group view (DR25); it is operated in Requirements until accept.
           <GroupActionsMenu key={group.groupId} group={group} onOpen={() => props.onSelectRequirement?.(group.groupId)} onAction={props.onAction} refusal={props.refusals?.[group.groupId]}>{(onContextMenu) => (
-            <span className={`group-card-anchor ${groupCardAnchor}`}><a className={`group-card ${groupCard}`} href={hashFor("requirements")} onClick={() => props.onSelectRequirement?.(group.groupId)} onContextMenu={onContextMenu}
+            <span className={`group-card-anchor ${groupCardAnchor}`}>{selectBox(group.groupId)}<a className={`group-card ${groupCard}`} href={hashFor("requirements")} onClick={() => props.onSelectRequirement?.(group.groupId)} onContextMenu={onContextMenu}
               aria-labelledby={`req-name-${group.groupId}`} aria-describedby={`req-goal-${group.groupId}`}>
               {/* Task 11 acceptance (session ffec7b28): the card names its requirement the way every other card does; tester #17: first. */}
               <span id={`req-goal-${group.groupId}`} className={`group-card-lead ${groupCardLead}`}><CardGoal group={group} className={`group-card-goal ${groupCardGoal}`} /></span>
               <span id={`req-name-${group.groupId}`} className={`group-card-name ${groupCardName}`}><span className="led" data-led={groupLed(group)} aria-hidden="true" />{group.groupId} · {groupStateText(group)} · {t("control.requirementBadge")}{label(group.repoId)}</span>
-            </a>{selectBox(group.groupId)}</span>
+            </a></span>
           )}</GroupActionsMenu>
         ) : (
           <GroupCard key={group.groupId} group={group} selected={group.groupId === props.selected} repoText={label(group.repoId)} now={now} onSelect={() => props.onSelect(group.groupId)} onAction={props.onAction} refusal={props.refusals?.[group.groupId]} onOpenDispatch={props.onOpenDispatch && (() => props.onOpenDispatch!(group.groupId))} selectBox={selectBox(group.groupId)} />

@@ -518,7 +518,7 @@ export const en = {
     groupCategory: { "not-started": "Not started", running: "Running", attention: "Needs attention", done: "Done", closed: "Closed", archived: "Archived" },
     // Tester #357: the list's selection toolbar.
     groupBulk: {
-      region: "Selected groups", select: "Select {{groupId}}", selected: "{{n}} selected", clear: "Clear selection",
+      region: "Selected groups", select: "Select {{groupId}}", selectBox: "Select", selected: "{{n}} selected", clear: "Clear selection",
       // Tester #390 (human ruling 2026-11-20, 「选择模式」): the mode is entered from the toolbar and left from it.
       startSelect: "Select", exitSelection: "Exit selection",
       archive: "Archive", close: "Close", closeNeedsDone: "Close takes done groups only; deselect the others.", outcomes: "What each group did",

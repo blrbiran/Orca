@@ -105,11 +105,12 @@ export const groupCard = "flex min-w-0 flex-1 flex-col items-stretch gap-[6px] r
 /** The card and its menu button side by side; the menu button sits over the card's top-right corner. */
 export const groupCardRow = "relative flex min-w-0 flex-wrap [&>.refusal]:basis-full";
 export const groupMore = "absolute top-2 right-2 z-[1] ms-0 min-h-control min-w-control";
-/** Tester #357: a card's selection box, a sibling of the card button (a checkbox cannot sit inside a button), bottom-right. */
+/** Tester #357: a card's selection box, a sibling of the card button (a checkbox cannot sit inside a button), at the card's start. */
 /** #355 review (minor 1): the card and its selection box, positioned together so the box sits on the card itself. */
 export const groupCardAnchor = "relative flex min-w-0 flex-1";
-/** Tester #390 (human ruling 2026-11-20, 「选择模式」): the box exists only in select mode; its label is a 44px hit area around the native box. */
-export const groupSelect = "absolute right-3 bottom-3 z-[1] flex min-h-[44px] min-w-[44px] items-center justify-center";
+/** Tester #390 (human ruling 2026-11-20, 「选择模式」): the box exists only in select mode. It rides at the card's start,
+ * in the content row beside the card button, with a visible short label; its label is a 44px hit area around the native box. */
+export const groupSelect = "flex shrink-0 min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 self-start";
 /** Tester #390: the list's toolbar -- the filter chips and the Select toggle on one wrapping row. */
 export const groupToolbar = "flex flex-wrap items-center gap-2";
 /** Tester #390: the Select toggle sits at the row's end (touch gets 44px). */

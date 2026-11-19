@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 /**
  * Tester #390 (human ruling 2026-11-20, 「选择模式」): the unexplained checkbox that sat on every Tasks card by default is
- * gone. A Select toggle in the list's toolbar enters select mode; only then does a card show its box (with its "Select
- * id" name and a 44px hit area), and the bulk toolbar's Exit selection leaves the mode and clears the selection.
+ * gone. A Select toggle in the list's toolbar enters select mode; only then does a card show its box, with its "Select
+ * id" name and a 44px hit area, and the bulk toolbar's Exit selection leaves the mode and clears the selection.
+ *
+ * Ruling: the human approved 「选择模式」 on 2026-11-20 as part of this P0 batch (#390's remaining position/label half).
+ * The box rides at the card's start, in the content row beside the card button, with a visible short label ("Select");
+ * it is not a floating box anchored to the bottom-right corner.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -45,15 +49,26 @@ describe("select mode is entered explicitly (#390)", () => {
     expect(screen.queryByRole("button", { name: "Select" })).toBeNull();
   });
 
-  it("shows each card's box, and the toolbar, once Select is pressed", () => {
+  it("shows each card's labelled box at its start, and the toolbar, once Select is pressed", () => {
     render(<Owner calls={[]} />);
     fireEvent.click(selectToggle());
     expect(screen.queryAllByRole("checkbox")).toHaveLength(GROUPS.length);
-    // A clear accessible name, and the box's label is a 44px hit area (DESIGN.md touch rule).
+    // A clear accessible name, and a visible short label beside the native box.
     expect(box("d1")).toBeTruthy();
     const label = box("d1").closest("label")!;
+    expect(within(label).getByText("Select")).toBeTruthy();
+    // The label is a 44px hit area (DESIGN.md touch rule).
     expect(label.className).toContain("min-h-[44px]");
     expect(label.className).toContain("min-w-[44px]");
+    // Ruling (2026-11-20): the box sits in the card's content row at its start, never anchored to the bottom-right.
+    expect(label.className).not.toContain("absolute");
+    expect(label.className).not.toContain("bottom-3");
+    const row = label.closest(".group-card-row");
+    expect(row).not.toBeNull();
+    const card = row!.querySelector("button.group-card");
+    expect(card).not.toBeNull();
+    // Left of the card: the box comes first in the row, then the card button.
+    expect(card!.previousElementSibling).toBe(label);
     expect(toolbar()).toBeTruthy();
     expect(within(toolbar()).getByRole("button", { name: "Exit selection" })).toBeTruthy();
     // The toggle is the pressed state of the mode, not a second primary.

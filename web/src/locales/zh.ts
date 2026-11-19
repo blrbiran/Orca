@@ -364,7 +364,7 @@ export const zh: Translation<typeof en> = {
     groupBlockers: " · {{n}} 个阻塞项",
     groupCategory: { "not-started": "未开始", running: "进行中", attention: "需要处理", done: "已完成", closed: "已关闭", archived: "已归档" },
     groupBulk: {
-      region: "已选的组", select: "选择 {{groupId}}", selected: "已选 {{n}} 个", clear: "清除选择",
+      region: "已选的组", select: "选择 {{groupId}}", selectBox: "选择", selected: "已选 {{n}} 个", clear: "清除选择",
       startSelect: "选择", exitSelection: "退出选择",
       archive: "归档", close: "关闭", closeNeedsDone: "只有已完成的组能关闭；请取消选择其他组。", outcomes: "每个组的结果",
       outcome: {
