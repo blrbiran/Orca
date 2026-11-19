@@ -98,7 +98,7 @@ export async function resolveAgentSwitch(
  * and the confirmed snapshot is re-issued with only this task's agent entry replaced. A task with skills is refused
  * (its skill set was checked against the frozen agent's kind at confirm); so is a switch to the installation it is on.
  */
-export function applyAgentSwitch(store: ControlStore, groupId: string, taskId: string, runId: string | null, next: FrozenWorkAgent, by: string, reason: AgentSwitchRecord["reason"]): { from: string; to: string } {
+export function applyAgentSwitch(store: ControlStore, groupId: string, taskId: string, runId: string | null, next: FrozenWorkAgent, by: string, reason: AgentSwitchRecord["reason"]): { from: string; to: string; model?: { from: string; to: string } } {
   const work = readWork(store, groupId, taskId) as unknown as Record<string, unknown>;
   const previous = frozenWorkAgent(work);
   // `auto` may keep the installation and change only its provenance (the unlock); nothing else may switch to the same one,
@@ -123,5 +123,6 @@ export function applyAgentSwitch(store: ControlStore, groupId: string, taskId: s
   const record: AgentSwitchRecord = { afterRunId: runId, previous, by, at: store.now(), reason };
   Object.assign(work, next, { agentSwitches: [...agentSwitchesOf(work), record] });
   saveWork(store, groupId, work as never);
-  return { from: previous.agent.agent, to: next.agent.agent };
+  // Review M5 (#368 b): a switch that named a model says which model it left and took (the task-retried activity).
+  return { from: previous.agent.agent, to: next.agent.agent, ...(next.agentProvenance.model === "descriptor" ? {} : { model: { from: previous.agent.model, to: next.agent.model } }) };
 }

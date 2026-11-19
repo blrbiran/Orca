@@ -10,6 +10,9 @@ import { applyRetryTask } from "../../src/control/retryTask.js";
 import { readWebGroup, WebControlService } from "../../src/control/webService.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { permissionRefusal } from "../../src/panel/permissions.js";
+import { createServer } from "node:http";
+import express from "express";
+import { registerControlMutationRoutes } from "../../src/panel/controlApi.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 
 async function world() {
@@ -29,7 +32,7 @@ async function world() {
   let n = 0;
   const retry = (payload: Record<string, unknown>) => service.retryTaskOnAgent({ schema: "orca-raw-command-v1", commandId: `retry-${++n}`, actorId: "operator",
     expectedRevision: revision(), verb: "retry-task", target: { kind: "group", groupId: "g" }, payload: { taskId: "a", runId, ...payload } } as never);
-  return { t, runId, work, retry, succeedNext: () => { failing = false; } };
+  return { t, runId, work, retry, service, revision, succeedNext: () => { failing = false; } };
 }
 const errorOf = (answer: unknown) => (answer as { error?: { code: string; message: string } }).error;
 
@@ -38,7 +41,7 @@ describe("task retry --model: a confirmed task's model changes on its retry (#36
     const w = await world(); try {
       const before = w.work();
       expect(before.agent).toMatchObject({ agent: "codex", model: "fixture-model" });
-      // mutation: send model-only payloads down the plain retry (controlApi / retryTaskOnAgent ignore model) -> model unchanged, red
+      // mutation: retryTaskOnAgent sends a model-only payload to the plain retry -> refused, red (the route: next test)
       expect(errorOf(await w.retry({ model: "gpt-new" }))).toBeUndefined();
       const after = w.work();
       expect(after.agent).toEqual({ ...before.agent, model: "gpt-new" });
@@ -46,10 +49,32 @@ describe("task retry --model: a confirmed task's model changes on its retry (#36
       expect(after.agentProvenance).toMatchObject({ agent: "task", model: "task" });
       expect(after.agentSwitches).toEqual([expect.objectContaining({ afterRunId: w.runId, reason: "person", by: "operator", previous: expect.objectContaining({ agent: before.agent }) })]);
       expect(() => readConfirmedTaskExecution(w.t.h.store, "g", "a")).not.toThrow();
+      // Review M5: the activity names the model left and taken (installation alone would read codex -> codex).
+      // mutation: applyAgentSwitch returns installations only -> no model pair, red
+      const activity = w.t.h.store.db.prepare("SELECT body FROM activity WHERE kind='task-retried' AND run_id=?").get(w.runId);
+      expect(JSON.parse(String(activity!.body))).toEqual({ fromRunId: w.runId, agent: { from: "codex", to: "codex", model: { from: "fixture-model", to: "gpt-new" } } });
       expect(readControlGroup(w.t.h.store, "e", "g").runs.map((run) => run.runId)).toContain(w.runId);
       w.succeedNext();
       const next = await w.t.claim();
       expect((w.t.body(next) as { agent: { agent: string; model: string } }).agent).toMatchObject({ agent: "codex", model: "gpt-new" });
+    } finally { await w.t.h.dispose(); }
+  });
+
+  it("through the panel's own route: POST groups/g/retry-task with a model alone succeeds (review I2)", async () => {
+    const w = await world(); try {
+      const app = express(); app.use(express.json());
+      app.use((_req, res, next) => { res.locals.orcaPrincipal = { kind: "user", userId: "owner-1", name: "owner", roles: ["owner"] }; next(); });
+      registerControlMutationRoutes(app, w.t.h.store, w.service, "web");
+      const server = createServer(app);
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const port = (server.address() as { port: number }).port;
+        const r = await fetch(`http://127.0.0.1:${port}/api/control/groups/g/retry-task`, { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ commandId: "route-model", expectedRevision: w.revision(), payload: { taskId: "a", runId: w.runId, model: "gpt-new" } }) });
+        // mutation: the route sends a payload without agent to service.retryTask -> recovery-blocked, red
+        expect([r.status, await r.json()]).toMatchObject([200, { result: { kind: "task-retried" } }]);
+        expect(w.work().agent.model).toBe("gpt-new");
+      } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
     } finally { await w.t.h.dispose(); }
   });
 
