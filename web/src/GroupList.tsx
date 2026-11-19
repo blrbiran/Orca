@@ -56,7 +56,7 @@ export function bulkCloseOpen(groups: readonly GroupSummaryV1[]): boolean {
 
 /**
  * Tester #357: a card's selection box, a sibling of the card's button or link (one cannot hold the other). #355 review
- * (minor 1): both sit in one positioned wrapper, so the box is placed on the card, never on a refusal notice under it.
+ * (minor 1): both are grouped in one wrapper, in-flow at the card's start, never on a refusal notice under it.
  * Tester #390 (human ruling 2026-11-20, 「选择模式」): shown only in select mode, at the card's start in its content row;
  * the visible short label and the 44px hit area wrap the native box, which keeps the accessible name.
  */

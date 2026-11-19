@@ -106,7 +106,7 @@ export const groupCard = "flex min-w-0 flex-1 flex-col items-stretch gap-[6px] r
 export const groupCardRow = "relative flex min-w-0 flex-wrap [&>.refusal]:basis-full";
 export const groupMore = "absolute top-2 right-2 z-[1] ms-0 min-h-control min-w-control";
 /** Tester #357: a card's selection box, a sibling of the card button (a checkbox cannot sit inside a button), at the card's start. */
-/** #355 review (minor 1): the card and its selection box, positioned together so the box sits on the card itself. */
+/** #355 review (minor 1): the card and its selection box are grouped in one wrapper, in-flow at the card's start, never on a refusal notice under it. */
 export const groupCardAnchor = "relative flex min-w-0 flex-1";
 /** Tester #390 (human ruling 2026-11-20, 「选择模式」): the box exists only in select mode. It rides at the card's start,
  * in the content row beside the card button, with a visible short label; its label is a 44px hit area around the native box. */
