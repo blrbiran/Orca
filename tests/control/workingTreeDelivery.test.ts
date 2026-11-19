@@ -65,6 +65,8 @@ async function world(scheme: IntegrationScheme = WT) {
   const repo = join(h.root, "checkout");
   mkdirSync(repo);
   g(repo, ["init", "-q", "-b", "main"]);
+  // #400: pinned so the person's global core.symlinks cannot decide whether WT-2's `link` is a real symlink.
+  g(repo, ["config", "core.symlinks", "true"]);
   writeFileSync(join(repo, "a.txt"), "one\n");
   writeFileSync(join(repo, "d.txt"), "gone\n");
   mkdirSync(join(repo, "sub")); writeFileSync(join(repo, "sub", "only.txt"), "x\n");
@@ -414,6 +416,26 @@ describe("working-tree delivery (spec §4.4)", { timeout: 60_000 }, () => {
       w.land({ "m.txt": "m\n" });
       expect(await w.pass()).toBe(true);
       expect(w.record().reason).toBe("integration-worktree-dirty");
+    } finally { await w.dispose(); }
+  });
+
+  it("WT-18: with core.symlinks=false a symlink entry lands as a regular file holding the target (#400)", async () => {
+    const w = await world(); try {
+      // A checkout that cannot hold symlinks: git writes a 120000 entry as a regular file whose content is the target.
+      g(w.repo, ["config", "core.symlinks", "false"]);
+      w.land({ "link": { text: "a.txt", mode: "120000" }, "n.txt": "n\n" });
+      w.finish();
+      // mutation: drop the core.symlinks clause of sameEntry -> the final read calls link not-at-tip and blocks, red
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: g(w.repo, ["rev-parse", "orca/g"]), pending: null });
+      const link = lstatSync(at(w, "link"));
+      expect(link.isSymbolicLink()).toBe(false);
+      expect(link.isFile()).toBe(true);
+      expect(readFileSync(at(w, "link"), "utf8")).toBe("a.txt");
+      // Nothing half-written: the other path landed as well, and the staging directory is gone.
+      expect(text(w, "n.txt")).toBe("n\n");
+      expect(existsSync(w.staging())).toBe(false);
+      expect(w.status()).toBe("?? link\n?? n.txt");
     } finally { await w.dispose(); }
   });
 });

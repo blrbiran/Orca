@@ -88,13 +88,17 @@ async function rawDiff(repo: string, from: string, to: string): Promise<Map<stri
   return out;
 }
 
-const sameEntry = (have: Have, entry: Entry, fileMode: boolean): boolean => {
+const sameEntry = (have: Have, entry: Entry, fileMode: boolean, symlinks: boolean): boolean => {
   if (have === "dir") return false;
   if (have === null || entry === null) return have === entry;
   if (have.oid !== entry.oid) return false;
+  if (have.mode === entry.mode) return true;
   const regular = (mode: string): boolean => mode === "100644" || mode === "100755";
   // Step 6: with core.fileMode=false the executable bit is not compared (git semantics).
-  return have.mode === entry.mode || (!fileMode && regular(have.mode) && regular(entry.mode));
+  if (!fileMode && regular(have.mode) && regular(entry.mode)) return true;
+  // #400: with core.symlinks=false git writes a 120000 entry as a regular file holding the link target, so that
+  // regular file is the entry's own shape -- in either direction, and only while the checkout cannot hold symlinks.
+  return !symlinks && (have.mode === "120000" ? regular(entry.mode) : (regular(have.mode) && entry.mode === "120000"));
 };
 
 /** Step 6, `have`: from `lstat`, never following a link; regular files hashed with clean filters, as `git status` does. */
@@ -135,7 +139,7 @@ function leadingUnsafe(repo: string, path: string): boolean {
 type Judged = { kind: "ok"; done: string[]; writable: string[] } | { kind: "blocked"; reason: string };
 
 /** Step 6, the whole safety rule: every path is done (`have == want`), writable (`have ∈ was`) or a conflict. */
-async function judge(repo: string, set: Map<string, { want: Entry; was: Entry[] }>, fileMode: boolean): Promise<Judged> {
+async function judge(repo: string, set: Map<string, { want: Entry; was: Entry[] }>, fileMode: boolean, symlinks: boolean): Promise<Judged> {
   const paths = [...set.keys()];
   for (const path of paths) if (leadingUnsafe(repo, path)) return { kind: "blocked", reason: `integration-working-tree-unsafe-path:${path}` };
   const haves = await readHaves(repo, paths);
@@ -143,8 +147,8 @@ async function judge(repo: string, set: Map<string, { want: Entry; was: Entry[] 
   for (const path of paths) {
     const have = haves.get(path)!, { want, was } = set.get(path)!;
     if (have === "dir") return { kind: "blocked", reason: `integration-working-tree-unsupported:dir:${path}` };
-    if (sameEntry(have, want, fileMode)) done.push(path);
-    else if (was.some((entry) => sameEntry(have, entry, fileMode))) writable.push(path);
+    if (sameEntry(have, want, fileMode, symlinks)) done.push(path);
+    else if (was.some((entry) => sameEntry(have, entry, fileMode, symlinks))) writable.push(path);
     else conflicts.push(path);
   }
   if (conflicts.length > 0) {
@@ -276,8 +280,10 @@ export async function integrateWorkingTree(store: ControlStore, repo: string, gr
     }
     if (set.size === 0) return { kind: "done", tip, integrated: null };
     const fileMode = (await gitChild(repo, ["config", "--bool", "core.fileMode"])).stdout.trim() !== "false";
+    // #400: read the same way -- only an explicit `false` turns symlinks off (unset means git's default, on).
+    const symlinks = (await gitChild(repo, ["config", "--bool", "core.symlinks"])).stdout.trim() !== "false";
     // Step 6.
-    const first = await judge(repo, set, fileMode);
+    const first = await judge(repo, set, fileMode, symlinks);
     if (first.kind === "blocked") return first;
     // Step 7: write-ahead.
     if (!hooks.recordPending({ schemeHash: integration.schemeHash, tip, base: from, new: tip })) return { kind: "dropped" };
@@ -298,7 +304,7 @@ export async function integrateWorkingTree(store: ControlStore, repo: string, gr
     // Step 9: every path judged again immediately before the first write (review M10).
     hooks.crash("wt-before-recheck");
     at = "-";
-    const again = await judge(repo, set, fileMode);
+    const again = await judge(repo, set, fileMode, symlinks);
     if (again.kind === "blocked") return again;
     const writeNow = new Set(again.writable);
     for (const path of toDelete) {
@@ -325,7 +331,7 @@ export async function integrateWorkingTree(store: ControlStore, repo: string, gr
     removeEmptyParents(repo, [...set].filter(([, { want }]) => want === null).map(([path]) => path));
     // Step 11.
     const haves = await readHaves(repo, [...set.keys()]);
-    for (const [path, { want }] of set) if (!sameEntry(haves.get(path)!, want, fileMode)) throw new WriteFailed(path, "not-at-tip");
+    for (const [path, { want }] of set) if (!sameEntry(haves.get(path)!, want, fileMode, symlinks)) throw new WriteFailed(path, "not-at-tip");
     return { kind: "done", tip, integrated: null };
   } catch (error) {
     // Errors are caught where they happen (review I9): a disk-full write is blocked by name, never a backoff. Only a
