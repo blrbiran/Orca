@@ -368,7 +368,7 @@ export function applyRequirementRevise(deps: RequirementCommandDeps, command: Re
       // Re-advance: the consensus (if any) is withdrawn and the draft that followed it no longer follows the requirement.
       const consensusWithdrawn = group.requirement.consensus !== null;
       if (consensusWithdrawn) {
-        group.requirement = { ...group.requirement, consensus: null, consensusWithdrawn: { at: now, by, revisedRound: round.roundNo } };
+        group.requirement = { ...group.requirement, consensus: null, consensusWithdrawn: { at: now, by, revisedRound: round.roundNo, lastDraftNo: latestDraft(deps.store, id)?.draftNo ?? 0 } };
         saveRequirementGroup(deps.store, group);
       }
       const draft = latestDraft(deps.store, id);

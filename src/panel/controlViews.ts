@@ -1956,9 +1956,12 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
         ? { ...rest, draftHash: requirementDraftHash(plan, rest.output) } : rest;
       // Tester #362: and each data file under a dot-directory the requirement names -- a hint only.
       // Dogfood finding (3): and, when Orca re-drafted after the person's feedback, that nothing reports on it.
-      const carry = shown.output !== null && shown.layers !== null ? feedbackAfterRedraft(drafts, shown.draftNo) : null;
+      // Review M3: both only on the draft awaiting review (the one the person decides on); review M1: not across a revision.
+      const reviewing = shown.output !== null && shown.layers !== null && shown.state === "awaiting-review";
+      const carry = reviewing ? feedbackAfterRedraft(drafts, shown.draftNo, requirement.consensusWithdrawn?.lastDraftNo ?? null) : null;
       return shown.output !== null && shown.layers !== null ? { ...shown, parallelCandidates: parallelCandidates(shown.output), impliedPathsOutsideTargets: impliedPathsOutsideTargets(shown.output),
-        goalPathsOutsideTargets: goalPathsOutsideTargets(shown.output), overlapSerialized: overlapSerialized(shown.output), runtimeDataPaths: runtimeDataPaths(shown.output, document),
+        goalPathsOutsideTargets: goalPathsOutsideTargets(shown.output), overlapSerialized: overlapSerialized(shown.output),
+        ...(reviewing ? { runtimeDataPaths: runtimeDataPaths(shown.output!, document) } : {}),
         ...(carry === null ? {} : { feedbackAfterRedraft: carry }) } : shown;
     }), spendCapBlock: readSpendCapBlock(store, groupId),
     clarify: { classification: limits.classification, override: limits.override, tier: limits.tier, roundCap: limits.roundCap,

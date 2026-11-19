@@ -96,6 +96,9 @@ describe("requirement-revise (spec §10.3, C10)", () => {
       const block = readRequirementGroup(x.store, "r").requirement;
       expect(block.consensus).toBeNull();
       expect(block.consensusWithdrawn).toMatchObject({ by: "human", revisedRound: 3 });
+      // Review M1 (session 3ba26002): the latest draft at the withdrawal bounds the feedback a later re-draft carries.
+      // mutation: drop lastDraftNo from the withdrawal record -> red
+      expect(block.consensusWithdrawn?.lastDraftNo).toBe(1);
       const draft = JSON.parse(String(x.store.db.prepare("SELECT body FROM requirement_drafts WHERE group_id='r' AND draft_no=1").get()!.body));
       expect(draft).toMatchObject({ state: "rejected", reasonCode: "requirement-revised" });
     } finally { await x.dispose(); }

@@ -28,11 +28,12 @@ describe("the split draft's runtime-data note (#362)", () => {
     // mutation: drop the note from DraftReview -> no such element, red
     const en = show(withDraft({ runtimeDataPaths: [{ taskId: "incident-cli", path: ".orca/incidents.json" }] })).querySelectorAll("[data-runtime-data-path]");
     expect(en).toHaveLength(1);
-    expect(en[0]!.textContent).toBe("incident-cli lists .orca/incidents.json, a data file the requirement names, as a target path. If that is where the program keeps its data while it runs (not seed data the requirement asks to commit), send feedback to drop it.");
+    // Review M7 (session 3ba26002): "if that is where the program keeps its data".
+    expect(en[0]!.textContent).toBe("incident-cli lists .orca/incidents.json, a data file the requirement names, as a target path. If that is where the program keeps its data (not seed data the requirement asks to commit), send feedback to drop it.");
     cleanup();
     await i18n.changeLanguage("zh");
     expect(show(withDraft({ runtimeDataPaths: [{ taskId: "incident-cli", path: ".orca/incidents.json" }] })).querySelector("[data-runtime-data-path]")?.textContent)
-      .toBe("incident-cli 把需求提到的数据文件 .orca/incidents.json 列为目标路径。如果这是程序运行时存放数据的位置（而不是需求要求提交的种子数据），请发反馈把它去掉。");
+      .toBe("incident-cli 把需求提到的数据文件 .orca/incidents.json 列为目标路径。如果这是程序存放数据的位置（而不是需求要求提交的种子数据），请发反馈把它去掉。");
     cleanup();
     expect(show(withDraft({ runtimeDataPaths: [] })).querySelector("[data-runtime-data-path]")).toBeNull();
   });
@@ -43,11 +44,12 @@ describe("the split draft's note after a re-draft that left the feedback unrepor
     const draftNo = requirementView("awaiting-review").drafts.at(-1)!.draftNo;
     // mutation: drop the note from DraftReview -> null, red
     expect(show(withDraft({ feedbackAfterRedraft: CARRY })).querySelector("[data-feedback-after-redraft]")?.textContent)
-      .toBe(`Orca drafted this split again after code handed back draft 3, written after your feedback on draft 2 ("Drop the test file."). Draft ${draftNo} reports no conflict with that feedback: check that it still follows it, and send the feedback again if it does not. The handed-back draft had reported that following it breaks AC2, R1.ADR1.`);
+      // Review M4 (session 3ba26002): the first re-drafted draft answered the feedback; "re-drafted", not "handed back".
+      .toBe(`This draft came from Orca re-drafting draft 3, which answered your feedback on draft 2 ("Drop the test file."). Draft ${draftNo} reports no conflict with that feedback: check that it still follows it, and send the feedback again if it does not. The re-drafted draft had reported that following it breaks AC2, R1.ADR1.`);
     cleanup();
     await i18n.changeLanguage("zh");
     expect(show(withDraft({ feedbackAfterRedraft: { ...CARRY, conflictsBefore: [] } })).querySelector("[data-feedback-after-redraft]")?.textContent)
-      .toBe(`代码退回了第 3 稿（它是按你对第 2 稿的反馈「Drop the test file.」写的），Orca 因此重新拆分。第 ${draftNo} 稿没有报告与该反馈的冲突：请检查它是否仍按反馈来做，如果没有，请再发一次反馈。`);
+      .toBe(`这一稿来自 Orca 对第 3 稿的重新拆分（第 3 稿是按你对第 2 稿的反馈「Drop the test file.」写的）。第 ${draftNo} 稿没有报告与该反馈的冲突：请检查它是否仍按反馈来做，如果没有，请再发一次反馈。`);
     cleanup();
     expect(show(withDraft({})).querySelector("[data-feedback-after-redraft]")).toBeNull();
   });

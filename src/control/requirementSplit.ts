@@ -341,7 +341,10 @@ function writableTestScope(declared: readonly string[], committedPaths: readonly
  * may not delete), `-s` (fails on an empty committed file the task could not fill), any other operator, a redirection or
  * a second argument does not match, and the path stays judged as before.
  */
-const EXISTENCE_TEST = /^\s*(?:test\s+-[ef]\s+[^\s<>&|;!]+|\[\s+-[ef]\s+[^\s<>&|;!\]]+\s+\])\s*$/;
+// Review M6 (session 3ba26002): `$` and backticks are not path characters here -- a substitution or expansion runs code.
+const EXISTENCE_TEST = /^\s*(?:test\s+-[ef]\s+[^\s<>&|;!$`]+|\[\s+-[ef]\s+[^\s<>&|;!$`\]]+\s+\])\s*$/;
+/** Review M6: whether one check segment is only an existence test (EXISTENCE_TEST); exported for its criterion. */
+export const existenceTestOnly = (segment: string): boolean => EXISTENCE_TEST.test(segment);
 
 /**
  * #239: the committed test files a check names that the task cannot write. Runner-agnostic: the command is split on
@@ -739,7 +742,9 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
  * Multi-directory projects spec §6.4: `multi` uses the multi instruction and fences the composed overview as
  * `project-overview`; absent, the bytes are the single-repository ones.
  */
-export function buildSplitPrompt(input: { document: string; overview: { canonicalJson: string; hash: string }; earlierDrafts: DraftBody[]; multi?: boolean; instructionVersion?: 5 | 6 | 7 | 8 }): string {
+export function buildSplitPrompt(input: { document: string; overview: { canonicalJson: string; hash: string }; earlierDrafts: DraftBody[]; multi?: boolean; instructionVersion?: 5 | 6 | 7 | 8;
+  /** Review M1: the latest draft when a revision withdrew the consensus (consensusWithdrawn.lastDraftNo); feedback before it is not carried. */
+  revisionBoundary?: number | null }): string {
   const nonce = input.overview.hash.slice(0, 16);
   const sent = input.earlierDrafts.filter((draft) => draft.output !== null || draft.reasons.length > 0);
   // Review I2 (session a9f9d6de): the block revises the latest draft that has tasks -- its tasks and the person's feedback
@@ -754,8 +759,9 @@ export function buildSplitPrompt(input: { document: string; overview: { canonica
   // a draft written after the person's feedback carries that feedback, the draft it was given on, and the conflicts the
   // revised draft reported.
   const v8 = input.multi !== true && (input.instructionVersion ?? 8) === 8;
-  const standing = v8 && latest !== undefined && latest.feedback === null ? standingFeedback(input.earlierDrafts) : null;
-  const conflicts = v8 && latest !== undefined ? conflictsOfDraft(latest) : [];
+  const standing = v8 && latest !== undefined && latest.feedback === null ? standingFeedback(input.earlierDrafts, input.revisionBoundary ?? null) : null;
+  // Review M5: the revised draft's conflicts go with the carried feedback only (the spec correction's words).
+  const conflicts = standing !== null ? conflictsOfDraft(latest!) : [];
   const revision = latest === undefined ? [] : [fence("earlier-draft", nonce, JSON.stringify({
     draftNo: latest.draftNo, tasks: latest.output?.tasks ?? null, feedback: standing?.feedback ?? latest.feedback,
     ...(standing === null ? {} : { feedbackOnDraft: standing.draftNo }),
@@ -773,10 +779,12 @@ const conflictsOfDraft = (draft: DraftBody) => (draft.output !== null && "requir
  * feedback on the latest rejected draft, when every draft after it ended without a word from the person (handed back by
  * code, failed or interrupted, so Orca drafted again). A draft rejected with no feedback (the requirement was revised),
  * or one the person reviewed or accepted, ends the search with none. `redrafts` are the drafts in between, in order.
+ * Review M1: so does a revision of the requirement -- drafts numbered up to `boundary` (the latest draft when a revision
+ * withdrew the consensus, consensusWithdrawn.lastDraftNo) were drafted for the old requirement and are not searched.
  */
-export function standingFeedback(before: readonly DraftBody[]): { draftNo: number; feedback: string; redrafts: DraftBody[] } | null {
+export function standingFeedback(before: readonly DraftBody[], boundary: number | null = null): { draftNo: number; feedback: string; redrafts: DraftBody[] } | null {
   const redrafts: DraftBody[] = [];
-  for (const draft of [...before].sort((a, b) => b.draftNo - a.draftNo)) {
+  for (const draft of [...before].filter((entry) => boundary === null || entry.draftNo > boundary).sort((a, b) => b.draftNo - a.draftNo)) {
     if (draft.state === "rejected") return draft.feedback === null ? null : { draftNo: draft.draftNo, feedback: draft.feedback, redrafts: redrafts.reverse() };
     if (!REDRAFTED_STATES.has(draft.state)) return null;
     redrafts.push(draft);
@@ -793,10 +801,10 @@ export interface FeedbackAfterRedraft { feedbackDraftNo: number; feedback: strin
  * nothing tells the person whether it still follows the feedback. Code cannot judge that (Rule 5); it says the facts:
  * the feedback, the drafts in between, and the criteria they reported following it breaks. Null otherwise.
  */
-export function feedbackAfterRedraft(drafts: readonly DraftBody[], draftNo: number): FeedbackAfterRedraft | null {
+export function feedbackAfterRedraft(drafts: readonly DraftBody[], draftNo: number, boundary: number | null = null): FeedbackAfterRedraft | null {
   const self = drafts.find((draft) => draft.draftNo === draftNo);
   if (self === undefined || self.output === null || conflictsOfDraft(self).some((entry) => entry.feedback !== undefined)) return null;
-  const standing = standingFeedback(drafts.filter((draft) => draft.draftNo < draftNo));
+  const standing = standingFeedback(drafts.filter((draft) => draft.draftNo < draftNo), boundary);
   if (standing === null || standing.redrafts.length === 0) return null;
   const conflictsBefore = [...new Set(standing.redrafts.flatMap((draft) => conflictsOfDraft(draft).filter((entry) => entry.feedback !== undefined).map((entry) => entry.criterion)))];
   return { feedbackDraftNo: standing.draftNo, feedback: standing.feedback, redrafts: standing.redrafts.map((draft) => draft.draftNo), conflictsBefore };

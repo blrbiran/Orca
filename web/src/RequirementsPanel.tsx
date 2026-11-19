@@ -447,7 +447,7 @@ function DraftReview(props: { view: View; draft: Draft; current: boolean; onComm
       {(draft.runtimeDataPaths ?? []).map((entry) => <p role="note" data-runtime-data-path key={`${entry.taskId}:${entry.path}`}>{t("requirements.runtimeDataPath", { task: entry.taskId, path: entry.path })}</p>)}
       {/* Dogfood finding (3): Orca re-drafted after the person's feedback; nothing in this draft reports on the feedback. */}
       {draft.feedbackAfterRedraft !== undefined && <p role="note" data-tone="warn" data-feedback-after-redraft>
-        {t("requirements.feedbackAfterRedraft", { n: draft.draftNo, redrafts: draft.feedbackAfterRedraft.redrafts.join(", "), on: draft.feedbackAfterRedraft.feedbackDraftNo, feedback: draft.feedbackAfterRedraft.feedback })}
+        {t("requirements.feedbackAfterRedraft", { n: draft.draftNo, first: draft.feedbackAfterRedraft.redrafts[0], on: draft.feedbackAfterRedraft.feedbackDraftNo, feedback: draft.feedbackAfterRedraft.feedback })}
         {draft.feedbackAfterRedraft.conflictsBefore.length > 0 && <> {t("requirements.feedbackConflictsBefore", { criteria: draft.feedbackAfterRedraft.conflictsBefore.join(", ") })}</>}</p>}
       {/* #351 addendum: the split's own report that this draft does not meet the requirement as written (code does not judge it). */}
       {conflicts.length > 0 && <RequirementConflicts conflicts={conflicts} current={props.current} />}
@@ -823,7 +823,7 @@ function FlowSteps(props: { view: View }): JSX.Element {
 }
 
 function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId: string) => void; agents: AgentsViewV1 | null } & ModelLists & EditableDrafts): JSX.Element {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { view } = props, groupId = view.summary.groupId;
   const editable: EditableDrafts = { drafts: props.drafts, onDraft: props.onDraft };
   // Ruling R1 (#219): an open revision is a draft of its round, keyed like that round's answers.
@@ -929,7 +929,8 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
       {!archived && (reason !== null || retryable || stopUnresolved) && (
         <p role="alert">{reason !== null && <>{reason}{isReason(reason) ? ` · ${t(`requirements.reason.${reason}`, { groupId })}` : ""} </>}
           {/* Dogfood finding (1): the reset the provider's text named, when it named one. */}
-          {quotaResetAt != null && <>{t("requirements.quotaResetsAt", { at: new Date(quotaResetAt).toLocaleString() })} </>}
+          {/* Review M9: in the app's language, not the browser's. */}
+          {quotaResetAt != null && <>{t("requirements.quotaResetsAt", { at: new Date(quotaResetAt).toLocaleString(i18n.language) })} </>}
           {stopped && <>{t("requirements.stopped")} </>}
           {stopUnresolved && <>{t("requirements.stopUnresolved")} </>}
           {retryable && <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "group", groupId } })}>{t("requirements.retry")}</button>}

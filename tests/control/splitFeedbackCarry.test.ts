@@ -59,7 +59,8 @@ describe("an automatic re-draft keeps the person's feedback (dogfood finding 3)"
       const found = findCommand(["requirement", "show"]);
       if (!("def" in found)) throw new Error("no requirement show row");
       // mutation: drop the requirement show line -> red
-      expect(found.def.format(view)).toContain(`draft 3 was re-drafted by Orca after code handed back draft 2, which answered your feedback on draft 1 ("${FEEDBACK}"); draft 3 reports no conflict with that feedback, so check that it still follows it; draft 2 had reported that following it breaks AC2. If it does not, send the feedback again: orca requirement feedback <group> --text "..."`);
+      // Review M4: the first re-drafted draft is the one that answered the feedback.
+      expect(found.def.format(view)).toContain(`draft 3 came from Orca re-drafting draft 2, which answered your feedback on draft 1 ("${FEEDBACK}"); draft 3 reports no conflict with that feedback, so check that it still follows it; draft 2 had reported that following it breaks AC2. If it does not, send the feedback again: orca requirement feedback <group> --text "..."`);
     } finally { await x.dispose(); }
   });
 
@@ -77,9 +78,33 @@ describe("an automatic re-draft keeps the person's feedback (dogfood finding 3)"
       .toEqual({ feedbackDraftNo: 1, feedback: FEEDBACK, redrafts: [2, 3], conflictsBefore: [] });
     // The draft reports a conflict about the feedback itself: the person is told by that report.
     expect(feedbackAfterRedraft([draft(1, "rejected", FEEDBACK), draft(2, "invalid", null), draft(3, "awaiting-review", null, { output: { ...VALID_SPLIT, requirementConflicts: CONFLICTS } })], 3)).toBeNull();
+    // Review M2: a rejection without feedback between the feedback and the draft ends the walk.
+    // mutation: keep walking past a no-feedback rejection -> draft 1's feedback found -> red
+    expect(feedbackAfterRedraft([draft(1, "rejected", FEEDBACK), draft(2, "rejected", null), draft(3, "invalid", null), draft(4, "awaiting-review", null)], 4)).toBeNull();
+    // Review M1: a revision of the requirement that left an ended draft in place (its consensus withdrawn after draft 2)
+    // ends the walk too: feedback given on the old requirement is not carried.
+    const acrossRevision = [draft(1, "rejected", FEEDBACK), draft(2, "failed", null, { output: null }), draft(3, "invalid", null), draft(4, "awaiting-review", null)];
+    expect(feedbackAfterRedraft(acrossRevision, 4)).toMatchObject({ feedbackDraftNo: 1, redrafts: [2, 3] });
+    // mutation: ignore the revision boundary in standingFeedback -> red
+    expect(feedbackAfterRedraft(acrossRevision, 4, 2)).toBeNull();
     // A revision of the requirement (rejected with no feedback) or no feedback at all: nothing.
     expect(feedbackAfterRedraft([draft(1, "rejected", null), draft(2, "invalid", null), draft(3, "awaiting-review", null)], 3)).toBeNull();
     expect(feedbackAfterRedraft([draft(1, "invalid", null), draft(2, "awaiting-review", null)], 2)).toBeNull();
+  });
+
+  it("sends the revised draft's conflicts only with carried feedback, and carries none across a requirement revision (review M5, M1)", () => {
+    const ov = { canonicalJson: "{}", hash: "c".repeat(64) };
+    // The person's own feedback draft carries its feedback as always, and no conflicts key (review M5).
+    // mutation: send conflicts whenever the revised draft has them -> requirementConflicts present -> red
+    expect(block(buildSplitPrompt({ document: "D.", overview: ov, earlierDrafts: [draft(1, "rejected", FEEDBACK, { output: { ...VALID_SPLIT, requirementConflicts: CONFLICTS } })] })))
+      .toEqual({ draftNo: 1, tasks: VALID_SPLIT.tasks, feedback: FEEDBACK, handedBackFor: [] });
+    const chain = [draft(1, "rejected", FEEDBACK), draft(2, "invalid", null, { output: { ...INVALID_SPLIT, requirementConflicts: CONFLICTS } })];
+    expect(block(buildSplitPrompt({ document: "D.", overview: ov, earlierDrafts: chain }))).toMatchObject({ feedback: FEEDBACK, feedbackOnDraft: 1, requirementConflicts: CONFLICTS });
+    // mutation: buildSplitPrompt ignores revisionBoundary -> feedback carried -> red
+    const across = block(buildSplitPrompt({ document: "D.", overview: ov, earlierDrafts: chain, revisionBoundary: 1 }));
+    expect(across).toMatchObject({ draftNo: 2, feedback: null });
+    expect(across).not.toHaveProperty("feedbackOnDraft");
+    expect(across).not.toHaveProperty("requirementConflicts");
   });
 
   it("keeps the version 7 bytes as they were, and version 8 asks the model to keep following the feedback", () => {
@@ -91,5 +116,31 @@ describe("an automatic re-draft keeps the person's feedback (dogfood finding 3)"
     expect(SPLIT_INSTRUCTION_V8.split("\n", 1)[0]).toBe("Orca requirement split, instruction version 8.");
     expect(SPLIT_INSTRUCTION_V8).toContain("The person's feedback stays in force until a draft is accepted");
     expect(SPLIT_INSTRUCTION_V8).toContain("`feedbackOnDraft`");
+  });
+});
+
+describe("the re-draft note's boundaries in the requirement view (review M1, M3)", () => {
+  it("is shown only on the draft awaiting review, and not across a requirement revision recorded on consensusWithdrawn", async () => {
+    const { readRequirementGroup, saveRequirementGroup } = await import("../../src/control/requirementRecords.js");
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: VALID_SPLIT }, { purpose: "split", output: { ...INVALID_SPLIT, requirementConflicts: CONFLICTS } }, { purpose: "split", output: VALID_SPLIT }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      await x.service.requirementDraftFeedback(x.command("requirement-draft-feedback", { draftNo: 1, feedback: FEEDBACK }));
+      await x.until(() => { try { return readDraft(x.store, "r", 3).state === "awaiting-review"; } catch { return false; } });
+      expect(readRequirementView(x.store, "e", "r").drafts[2]).toHaveProperty("feedbackAfterRedraft");
+      // Review M3: once the draft is no longer awaiting review (here: accepted state written directly), no note.
+      // mutation: drop the awaiting-review condition in the view -> note still there -> red
+      const { writeDraft } = await import("../../src/control/requirementRecords.js");
+      writeDraft(x.store, "r", { ...readDraft(x.store, "r", 3), state: "rejected", feedback: "Another change." });
+      expect(readRequirementView(x.store, "e", "r").drafts[2]).not.toHaveProperty("feedbackAfterRedraft");
+      expect(readRequirementView(x.store, "e", "r").drafts[2]).not.toHaveProperty("runtimeDataPaths");
+      writeDraft(x.store, "r", { ...readDraft(x.store, "r", 3), state: "awaiting-review", feedback: null });
+      // Review M1: a revision that withdrew the consensus after draft 2 is a boundary for the view.
+      const group = readRequirementGroup(x.store, "r");
+      group.requirement = { ...group.requirement, consensusWithdrawn: { at: "2026-11-19T00:00:00.000Z", by: "human", revisedRound: 1, lastDraftNo: 2 } };
+      saveRequirementGroup(x.store, group);
+      // mutation: the view passes no boundary -> note still there -> red
+      expect(readRequirementView(x.store, "e", "r").drafts[2]).not.toHaveProperty("feedbackAfterRedraft");
+    } finally { await x.dispose(); }
   });
 });

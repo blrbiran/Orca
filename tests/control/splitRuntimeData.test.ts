@@ -58,7 +58,8 @@ describe("a runtime data path in a task's targetPaths (#362)", () => {
       const found = findCommand(["requirement", "show"]);
       if (!("def" in found)) throw new Error("no requirement show row");
       // mutation: drop the requirement show line -> red
-      expect(found.def.format(view)).toContain("draft 1 exporter lists .orca/notes.json, a data file the requirement names, as a target path; if that is where the program keeps its data while it runs (not seed data the requirement asks to commit), drop it: orca requirement drop-path <group> --task exporter --path .orca/notes.json");
+      // Review M7 (session 3ba26002): the hint is conditional -- "if that is where the program keeps its data".
+      expect(found.def.format(view)).toContain("draft 1 exporter lists .orca/notes.json, a data file the requirement names, as a target path; if that is where the program keeps its data (not seed data the requirement asks to commit), drop it: orca requirement drop-path <group> --task exporter --path .orca/notes.json");
     } finally { await x.dispose(); }
   });
 });

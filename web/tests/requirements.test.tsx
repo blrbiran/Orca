@@ -212,7 +212,9 @@ describe("the Requirements section (N1 spec §11.2)", () => {
     // mutation: drop the locale line or the REASONS entry -> red
     expect(screen.getByRole("alert").textContent).toContain("requirement-agent-quota · The agent's usage quota ran out, so Orca did not retry the call. Switch the requirement's agent, or wait until the quota resets, then retry.");
     // mutation: drop the reset line -> red
-    expect(screen.getByRole("alert").textContent).toContain(`The quota resets at ${new Date(resetAt).toLocaleString()}.`);
+    // Review M9 (session 3ba26002): the time in the app's language, not the browser's.
+    // mutation: format with the browser locale -> red (the test runner's locale is not zh)
+    expect(screen.getByRole("alert").textContent).toContain(`The quota resets at ${new Date(resetAt).toLocaleString("en")}.`);
     expect([...document.querySelectorAll('p[role="status"]')].map((p) => p.textContent)).toContain("codex-exit-error · The model process exited with an error before it gave an answer. Look at the run's evidence, then retry the task. · You've hit your usage limit.");
     // Retry is there for any failed step (`stalled`), so the RETRYABLE entry is a redundant guard here, not pinned.
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -222,7 +224,7 @@ describe("the Requirements section (N1 spec §11.2)", () => {
     try {
       render(<RequirementsPanel config={config as ControlConfigV1} summary={summaryWith(quota) as ControlSummaryV1} views={{ r: quota }} selected="r" agents={null} language="zh" onSelect={() => {}} onCommand={vi.fn()} />);
       expect(screen.getByRole("alert").textContent).toContain("requirement-agent-quota · 智能体的用量额度已用完，Orca 没有重试这次调用。请为需求换一个智能体，或等额度重置后再重试。");
-      expect(screen.getByRole("alert").textContent).toContain(`额度将于 ${new Date(resetAt).toLocaleString()} 重置。`);
+      expect(screen.getByRole("alert").textContent).toContain(`额度将于 ${new Date(resetAt).toLocaleString("zh")} 重置。`);
     } finally { await i18n.changeLanguage("en"); }
   });
 });

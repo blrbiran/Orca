@@ -227,3 +227,8 @@ printed by `requirement show` and shown by the Web draft view:
   they reported following it breaks. Whether the draft follows the feedback is not judged by code.
 - `runtimeDataPaths` -- each exact target path that is a data file (`.json`, `.jsonl`, `.ndjson`, `.db`, `.sqlite`,
   `.sqlite3`, `.csv`) inside a dot-directory and that the requirement document names, with `orca requirement drop-path`.
+
+Review fixes (same session): the standing-feedback search also stops at a revision of the requirement -- drafts numbered up
+to `consensusWithdrawn.lastDraftNo` (the latest draft when a revision withdrew the consensus; absent on older records) are
+not searched (M1); the revised draft's `requirementConflicts` are sent only together with carried feedback (M5); and both
+view notes (`feedbackAfterRedraft`, `runtimeDataPaths`) are given only on the draft awaiting review (M3).

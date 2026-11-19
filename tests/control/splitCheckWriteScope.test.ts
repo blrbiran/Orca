@@ -10,7 +10,7 @@ import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildSplitPrompt, expandMultiSplitDraft, expandSplitDraft, explainSplitReason, validateMultiSplitDraft, validateSplitDraft } from "../../src/control/requirementSplit.js";
+import { buildSplitPrompt, existenceTestOnly, expandMultiSplitDraft, expandSplitDraft, explainSplitReason, validateMultiSplitDraft, validateSplitDraft } from "../../src/control/requirementSplit.js";
 import type { MultiSplitOutput, SplitOutput } from "../../src/control/requirementSchemas.js";
 import { writeTree } from "./fixtures/dirRequirement.js";
 
@@ -153,6 +153,16 @@ describe("a check that only asks whether a committed test file exists (dogfood f
       const out = await validate(split({ checks: [check] }));
       expect(scopeReasons(out.reasons), check).toEqual(expected);
     }
+  });
+
+  // Review M6 (session 3ba26002): a command substitution or parameter expansion in the path runs code (it may write), so
+  // such a segment is not an existence test. A refusal is not observable through validation (the token is not a committed
+  // path either way), so the segment classifier is asserted directly.
+  it("does not take a path with `$` or a backtick for an existence test", () => {
+    expect(existenceTestOnly("test -f test/cli-workflow.test.js")).toBe(true);
+    expect(existenceTestOnly("[ -e test/cli-workflow.test.js ]")).toBe(true);
+    // mutation: allow `$` and backticks in the path class again -> true -> red
+    for (const segment of ["test -f $(touch${IFS}x)", "test -f `touch x`", "[ -f $(touch${IFS}x) ]", "test -e ${HOME}"]) expect(existenceTestOnly(segment), segment).toBe(false);
   });
 
   it("applies the same rule to a write's checks in a multi split", async () => {

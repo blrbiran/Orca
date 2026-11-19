@@ -154,9 +154,10 @@ async function runEntryOf(context: WriteContext, runId: string): Promise<{ group
 interface FeedbackAfterRedraft { feedbackDraftNo: number; feedback: string; redrafts: number[]; conflictsBefore: string[] }
 /** Dogfood finding (3): one line saying the draft came from Orca's re-draft after the feedback, and what was reported before. */
 function feedbackAfterRedraftLine(draftNo: number, carry: FeedbackAfterRedraft): string {
-  const last = carry.redrafts.at(-1)!;
+  // Review M4: the first re-drafted draft is the one that answered the feedback.
+  const [first, ...again] = carry.redrafts;
   const before = carry.conflictsBefore.length === 0 ? "" : `; ${carry.redrafts.length === 1 ? "draft" : "drafts"} ${carry.redrafts.join(", ")} had reported that following it breaks ${carry.conflictsBefore.join(", ")}`;
-  return `draft ${draftNo} was re-drafted by Orca after code handed back draft ${last}, which answered your feedback on draft ${carry.feedbackDraftNo} ("${carry.feedback}"); draft ${draftNo} reports no conflict with that feedback, so check that it still follows it${before}. If it does not, send the feedback again: orca requirement feedback <group> --text "..."`;
+  return `draft ${draftNo} came from Orca re-drafting draft ${first}, which answered your feedback on draft ${carry.feedbackDraftNo} ("${carry.feedback}")${again.length === 0 ? "" : ` (then re-drafting ${again.length === 1 ? "draft" : "drafts"} ${again.join(", ")})`}; draft ${draftNo} reports no conflict with that feedback, so check that it still follows it${before}. If it does not, send the feedback again: orca requirement feedback <group> --text "..."`;
 }
 
 function requirementShow(body: unknown): string {
@@ -181,7 +182,7 @@ function requirementShow(body: unknown): string {
     // #351 addendum: where the split itself reports its draft does not meet the requirement as written (not checked by code).
     ...(draft.output?.requirementConflicts ?? []).map((entry) => `draft ${draft.draftNo} requirement-conflict: ${entry.criterion} -- ${entry.why}${entry.feedback === undefined ? "" : ` (feedback: "${entry.feedback}")`}`),
     // Tester #362: a data file under a dot-directory the requirement names, listed as a target path (a hint).
-    ...(draft.runtimeDataPaths ?? []).map((entry) => `draft ${draft.draftNo} ${entry.taskId} lists ${entry.path}, a data file the requirement names, as a target path; if that is where the program keeps its data while it runs (not seed data the requirement asks to commit), drop it: orca requirement drop-path <group> --task ${entry.taskId} --path ${entry.path}`),
+    ...(draft.runtimeDataPaths ?? []).map((entry) => `draft ${draft.draftNo} ${entry.taskId} lists ${entry.path}, a data file the requirement names, as a target path; if that is where the program keeps its data (not seed data the requirement asks to commit), drop it: orca requirement drop-path <group> --task ${entry.taskId} --path ${entry.path}`),
     // Dogfood finding (3): Orca re-drafted after the person's feedback and nothing in this draft reports on it.
     ...(draft.feedbackAfterRedraft === undefined ? [] : [feedbackAfterRedraftLine(draft.draftNo, draft.feedbackAfterRedraft)]),
   ]);

@@ -36,7 +36,9 @@ export const requirementBlockSchema = z.object({
   classOverride: classPairSchema.optional(),
   roundsGranted: safeInteger.positive().optional(),
   /** Flow engine spec §10.3: the last consensus a revision withdrew -- when, by whom, and which round was revised. */
-  consensusWithdrawn: z.object({ at: canonicalTimestampSchema, by: z.string().min(1), revisedRound: safeInteger.positive() }).strict().optional(),
+  // Review M1 (session 3ba26002): `lastDraftNo`, the latest draft number at the withdrawal (0: none) -- drafts up to it were
+  // for the old requirement, so a later re-draft carries none of their feedback. Absent on records written before it.
+  consensusWithdrawn: z.object({ at: canonicalTimestampSchema, by: z.string().min(1), revisedRound: safeInteger.positive(), lastDraftNo: safeInteger.optional() }).strict().optional(),
 }).strict();
 export type RequirementBlock = z.infer<typeof requirementBlockSchema>;
 

@@ -210,3 +210,7 @@ and the next step: `orca requirement set-agent <group> --agent <agent> --model <
 `orca recovery retry --group <group>`, or the same retry after the reset. The Web explains the code and shows the reset
 time; Retry stays. Every other failed call is unchanged (§7 holds). The flow paths (`src/flow/kinds/clarify.ts`,
 `src/flow/feedback/intake.ts`) are not changed: their call results carry no ccloop failure cause.
+
+One-way upgrade (review M8): a stored call record carrying `cause` or `resetAt`, and a round or draft whose `reasonCode` is
+`requirement-agent-quota`, are refused by the strict schemas of binaries built before this correction, so a store that
+has them cannot be read by an older Orca.

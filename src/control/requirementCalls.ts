@@ -552,6 +552,8 @@ export const SPLIT_HANDLER: SingleCallHandler = {
       buildSplitPrompt({
         document: renderRequirementDocument({ groupId: run.groupId, requirement: group.requirement, rounds: chainRounds(readRounds(deps.store, run.groupId)), acceptedSplit: null }),
         overview: built, earlierDrafts: readDrafts(deps.store, run.groupId).filter((draft) => draft.draftNo < target.no), ...(multi ? { multi: true } : {}),
+        // Review M1: feedback given before a revision withdrew the consensus is not carried.
+        revisionBoundary: group.requirement.consensusWithdrawn?.lastDraftNo ?? null,
       }),
     // Task setup spec §4.1: a single repository's split is also sent its manifests, read from the overview's commit in the
     // group's target (a dir group's vault); a multi group's overview is left as it is (setup is refused there, §5.4).
