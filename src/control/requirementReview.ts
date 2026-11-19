@@ -26,7 +26,7 @@ import { recordProjectionChange } from "./projectionJournal.js";
 import { readWork } from "./queries.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
 import { readDraft, readRounds } from "./requirementRecords.js";
-import { reviewOf, reviewRequired, type CriterionVerdict, type RequirementReview, type ReviewRound, type ReviewRoundResult, type ReviewWhy } from "./requirementReviewRecord.js";
+import { reviewOf, reviewRequired, type CriterionVerdict, type RelativePass, type RequirementReview, type ReviewRound, type ReviewRoundResult, type ReviewWhy } from "./requirementReviewRecord.js";
 import type { SingleCallHandler, SingleCallRecordFacts, SingleCallRunRow } from "./singleCallPurposes.js";
 import { taskWorkTokens } from "./usagePause.js";
 import { QUIET_GIT, workBranchTip } from "./workspace.js";
@@ -470,6 +470,30 @@ const reviewIdentity = (run: SingleCallRunRow): { roundNo: number; tip: string }
 const sha256 = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
 
 /**
+ * Tester #377 (human ruling, session 3ba26002: 「同意」; follow-up G spec, Correction of 2026-11-19): the not-met criteria of
+ * a round on `tip` that fail only because the repository was already red at the group's base. Code decides from Orca's
+ * own records (Rule 5); the reviewer's verdict is kept as given. A criterion qualifies when every evidence item it names is
+ * the acceptance record (none a delivered file), its agreed text names the full-suite command, the acceptance on this tip
+ * is `passed-relative` with a base run, every suite run on the tip exited non-zero with an exit the base also gave (the
+ * base red on every run), every other command on the tip exited 0, and no person answered that command's pre-existing
+ * failure `allow-fix`. Orca keeps no failing-test identities, so exits are all it can compare.
+ */
+export function relativePasses(body: unknown, tip: string, criteria: ReadonlyArray<CriterionVerdict>, texts: ReadonlyArray<{ id: string; text: string }>): RelativePass[] {
+  const accepted = acceptanceOf(body);
+  if (accepted === null || accepted.tip !== tip || accepted.result !== "passed-relative") return [];
+  const suite = accepted.fullSuite, command = suite?.command, base = suite?.baseline;
+  if (typeof command !== "string" || command.trim() === "" || base === undefined) return [];
+  if (base.exits.length === 0 || base.exits.some((exit) => exit === "0")) return [];
+  if (suite!.exits.length === 0 || suite!.exits.some((exit) => exit === "0" || !base.exits.includes(exit))) return [];
+  if (accepted.commands.some((c) => c.command !== command && !c.command.startsWith("baseline: ") && c.exit !== "0")) return [];
+  const answers = (body as { preexistingFailureAnswers?: Record<string, { answer?: unknown } | undefined> } | null)?.preexistingFailureAnswers;
+  if (answers?.[command]?.answer === "allow-fix") return [];
+  return criteria.filter((c) => c.verdict === "not-met" && c.evidence.length > 0 && c.evidence.every((e) => e.path === "orca:acceptance")
+    && (texts.find((t) => t.id === c.id)?.text ?? "").includes(command))
+    .map((c) => ({ criterionId: c.id, command, tipExits: [...suite!.exits], baseExits: [...base.exits] }));
+}
+
+/**
  * §3.2 bounded: the changed files (path, status, bytes and sha256 each; for #337 also what binaryFacts reads from the
  * header, which the prompt shows for a binary file) and the text diff cut at the bound.
  */
@@ -595,7 +619,13 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
       recordActivity(store, { groupId: runRow.groupId, runId: runRow.runId, kind: "requirement-review", body: { roundNo, result: "asked-again", tip, state: current.state, failure: facts?.errorCode ?? failed } });
       return;
     }
-    const result: ReviewRoundResult = failed !== null || answer === null ? "failed" : answer.result;
+    // Tester #377: a not-met criterion red only because the base was red is a relative pass; when every not-met one is,
+    // the round passes (the reviewer's verdicts are kept, and the round names each relative pass).
+    const relative = failed === null && answer !== null && answer.result === "not-met"
+      ? relativePasses(body, tip, answer.criteria, reviewInputsOf(store, runRow.groupId, body).criteria) : [];
+    const allRelative = relative.length > 0 && answer !== null && answer.result === "not-met"
+      && answer.criteria.every((c) => c.verdict !== "not-met" || relative.some((r) => r.criterionId === c.id));
+    const result: ReviewRoundResult = failed !== null || answer === null ? "failed" : allRelative ? "passed" : answer.result;
     const conflict = answer !== null && answer.result !== "invalid" && result === "not-met" ? answer.checkConflict : undefined;
     const round: ReviewRound = { roundNo, tip, runId: runRow.runId, at: store.now(), result,
       criteria: answer !== null && answer.result !== "invalid" ? answer.criteria : [],
@@ -603,14 +633,16 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
         : conflict === undefined ? answer.summary : `check conflict reported for ${conflict.criterionId}: ${cutUtf8(conflict.requiredCheck, 200)}; ${cutUtf8(conflict.because, 500)}. No automatic fix; review the person's restriction and the check.`,
       ...(current.rerun === undefined ? {} : { note: current.rerun.note }),
       // Tester #340: kept as data, not only in the summary sentence.
-      ...(conflict === undefined ? {} : { checkConflict: { criterionId: conflict.criterionId, requiredCheck: cutUtf8(conflict.requiredCheck, 4096), because: cutUtf8(conflict.because, 4096) } }) };
+      ...(conflict === undefined ? {} : { checkConflict: { criterionId: conflict.criterionId, requiredCheck: cutUtf8(conflict.requiredCheck, 4096), because: cutUtf8(conflict.because, 4096) } }),
+      ...(relative.length === 0 ? {} : { relativePass: relative }) };
     const { rerun: _rerun, why: _why, ...rest } = current;
     let next: RequirementReview = { ...rest, rounds: [...current.rounds, round], state: "passed" };
     if (result !== "passed") next = conflict === undefined ? settleNotPassed(store, runRow.groupId, next, round)
       // Tester #340: a definite not-met that conflicts with the person's restriction -- the person decides which gives way.
       : { ...next, state: "not-passed", why: "check-conflict" };
     saveReview(store, runRow.groupId, next);
-    recordActivity(store, { groupId: runRow.groupId, kind: "requirement-review", body: { roundNo, result, tip, state: next.state, ...(round.fixTaskId === undefined ? {} : { action: "fix-opened", taskId: round.fixTaskId }) } });
+    recordActivity(store, { groupId: runRow.groupId, kind: "requirement-review", body: { roundNo, result, tip, state: next.state, ...(round.fixTaskId === undefined ? {} : { action: "fix-opened", taskId: round.fixTaskId }),
+      ...(relative.length === 0 ? {} : { relativePass: relative.map((r) => r.criterionId) }) } });
   },
   usageUnknownReason: REQUIREMENT_REVIEW_USAGE_UNKNOWN,
 };
@@ -624,7 +656,8 @@ function settleNotPassed(store: ControlStore, groupId: string, review: Requireme
   if (round.result === "not-met") {
     // Tester #343 (spec S5): a criterion only the plan or the person can meet gets no work fix task -- one such fix burned
     // 48M tokens on a goal no file change could reach. A round recorded before S5 has no label and reads as `work`.
-    const notMet = round.criteria.filter((c) => c.verdict === "not-met");
+    // Tester #377: a relative pass does not count as not-met.
+    const notMet = round.criteria.filter((c) => c.verdict === "not-met" && !isRelativePass(round, c.id));
     const left = notMet.filter((c) => (c.fixableBy ?? "work") !== "work").map((c) => c.id);
     if (left.length > 0) round.leftToPerson = left;
     if (left.length === notMet.length) return { ...review, state: "not-passed", why: "not-fixable-by-work" };
@@ -637,6 +670,8 @@ function settleNotPassed(store: ControlStore, groupId: string, review: Requireme
   const why: ReviewWhy = round.result === "cannot-judge" ? "cannot-judge" : round.result === "invalid" ? "invalid" : round.result === "unfunded" ? "unfunded" : "failed";
   return { ...review, state: "not-passed", why };
 }
+
+const isRelativePass = (round: ReviewRound, criterionId: string): boolean => (round.relativePass ?? []).some((r) => r.criterionId === criterionId);
 
 /** The fix task's id: `review-fix-<round>`, or `-<n>` after it when a hand fix of the same round took that id. */
 export function fixTaskIdOf(store: ControlStore, groupId: string, roundNo: number): string {
@@ -787,7 +822,8 @@ export function openFixTask(store: ControlStore, groupId: string, round: ReviewR
   const body = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body));
   const criteria = reviewInputsOf(store, groupId, body).criteria;
   const auto = by === "auto";
-  const scope: ReviewRound = auto ? { ...round, criteria: round.criteria.filter((c) => c.verdict !== "not-met" || (c.fixableBy ?? "work") === "work") } : round;
+  // Tester #377: nor does it cover a relative pass (red only because the base was red).
+  const scope: ReviewRound = auto ? { ...round, criteria: round.criteria.filter((c) => c.verdict !== "not-met" || ((c.fixableBy ?? "work") === "work" && !isRelativePass(round, c.id))) } : round;
   const sourceId = fixSourceTaskId(store, groupId, scope);
   const taskId = fixTaskIdOf(store, groupId, round.roundNo);
   const grant = (readWork(store, groupId, sourceId) as unknown as { grant: { work: BudgetAmount; handoff: Amount } }).grant;

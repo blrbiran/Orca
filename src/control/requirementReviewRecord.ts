@@ -29,7 +29,14 @@ export interface ReviewRound {
   checkConflict?: { criterionId: string; requiredCheck: string; because: string };
   /** Tester #343: the not-met criteria no automatic fix covers (fixableBy `plan` or `person`), left to the person. */
   leftToPerson?: string[];
+  /**
+   * Tester #377: the not-met criteria code judged red only because the base was already red (requirementReview.ts
+   * relativePasses) -- not counted as not-met. Absent in a round with none, and in every round recorded before.
+   */
+  relativePass?: RelativePass[];
 }
+/** Tester #377: a criterion about the full suite, red on the reviewed tip with an exit the group's base gave too. */
+export interface RelativePass { criterionId: string; command: string; tipExits: string[]; baseExits: string[] }
 export type ReviewState = "pending" | "reviewing" | "passed" | "fixing" | "not-passed" | "accepted" | "not-run";
 export type ReviewWhy = "multi-repo" | "dir" | "unfunded" | "invalid" | "cannot-judge" | "rounds-exhausted" | "failed" | "check-conflict" | "not-fixable-by-work";
 export interface RequirementReview {

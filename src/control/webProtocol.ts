@@ -1803,6 +1803,8 @@ export const groupSummarySchema = z
         summary: z.string(), note: z.string().optional(), fixTaskId: idSchema.optional(), fixBy: nonemptyString.optional(),
         checkConflict: z.object({ criterionId: nonemptyString, requiredCheck: nonemptyString, because: nonemptyString }).strict().optional(),
         leftToPerson: z.array(nonemptyString).optional(),
+        // Tester #377: optional so a round recorded before it parses unchanged.
+        relativePass: z.array(z.object({ criterionId: nonemptyString, command: nonemptyString, tipExits: z.array(nonemptyString), baseExits: z.array(nonemptyString) }).strict()).optional(),
       }).strict()),
       autoFixRounds: safeInteger,
       accepted: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),

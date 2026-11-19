@@ -17,7 +17,9 @@ export const CRITERIA = [{ id: "AC1", text: "a.txt says hello" }, { id: "AC2", t
  * Each task lands its own file, so the group acceptance runs on its tip; the review's single calls are answered by
  * `answer` (fixtures/singleCallAnswers.ts). `requirement: false` leaves the block off; `followupG: false` strips the marker.
  */
-export async function reviewWorld(options: { tasks?: WebFixtureTask[]; requirement?: boolean; followupG?: boolean; answer?: (call: SingleCallSeen) => SingleCallAnswer; harness?: HarnessOptions } = {}) {
+// Tester #377: `criteria` replaces the clarification's acceptance criteria (CRITERIA by default).
+export async function reviewWorld(options: { tasks?: WebFixtureTask[]; requirement?: boolean; followupG?: boolean; answer?: (call: SingleCallSeen) => SingleCallAnswer; harness?: HarnessOptions;
+  criteria?: Array<{ id: string; text: string }> } = {}) {
   const t = await driverHarness(options.tasks ?? [{ taskId: "a" }, { taskId: "b" }], options.harness ?? {});
   const limit = readWebGroup(t.h.store, "g").ledger.groupLimit;
   const raised = t.service.setLimit(t.h.command("set-limit", { limit: { ...limit, activeMs: limit.activeMs * 4, attempts: limit.attempts + 20, sessions: limit.sessions + 20 } }));
@@ -34,7 +36,7 @@ export async function reviewWorld(options: { tasks?: WebFixtureTask[]; requireme
     if (options.followupG === false) delete body.modelVersion;
     t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(body));
     writeRound(t.h.store, "g", { ...newRound(1), state: "answered", closedByConsensus: true,
-      result: { slug: null, statement: "Two files say hello world.", acceptanceCriteria: CRITERIA, questions: [], frontierEmpty: true, openBranches: [], glossary: [], adrs: [] } });
+      result: { slug: null, statement: "Two files say hello world.", acceptanceCriteria: options.criteria ?? CRITERIA, questions: [], frontierEmpty: true, openBranches: [], glossary: [], adrs: [] } });
   });
   const seen = answerSingleCalls(t, options.answer ?? (() => ({ outcome: "complete", output: allMet() })));
   const driver = t.driver();
