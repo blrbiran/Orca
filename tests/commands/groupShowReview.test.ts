@@ -89,4 +89,19 @@ describe("group show names the requirement review (tester follow-up G §3.3)", (
     expect(out).not.toContain("review-accept");
     expect((await cli(["group", "show", "g-alpha", "--json"], p.dir)).stdout).not.toContain("review: passed on");
   });
+
+  // Tester #377: a criterion red only because the group's base was red too passed relative; show and brief name it.
+  it("a passed review names each relative pass, in group show and group brief (#377)", async () => {
+    const review = { state: "passed", autoFixRounds: 0, rounds: [{ ...round("passed", [{ id: "AC9", verdict: "not-met", evidence: [{ path: "orca:acceptance", line: null }], missing: "npm test exits 1", fixableBy: "work" }]),
+      relativePass: [{ criterionId: "AC9", command: "npm test", tipExits: ["1", "1"], baseExits: ["1", "1"] }] }] };
+    const expected = [`review: passed on ${"a".repeat(12)} (round 1)`,
+      "  AC9 relative pass: `npm test` exited 1, 1 on this tip and 1, 1 at the group's base -- red before the group; not counted as not met"];
+    const p = await panel(review);
+    const shown = (await cli(["group", "show", "g-alpha"], p.dir)).stdout.split("\n");
+    // mutation: drop relativePassLines from the passed branch of reviewLines -> red
+    expect(shown.slice(shown.indexOf(expected[0]!), shown.indexOf(expected[0]!) + 2)).toEqual(expected);
+    const b = await fakePanel({ "GET summary": SUMMARY, "GET groups/g-alpha/brief": { status: 200, body: { schema: "orca-group-brief-v1", groupId: "g-alpha", repoId: "repo-1", state: "done", commandRevision: 5, requirementReview: review } } });
+    const brief = (await cli(["group", "brief", "g-alpha"], b.dir)).stdout.split("\n");
+    expect(brief.slice(brief.indexOf(expected[0]!), brief.indexOf(expected[0]!) + 2)).toEqual(expected);
+  });
 });

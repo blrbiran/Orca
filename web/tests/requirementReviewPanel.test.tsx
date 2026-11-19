@@ -84,6 +84,22 @@ describe("the requirement review panel (tester follow-up G §3.3)", () => {
     expect(show(left).panel.querySelector("[data-left-to-person]")!.textContent).toContain("留给你处理（改文件无法满足）：AC1 (计划), AC2 (需你决定)");
   });
 
+  // Tester #377: a not-met criterion red only because the group's base was red too passed relative; the panel says so.
+  it("names each relative pass next to a passed review", async () => {
+    const passed: RequirementReviewV1 = { state: "passed", autoFixRounds: 0, rounds: [{ ...notPassed.rounds[0]!, result: "passed", summary: "AC2 is red",
+      relativePass: [{ criterionId: "AC2", command: "npm test", tipExits: ["1", "1"], baseExits: ["1", "1"] }] }] };
+    const { panel } = show(passed);
+    // mutation: drop the relative-pass block -> null, red
+    const box = panel.querySelector<HTMLElement>("[data-relative-pass]");
+    expect(box).not.toBeNull();
+    expect(box!.textContent).toBe("AC2: relative pass -- npm test exited 1, 1 on this tip and 1, 1 at the group's base, so it was red before this group; not counted as not met.");
+    cleanup();
+    expect(show(notPassed).panel.querySelector("[data-relative-pass]")).toBeNull();
+    cleanup();
+    await i18n.changeLanguage("zh");
+    expect(show(passed).panel.querySelector("[data-relative-pass]")!.textContent).toBe("AC2：相对通过——npm test 在本次结果上退出 1, 1，在任务组起点上退出 1, 1，任务组开始前就已失败；不计为未满足。");
+  });
+
   it("none on an archived group or a passed review; zh words", async () => {
     expect(within(show(notPassed, true).panel).queryAllByRole("button")).toEqual([]);
     cleanup();

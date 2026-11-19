@@ -67,6 +67,12 @@ export function RequirementReviewPanel(props: { groupId: string; review: Require
           {left.some((c) => c.by === "person") && <p>{t("control.review.left.person", { ids: left.filter((c) => c.by === "person").map((c) => c.id).join(", ") })}</p>}
         </div>
       )}
+      {(last?.relativePass ?? []).length > 0 && (
+        // Tester #377: a not-met criterion red only because the group's base was red too -- not counted as not met.
+        <div data-relative-pass="">
+          {last!.relativePass!.map((r) => <p key={r.criterionId} data-tone="warn">{t("control.review.relative", { id: r.criterionId, command: r.command, tip: r.tipExits.join(", "), base: r.baseExits.join(", ") })}</p>)}
+        </div>
+      )}
       {last !== undefined && last.summary !== "" && <p className="detail-note">{last.summary}</p>}
       {review.state === "not-passed" && !props.archived && (open === null ? (
         <>

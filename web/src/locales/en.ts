@@ -951,6 +951,8 @@ export const en = {
         plan: "{{ids}}: about the accepted plan -- ask for a new draft with orca requirement feedback {{groupId}} --text '<what to change in the plan>'.",
         person: "{{ids}}: only you can decide -- accept the work as it is, or review again with a note.",
       },
+      // Tester #377: a not-met criterion red only because the group's base was red too.
+      relative: "{{id}}: relative pass -- {{command}} exited {{tip}} on this tip and {{base}} at the group's base, so it was red before this group; not counted as not met.",
     },
     noChange: {
       chip: "no change",

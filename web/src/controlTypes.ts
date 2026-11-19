@@ -747,7 +747,9 @@ export type RequirementReviewV1 = {
     /** Tester #340: a reported conflict between a criterion, a required check and the person's restriction. */
     checkConflict?: { criterionId: string; requiredCheck: string; because: string };
     /** Tester #343: the not-met criteria no automatic fix covers (plan or person). */
-    leftToPerson?: string[] }>;
+    leftToPerson?: string[];
+    /** Tester #377: not-met criteria Orca judged red only because the group's base was red too; not counted as not met. */
+    relativePass?: Array<{ criterionId: string; command: string; tipExits: string[]; baseExits: string[] }> }>;
   autoFixRounds: number;
   accepted?: { by: string; note: string; at: number };
   rerun?: { by: string; note: string; at: number };

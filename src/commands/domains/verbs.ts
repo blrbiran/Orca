@@ -331,9 +331,14 @@ export function acceptanceLines(groupId: string, a: AcceptanceView | undefined):
 export interface ReviewView {
   state: string; why?: string; problem?: string; autoFixRounds?: number;
   rounds: Array<{ roundNo: number; tip: string; result: string; summary?: string; criteria: Array<{ id: string; verdict: string; evidence: Array<{ path: string; line: number | null }>; missing: string | null; fixableBy?: string }>; fixTaskId?: string;
-    checkConflict?: { criterionId: string; requiredCheck: string; because: string }; leftToPerson?: string[] }>;
+    checkConflict?: { criterionId: string; requiredCheck: string; because: string }; leftToPerson?: string[];
+    relativePass?: Array<{ criterionId: string; command: string; tipExits: string[]; baseExits: string[] }> }>;
   accepted?: { by: string; note: string };
 }
+
+/** Tester #377: one line per criterion Orca judged red only because the group's base was red too. */
+const relativePassLines = (round: ReviewView["rounds"][number] | undefined): string[] => (round?.relativePass ?? []).map((r) =>
+  `  ${r.criterionId} relative pass: \`${r.command}\` exited ${r.tipExits.join(", ")} on this tip and ${r.baseExits.join(", ")} at the group's base -- red before the group; not counted as not met`);
 
 /** `next:` for the first command, `  or:` for each after it. */
 const answerLines = (commands: readonly string[], note: (command: string) => string = () => ""): string[] =>
@@ -389,16 +394,17 @@ export function keptLines(groupId: string, s: KeptSummary | undefined, delivery:
 export function reviewLines(groupId: string, review: ReviewView | undefined): string[] {
   if (review === undefined) return [];
   const last = review.rounds.at(-1);
-  if (review.state === "passed") return [`review: passed on ${(last?.tip ?? "?").slice(0, 12)} (round ${last?.roundNo ?? "?"})`];
+  if (review.state === "passed") return [`review: passed on ${(last?.tip ?? "?").slice(0, 12)} (round ${last?.roundNo ?? "?"})`, ...relativePassLines(last)];
   if (review.state === "accepted") return [`review: accepted as it is by ${review.accepted?.by ?? "?"}: ${review.accepted?.note ?? ""}`];
   const left = leftToPerson(last);
   const leftLine = left.length === 0 ? [] : [`left to a person (no change to files can meet them): ${left.map((c) => `${c.id} (${c.by})`).join(", ")}`];
-  if (review.state === "fixing") return [`review: fixing (task ${last?.fixTaskId ?? "?"}, round ${last?.roundNo ?? "?"})`, ...leftLine];
+  if (review.state === "fixing") return [`review: fixing (task ${last?.fixTaskId ?? "?"}, round ${last?.roundNo ?? "?"})`, ...relativePassLines(last), ...leftLine];
   if (review.state !== "not-passed") return [`review: ${review.state}${review.why === undefined ? "" : ` (${review.why})`}`];
   if (review.why === "not-fixable-by-work") return [
     `problem: ${review.problem ?? "requirement-review-not-passed:not-fixable-by-work"}`,
     ...(last?.summary ? [`review: ${last.summary}`] : []),
     ...(last?.criteria ?? []).map((c) => `  ${c.id} ${c.verdict}: ${c.missing ?? c.evidence[0]?.path ?? ""}`),
+    ...relativePassLines(last),
     ...leftLine,
     ...notFixableLines(groupId, left),
   ];
@@ -406,6 +412,7 @@ export function reviewLines(groupId: string, review: ReviewView | undefined): st
     `problem: ${review.problem ?? `requirement-review-not-passed:${review.why ?? "?"}`}`,
     ...(last?.summary ? [`review: ${last.summary}`] : []),
     ...(last?.criteria ?? []).map((c) => `  ${c.id} ${c.verdict}: ${c.missing ?? c.evidence[0]?.path ?? ""}`),
+    ...relativePassLines(last),
     // Tester #340: the three facts of a reported check conflict, and what a person decides.
     ...(last?.checkConflict === undefined ? [] : [
       `conflict: criterion ${last.checkConflict.criterionId}`, `  required check: ${last.checkConflict.requiredCheck}`, `  because: ${last.checkConflict.because}`,
