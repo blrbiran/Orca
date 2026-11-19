@@ -1869,3 +1869,22 @@ Human rulings of this session on tester #381 (1-7), as implemented:
    `control.sqlite.bak.<epoch ms>` (a `-<n>` suffix when the name is taken), mode 0600, by `VACUUM INTO`. A start with
    nothing new to record writes and copies nothing (idempotent). Residue on failure: a failed copy throws before any row
    is written (the panel does not start); a copy taken before a failed transaction stays beside the database.
+
+
+## Correction (2026-11-19, session 3ba26002, #381 review fixes): the estimate record's hash, the upgrade precondition, the backup staging
+
+Who/when: the Track P implementer (Claude Opus 5.5, a subagent of Orca control session `3ba26002`), 2026-11-19, on branch `fix/g-profile` (review fix wave). The text above is kept verbatim (Rule 13).
+
+1. **The estimate record names the binding hash.** A re-estimate (`estimates`) or an import whose payload names the
+   profile by a legacy hash (accepted by alias) records the resolved binding hash on the estimate, the same one its
+   request and contract froze; before this fix the record kept the payload's hash and every read of the group refused it
+   (`queries.ts` readEstimateRecord). The two byte-equality checks between an estimate record's `profile` and its
+   request's `estimatorProfile` / its contract's `profile` (`queries.ts`, `webService.ts` claimEstimate) stay integrity
+   checks of records written together, not binding comparisons.
+2. **Upgrade precondition.** The alias carry-over (item 3 of the correction above) rescues a binding only when the loaded
+   file is byte for byte what it was bound to at the first panel start of this version. A `--profile` file must not be
+   edited before that first start; afterwards its unbound fields may be edited freely.
+3. **Backup staging (Rule 17, amends item 5 above).** The copy is written inside a fresh `<state dir>/.profile-carry-*`
+   directory (0700), made 0600 there and renamed to `control.sqlite.bak.<epoch ms>`; the staging directory is removed
+   whether or not the copy succeeded. Backups are never pruned. Residue on failure: none from staging; a renamed copy
+   taken before a failed transaction stays beside the database.

@@ -244,3 +244,13 @@ it). Ruling 3: `maxOutputTokens`, `framingTokenOverhead` and `tokenizer` are opt
 (`estimatorCompatibility.ts` `ESTIMATOR_DEFAULTS`, `estimatorSettings`). A profile with `estimatorPreflight: null` is still
 `preflight-unavailable`. Every request and contract still records the instruction it used, and an estimate already
 queued settles, repairs and retries with the version its contract recorded (unchanged code paths).
+
+
+## Correction (2026-11-19, session 3ba26002, #381 review): the framing default and an absent preflight block
+
+Who/when: the Track P implementer (Claude Opus 5.5, a subagent of Orca control session `3ba26002`), 2026-11-19, on branch `fix/g-profile` (review fix wave). The text above is kept verbatim (Rule 13).
+
+Controller rulings on the human's 「先按你的建议执行」 (reversible) amend the correction above: the `framingTokenOverhead`
+default is **12000**, the human-ruled measured value of the live profile (not 17; `maxOutputTokens` 64000 and the utf8
+2/3 tokenizer are unchanged). An **absent** `estimatorPreflight` key now parses and means all defaults;
+`estimatorPreflight: null` stays the explicit opt-out (`preflight-unavailable`).
