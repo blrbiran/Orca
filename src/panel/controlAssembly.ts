@@ -1,3 +1,4 @@
+import { sweepWorkingTreeStaging } from "../control/workingTreeDelivery.js";
 import type { PanelCorrections } from "../control/correctionCommands.js";
 import { advanceFlowRuns, recordRunError, startFlowRun } from "../flow/kernel.js";
 import { getFlowRun, listRunsWithOpenWork } from "../flow/store.js";
@@ -486,7 +487,15 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
       // stay alive. A panel that has closed its server should exit.
       timer = setInterval(() => { void pump(); }, intervalMs);
       timer.unref();
-      driver?.start(intervalMs);
+      // Working-tree delivery spec §7 (controller ruling Q4): every registered repository's `<git-dir>/orca/deliver-*` is
+      // removed before the driver's first round (no pass is running yet); a repository that fails is logged, never fatal.
+      const started = driver;
+      if (started !== null) {
+        let paths: string[] = [];
+        try { paths = config.listRepositories().map((repository) => repository.path).filter((path): path is string => typeof path === "string"); }
+        catch (error) { process.stderr.write(`orca-panel: working-tree staging sweep: ${error instanceof Error ? error.message : String(error)}\n`); }
+        void sweepWorkingTreeStaging(paths, (line) => process.stderr.write(`${line}\n`)).finally(() => started.start(intervalMs));
+      }
       return true;
     },
     // Controller ruling P10: a shutdown already stopped the driver and awaited it; close does not

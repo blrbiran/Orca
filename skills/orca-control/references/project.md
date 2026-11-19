@@ -33,7 +33,7 @@ where the project's finished work goes by default
 
 - What it does: sends control verb `set-integration-scheme`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
-- `--delivery <delivery>` (required): keep|local|push-target|push-branch|github-pr (anything but keep needs a person token)
+- `--delivery <delivery>` (required): keep|local|push-target|push-branch|github-pr|working-tree (working-tree: written into the registered checkout, uncommitted, once the group is accepted; the project setter always needs a person token, the group setter for anything but keep)
 - `--trigger <trigger>`: task|group
 - `--method <method>`: merge|squash
 - `--target <target>`: the target branch

@@ -23,6 +23,9 @@ const CID = "c_0123456789abcdef";
 const MAPPINGS: Array<[string[], string, number, unknown]> = [
   [["project", "set-workspace-mode", "--mode", "clone"], "repositories/repo-1/workspace-mode", 7, { workspaceMode: "clone" }],
   [["project", "set-integration", "--delivery", "keep"], "repositories/repo-1/integration", 7, { integration: { delivery: "keep" } }],
+  // Working-tree delivery spec §5 (#365): the scheme has no other field.
+  [["project", "set-integration", "--delivery", "working-tree"], "repositories/repo-1/integration", 7, { integration: { delivery: "working-tree" } }],
+  [["group", "set-integration", "g-alpha", "--delivery", "working-tree"], "groups/g-alpha/integration", 5, { integration: { delivery: "working-tree" } }],
   [["project", "set-integration", "--delivery", "github-pr", "--trigger", "group", "--target", "main", "--remote", "origin"], "repositories/repo-1/integration", 7,
     { integration: { delivery: "github-pr", trigger: "group", target: "main", remote: "origin" } }],
   // Tester #339: the named-source history delivery (#328) from flags -- sources in the order given, targetRef from --target.
@@ -144,6 +147,16 @@ describe("project, decision, correction, agent, usage, orchestration, recovery w
       // mutation: accept a history flag without its source / on another delivery -> a post, red
       expect(out.code, JSON.stringify(argv)).not.toBe(0);
       expect(w.posts(), JSON.stringify(argv)).toEqual([]);
+    }
+  });
+
+  it("--delivery working-tree refuses every other scheme flag, before anything is sent (#365)", async () => {
+    for (const flag of [["--target", "main"], ["--trigger", "group"], ["--method", "merge"], ["--remote", "origin"]]) {
+      const w = await world();
+      const out = await cli(["project", "set-integration", "--delivery", "working-tree", ...flag, "--json"], w.dir);
+      // mutation: drop the extra-flag check -> a post carrying only the delivery, red
+      expect(out.code, flag.join(" ")).not.toBe(0);
+      expect(w.posts(), flag.join(" ")).toEqual([]);
     }
   });
 

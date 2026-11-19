@@ -22,7 +22,7 @@ const NEXT: Readonly<Record<string, string>> = {
   // Tester #355: a closed group takes unclose (and archive, which converts it); only a done group closes.
   "group-closed": "the group is closed and refuses every command but unclose and archive; orca group unclose <group> first",
   "group-not-done": "only a done group closes; to set aside a group that is not done, orca group archive <group>",
-  "close-delivery-pending": "the group's delivery is still owed (being pushed, backing off, in conflict or blocked, or a draft pull request not yet ready); orca group brief <group> shows it -- close works once it is delivered, and orca group archive <group> sets it aside now",
+  "close-delivery-pending": "the group's delivery is still owed (being pushed, backing off, in conflict or blocked, a draft pull request not yet ready, or not yet written into your working tree); orca group brief <group> shows it -- close works once it is delivered, and orca group archive <group> sets it aside now",
 };
 
 /** Fix wave m-6: `<group>` is the group's id when the CLI knows it. */

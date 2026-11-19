@@ -24,6 +24,12 @@ export function schemeFromFlags(c: WriteContext): unknown {
   if ((sources.length > 0 || artifacts.length > 0) && delivery !== "local") throw invalid("--history-source and --history-artifact go only with --delivery local");
   if (artifacts.length > 0 && sources.length === 0) throw invalid("--history-artifact needs at least one --history-source");
   if (delivery === "keep") return { delivery };
+  // Working-tree delivery spec §5: the scheme has no trigger, method, target or remote; none is accepted with it.
+  if (delivery === "working-tree") {
+    const extra = ["trigger", "method", "target", "remote"].find((flag) => str(c, flag) !== undefined);
+    if (extra !== undefined) throw invalid(`--delivery working-tree takes no --${extra}`);
+    return { delivery };
+  }
   const need = (flag: string): string => { const value = str(c, flag); if (value === undefined) throw invalid(`--delivery ${delivery} wants --${flag}`); return value; };
   if (delivery === "local") {
     const scheme = { delivery, trigger: need("trigger"), method: need("method"), target: need("target") };
@@ -40,10 +46,10 @@ export function schemeFromFlags(c: WriteContext): unknown {
   }
   if (delivery === "push-target") return { delivery, trigger: need("trigger"), method: need("method"), target: need("target"), remote: need("remote") };
   if (delivery === "push-branch" || delivery === "github-pr") return { delivery, trigger: need("trigger"), target: need("target"), remote: need("remote") };
-  throw invalid("--delivery wants keep|local|push-target|push-branch|github-pr");
+  throw invalid("--delivery wants keep|local|push-target|push-branch|github-pr|working-tree");
 }
 export const SCHEME_FLAGS = [
-  { name: "delivery", type: "string" as const, required: true, summary: "keep|local|push-target|push-branch|github-pr (anything but keep needs a person token)" },
+  { name: "delivery", type: "string" as const, required: true, summary: "keep|local|push-target|push-branch|github-pr|working-tree (working-tree: written into the registered checkout, uncommitted, once the group is accepted; the project setter always needs a person token, the group setter for anything but keep)" },
   { name: "trigger", type: "string" as const, summary: "task|group" }, { name: "method", type: "string" as const, summary: "merge|squash" },
   { name: "target", type: "string" as const, summary: "the target branch" }, { name: "remote", type: "string" as const, summary: "the remote" },
   { name: "history-source", type: "string" as const, repeatable: true,
