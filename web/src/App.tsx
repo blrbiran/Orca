@@ -1076,7 +1076,9 @@ export function App(): JSX.Element {
     try {
       const value = await fetchOverview(since);
       if (identity !== sourceIdentityNow.current || seq !== overviewSeq.current || (epoch !== null && value.epoch !== epoch)) return;
-      if (since !== undefined && value.groups.length === 0 && value.steps.length === 0 && value.issues.length === 0) {
+      // Unchanged only at the cursor's own changeSeq. An empty answer ahead of it is a change whose groups are no
+      // longer listed (the last one was archived), so it takes the complete read below like any other change.
+      if (since !== undefined && value.changeSeq <= since && value.groups.length === 0 && value.steps.length === 0 && value.issues.length === 0) {
         // Unchanged: the answer carries no list, so the prior one stays and only its cursor is adopted.
         setOverviewSource((stored) => stored.identity === identity && stored.data !== null
           ? { identity, status: "available", data: { ...stored.data, changeSeq: Math.max(stored.data.changeSeq, value.changeSeq) }, error: null }
