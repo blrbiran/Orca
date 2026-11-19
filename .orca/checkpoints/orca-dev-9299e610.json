@@ -3,42 +3,44 @@
   "runId": "orca-dev-9299e610",
   "runtime": "claude-code",
   "sessionRef": "9299e610-74ae-450a-90fe-c3fb2b962b12",
-  "writtenAt": "2026-11-19T14:45:27.428Z",
-  "head": "7071f56df9a2c9712206442284ca9fa9964d60d9",
+  "writtenAt": "2026-11-19T15:37:19.173Z",
+  "head": "95e01dac261994cce7bbe0f5c4e8d98a422f2f52",
   "level": {
     "kind": "reading",
-    "level": 335955,
+    "level": 459825,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
-    "band": 1
+    "band": 2
   },
   "next": [
-    "Wave 1 implementers (#400,#393,#390) running in worktrees",
-    "review and merge Wave 1",
-    "dispatch Wave 2 (#389,#370,#383)",
-    "brainstorm #369/#385 from the research memo",
-    "run quick/wide gates and update handoff"
+    "merge Wave 2 tasks after reviews/follow-ups (#389 spec Correction + copy, #370 resume-wake decision, #383 false-sentence follow-up, #369 zh full-sentence follow-up)",
+    "run final quick+wide gates with panel stopped and ORCA_CCLOOP_BIN=.wt-final-ccloop-pin/dist/cli.js",
+    "update Orca/ccloop/ccmem handoffs and tester ledger",
+    "push Orca (and ccloop/ccmem if changed) under allow-push",
+    "give the user the <=10-line executive summary"
   ],
   "open": [
-    "Wave 1 results pending",
-    "#387 waits for the tester's package.json diff"
+    "#389 review pending (spec Correction + conflict copy)",
+    "#370 review pending (resume-wake stranding decision)",
+    "#383 follow-up running (requirementReview false flaky sentence)",
+    "#369 follow-up running (zh full-sentence pin)",
+    "#393 server-side global dispatchBlocked changeSeq gap registered",
+    "#387 waits for tester package.json diff"
   ],
-  "awaitingHuman": [],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "final push of Orca/ccloop/ccmem is authorized this session; no further human action needed unless a review finds a product decision"
+    }
+  ],
   "measurements": [
     {
-      "command": "TMPDIR=/tmp npm test",
+      "command": "npm run typecheck",
       "exitCode": 0,
-      "commit": "7071f56df9a2c9712206442284ca9fa9964d60d9",
-      "observedAt": "2026-11-19T14:44:42.233Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-9299e610-Dih51p/1.txt"
-    },
-    {
-      "command": "npm run test:wide",
-      "exitCode": 0,
-      "commit": "7071f56df9a2c9712206442284ca9fa9964d60d9",
-      "observedAt": "2026-11-19T14:45:27.365Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-9299e610-Dih51p/2.txt"
+      "commit": "95e01dac261994cce7bbe0f5c4e8d98a422f2f52",
+      "observedAt": "2026-11-19T15:37:19.102Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-9299e610-p7p6Mm/1.txt"
     }
   ]
 }
