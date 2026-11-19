@@ -68,6 +68,18 @@ describe("dirs[] reaches step C (change-sized runs §5.7, P2)", () => {
     const envelope = { ...h.envelope, work: { ...h.envelope.work, additionalRepos: [{ key: "alpha", targetRepo: join(h.root, "alpha"), base: "HEAD" }] } } as unknown as StartEnvelope;
     expect((await h.port.collect(envelope, 0)).dirs).toEqual(dirs);
   });
+
+  // P2 review: under a ccloop without the key (the pinned one) the report a multi run saves -- an artifact whose id hashes
+  // the report -- is exactly what it was before P2: collect's dirs[] answer is checked as before and never copied into it.
+  // Mutation: spread `dirs` whatever the envelope -> the un-keyed report carries it, red.
+  it("leaves an un-keyed run's report without dirs, as before P2", async () => {
+    const dirs = [{ key: "alpha", resultRepo: "repos/alpha", changedPaths: ["a.txt"], attemptSha: "4".repeat(40) }];
+    const h = await fixture({ dirs }, false);
+    const envelope = { ...h.envelope, work: { ...h.envelope.work, additionalRepos: [{ key: "alpha", targetRepo: join(h.root, "alpha"), base: "HEAD" }] } } as unknown as StartEnvelope;
+    const report = await h.port.collect(envelope, 0);
+    expect(report.terminal?.repoDir).toBe(join(h.root, "repo"));
+    expect(Object.hasOwn(report, "dirs")).toBe(false);
+  });
 });
 
 describe("legacy-published-candidate-v2 (change-sized runs §5.5.4, P2)", () => {
