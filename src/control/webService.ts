@@ -12,7 +12,6 @@ import { appliedWorkAttempts } from "./budgetSuggestions.js";
 import { EXPECTATION_FLOOR_TOKENS, expectationModelApplies, writeTokenIntent } from "./expectationModel.js";
 import { repoTaskHistory } from "./estimateHistory.js";
 import { applyUsagePauseDecide, continueGroupCapStops, type UsagePauseDecideCommand } from "./usagePause.js";
-import { assertNoActiveUnbounded } from "./spendCaps.js";
 import { hasTokenPolicy, enableOptionalTokenPolicy } from "./fundedAllowance.js";
 import { budgetAmountSchema, safeInteger } from "./schema.js";
 import { z } from "zod";
@@ -2668,8 +2667,10 @@ export class WebControlService {
         const limit = command.payload.limit;
         if (same(limit, group.limit)) throw new ControlError("no-op-command");
         const toppedUp = limit.tokens !== null && group.limit.tokens !== null && limit.tokens > group.limit.tokens;
-        // Unknown usage cannot authorize a decrease or a new allocation.
-        if(limit.tokens!==null)assertNoActiveUnbounded(this.store,"all",id);
+        // Ruling (2026-11-20, human approval of #389): a finite limit is installed beside an active unbounded run. The run
+        // keeps its unbounded grant -- it may overspend until it ends (the accepted one-turn overshoot) -- and the new limit
+        // binds every later claim, so `close-run` is no longer required first. A spend cap (spendCommands.ts) and the agent
+        // group-cap path (commands.ts) still refuse: there the write itself claims to bind a grant the provider already has.
         const decreasing = dimensions.some(d => limit[d]!==null&&(group.limit[d]===null||limit[d]! < group.limit[d]!));
         // Tester follow-up G spec §2.1: in an expectation-model group a run may pass the cap by what it had in flight, so a
         // top-up is checked against the limit it installs (its deficit must close), not against the one it replaces.

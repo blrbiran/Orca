@@ -123,7 +123,10 @@ describe("the ceiling a claim holds (spec §2.1)", { timeout: 120_000 }, () => {
     } finally { await t.h.dispose(); }
   });
 
-  it("set-limit is not refused while ceiling-bounded runs are active; a legacy null-grant run still refuses it", async () => {
+  // Ruling (2026-11-20, human approval of #389): a finite limit is installed beside an active unbounded run -- the run
+  // keeps its unbounded grant until it ends, and `close-run` first is no longer required. (The spend cap and the agent
+  // group-cap path still refuse: there the write itself claims to bind that grant.)
+  it("set-limit is not refused while ceiling-bounded runs are active, nor for a legacy null-grant run", async () => {
     const t = await finiteGroup({ expectation: true, limit: 20 * M });
     try {
       await t.claim();
@@ -134,7 +137,9 @@ describe("the ceiling a claim holds (spec §2.1)", { timeout: 120_000 }, () => {
     try {
       await legacy.claim();
       const limit = readWebGroup(legacy.h.store, "g").ledger.groupLimit;
-      expect(legacy.service.setLimit(legacy.h.command("set-limit", { limit: { ...limit, tokens: 30 * M } }))).toMatchObject({ error: { code: "active-unbounded-budget-conflict" } });
+      // mutation: restore `assertNoActiveUnbounded` in `setLimit` -> the refusal, red.
+      expect(legacy.service.setLimit(legacy.h.command("set-limit", { limit: { ...limit, tokens: 30 * M } }))).toMatchObject({ result: { kind: "limit-set" } });
+      expect(readWebGroup(legacy.h.store, "g").ledger.groupLimit.tokens).toBe(30 * M);
     } finally { await legacy.h.dispose(); }
   });
 });

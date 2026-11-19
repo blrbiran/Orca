@@ -6,16 +6,19 @@ import { readControlGroup } from "../../src/panel/controlViews.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
 // Ruling (2026-11-12, tester follow-up H): 「这次批准改写所有必要的判据。」 -- an authored (null) task ceiling kept through a stop, and the continued run's
 // funded work grant, are a pre-release group's rules (spec G §2.2; an expectation-model run holds a live ceiling instead).
-it("stops an unbounded task with its authored ceiling intact, then admits a finite group ceiling",async()=>{
+// Ruling (2026-11-20, human approval of #389): the finite group ceiling is installed beside the running unbounded run --
+// `close-run` first is no longer required, and the limit set then binds the continued claim.
+it("stops an unbounded task with its authored ceiling intact; a limit set while it ran bounds the continued claim",async()=>{
  const x=await driverHarness([{taskId:"a",tokenBudget:null}],{tokenPolicy:"optional-v1",modelVersion:null,killGraceMs:0,behaviour:()=>"stoppable"});
  const driver=x.driver();try {
   const id=await x.claim();await x.until(driver,()=>x.body(id).state==="accepted");
   const before=readControlGroup(x.h.store,"epoch","g").ledger.groupLimit;
-  expect(x.service.setLimit(x.h.command("set-limit",{limit:{...before,tokens:5_000_000}}))).toMatchObject({error:{code:"active-unbounded-budget-conflict"}});
+  // mutation: restore `assertNoActiveUnbounded` in `setLimit` -> this is refused, red.
+  expect(x.service.setLimit(x.h.command("set-limit",{limit:{...before,tokens:5_000_000}}))).not.toHaveProperty("error");
+  expect(readControlGroup(x.h.store,"epoch","g").ledger.groupLimit.tokens).toBe(5_000_000);
   await x.service.handoffStop(x.h.command("handoff-stop",{}));
   await x.until(driver,()=>{const r=x.body(id);if(r.state==="blocked")throw new Error(JSON.stringify(r.drive));return r.state==="settled-recoverable";});
   expect(readWork(x.h.store,"g","a").grant.work.tokens).toBeNull();
-  expect(x.service.setLimit(x.h.command("set-limit",{limit:{...before,tokens:5_000_000}}))).not.toHaveProperty("error");
   expect(readControlGroup(x.h.store,"epoch","g").ledger.groupLimit.tokens).toBe(5_000_000);
   expect(await x.service.resumeFromHandoff(x.h.command("resume-from-handoff",{selections:[{taskId:"a",predecessorRunId:id,checkpointId:x.body(id).checkpointId}]}))).not.toHaveProperty("error");
   const continued=await deliverScheduledStart(x.dispatch,"g");expect(continued.kind).toBe("claimed");if(continued.kind!=="claimed")return;

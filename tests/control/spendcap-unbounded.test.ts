@@ -1,5 +1,8 @@
-// Tester #389: after Orca auto-confirms an unlimited group with an active run, `group set-limit` refuses with
-// `active-unbounded-budget-conflict` (the provider already holds an unbounded grant, so a finite limit cannot bind it).
+// Tester #389: an agent's group-cap write beside an active unbounded run refuses with `active-unbounded-budget-conflict`
+// (the provider already holds an unbounded grant, so a finite limit cannot bind it). Ruling (2026-11-20, human approval of
+// #389): the operator's `orca group set-limit` (WebControlService.setLimit) now installs the finite limit instead -- the run
+// keeps its unbounded grant until it ends and the new limit binds later claims. Only this agent path (commands.ts) and the
+// spend-cap path still refuse, so this file pins that remaining refusal.
 // The refusal must name the run and the exact ways out -- group close-run (or run abandon while it runs) -- and the retry.
 import { describe, expect, it } from "vitest";
 import { claimWork } from "../../src/control/budget.js";

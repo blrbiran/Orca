@@ -8,7 +8,9 @@ import { autoConfirmBlocker, autoConfirmCommandId } from "../../src/control/auto
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { readGroupOrchestration } from "../../src/control/orchestration.js";
 import { readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
-import { WebControlService } from "../../src/control/webService.js";
+import { WebControlService, readWebGroup } from "../../src/control/webService.js";
+import { replenishStartWakes } from "../../src/control/executionDriver.js";
+import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import type { ImportDefaults } from "../../src/control/planImport.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { readDraft } from "../../src/control/requirementRecords.js";
@@ -70,6 +72,49 @@ describe("H4: the automatic confirm of unlimited-token groups", () => {
       expect(JSON.parse(String(row.result))).toMatchObject({ result: { kind: "confirmed" } });
       expect(readGroupOrchestration(h.store, "g")).toMatchObject({ mode: "run" });
       expect((await service.autoStart()).started).toEqual(["g"]);
+    } finally { await h.dispose(); }
+  });
+
+  // Ruling (2026-11-20, human approval of #389): an operator installing a finite limit no longer has to close-run first.
+  // The active run keeps its unbounded grant and may overspend until it ends (the repository's accepted one-turn
+  // overshoot); the new limit binds every later claim. The refusal survives only where the write itself is a finite
+  // binder for a provider that already holds an unbounded grant -- the spend cap and the agent group-cap path.
+  it("#389: set-limit installs a finite limit beside an active unbounded run; the next claim is bounded", async () => {
+    const h = await webFixture(undefined, [{ taskId: "a" }, { taskId: "b" }], { tokenPolicy: "optional-v1", importContext: PERSON, ...PLAN_AGENT });
+    try {
+      const service = new WebControlService(h.deps);
+      expect((await passWithPredicate(h, service)).result).toEqual({ confirmed: ["g"], refused: [] });
+      expect((await service.autoStart()).started).toEqual(["g"]);
+      const first = await deliverScheduledStart(h.deps, "g");
+      expect(first.kind).toBe("claimed");
+      if (first.kind !== "claimed") return;
+      expect(JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(first.runId)!.body))).toMatchObject({ grant: { work: { tokens: null } } });
+      // mutation: restore `assertNoActiveUnbounded` in `setLimit` -> the refusal, red.
+      const before = readWebGroup(h.store, "g").ledger.groupLimit;
+      expect(service.setLimit(h.command("set-limit", { limit: { ...before, tokens: 5_000_000 } }))).toMatchObject({ result: { kind: "limit-set" } });
+      expect(readWebGroup(h.store, "g").ledger.groupLimit.tokens).toBe(5_000_000);
+      // The conservation/reserve rules are unchanged: a decrease below what is occupied refuses and rolls back, and a top-up
+      // is admitted.
+      const occupied = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+      expect(service.setLimit(h.command("set-limit", { limit: { ...before, tokens: occupied.used.tokens + occupied.reserved.tokens - 1 } })))
+        .toMatchObject({ error: { code: "group-budget-unavailable" } });
+      expect(readWebGroup(h.store, "g").ledger.groupLimit.tokens).toBe(5_000_000);
+      expect(service.setLimit(h.command("set-limit", { limit: { ...before, tokens: 5_500_000 } }))).toMatchObject({ result: { kind: "limit-set" } });
+      expect(readWebGroup(h.store, "g").ledger.groupLimit.tokens).toBe(5_500_000);
+      // The run stays active with its unbounded grant: what remains of the accepted overshoot is the rest of that run.
+      expect(h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(first.runId)).toMatchObject({ active: 1 });
+      expect(JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(first.runId)!.body)).grant.work.tokens).toBeNull();
+      // The next claim is funded from the new limit -- never an unbounded grant.
+      expect(replenishStartWakes({ store: h.store, admissionGate: h.deps.admissionGate })).toHaveLength(1);
+      const next = await deliverScheduledStart(h.deps, "g");
+      expect(next.kind).toBe("claimed");
+      if (next.kind !== "claimed") return;
+      // The next claim is bounded by the new limit: in this group's expectation model it holds a finite live ceiling
+      // (a token grant is null by construction) whose tokens cannot exceed the limit just installed.
+      const run = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(next.runId)!.body));
+      expect(run.grant.work.tokens).toBeNull();
+      expect(run.liveCeiling.tokens).toBeGreaterThan(0);
+      expect(run.liveCeiling.tokens).toBeLessThanOrEqual(5_500_000);
     } finally { await h.dispose(); }
   });
 
