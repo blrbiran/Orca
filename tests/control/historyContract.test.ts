@@ -59,7 +59,8 @@ describe("a named-source history promise (#328)", () => {
     expect((SPLIT_JSON_SCHEMA_V6 as { properties: Record<string, unknown> }).properties).toHaveProperty("historyExpectation");
     const prompt = buildSplitPrompt({ document: "Merge named source branches into main.", overview: { canonicalJson: "{}", hash: "f".repeat(64) }, earlierDrafts: [] });
     // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) — the default single-repository instruction is version 7, which keeps V6's historyExpectation.
-    expect(prompt).toContain("instruction version 7");
+    // Ruling (session 3ba26002): dogfood finding (3) and tester #362 make the default single-repository instruction version 8, which keeps V7's (and V6's) text.
+    expect(prompt).toContain("instruction version 8");
     expect(buildSplitPrompt({ document: "Merge named source branches into main.", overview: { canonicalJson: "{}", hash: "f".repeat(64) }, earlierDrafts: [], instructionVersion: 6 })).toContain("historyExpectation");
     expect(prompt).toContain("historyExpectation");
     expect(SPLIT_INSTRUCTION_V6).toContain("directSecondParent");

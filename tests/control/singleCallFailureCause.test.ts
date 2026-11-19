@@ -24,7 +24,9 @@ const settled = async (recordExtra?: Record<string, unknown>) => {
 describe("a single-call record with ccloop's failureCause (R0)", () => {
   it("parses, and the failed call is settled exactly as one without the field", async () => {
     const without = await settled();
-    const withCause = await settled({ failureCause: { cause: "quota", detail: "You've hit your usage limit" } });
+    // Ruling (session 3ba26002): dogfood finding (1) ends a split call typed `quota` without a re-draft (requirementCallQuota.test.ts),
+    // so this criterion uses another typed cause; it still encodes: a record with the field is read as one without it.
+    const withCause = await settled({ failureCause: { cause: "transient", detail: "upstream 502" } });
     expect(without.blockedReason).toBeNull();
     expect(withCause.blockedReason).toBeNull();
     expect(withCause.state).toBe(without.state);

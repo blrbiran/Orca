@@ -18,7 +18,9 @@ const failed = (purpose: "clarify" | "split", failureCause?: { cause: string; de
 
 describe("a failed requirement call keeps ccloop's failure detail (#125)", () => {
   it("clarify: the failed call records the detail, cut to 512 UTF-8 bytes; the retried valid call has none", async () => {
-    const x = await requirementHarness({ answers: [failed("clarify", { cause: "quota", detail: LONG }), { purpose: "clarify", output: ROUND_ONE }] });
+    // Ruling (session 3ba26002): dogfood finding (1) ends a call typed `quota` without a retry, so this retried-call fixture
+    // uses another typed cause (`transient`); it still encodes: a failed call keeps ccloop's detail.
+    const x = await requirementHarness({ answers: [failed("clarify", { cause: "transient", detail: LONG }), { purpose: "clarify", output: ROUND_ONE }] });
     try {
       await x.until(() => x.round(1).state === "awaiting-answers");
       const [first, second] = x.round(1).calls;
@@ -33,7 +35,7 @@ describe("a failed requirement call keeps ccloop's failure detail (#125)", () =>
   });
 
   it("split: the failed draft's call records the detail", async () => {
-    const x = await requirementHarness({ answers: [failed("split", { cause: "quota", detail: "You've hit your usage limit" }), { purpose: "split", output: VALID_SPLIT }], startAt: "split" });
+    const x = await requirementHarness({ answers: [failed("split", { cause: "transient", detail: "You've hit your usage limit" }), { purpose: "split", output: VALID_SPLIT }], startAt: "split" });
     try {
       const draft2 = () => { try { return readDraft(x.store, "r", 2).state; } catch { return "drafting"; } };
       await x.until(() => draft2() !== "drafting");
@@ -43,7 +45,9 @@ describe("a failed requirement call keeps ccloop's failure detail (#125)", () =>
   });
 
   it("adds no key where the record names no detail: no failureCause, a null detail, an empty one", async () => {
-    for (const cause of [undefined, { cause: "quota", detail: null }, { cause: "quota", detail: "" }]) {
+    // Ruling (session 3ba26002): dogfood finding (1) ends a call typed `quota` without a retry, so this retried-call fixture
+    // uses another typed cause (`transient`); it still encodes: a failed call keeps ccloop's detail.
+    for (const cause of [undefined, { cause: "transient", detail: null }, { cause: "transient", detail: "" }]) {
       const x = await requirementHarness({ answers: [failed("clarify", cause), { purpose: "clarify", output: ROUND_ONE }] });
       try {
         await x.until(() => x.round(1).state === "awaiting-answers");

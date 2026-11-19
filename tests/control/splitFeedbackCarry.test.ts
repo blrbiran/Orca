@@ -67,7 +67,10 @@ describe("an automatic re-draft keeps the person's feedback (dogfood finding 3)"
     // Directly after the feedback: the model saw it, nothing to say.
     expect(feedbackAfterRedraft([draft(1, "rejected", FEEDBACK), draft(2, "awaiting-review", null)], 2)).toBeNull();
     // After one re-draft, with a conflict reported before: said, with the criteria.
-    expect(feedbackAfterRedraft([draft(1, "rejected", FEEDBACK), draft(2, "invalid", null, { output: { ...INVALID_SPLIT, requirementConflicts: CONFLICTS } }), draft(3, "awaiting-review", null)], 3))
+    // A conflict the re-draft reported without quoting feedback is not about the feedback, so it is not named.
+    // mutation: drop the `feedback` filter on conflictsBefore -> AC9 named -> red
+    const unrelated = { criterion: "AC9", why: "Not about the feedback." };
+    expect(feedbackAfterRedraft([draft(1, "rejected", FEEDBACK), draft(2, "invalid", null, { output: { ...INVALID_SPLIT, requirementConflicts: [...CONFLICTS, unrelated] } }), draft(3, "awaiting-review", null)], 3))
       .toEqual({ feedbackDraftNo: 1, feedback: FEEDBACK, redrafts: [2], conflictsBefore: ["AC2"] });
     // Across two re-drafts (a failed call between), with no conflict reported before.
     expect(feedbackAfterRedraft([draft(1, "rejected", FEEDBACK), draft(2, "invalid", null), draft(3, "failed", null, { output: null }), draft(4, "awaiting-review", null)], 4))

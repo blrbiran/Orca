@@ -101,6 +101,7 @@ describe("the split's parallel candidates (#284)", () => {
     // mutation: drop PARALLEL_RULE from either instruction -> red
     expect(prompt).toContain(rule);
     expect(multi).toContain(rule);
-    expect(prompt.split("\n", 1)[0]).toBe("Orca requirement split, instruction version 7.");
+    // Ruling (session 3ba26002): dogfood finding (3) and tester #362 make the default single-repository instruction version 8; the parallel rule still rides the current call.
+    expect(prompt.split("\n", 1)[0]).toBe("Orca requirement split, instruction version 8.");
   });
 });
