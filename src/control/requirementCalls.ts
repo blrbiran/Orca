@@ -297,6 +297,16 @@ export const callOf = (run: SettledRun, outcome: CallRecord["outcome"], reason: 
   ...(quota === null ? {} : { cause: QUOTA_CAUSE, ...(quota.resetAt === null ? {} : { resetAt: quota.resetAt }) }),
 });
 
+/**
+ * Review I1 (session 3ba26002): a requirement call blocked at C on unknown usage keeps ccloop's typed failure cause (with
+ * its #125 detail) on the blocked run, as runFailureCauseSchema holds it; the person's usage settlement rebuilds the
+ * record facts from it (singleCallSettlement.ts), so a quota failure is still not retried once its usage is charged.
+ */
+function keptFailureCause(_settled: unknown, _at: number, facts?: SingleCallRecordFacts): { run: Record<string, unknown>; drive: { failureCause?: { cause: string; phase: null; retries: number; detail: string | null } } } {
+  const cause = facts?.failureCause ?? null;
+  return { run: {}, drive: cause === null ? {} : { failureCause: { cause: cause.cause, phase: null, retries: 0, detail: cause.detail } } };
+}
+
 /** Dogfood finding (1): what a call that ended on ccloop's typed `quota` cause keeps -- the reset its CLI text names, if any. */
 export interface CallQuota { resetAt: number | null }
 
@@ -430,6 +440,7 @@ export const CLARIFY_HANDLER: SingleCallHandler = {
   completeInTransaction(store, run, rawOutput, commitTerminal, failure = null, facts) {
     settleRequirementCallInTransaction(store, run, commitTerminal, (inner, group, target, settled) => recordClarify(inner, group, target, settled, rawOutput, failure, failureDetailOf(facts), callQuotaOf(failure, facts, inner.now())));
   },
+  blockedRunFields: keptFailureCause,
   usageUnknownReason: "requirement-usage-unknown",
 };
 
@@ -556,5 +567,6 @@ export const SPLIT_HANDLER: SingleCallHandler = {
   completeInTransaction(store, run, evaluation, commitTerminal, failure = null, facts) {
     settleRequirementCallInTransaction(store, run, commitTerminal, (inner, group, target, settled) => recordSplit(inner, group, target, settled, evaluation as SplitEvaluation, failure, failureDetailOf(facts), callQuotaOf(failure, facts, inner.now())));
   },
+  blockedRunFields: keptFailureCause,
   usageUnknownReason: "requirement-usage-unknown",
 };

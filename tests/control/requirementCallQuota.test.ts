@@ -67,3 +67,45 @@ describe("a requirement call that ended on an exhausted quota (dogfood finding 1
     expect(roundBodySchema.shape.calls.element.safeParse({ ...call, cause: "transient" }).success).toBe(false);
   });
 });
+
+/**
+ * Independent review I1 (session 3ba26002): a quota failure whose usage ccloop could not observe, in a group that is not
+ * soft (the harness's default), is blocked at C as `requirement-usage-unknown:<code>`. The person settles it by charging the
+ * grant (recovery-retry), and the settlement completes the call -- with ccloop's record facts rebuilt from the blocked
+ * run, so the quota is still seen: no retry, the cause and the #125 detail kept.
+ */
+describe("a quota failure with unknown usage, settled by the person (review I1)", () => {
+  const OWNER = { client: "web", principal: "user:owner" };
+  const unknownQuota = (purpose: "clarify" | "split") => ({ ...quota(purpose), tokens: null });
+  type Harness = Awaited<ReturnType<typeof requirementHarness>>;
+  const settle = async (x: Harness, runId: string) => {
+    const { withCommandContext } = await import("../../src/control/commandClient.js");
+    const command = x.command("recovery-retry", { scope: "run", runId, acknowledge: "charge-remaining-grant" }, { kind: "run", groupId: "r", runId }) as { commandId: string };
+    return withCommandContext(command.commandId, OWNER, () => x.service.recoveryRetry(command as never));
+  };
+
+  it("clarify: the blocked run keeps ccloop's failure cause, and the settled round ends requirement-agent-quota with no retry", async () => {
+    const x = await requirementHarness({ answers: [unknownQuota("clarify"), quota("clarify"), quota("clarify")] });
+    try {
+      await x.until(() => x.runs()[0]?.state === "blocked");
+      const [blocked] = x.runs();
+      expect(blocked.drive.blockedReason).toBe("requirement-usage-unknown:codex-exit-error");
+      // mutation: drop the requirement handlers' blockedRunFields -> no failureCause on the blocked run -> red
+      expect(blocked.drive.failureCause).toEqual({ cause: "quota", phase: null, retries: 0, detail: DETAIL });
+      expect(await settle(x, blocked.runId)).toMatchObject({ result: { resolved: true } });
+      // mutation: the settlement passes no facts to completeInTransaction -> retries 1, round drafting -> red
+      expect(x.round(1)).toMatchObject({ state: "failed", retries: 0, reasonCode: "requirement-agent-quota" });
+      expect(x.round(1).calls).toEqual([expect.objectContaining({ runId: blocked.runId, outcome: "failed", reason: "codex-exit-error", detail: DETAIL, cause: "quota", resetAt: RESET_AT })]);
+      expect(x.fake.calls.accept).toHaveLength(1);
+    } finally { await x.dispose(); }
+  });
+
+  it("split: the settled draft fails as requirement-agent-quota, with no automatic re-draft", async () => {
+    const x = await requirementHarness({ answers: [unknownQuota("split"), quota("split")], startAt: "split" });
+    try {
+      await x.until(() => x.runs()[0]?.state === "blocked");
+      expect(await settle(x, x.runs()[0]!.runId)).toMatchObject({ result: { resolved: true } });
+      expect(readDrafts(x.store, "r").map((draft) => [draft.draftNo, draft.state, draft.reasonCode])).toEqual([[1, "failed", "requirement-agent-quota"]]);
+    } finally { await x.dispose(); }
+  });
+});

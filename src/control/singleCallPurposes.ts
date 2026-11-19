@@ -77,7 +77,7 @@ export interface SingleCallHandler {
    * Quota probe spec 2026-11-06 §2 Outcome: what a run blocked at C on unknown usage keeps of `evaluate`'s result, on the
    * run and its drive record (a probe's verdict is known from the record even when its usage is not). Absent: nothing.
    */
-  blockedRunFields?(settled: unknown, at: number): { run: Record<string, unknown>; drive: Partial<DriveRecord> };
+  blockedRunFields?(settled: unknown, at: number, facts?: SingleCallRecordFacts): { run: Record<string, unknown>; drive: Partial<DriveRecord> };
   /**
    * Quota probe spec 2026-11-06 (controller decision): whether `evaluate`'s result says the provider refused the call
    * before any work, so its unknown work usage is booked 0 (bookRejectedZeroInTransaction) instead of blocking the run.
@@ -121,6 +121,9 @@ const CLARIFY_ANY: SingleCallHandler = {
   // ERRATUM (session 43913afc, flow call settlement spec 2026-11-01): a flow clarify call is now settled by the flow core.
   completeInTransaction: (store, run, rawOutput, commitTerminal, failure, facts) =>
     (isFlowCallRun(run) ? flowHandler("clarify") : CLARIFY_HANDLER).completeInTransaction!(store, run, rawOutput, commitTerminal, failure, facts),
+  // Review I1 (session 3ba26002): the hook is not told the run, so a flow clarify call blocked on unknown usage keeps
+  // ccloop's failure cause on its run too; nothing on the flow path reads it.
+  blockedRunFields: CLARIFY_HANDLER.blockedRunFields,
   usageUnknownReason: CLARIFY_HANDLER.usageUnknownReason,
 };
 const flowHandler = (purpose: SingleCallPurpose): SingleCallHandler => ({ purpose, ...FLOW_CALL_HANDLER });

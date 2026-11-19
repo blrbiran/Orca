@@ -115,7 +115,11 @@ export function settleSingleCallUsageInTransaction(
       else interruptRequirementCall(store, run.groupId, settled as never);
       store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(run.runId);
     } else {
-      handler.completeInTransaction!(store, readRun(store, run.runId) as SingleCallRun, handler.evaluate === undefined ? null : input.evaluation, commitTerminal, failure);
+      // Review I1 (session 3ba26002): the record's facts as the blocked run kept them (a requirement call's blockedRunFields),
+      // so the purpose judges the settled call as the driver would have -- a quota failure is not retried, its detail kept.
+      const cause = run.drive?.failureCause;
+      const facts = cause === undefined ? undefined : { outcome: "failed" as const, failureCause: { cause: cause.cause, detail: cause.detail } };
+      handler.completeInTransaction!(store, readRun(store, run.runId) as SingleCallRun, handler.evaluate === undefined ? null : input.evaluation, commitTerminal, failure, facts);
     }
   }
   // Flow call settlement spec §4, review (session 43913afc) I1: a flow call a stop closed had its draw returned to the pool

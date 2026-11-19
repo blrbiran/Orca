@@ -1543,7 +1543,7 @@ export async function stepCSingleCall(deps: ExecutionDriverDeps, runId: string):
       // Same spec O1, R4: ccloop's lower bound stays on the blocked run for the view and the settlement marker.
       const bound = record.usageLowerBound === undefined ? {} : { singleCallUsageLowerBound: record.usageLowerBound };
       // Quota probe spec 2026-11-06 §2 Outcome: a purpose may keep what its record told, though the usage is unknown.
-      const kept = handler.blockedRunFields?.(settled, (deps.now?.() ?? new Date()).getTime()) ?? { run: {}, drive: {} };
+      const kept = handler.blockedRunFields?.(settled, (deps.now?.() ?? new Date()).getTime(), facts) ?? { run: {}, drive: {} };
       blockRun(deps, runId, "C", reason, kept.drive, { ...bound, ...kept.run });
       return true;
     }
