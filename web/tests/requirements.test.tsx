@@ -198,6 +198,33 @@ describe("the Requirements section (N1 spec §11.2)", () => {
       expect(screen.getByRole("alert").textContent).toContain("clarify-call-failed · 这一轮的调用失败了，模型没有给出可检查的回答；失败调用的代码和详情一并显示。");
     } finally { await i18n.changeLanguage("en"); }
   });
+
+  // Dogfood finding (1) (session 3ba26002): a call that ended on an exhausted quota is not retried by Orca; the step says
+  // why, when the quota resets (from the summary's agentQuota), and keeps Retry for after a switch or the reset.
+  it("explains requirement-agent-quota with the reset time, beside the provider's words, with Retry", async () => {
+    const resetAt = new Date(2026, 10, 23, 7, 13).getTime();
+    const call = { runId: "run-1", overviewHash: null, commit: null, usage: null, outcome: "failed" as const, reason: "codex-exit-error", detail: "You've hit your usage limit.", cause: "quota" as const, resetAt };
+    const failedRound = requirementView("failed");
+    const quota: RequirementViewV1 = { ...failedRound, summary: { ...failedRound.summary, requirement: { ...failedRound.summary.requirement!, reasonCode: "requirement-agent-quota",
+      agentQuota: { detail: "You've hit your usage limit.", resetAt, next: "switch or wait" } } },
+      rounds: [{ ...failedRound.rounds[0]!, reasonCode: "requirement-agent-quota", calls: [call] }] };
+    const onCommand = mount(quota);
+    // mutation: drop the locale line or the REASONS entry -> red
+    expect(screen.getByRole("alert").textContent).toContain("requirement-agent-quota · The agent's usage quota ran out, so Orca did not retry the call. Switch the requirement's agent, or wait until the quota resets, then retry.");
+    // mutation: drop the reset line -> red
+    expect(screen.getByRole("alert").textContent).toContain(`The quota resets at ${new Date(resetAt).toLocaleString()}.`);
+    expect([...document.querySelectorAll('p[role="status"]')].map((p) => p.textContent)).toContain("codex-exit-error · The model process exited with an error before it gave an answer. Look at the run's evidence, then retry the task. · You've hit your usage limit.");
+    // Retry is there for any failed step (`stalled`), so the RETRYABLE entry is a redundant guard here, not pinned.
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onCommand).toHaveBeenCalledWith({ verb: "recovery-retry", groupId: "r", expectedRevision: 3, payload: { scope: "group", groupId: "r" } });
+    cleanup();
+    await i18n.changeLanguage("zh");
+    try {
+      render(<RequirementsPanel config={config as ControlConfigV1} summary={summaryWith(quota) as ControlSummaryV1} views={{ r: quota }} selected="r" agents={null} language="zh" onSelect={() => {}} onCommand={vi.fn()} />);
+      expect(screen.getByRole("alert").textContent).toContain("requirement-agent-quota · 智能体的用量额度已用完，Orca 没有重试这次调用。请为需求换一个智能体，或等额度重置后再重试。");
+      expect(screen.getByRole("alert").textContent).toContain(`额度将于 ${new Date(resetAt).toLocaleString()} 重置。`);
+    } finally { await i18n.changeLanguage("en"); }
+  });
 });
 
 // Task 13 implementer additions (session b5e8d368, 2026-10-02): the branches the plan's five criteria do not reach.

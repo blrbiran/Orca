@@ -193,3 +193,20 @@ Rewrites authorized by the rulings above: the `i18nPseudo` enum count (new activ
 (#125); tests that pin the theme list (#200); tests that pin Overview's flat Progress list (#256). Any other existing
 criterion that must change goes in its own commit marked `Ruling: pending` and waits for the human before merging to
 main. Every new branch is shown red by a named mutation in a `git clone --local` copy.
+
+## Correction (2026-11-19, session 3ba26002): a requirement call that ended on an exhausted quota (dogfood finding 1)
+
+§7 (#125) treats every failed requirement call alike: the round or draft spends its automatic retries (two re-asks, or
+two re-drafts) and then ends `clarify-call-failed` / `split-call-failed`. The paid dogfood `dogfood-20261119-count`
+(codex) showed the cost: ccloop's single-call record typed every clarify call's failure `failureCause.cause: "quota"`
+("You've hit your usage limit ... try again at Nov 23rd, 2026 7:13 AM."), and each retry failed the same way.
+
+From this correction, a clarify or split call whose ccloop record is not complete and whose typed cause is `quota` (the
+cause Orca's task runs already act on, `quotaRest.ts`) is not retried. Its round or draft ends `failed` at once with
+`reasonCode` `requirement-agent-quota`; the call record keeps `cause: "quota"` and, when the CLI's text names a reset
+(`quotaRest.ts` `parseResetAt`, read when the call is recorded), `resetAt` (epoch ms). The requirement summary (so the
+group brief, the Web and the overview's problem item) carries `agentQuota` -- the provider's words, the reset (or null),
+and the next step: `orca requirement set-agent <group> --agent <agent> --model <model>` then
+`orca recovery retry --group <group>`, or the same retry after the reset. The Web explains the code and shows the reset
+time; Retry stays. Every other failed call is unchanged (§7 holds). The flow paths (`src/flow/kinds/clarify.ts`,
+`src/flow/feedback/intake.ts`) are not changed: their call results carry no ccloop failure cause.

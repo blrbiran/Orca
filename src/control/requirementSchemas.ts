@@ -62,6 +62,13 @@ export const clarifyResultSchema = z.object({
   glossary: z.array(glossaryEntrySchema), adrs: z.array(adrSchema), classification: classificationSchema.optional(),
 }).strict();
 /** Issue #125 (session f958ec3f): the most a failed call's `detail` keeps of ccloop's failureCause.detail. */
+/** Dogfood finding (1): ccloop's typed failure cause for a provider's exhausted usage quota (as task runs read it). */
+export const QUOTA_CAUSE = "quota";
+/**
+ * Dogfood finding (1): a round or draft whose call ended on an exhausted quota -- not retried, since every retry fails the
+ * same way until the quota resets; the person switches the agent or waits, then retries.
+ */
+export const AGENT_QUOTA_REASON = "requirement-agent-quota";
 export const CALL_DETAIL_MAX_BYTES = 512;
 /**
  * One call of a round or draft (spec §4.2 "the run ids and usage of the round's calls, the overview hash and commit").
@@ -71,6 +78,10 @@ export const callRecordSchema = z.object({
   runId: idSchema, overviewHash: hash.nullable(), commit: commit.nullable(), usage: amountSchema.nullable(),
   outcome: z.enum(["valid", "invalid", "failed", "interrupted"]), reason: z.string().nullable(),
   detail: nonempty.refine((text) => Buffer.byteLength(text, "utf8") <= CALL_DETAIL_MAX_BYTES, { message: `over-${CALL_DETAIL_MAX_BYTES}-utf8-bytes` }).optional(),
+  // Dogfood finding (1) (session 3ba26002): a failed call ccloop typed `quota` keeps that cause (no other cause is kept:
+  // only quota changes what Orca does), and the reset its CLI text names, as epoch ms (quotaRest.ts parseResetAt), when it
+  // names one. Both absent on every other call, so those keep their bytes.
+  cause: z.literal(QUOTA_CAUSE).optional(), resetAt: safeInteger.optional(),
 }).strict();
 export const answerSchema = z.object({ id: questionIdSchema, kind: z.enum(["recommended", "text"]), text: nonempty }).strict();
 export const decisionSchema = z.object({ id: nonempty, accept: z.boolean() }).strict();
@@ -79,7 +90,7 @@ export const roundBodySchema = z.object({
   waiting: z.enum(REQUIREMENT_WAITING).nullable(), result: clarifyResultSchema.nullable(),
   answers: z.array(answerSchema).nullable(), glossaryDecisions: z.array(decisionSchema).nullable(), adrDecisions: z.array(decisionSchema).nullable(),
   answeredAt: canonicalTimestampSchema.nullable(), closedByConsensus: z.boolean(),
-  reasonCode: z.enum(["clarify-output-invalid", "clarify-call-failed"]).nullable(), calls: z.array(callRecordSchema),
+  reasonCode: z.enum(["clarify-output-invalid", "clarify-call-failed", AGENT_QUOTA_REASON]).nullable(), calls: z.array(callRecordSchema),
   /**
    * Flow engine spec §10.3 (W-76): a revision of round `revises`, appended, never overwriting it (clarifyChain.ts): its
    * result is round `revises`'s copied; the person's reason, who and through which channel; the superseded rounds
@@ -139,7 +150,7 @@ export const draftBodySchema = z.object({
     z.object({ taskId: nonempty, path: nonempty, writers: z.array(nonempty).max(0), source: z.literal("goal") }).strict(),
   ])).nullable().default(null),
   // `requirement-revised` (spec §10.3): an earlier clarify round was revised, so the draft no longer follows the requirement.
-  reasonCode: z.enum(["split-output-invalid", "split-call-failed", "split-validation-exhausted", "requirement-revised"]).nullable(), calls: z.array(callRecordSchema),
+  reasonCode: z.enum(["split-output-invalid", "split-call-failed", "split-validation-exhausted", "requirement-revised", AGENT_QUOTA_REASON]).nullable(), calls: z.array(callRecordSchema),
 }).strict();
 export const requirementExportSchema = z.object({
   state: z.enum(["not-due", "pending", "done", "conflict"]), path: z.string().nullable(), commit: commit.nullable(), parent: commit.nullable(), detail: z.string().nullable(),

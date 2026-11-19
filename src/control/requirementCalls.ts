@@ -18,7 +18,8 @@ import {
   clarifyingLedger, clarifyLimits, latestDraft, latestRound, newDraft, queueRequirementCall, readDraft, readDrafts, readRequirementGroup, readRound, readRounds,
   saveRequirementGroup, writeDraft, writeRound, type RequirementGroup,
 } from "./requirementRecords.js";
-import { CALL_DETAIL_MAX_BYTES, MAX_AUTO_RETRIES, multiSplitOutputSchema, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody, type RequirementWaiting } from "./requirementSchemas.js";
+import { AGENT_QUOTA_REASON, CALL_DETAIL_MAX_BYTES, MAX_AUTO_RETRIES, multiSplitOutputSchema, QUOTA_CAUSE, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody, type RequirementWaiting } from "./requirementSchemas.js";
+import { parseResetAt } from "./quotaRest.js";
 import {
   buildSplitPrompt, expandMultiSplitDraft, expandSplitDraft, SPLIT_JSON_SCHEMA_V7, SPLIT_JSON_SCHEMA_MULTI, validateMultiSplitDraft, validateSplitDraft, withoutEmptySetup,
   type SplitPlanFile,
@@ -286,13 +287,28 @@ export function requirementCallTargetMoved(store: ControlStore, run: SingleCallR
   return (target.kind === "round" ? readRound(store, run.groupId, target.no).state : readDraft(store, run.groupId, target.no).state) !== "drafting";
 }
 
-export const callOf = (run: SettledRun, outcome: CallRecord["outcome"], reason: string | null, detail: string | null = null): CallRecord => ({
+export const callOf = (run: SettledRun, outcome: CallRecord["outcome"], reason: string | null, detail: string | null = null, quota: CallQuota | null = null): CallRecord => ({
   runId: run.runId, overviewHash: run.overview?.hash ?? null,
   commit: run.overview !== undefined && run.overview !== null && "commit" in run.overview ? run.overview.commit : null,
   usage: run.cumulative.work, outcome, reason,
   // Issue #125: present only when there is one, so a call record without it keeps its bytes.
   ...(detail === null ? {} : { detail }),
+  // Dogfood finding (1): only on a call that ended on an exhausted quota; the reset only when the CLI's text names one.
+  ...(quota === null ? {} : { cause: QUOTA_CAUSE, ...(quota.resetAt === null ? {} : { resetAt: quota.resetAt }) }),
 });
+
+/** Dogfood finding (1): what a call that ended on ccloop's typed `quota` cause keeps -- the reset its CLI text names, if any. */
+export interface CallQuota { resetAt: number | null }
+
+/**
+ * Dogfood finding (1) (session 3ba26002): a failed call whose ccloop record types its cause `quota` (the provider's usage
+ * limit; quotaRest.ts reads the same cause for task runs), with the reset time its full detail names (parseResetAt, in
+ * the machine's local time, relative to `at` for a time-only reset); null for any other call. Not a prose parse of our own.
+ */
+export function callQuotaOf(failure: string | null, facts: SingleCallRecordFacts | undefined, at: number): CallQuota | null {
+  if (failure === null || facts?.failureCause?.cause !== QUOTA_CAUSE) return null;
+  return { resetAt: parseResetAt(facts.failureCause.detail, at) };
+}
 
 /**
  * Issue #125 (session f958ec3f): the head of the provider's words for a failed call, from ccloop's record
@@ -304,7 +320,7 @@ export function failureDetailOf(facts: SingleCallRecordFacts | undefined): strin
 }
 
 /** Spec §7.3 and H7: a valid round awaits answers; an invalid one is retried at most twice, then fails. */
-function recordClarify(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, rawOutput: unknown, failure: string | null, detail: string | null): void {
+function recordClarify(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, rawOutput: unknown, failure: string | null, detail: string | null, quota: CallQuota | null): void {
   const round = readRound(store, group.groupId, target.no);
   if (round.state !== "drafting") throw new ControlError("recovery-blocked", "requirement-round-moved");
   const rounds = readRounds(store, group.groupId);
@@ -315,12 +331,15 @@ function recordClarify(store: ControlStore, group: RequirementGroup, target: Req
   // repeats, so only the chain's earlier rounds' questions can be depended on -- one id, one question.
   const earlierQuestionIds = rounds.filter((r) => chain.indexOf(r.roundNo) !== -1 && chain.indexOf(r.roundNo) < position).flatMap((r) => r.result?.questions.map((q) => q.id) ?? []);
   const classified = classifyClarifyOutput(rawOutput, { roundNo: position === -1 ? round.roundNo : position + 1, requirementId: group.requirement.requirementId, earlierQuestionIds, classification: clarifyLimits(store, group).effective });
-  round.calls = [...round.calls, failure !== null ? callOf(run, "failed", failure, detail) : callOf(run, classified.ok ? "valid" : "invalid", classified.ok ? null : classified.reason)];
+  round.calls = [...round.calls, failure !== null ? callOf(run, "failed", failure, detail, quota) : callOf(run, classified.ok ? "valid" : "invalid", classified.ok ? null : classified.reason)];
   if (classified.ok) {
     Object.assign(round, { result: classified.result, state: "awaiting-answers", lastInvalidReason: null });
     if (round.roundNo === 1) group.requirement.slug = classified.result.slug;
     // Task 10a: the latest round that gave a title wins; a round without one keeps the earlier title.
     if (classified.result.title !== undefined) group.requirement.title = classified.result.title;
+  } else if (quota !== null) {
+    // Dogfood finding (1): every retry would fail the same way until the quota resets, so none is made.
+    Object.assign(round, { state: "failed", reasonCode: AGENT_QUOTA_REASON, lastInvalidReason: classified.reason });
   } else if (round.retries < MAX_AUTO_RETRIES && (failure === null || !PRE_SPAWN_REFUSALS.has(failure))) {
     Object.assign(round, { retries: round.retries + 1, lastInvalidReason: classified.reason });
     queueRequirementCall(store, group.groupId, `retry-${run.runId}`);
@@ -406,10 +425,10 @@ export const CLARIFY_HANDLER: SingleCallHandler = {
   },
   classify: classifyClarifyOutput,
   complete(deps, run, rawOutput, commitTerminal, failure = null, facts) {
-    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordClarify(store, group, target, settled, rawOutput, failure, failureDetailOf(facts)));
+    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordClarify(store, group, target, settled, rawOutput, failure, failureDetailOf(facts), callQuotaOf(failure, facts, store.now())));
   },
   completeInTransaction(store, run, rawOutput, commitTerminal, failure = null, facts) {
-    settleRequirementCallInTransaction(store, run, commitTerminal, (inner, group, target, settled) => recordClarify(inner, group, target, settled, rawOutput, failure, failureDetailOf(facts)));
+    settleRequirementCallInTransaction(store, run, commitTerminal, (inner, group, target, settled) => recordClarify(inner, group, target, settled, rawOutput, failure, failureDetailOf(facts), callQuotaOf(failure, facts, inner.now())));
   },
   usageUnknownReason: "requirement-usage-unknown",
 };
@@ -492,12 +511,14 @@ export async function evaluateSplit(deps: SingleCallPrepareDeps, run: SingleCall
 }
 
 /** Spec §8.3 and H7 (DR9): a valid draft awaits review; an invalid one becomes `invalid` and the next draft is drafted, at most twice. */
-function recordSplit(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, ev: SplitEvaluation, failure: string | null, detail: string | null): void {
+function recordSplit(store: ControlStore, group: RequirementGroup, target: RequirementTarget, run: SettledRun, ev: SplitEvaluation, failure: string | null, detail: string | null, quota: CallQuota | null): void {
   const draft = readDraft(store, group.groupId, target.no);
   if (draft.state !== "drafting") throw new ControlError("recovery-blocked", "requirement-draft-moved");
-  draft.calls = [...draft.calls, failure !== null ? callOf(run, "failed", failure, detail) : callOf(run, ev.ok ? "valid" : "invalid", ev.ok ? null : ev.reasons.join("; "))];
+  draft.calls = [...draft.calls, failure !== null ? callOf(run, "failed", failure, detail, quota) : callOf(run, ev.ok ? "valid" : "invalid", ev.ok ? null : ev.reasons.join("; "))];
   Object.assign(draft, { output: ev.output, plan: ev.ok ? ev.plan : null, draftHash: ev.ok ? ev.draftHash : null, reasons: ev.reasons, layers: ev.layers, implicitEdges: ev.implicitEdges, impliedPathsAdded: ev.impliedPathsAdded });
   if (ev.ok) draft.state = "awaiting-review";
+  // Dogfood finding (1): an exhausted quota is not re-drafted; every new draft would fail the same way until it resets.
+  else if (quota !== null) Object.assign(draft, { state: "failed", reasonCode: AGENT_QUOTA_REASON });
   else if (draft.autoRetry < MAX_AUTO_RETRIES && (failure === null || !PRE_SPAWN_REFUSALS.has(failure))) {
     draft.state = "invalid";
     writeDraft(store, group.groupId, draft);
@@ -530,10 +551,10 @@ export const SPLIT_HANDLER: SingleCallHandler = {
   evaluate: evaluateSplit,
   classify: validateSplitDraft,
   complete(deps, run, evaluation, commitTerminal, failure = null, facts) {
-    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordSplit(store, group, target, settled, evaluation as SplitEvaluation, failure, failureDetailOf(facts)));
+    settleRequirementCall(deps, run, commitTerminal, (store, group, target, settled) => recordSplit(store, group, target, settled, evaluation as SplitEvaluation, failure, failureDetailOf(facts), callQuotaOf(failure, facts, store.now())));
   },
   completeInTransaction(store, run, evaluation, commitTerminal, failure = null, facts) {
-    settleRequirementCallInTransaction(store, run, commitTerminal, (inner, group, target, settled) => recordSplit(inner, group, target, settled, evaluation as SplitEvaluation, failure, failureDetailOf(facts)));
+    settleRequirementCallInTransaction(store, run, commitTerminal, (inner, group, target, settled) => recordSplit(inner, group, target, settled, evaluation as SplitEvaluation, failure, failureDetailOf(facts), callQuotaOf(failure, facts, inner.now())));
   },
   usageUnknownReason: "requirement-usage-unknown",
 };

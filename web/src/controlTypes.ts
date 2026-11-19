@@ -71,6 +71,8 @@ export type RequirementSummaryV1 = {
   title?: string;
   /** Issue 91 review fix: present only on a handoff-unresolved stop -- whether recovery-retry can act on it. */
   stopRetryable?: boolean;
+  /** Dogfood finding (1): only when the current step ended requirement-agent-quota -- the provider's text, its reset (epoch ms), the next step. */
+  agentQuota?: { detail: string | null; resetAt: number | null; next: string };
 };
 
 export type GroupSummaryV1 = {
@@ -252,6 +254,9 @@ export type RequirementCallRecordV1 = {
   reason: string | null;
   /** Issue #125: a failed call's head of the provider's words, from ccloop's record; absent when it named none. */
   detail?: string;
+  /** Dogfood finding (1): only on a call that ended on an exhausted quota, with the reset its text named (epoch ms), if any. */
+  cause?: "quota";
+  resetAt?: number;
 };
 export type ClarifyResultV1 = {
   slug: string | null;
@@ -280,7 +285,7 @@ export type RoundBodyV1 = {
   adrDecisions: RequirementDecisionInputV1[] | null;
   answeredAt: string | null;
   closedByConsensus: boolean;
-  reasonCode: null | "clarify-output-invalid" | "clarify-call-failed";
+  reasonCode: null | "clarify-output-invalid" | "clarify-call-failed" | "requirement-agent-quota";
   calls: RequirementCallRecordV1[];
   /** Flow engine spec §10.3 (W-76): set on a revision of round `revises` only. */
   revises?: number;
@@ -339,7 +344,7 @@ export type DraftViewV1 = {
   overlapSerialized?: Array<{ a: string; b: string; paths: string[] }>;
   /** Spec 2026-11-16: paths the split added to a task's targetPaths because its success condition named them (#345: or its goal, `source: "goal"`). */
   impliedPathsAdded: Array<{ taskId: string; path: string; writers: string[]; source?: "goal" }> | null;
-  reasonCode: null | "split-output-invalid" | "split-call-failed" | "split-validation-exhausted" | "requirement-revised";
+  reasonCode: null | "split-output-invalid" | "split-call-failed" | "split-validation-exhausted" | "requirement-revised" | "requirement-agent-quota";
   calls: RequirementCallRecordV1[];
 };
 /** N1 spec §11.2: one requirement in full (src/control/webProtocol.ts requirementViewSchema, field for field). */

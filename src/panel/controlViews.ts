@@ -54,7 +54,7 @@ import { clarifyLimits, hasRequirementBlock, latestDraft, latestRound, readDraft
 import { QUOTA_PROBE_MAX_OUTPUT_TOKENS, probeVerdictSchema, quotaProbeIdentitySchema } from "../control/quotaProbeCall.js";
 import { isGroupCallPurpose, isGroupCallWorkItem, readGroupCallContract } from "../control/groupSingleCall.js";
 import { reviewOf, reviewProblem } from "../control/requirementReviewRecord.js";
-import { CLARIFY_CAPS } from "../control/requirementSchemas.js";
+import { AGENT_QUOTA_REASON, CLARIFY_CAPS, QUOTA_CAUSE, type CallRecord } from "../control/requirementSchemas.js";
 import { renderRequirementDocument } from "../control/requirementDocument.js";
 import { activeChain, chainRounds } from "../control/clarifyChain.js";
 import { readEstimateContract } from "../control/estimator.js";
@@ -598,7 +598,20 @@ function requirementSummaryFromSnapshot(store: ControlStore, groupId: string, sn
     ...(group.requirement.title === undefined ? {} : { title: group.requirement.title }),
     // Issue 91 review fix: only on a handoff-unresolved stop -- whether recovery-retry can act on it.
     ...(groupStopState(store, groupId) === "handoff-unresolved" ? { stopRetryable: unresolvedStopRetryable(store, groupId) } : {}),
+    ...agentQuotaOf(groupId, group.requirement.consensus === null ? round : draft),
   };
+}
+
+/**
+ * Dogfood finding (1) (session 3ba26002): a round or draft that ended on an exhausted quota names its call's provider text,
+ * the reset that text named when the call was recorded, and the next step -- another agent now, or a retry after the reset.
+ */
+function agentQuotaOf(groupId: string, step: { reasonCode: string | null; calls: CallRecord[] } | null): Pick<RequirementSummaryV1, "agentQuota"> {
+  if (step === null || step.reasonCode !== AGENT_QUOTA_REASON) return {};
+  const call = [...step.calls].reverse().find((entry) => entry.cause === QUOTA_CAUSE);
+  const resetAt = call?.resetAt ?? null, retry = `orca recovery retry --group ${groupId}`;
+  return { agentQuota: { detail: call?.detail ?? null, resetAt,
+    next: `the agent's usage quota ran out${resetAt === null ? "" : ` (it resets at ${new Date(resetAt).toISOString()})`}: switch the requirement's agent with ${requirementSetAgentCommand(groupId)}, then ${retry}; or wait for the reset and run ${retry}` } };
 }
 
 export function readGroupSummary(store: ControlStore, groupId: string): GroupSummaryV1 {

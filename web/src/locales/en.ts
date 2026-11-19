@@ -1776,6 +1776,7 @@ export const en = {
     clarifyMore: "Clarify one more round",
     saveSplit: "Save split to library",
     draftMore: "More split actions",
+    quotaResetsAt: "The quota resets at {{at}}.",
     reason: {
       "clarify-output-invalid": "The model's answers for this round were invalid three times.",
       "clarify-call-failed": "This round's call failed, so the model gave no answer to check; the failed call's code and details are shown with it.",
@@ -1783,6 +1784,7 @@ export const en = {
       "split-call-failed": "The split's call failed, so the model gave no split to check; the failed call's code and details are shown with it.",
       "split-validation-exhausted": "The split failed code's checks three times; the last reasons are shown.",
       "requirement-budget-exhausted": "The next call does not fit the limit; raise the limit to go on.",
+      "requirement-agent-quota": "The agent's usage quota ran out, so Orca did not retry the call. Switch the requirement's agent, or wait until the quota resets, then retry.",
       "requirement-usage-unknown": "Some of this requirement's usage is unknown, so no further call is made. Settle the blocked call's usage (charge its grant), then it retries.",
       "requirement-export-conflict": "orca/{{groupId}} already exists with other commits; it was not touched.",
       "requirement-export-path-blocked": "A file named .orca or .orca/requirements in HEAD blocks the document's export; nothing was written.",

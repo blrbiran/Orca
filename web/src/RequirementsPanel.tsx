@@ -40,12 +40,13 @@ type Draft = View["drafts"][number];
 /** Every reason code this section can show, each with its one-line explanation (requirements.reason.*). */
 const REASONS = [
   "clarify-output-invalid", "clarify-call-failed", "split-output-invalid", "split-call-failed", "split-validation-exhausted", "requirement-budget-exhausted", "requirement-usage-unknown",
-  "requirement-export-conflict", "requirement-export-path-blocked", "requirement-export-pending", "requirement-not-split",
+  "requirement-agent-quota", "requirement-export-conflict", "requirement-export-path-blocked", "requirement-export-pending", "requirement-not-split",
 ] as const;
 type Reason = (typeof REASONS)[number];
 /** The reasons recovery-retry lifts: a failed round or draft re-queues, a blocked export re-arms (spec §11.1, §15 item 11). */
 // Tester follow-up E §7 (#125): a step whose last call failed is retried like one whose output was invalid.
-const RETRYABLE: readonly string[] = ["clarify-output-invalid", "clarify-call-failed", "split-output-invalid", "split-call-failed", "split-validation-exhausted", "requirement-export-conflict", "requirement-export-path-blocked"];
+// Dogfood finding (1): so is one whose call ended on an exhausted quota, once the agent is switched or the quota reset.
+const RETRYABLE: readonly string[] = ["clarify-output-invalid", "clarify-call-failed", "split-output-invalid", "split-call-failed", "split-validation-exhausted", "requirement-agent-quota", "requirement-export-conflict", "requirement-export-path-blocked"];
 const BUDGET_EXHAUSTED = "requirement-budget-exhausted";
 const EXPORT_PENDING = "requirement-export-pending";
 const isReason = (code: string): code is Reason => (REASONS as readonly string[]).includes(code);
@@ -828,6 +829,7 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
   const short = (tokens: number): string => shortTokens(tokens);
   const accepted = (decisions: Round["glossaryDecisions"]) => new Set((decisions ?? []).filter((d) => d.accept).map((d) => d.id));
   const reason = view.summary.requirement?.waiting ?? view.summary.requirement?.reasonCode ?? null;
+  const quotaResetAt = view.summary.requirement?.agentQuota?.resetAt ?? null;
   const step = view.requirement.consensus === null ? round : draft;
   // ccloop error codes spec (2026-10-15) §4.5-§4.6: a failed step names its latest failed call's ccloop code.
   const failedCall = step?.state === "failed" ? [...step.calls].reverse().find((call) => call.outcome === "failed") ?? null : null;
@@ -920,6 +922,8 @@ function Detail(props: { view: View; onCommand: OnCommand; onPrepare?: (groupId:
       <div id={overviewRegionId("requirement", groupId, "problem")} tabIndex={-1} data-overview-region="problem">
       {!archived && (reason !== null || retryable || stopUnresolved) && (
         <p role="alert">{reason !== null && <>{reason}{isReason(reason) ? ` · ${t(`requirements.reason.${reason}`, { groupId })}` : ""} </>}
+          {/* Dogfood finding (1): the reset the provider's text named, when it named one. */}
+          {quotaResetAt != null && <>{t("requirements.quotaResetsAt", { at: new Date(quotaResetAt).toLocaleString() })} </>}
           {stopped && <>{t("requirements.stopped")} </>}
           {stopUnresolved && <>{t("requirements.stopUnresolved")} </>}
           {retryable && <button type="button" onClick={() => props.onCommand({ verb: "recovery-retry", groupId, expectedRevision: revisionOf(view), payload: { scope: "group", groupId } })}>{t("requirements.retry")}</button>}

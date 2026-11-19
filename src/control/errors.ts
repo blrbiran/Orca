@@ -594,6 +594,7 @@ export const nonDurableControlErrorClassifications = {
   // N1 spec §11.1 (DR27): reason codes projected on a requirement's rounds, drafts and export, never command outcomes.
   "clarify-call-failed": "internal",
   "clarify-output-invalid": "internal",
+  "requirement-agent-quota": "internal",
   "requirement-budget-exhausted": "internal",
   "requirement-export-conflict": "internal",
   "requirement-export-path-blocked": "internal",

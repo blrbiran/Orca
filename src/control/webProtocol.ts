@@ -1658,6 +1658,9 @@ export const requirementSummarySchema = z.object({
   title: nonemptyString.optional(),
   // Issue 91 review fix: present only on a handoff-unresolved stop -- whether recovery-retry can act on it.
   stopRetryable: z.boolean().optional(),
+  // Dogfood finding (1) (session 3ba26002): present only when the current round or draft ended `requirement-agent-quota`
+  // -- its call's provider text, the reset that text names (epoch ms, null when none) and what to do next.
+  agentQuota: z.object({ detail: nonemptyString.nullable(), resetAt: safeInteger.nullable(), next: nonemptyString }).strict().optional(),
 }).strict();
 export type RequirementSummaryV1 = z.infer<typeof requirementSummarySchema>;
 
