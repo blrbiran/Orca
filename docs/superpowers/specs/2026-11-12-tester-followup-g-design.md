@@ -609,3 +609,38 @@ reproduced this with 8/8 tasks done and every focused check green.
 - Criteria: `tests/control/requirementReviewAcceptanceGate.test.ts` (a failing tip is reviewed and the group stays out of
   done) and the rewritten `tests/control/requirementReviewFix.test.ts` "starts an initial review even when group
   acceptance truly fails (#314)".
+
+## Correction (2026-11-19, session 3ba26002): a criterion red only because the base was red is a relative pass (#377)
+
+Human ruling (session `3ba26002`, #377: 「同意」; the principle of #337: "Orca's design intent is not to get stuck on a
+person"): a not-met criterion that fails only because the repository was already red at the group's base is judged a
+**relative pass**. The group carries a visible note and reaches done; it does not stop for a person. Code decides, not the
+model (Rule 5): the reviewer's answer is kept as given, and code reads Orca's own records to decide which not-met
+criteria are relative passes.
+
+**The rule** (`requirementReview.ts` `relativePasses`). A criterion of a review round on tip T is a relative pass when all
+of the following hold; otherwise it is judged as before:
+
+1. The reviewer answered it `not-met`, and every evidence item it named is the acceptance record (`orca:acceptance`) --
+   the reviewer pointed at no file the group delivered.
+2. The criterion's agreed text (the clarification's acceptance criterion) contains the project's full-suite command
+   literally -- the criterion is about that command.
+3. The group's acceptance record is for T and is `passed-relative`, with a full-suite command and a base run.
+4. Every run of the suite on T exited non-zero, and each of those exits also appears among the suite's exits at the
+   group's base (so `1` at the tip against `1` at the base qualifies; a timeout at the tip against `1` at the base does
+   not).
+5. Every other command the acceptance ran on T (setup and the tasks' checks) exited `0`: the suite is the only red thing.
+6. No person answered the pre-existing failure of that command with `allow-fix` (spec 2026-11-18 L2): a person who asked
+   for the failure to be repaired keeps today's fix path.
+
+Orca records no failing-test identities at the tip or the base (only output tails), so the rule cannot require "tip
+failures are a subset of base failures"; condition 4 compares exit codes only. A regression hidden inside a suite that
+was already red is therefore not caught by this rule (it was not caught by the `passed-relative` acceptance either).
+
+**What changes.** The round records the relative passes (`relativePass: [{criterionId, command, tipExits, baseExits}]`,
+optional, so a round recorded before parses unchanged). A relative pass does not count as not-met: when every not-met
+criterion of a round is one, the round's result is `passed` and the review passes (the done gate opens); otherwise the
+remaining not-met criteria are routed as before (fixableBy, automatic fix), and the automatic fix task's goal leaves the
+relative passes out. `group show` / `group brief` print one line per relative pass, and the Web review panel shows it
+next to the criterion. `orca status` shows a passed review nowhere today and is unchanged; the base-red suite is already
+the acceptance's `full-suite-pre-existing` warning.

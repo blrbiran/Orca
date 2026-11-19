@@ -218,3 +218,15 @@ File:line references were read at that commit (`/usr/bin/git show <commit>:<file
    (`run-usage-not-settleable:abandoned`), Orca's own approximate settlement included. Settling it as abandoned there
    instead would change that branch's reservation arithmetic, so it was not done. **Limit:** such a run then has no way
    out short of archiving the group (no settle-usage disposition, no `task retry`).
+
+## Correction (2026-11-19, session 3ba26002): the automatic fix task's cap never exceeds what the group has left (#377)
+
+Tester #377: S5's cap (`autoFixTokenCeiling`: twice the source task's used tokens, at least 1M, clamped by the source's
+grant -- Correction 3.3c) was 4.09M while the group's unallocated reserve held 1.58M, so appending the fix task failed
+`group-budget-unavailable` and the review stopped `unfunded` with budget still left. Now the cap is also clamped by what
+the group can fund: the unallocated reserve's tokens less the fix task's handoff tokens (the two allocations
+`appendConfirmedTaskInTransaction` reserves together). The 1M floor holds only when the group can pay it; below that the
+cap is what the group has left. Only when that is zero or less (or another dimension -- active time, attempts, sessions --
+does not fit) does the fix stay `unfunded`, shown with its existing next steps. A group with no token limit (reserve
+tokens `null`) is not clamped. A person's `review-fix` keeps the source's grant as before. A positive but very small
+remainder still opens a fix task with that cap (no minimum below the floor); see the build report.

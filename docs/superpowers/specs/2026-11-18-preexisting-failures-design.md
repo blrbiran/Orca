@@ -287,3 +287,11 @@ as written; it is corrected here.
    asker is that failed run); a red answer reaches the new run while it works as §6's live note. Continuations, saved-result
    verifies and recovery runs ask nothing there. A failed run that is never followed by another gets no base check for its
    final attempt's command; one followed before the collector stored that verification gets `lastFailure`'s (or none).
+
+## Correction (2026-11-19, session 3ba26002): an `allow-fix` answer withholds the review's relative pass (#377)
+
+§11 said an answer "changes no acceptance rule, retry rule, verdict rule". Since #377 (follow-up G spec, Correction of
+2026-11-19) code judges a not-met criterion about the full suite a relative pass when the suite was already red at the
+group's base. One answer now matters to that rule: `allow-fix` on the suite's command (the person asked for the
+pre-existing failure to be repaired) withholds the relative pass, so the criterion stays not-met and takes the fix path
+as before. `relative` and `edit-requirement`, and no answer, leave the rule to apply.
