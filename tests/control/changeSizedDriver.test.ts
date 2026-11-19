@@ -1,8 +1,11 @@
 import { existsSync, readdirSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { ExecutionDriver } from "../../src/control/executionDriver.js";
 import { describe, expect, it } from "vitest";
 import { readArtifact } from "../../src/control/archive.js";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
-import { readStartEnvelope } from "../../src/control/executionDriver.js";
+import { checkPathOf, readStartEnvelope } from "../../src/control/executionDriver.js";
 import { snapshotV2Schema, verifySnapshotInRepository } from "../../src/control/snapshotV2.js";
 import { applySetWorkspaceMode } from "../../src/control/workspaceSettings.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
@@ -106,4 +109,43 @@ describe("ccloop P1 (features.attemptRef v1): the attempt is a pinned ref (§5.3
       expect(git(t.repo, "rev-parse", `refs/orca/runs/${runId}`)).toBe(run.drive.attemptSha);
     } finally { await t.h.dispose(); }
   }, 60_000);
+});
+
+describe("a v2 run's check commands run in a check worktree of the target (§5.3)", () => {
+  async function settle(driver: ExecutionDriver, predicate: () => boolean, ms = 60_000): Promise<void> {
+    const deadline = Date.now() + ms;
+    while (!predicate()) {
+      if (Date.now() > deadline) throw new Error("the driver did not reach the expected state in time");
+      await driver.round();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  }
+  const CHECK = "test \"$(cut -d' ' -f2 tests/value.test.txt)\" = \"$(cat src/value.txt)\"";
+  // criteriaBaseRun.test.ts:248's intent for a v2 run (spec §11.1 P2 row): the base re-run's setup output is neither left
+  // nor archived. Mutations: skip the check worktree's removal after the verdict -> check-<runId> exists, red; run the
+  // re-run in <sourceDir>/repo -> a keyed run has none, the re-run cannot start, red.
+  it("re-runs a modified check at base in check-<runId>, removes it after the verdict, and archives no setup output", async () => {
+    const install = "mkdir -p node_modules/x && touch node_modules/x/index.js";
+    const t = await driverHarness([{ taskId: "a", tokenBudget: 4_000_000, targetPaths: ["tests/**", "src/**", "a"], contextExtra: { setupCommands: [install] } }],
+      { tokenPolicy: "optional-v1", attemptRef: true, files: () => ({ "tests/value.test.txt": "expect 4 # reworded\n" }), requiredChecks: [CHECK] });
+    try {
+      await mkdir(join(t.repo, "tests"), { recursive: true }); await mkdir(join(t.repo, "src"), { recursive: true });
+      await writeFile(join(t.repo, "tests", "value.test.txt"), "expect 4\n"); await writeFile(join(t.repo, "src", "value.txt"), "4\n");
+      await writeFile(join(t.repo, ".gitignore"), "node_modules/\n");
+      git(t.repo, "add", "tests", "src", ".gitignore"); git(t.repo, "commit", "-qm", "checks");
+      const runId = await t.claim();
+      const driver = t.driver();
+      await settle(driver, () => t.body(runId).drive?.landedCommit != null || t.body(runId).state === "blocked");
+      const run = t.body(runId);
+      expect(run.drive.blockedReason).toBeNull();
+      expect(run.drive.criteriaBase).toEqual({ result: "passed" });
+      expect(run.drive.attemptDelivery).toBe("ref-v1");
+      expect(existsSync(checkPathOf(t.deps.roots, runId))).toBe(false);
+      expect(existsSync(join(run.drive.sourceDir, "repo"))).toBe(false);
+      const tree = git(t.repo, "ls-tree", "-r", "--name-only", run.drive.attemptSha).split("\n");
+      expect(tree).toContain("src/value.txt");
+      expect(tree.filter((path) => path.includes("node_modules"))).toEqual([]);
+      expect(git(t.repo, "worktree", "list", "--porcelain")).not.toContain(`check-${runId}`);
+    } finally { await t.h.dispose(); }
+  }, 90_000);
 });
