@@ -1,6 +1,7 @@
 import { recordActivity } from "./activity.js";
 import { terminalKindOf } from "./archivedMark.js";
 import { applyWebCommand, type WebCommandContext } from "./commandLedger.js";
+import { rearmContinuingContinuations } from "./continuation.js";
 import { ArchiveRunActiveError, ControlError, type ActiveRunRef } from "./errors.js";
 import { recoveryRetryCommand, resumableBlockedRun } from "./driveRecord.js";
 import { dirWorkspaceOf } from "./dirGroup.js";
@@ -113,13 +114,14 @@ function interruptParkedCall(store: ControlStore, groupId: string, target: Requi
 /**
  * Tester #370 (human ruling 2026-11-20: the read side plus clearing pending wakes this round; DB `status` convergence is
  * a later design): a group archived or closed takes no new work, so its queued start-family wakes are marked delivered in
- * the same transaction -- the rows stay for audit. `recovery list` therefore reports no `group-archived` deferred wake for
- * a group archived from now on, and the unarchive does not resurrect them (nothing is re-armed). Only the kinds the pump
- * would claim as a start are retired; a queued estimate's wake is not one of them -- it is held, not dropped, and delivers
- * once the group is unarchived (spec §6.3).
+ * the same transaction -- the rows stay for audit. The family is every kind the pump claims as a start, the historical
+ * `continuation` kind included, so `recovery list` reports no `group-archived` deferred wake for a group archived from now
+ * on. The unarchive re-arms a continuation batch from its durable registration (rearmContinuingContinuations); nothing else
+ * is resurrected. A queued estimate's wake is not one of these -- it is held, not dropped, and delivers once the group is
+ * unarchived (spec §6.3).
  */
-function clearPendingStartWakes(store: ControlStore, groupId: string): void {
-  store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE group_id=? AND delivered=0 AND kind IN ('start','no-start','resume')").run(groupId);
+function clearPendingDispatchWakes(store: ControlStore, groupId: string): void {
+  store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE group_id=? AND delivered=0 AND kind IN ('start','no-start','resume','continuation')").run(groupId);
 }
 
 /**
@@ -139,7 +141,7 @@ export function applyArchiveGroup(deps: { store: ControlStore }, command: Archiv
       const at = deps.store.now();
       group.archived = { at, actor: context.rawCommand.actorId };
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
-      clearPendingStartWakes(deps.store, groupId);
+      clearPendingDispatchWakes(deps.store, groupId);
       recordActivity(deps.store, { groupId, kind: "archived", body: {} });
       return success(context, { kind: "archived", groupId, at });
     },
@@ -195,7 +197,7 @@ export function applyCloseGroup(deps: { store: ControlStore }, command: CloseGro
       const at = deps.store.now();
       group.archived = { at, actor: context.rawCommand.actorId, kind: "closed" };
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
-      clearPendingStartWakes(deps.store, groupId);
+      clearPendingDispatchWakes(deps.store, groupId);
       recordActivity(deps.store, { groupId, kind: "closed", body: {} });
       return success(context, { kind: "closed", groupId, at });
     },
@@ -231,11 +233,16 @@ function owedDelivery(store: ControlStore, groupId: string, group: Record<string
 /**
  * Spec §6.3 and the #370 correction below: removes a terminal mark of the given kind (refused no-op-command when the group
  * has none; the ledger refuses the other kind by its own code before this), pausing a group that would run on its own.
+ * Tester #370 review (human ruling 2026-11-20): the archive retired a queued continuation batch with the other
+ * start-family wakes; an unarchive re-arms it here from each `continuing` work item's durable registration, BEFORE the
+ * pause decision, so the pause holds the batch and a person's resume is what delivers it. (An unclose is a done group; it
+ * has no continuing work item.)
  */
 function removeTerminalMark(store: ControlStore, context: WebCommandContext, groupId: string, kind: "archived" | "closed"): boolean {
   const group = groupBody(store, groupId);
   if (terminalKindOf(group) !== kind) throw new ControlError("no-op-command");
   delete group.archived;
+  if (kind === "archived") rearmContinuingContinuations(store, groupId);
   const pause = wouldRunOnUnarchive(store, groupId, group);
   if (pause) {
     saveStopIntent(store, groupId, "pause", context.nextCommandRevision, { mode: "pause", state: "paused", frozenRunIds: [], acceptedAt: null, deadlineAt: null });

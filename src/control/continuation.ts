@@ -208,6 +208,26 @@ function armContinuationWake(store: ControlStore, groupId: string, resumeRevisio
 }
 
 /**
+ * Tester #370 (human ruling 2026-11-20, its review): archiving or closing a group retires its queued start-family wakes,
+ * a continuation batch included. Each `continuing` work item keeps its durable registration (and its resume revision), so
+ * an unarchive re-arms the batch from that record -- one wake per revision, in work-item order, resetting the cleared row
+ * (`armContinuationWake`'s ON CONFLICT). The batch is a person's to resume: nothing here starts it. Returns the armed ids.
+ */
+export function rearmContinuingContinuations(store: ControlStore, groupId: string): string[] {
+  const batches = new Map<number, RegisteredContinuation[]>();
+  for (const row of store.db.prepare("SELECT body FROM work_items WHERE group_id=? ORDER BY rowid").all(groupId)) {
+    const work = JSON.parse(String(row.body)) as ContinuationWork;
+    const registered = registrationOf(work.continuation);
+    // Only a registration the work item still points at is claimable (continuationClaimable); a stale one is not re-armed.
+    if (work.status !== "continuing" || registered === null || work.pendingRunId !== registered.pendingRunId) continue;
+    const batch = batches.get(registered.resumeRevision) ?? [];
+    batch.push(registered);
+    batches.set(registered.resumeRevision, batch);
+  }
+  return [...batches.entries()].map(([revision, registrations]) => armContinuationWake(store, groupId, revision, registrations));
+}
+
+/**
  * Live transcript spec §10.5.1 (plan D7): register the continuation a flow resume of a recoverable child needs. The
  * child's one work item holds its current run, and only a settled-recoverable run with a committed checkpoint continues.
  */

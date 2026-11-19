@@ -445,6 +445,19 @@ describe("no claim and no wake for an archived group (spec §6.3)", () => {
     } finally { await h.dispose(); }
   });
 
+  // Ruling (2026-11-20, #370 scope plus its review): the historical `continuation` wake kind is part of the start family
+  // the read side reports for an archived group, so the archive clears it with the others (the row stays for audit).
+  it("clears a legacy continuation wake at archive (#370 review)", async () => {
+    const { h, service } = await confirmed();
+    try {
+      h.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES ('legacy:continuation','g','continuation','{}',0)").run();
+      service.archiveGroup(h.command("archive-group", {}));
+      // mutation: drop `continuation` from the cleared kinds -> delivered is 0 and recovery reports it, red here
+      expect(h.store.db.prepare("SELECT delivered FROM scheduler_wakes WHERE id='legacy:continuation'").get()).toEqual({ delivered: 1 });
+      expect(readControlRecovery(h.store, "e").deferredWakes).toBeUndefined();
+    } finally { await h.dispose(); }
+  });
+
   it("offers no claimable task, so the driver arms no new start wake, until it is unarchived", async () => {
     const { h, service } = await confirmed();
     try {

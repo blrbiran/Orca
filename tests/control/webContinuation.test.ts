@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { WebControlService } from "../../src/control/webService.js";
 import { continuationIdentity, continuationWakeBody } from "../../src/control/continuation.js";
 import { groupStopState, readStopIntent } from "../../src/control/stopIntent.js";
+import { readControlRecovery } from "../../src/panel/controlViews.js";
 import { createWebWakeHandlers, deliverScheduledStart, nextClaimableTask, settleProviderAttempt } from "../../src/control/webDispatch.js";
 import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
@@ -601,10 +602,10 @@ function idSchemaFree(value: string): boolean {
 }
 
 describe("an archived group with a queued continuation and a queued start (issue-fixes spec §6.3, plan Review Focus 4)", () => {
-  // Ruling (2026-11-20, #370): the human approved the read-side plus clear-wakes scope. The archive now marks both queued
-  // wakes delivered (the rows stay for audit) and the unarchive does not resurrect them, so the pump has nothing to defer;
-  // a person's resume starts the group's ordinary work again, without the cleared continuation batch.
-  it("clears both wakes at archive: no claim is made, and the unarchive does not resurrect them", async () => {
+  // Ruling (2026-11-20, #370 scope plus its review): the archive marks both queued wakes delivered (the rows stay for
+  // audit); the unarchive re-arms the continuation batch from the durable registration, so its pause holds that batch, while
+  // the cleared ordinary start wake stays retired. A person's resume then delivers the continuation.
+  it("clears both wakes at archive; the unarchive re-arms the continuation but not the start, and a person's resume delivers it", async () => {
     const ctx = await continuationFixture(); const { h, service } = ctx; try {
       const a = await recoverablePredecessor(ctx, "a");
       await stoppedAfterHandoff(ctx);
@@ -614,36 +615,42 @@ describe("an archived group with a queued continuation and a queued start (issue
       const queued = () => wakeRows(h.store).filter((row) => row.delivered === 0 && (row.kind === "start" || row.kind === "resume"));
       const wakes = queued().map((row) => row.id).sort();
       expect(queued().map((row) => row.kind).sort()).toEqual(["resume", "start"]);
+      const resumeWakeId = queued().find((row) => row.kind === "resume")!.id;
+      const startWakeId = queued().find((row) => row.kind === "start")!.id;
       const archived = service.archiveGroup(h.command("archive-group", {}));
       if ("error" in archived) throw new Error(JSON.stringify(archived));
-      // mutation: drop the wake-clearing write from applyArchiveGroup -> both rows are still pending, red here
+      // mutation: drop `resume` from the cleared kinds -> the resume row is still pending, red here
       expect(queued()).toEqual([]);
-      expect(wakeRows(h.store).filter((row) => wakes.includes(row.id)).map((row) => row.delivered)).toEqual([1, 1]);
       // The pump's own handlers, as the driver delivers them: nothing is left to acknowledge and nothing is claimed.
       const handlers = createWebWakeHandlers({ ...ctx.deps, service });
       const pass = await deliverSchedulerWakes(h.store, handlers);
       for (const id of wakes) expect(pass.delivered).not.toContain(id);
       expect(await deliverScheduledStart(ctx.deps, "g")).toEqual({ kind: "idle" });
       expect(activeRunIds(h.store)).toEqual([]);
-      // The unarchive pauses the group (ordinary work is still claimable) and leaves the cleared rows alone.
+      // The unarchive re-arms the continuation batch (same row, pending again) and pauses the group; the start stays retired.
       expect(service.unarchiveGroup(h.command("unarchive-group", {}))).toMatchObject({ result: { kind: "unarchived", paused: true } });
-      expect(pendingWakes(h.store).filter((id) => wakes.includes(id))).toEqual([]);
+      expect(h.store.db.prepare("SELECT delivered FROM scheduler_wakes WHERE id=?").get(resumeWakeId)).toEqual({ delivered: 0 });
+      expect(h.store.db.prepare("SELECT delivered FROM scheduler_wakes WHERE id=?").get(startWakeId)).toEqual({ delivered: 1 });
       expect(activeRunIds(h.store)).toEqual([]);
-      await service.resumeDispatch(h.command("resume-dispatch", {}));
+      expect(await service.resumeDispatch(h.command("resume-dispatch", {})))
+        .toMatchObject({ result: { kind: "scheduled", operation: "resume-dispatch" } });
       const after = await deliverSchedulerWakes(h.store, handlers);
-      for (const id of wakes) expect(after.delivered).not.toContain(id);
-      expect(activeRunIds(h.store).length).toBeGreaterThan(0);
+      expect(after.delivered).toContain(resumeWakeId);
+      expect(after.delivered).not.toContain(startWakeId);
+      expect(activeRunIds(h.store).map((id) => runRow(h.store, id).workItemId)).toContain("a");
+      expect(workRow(h.store, "a").status).not.toBe("continuing");
     } finally { await h.dispose(); }
   });
 });
 
 // #370 review: a resume wake is held by the unarchive's pause even when no task is claimable (a's continuation is the
 // group's only work), so the queued-wake rule, not the claimable-task one, is what pauses it.
-// Ruling (2026-11-20, #370): the human approved the read-side plus clear-wakes scope. The archive now clears the
-// continuation wake and the unarchive does not resurrect it; with no claimable task left, the unarchive pauses nothing and
-// the cleared continuation is not run again. This replaces the criterion where the pause held the wake for a later resume.
+// Ruling (2026-11-20, #370 scope plus its review): the archive clears the queued start-family wakes (deferredWakes names
+// no group-archived row), and the unarchive re-arms the continuation batch from the durable work-item registrations BEFORE
+// deciding the pause. The pause then holds the re-armed wake; a person's resume delivers it and the work item leaves
+// `continuing`. This replaces the criterion that let the archive clear the batch for good and pinned the stranded state.
 describe("an archived group whose only queued work is a continuation (#370 review)", () => {
-  it("the archive clears the continuation wake; the unarchive neither pauses nor resurrects it", async () => {
+  it("the archive clears the continuation wake; the unarchive re-arms and pauses it; a person's resume delivers the continuation", async () => {
     const ctx = await continuationFixture([{ taskId: "a" }]); const { h, service } = ctx; try {
       const a = await recoverablePredecessor(ctx, "a");
       await stoppedAfterHandoff(ctx);
@@ -652,21 +659,28 @@ describe("an archived group whose only queued work is a continuation (#370 revie
       expect(nextClaimableTask(h.store, "g")).toBeNull();
       const continuationWake = h.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id='g' AND kind='resume' AND delivered=0").get();
       expect(continuationWake).toBeDefined();
+      const continuationWakeId = String(continuationWake!.id);
       service.archiveGroup(h.command("archive-group", {}));
-      // mutation: drop the wake-clearing write from applyArchiveGroup -> the continuation wake is still pending, red here
-      expect(h.store.db.prepare("SELECT delivered FROM scheduler_wakes WHERE id=?").get(String(continuationWake!.id)))
-        .toEqual({ delivered: 1 });
+      // mutation: drop `resume` from the cleared kinds -> the continuation wake is still pending, red here
+      expect(h.store.db.prepare("SELECT delivered FROM scheduler_wakes WHERE id=?").get(continuationWakeId)).toEqual({ delivered: 1 });
+      // `resume` is the only kind the read side reports as group-archived; the archived group names none.
+      expect(readControlRecovery(h.store, "e").deferredWakes).toBeUndefined();
       const result = service.unarchiveGroup(h.command("unarchive-group", {}));
-      // Nothing would run on its own once unarchived: no wake and no claimable task, so no pause is taken.
-      // mutation: re-arm the cleared wake on unarchive -> pendingWakes is non-empty and the unarchive pauses, red here
-      expect((result as { result: Record<string, unknown> }).result).not.toHaveProperty("paused");
-      expect(h.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id='g' AND delivered=0 AND kind IN ('start','no-start','resume')").all()).toEqual([]);
+      // mutation: drop the unarchive re-arm -> there is no pending wake, so no pause is taken, red here and below
+      expect(result).toMatchObject({ result: { kind: "unarchived", paused: true } });
+      expect(h.store.db.prepare("SELECT kind,delivered FROM scheduler_wakes WHERE id=?").get(continuationWakeId))
+        .toEqual({ kind: "resume", delivered: 0 });
+      expect(readStopIntent(h.store, "g")).toMatchObject({ mode: "pause" });
       const handlers = createWebWakeHandlers({ ...ctx.deps, service });
       await deliverSchedulerWakes(h.store, handlers);
       expect(activeRunIds(h.store)).toEqual([]);
-      await service.resumeDispatch(h.command("resume-dispatch", {}));
+      expect(workRow(h.store, "a").status).toBe("continuing");
+      // A person's resume is what lets the re-armed batch run; the work item leaves `continuing`.
+      expect(await service.resumeDispatch(h.command("resume-dispatch", {})))
+        .toMatchObject({ result: { kind: "scheduled", operation: "resume-dispatch" } });
       await deliverSchedulerWakes(h.store, handlers);
-      expect(activeRunIds(h.store)).toEqual([]);
+      expect(activeRunIds(h.store).map((id) => runRow(h.store, id).workItemId)).toContain("a");
+      expect(workRow(h.store, "a").status).not.toBe("continuing");
     } finally { await h.dispose(); }
   });
 });
