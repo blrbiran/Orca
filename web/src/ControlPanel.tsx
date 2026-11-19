@@ -88,6 +88,8 @@ export interface ControlPanelProps {
   integration?: RepositoryIntegrationV1 | null;
   /** A repository's integration read, for the target an open group's confirm step suggests. */
   integrationFor?: (repoId: string) => RepositoryIntegrationV1 | null;
+  /** Working-tree delivery spec §4.2 item 1: the first-use question's project command (App.tsx). */
+  onProjectDelivery?: import("./DeliveryChoice.js").ProjectDeliverySender;
   /** Control run decisions plan Task 11: a group's decisions as last read, and opening one in Decisions to correct it. */
   decisionsFor?: (groupId: string) => GroupDecisionsRead | null;
   onCorrectDecision?: (projectKey: string, decisionId: string, origin?: { groupId: string; taskId: string | null; runId: string }) => void;
@@ -431,6 +433,7 @@ export function ControlPanel(props: ControlPanelProps): JSX.Element {
           workspace={props.workspace}
           workspaceFor={props.workspaceFor}
           integrationFor={props.integrationFor}
+          onProjectDelivery={props.onProjectDelivery}
           decisions={props.decisionsFor?.(view.summary.groupId) ?? null}
           revisionOf={(groupId) => summary.groups.find((group) => group.groupId === groupId)?.commandRevision ?? null}
           groupOf={(groupId) => summary.groups.find((group) => group.groupId === groupId)}

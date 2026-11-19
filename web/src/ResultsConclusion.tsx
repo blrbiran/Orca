@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next";
 import type { GroupDecisionsViewV1, GroupViewV1 } from "./controlTypes.js";
 import { PR_URL, short, workBranch } from "./GitScheme.js";
 import { enumText } from "./i18n.js";
-import { integrationSentence } from "./IntegrationScheme.js";
+import { integrationReasonText, integrationSentence } from "./IntegrationScheme.js";
 import { runNeedsHuman } from "./RunDecisions.js";
 
 export interface ResultsConclusionProps {
@@ -91,6 +91,14 @@ export function ResultsConclusion(props: ResultsConclusionProps): JSX.Element {
     : null;
   // Tester #365(a): a kept delivery's files are on the work branch only; say so, and how to list and take them.
   const kept = !folders && summary.state === "done" && scheme.delivery === "keep";
+  // Working-tree delivery spec §4.6: where a working-tree group's files are, or why not, from the integration record.
+  const record = view.integration;
+  const workingTree = folders || record === undefined || scheme.delivery !== "working-tree" ? null
+    : record.state === "blocked" && record.reason !== null ? t("control.results.workingTree.blocked", { reason: integrationReasonText(record.reason) })
+    : summary.state !== "done" ? t("control.results.workingTree.pending")
+    : record.waitingFor !== undefined ? t("control.results.workingTree.waiting", { prerequisite: record.waitingFor })
+    : record.lastIntegrated !== null && (tip === null || record.lastIntegrated === tip) ? t("control.results.workingTree.written", { tip: short(record.lastIntegrated), branch })
+    : t("control.results.workingTree.notYet");
 
   return (
     <section aria-label={t("control.results.conclusion")} data-testid="results-conclusion" className="detail-block min-w-0 wrap-anywhere">
@@ -107,6 +115,7 @@ export function ResultsConclusion(props: ResultsConclusionProps): JSX.Element {
           <span data-conclusion="delivery-sentence">{delivery}</span>
           {pr !== null && <>{" · "}{PR_URL.test(pr.url) ? <a href={pr.url}>{prLabel}</a> : prLabel}</>}
           {merge !== null && <span className="block" data-conclusion="merge">{merge}</span>}
+          {workingTree !== null && <span className="block" data-conclusion="working-tree">{workingTree}</span>}
           {kept && <>
             <span className="block" data-conclusion="kept">{tip === null ? t("control.results.keptOn", { branch }) : t("control.results.keptOnTip", { branch, tip: short(tip) })}</span>
             <span className="block" data-conclusion="kept-take">{t("control.results.keptTake", { branch, groupId: summary.groupId })}</span>

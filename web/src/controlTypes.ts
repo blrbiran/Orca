@@ -637,6 +637,8 @@ export type GroupViewV1 = {
   spendCapBlock?: SpendCapBlockV1 | null;
   /** Integration spec §4: the group's integration; absent for keep. */
   integration?: GroupIntegrationViewV1;
+  /** Working-tree delivery spec §4.2: false only where the first-use question is asked; absent reads as chosen. */
+  projectDeliveryChosen?: false;
   /** Issue-fixes spec §5.2: the group's newest 50 activity rows, newest first. Optional so literal fixtures need no edit. */
   activity?: ActivityEntryV1[];
   /** Tester round 2 §7.3: whether Orca confirms this group on its own; absent reads as not eligible (an older server). */
@@ -1093,6 +1095,8 @@ export type IntegrationSchemeV1 =
 export type GroupIntegrationViewV1 = {
   scheme: IntegrationSchemeV1; schemeHash: string; frozen: boolean; state: "idle" | "blocked" | "conflict" | "resolving"; reason: string | null;
   lastIntegrated: string | null; integratedCommit: string | null; pr: { url: string; number: number; ready: boolean } | null;
+  /** Working-tree delivery spec §4.4 step 1, §4.6: the stacked prerequisite this group's working-tree delivery waits for. */
+  waitingFor?: string;
   /** Delivery tail spec D5 (#333): present only while a transient failure is backing off (epoch ms; the failure's message). */
   retryAfter?: number; transient?: number; transientReason?: string | null;
   history?: { state: "pending" | "verified" | "blocked"; targetTip: string | null; evidenceHash: string | null; reason: string | null;

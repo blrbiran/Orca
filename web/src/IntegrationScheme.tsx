@@ -177,6 +177,8 @@ export function RepositoryIntegration(props: { integration: RepositoryIntegratio
     <section aria-label={t("control.integration.region")}>
       <h3>{t("control.integration.region")}</h3>
       <p>{t("control.integration.repoLine", { repoId: integration.repoId, revision: integration.revision })} {integrationSentence(integration.integration, t("control.integration.anyGroup"))}</p>
+      {/* Working-tree delivery spec §4.2 item 2: absent `chosen` (an older panel) reads as chosen. */}
+      {integration.chosen === false && <p>{t("control.integration.notChosen")}</p>}
       {mayChange
         ? (
           // Keyed by the revision, so the form starts again from what the server holds after every change.

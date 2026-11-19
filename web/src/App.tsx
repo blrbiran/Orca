@@ -853,6 +853,20 @@ export function App(): JSX.Element {
     await readIntegration(repoId);
   };
 
+  /**
+   * Working-tree delivery spec §4.2 item 1: the first-use question's project command. As sendRepositoryIntegration, and it
+   * answers the caller: null when applied, else the refusal's code ("uncertain" when the outcome is unknown).
+   */
+  const chooseProjectDelivery = async (repoId: string, scheme: IntegrationSchemeV1, expectedRevision: number): Promise<string | null> => {
+    const scope = `@repository:${repoId}`;
+    const answer = await sendIntegrationScheme(repoId, scheme, expectedRevision);
+    const code = answer.kind === "uncertain" ? "uncertain" : answer.status >= 400 ? refusalFromAnswer(answer).code : null;
+    if (answer.kind === "uncertain") dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: answer.refusal });
+    else if (answer.status >= 400 && code !== "no-op-command") dispatchControl({ type: "refusal", place: "panel", groupId: scope, value: refusalFromAnswer(answer) });
+    await readIntegration(repoId);
+    return code;
+  };
+
   /** Name the operator's new defaults under the revision they were read at; whatever the server says is read back. */
   const sendAgentPreferences = async (preferences: OperatorPreferencesV1, expectedRevision: number): Promise<void> => {
     if (agentPreferences === null) return;
@@ -1923,6 +1937,7 @@ export function App(): JSX.Element {
           workspaceFor={(repoId) => workspaces[repoId] ?? null}
           integration={panelRepoId === null ? null : integrations[panelRepoId] ?? null}
           integrationFor={(repoId) => integrations[repoId] ?? null}
+          onProjectDelivery={chooseProjectDelivery}
           decisionsFor={(groupId) => groupDecisions[groupId] ?? null}
           onCorrectDecision={openDecisionById}
           agents={agents}

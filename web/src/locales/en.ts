@@ -1127,9 +1127,23 @@ export const en = {
       cloneOption: "private clone",
     },
     // Integration spec §3, §6.5, §9.1: the repository's default, the group's copy on the confirm step, and the Git area.
+    // Working-tree delivery spec §4.2 item 1 (#365): the first-use question on a done group's Results.
+    deliveryChoice: {
+      question: "Where should finished files go for this project?",
+      why: "This group's files are on its branch, not in your working tree, and nobody has chosen where finished files go for this project yet.",
+      workingTree: "Put them in my working tree",
+      keep: "Keep them on the branch",
+      others: "Other deliveries (merge into a branch, push, pull request): Project settings.",
+      ownerOnly: "Only the panel owner chooses this.",
+      projectFailed: "The project's delivery was not saved ({{code}}).",
+      groupFailed: "The project now writes finished files into your working tree, but this group's delivery was not changed (the reason is shown at the top of this group).",
+      groupOnly: "Put this group's files in my working tree",
+    },
     integration: {
       region: "Integration",
       anyGroup: "[group]",
+      // Working-tree delivery spec §4.2 item 2: a project nobody chose a delivery for.
+      notChosen: "Not chosen yet: groups keep their files on orca/<group> until a person chooses.",
       groupRegion: "Integration of this group",
       repoLine: "Default for new groups in {{repoId}} (setting revision {{revision}}):",
       delivery: "Delivery",
@@ -1342,6 +1356,14 @@ export const en = {
       keptOn: "The files are on {{branch}}, not in your working tree.",
       keptOnTip: "The files are on {{branch}} (tip {{tip}}), not in your working tree.",
       keptTake: "List them: git diff --name-only HEAD...{{branch}} · take them: git checkout {{branch}} -- <paths> (this overwrites uncommitted edits in those paths) · or deliver this group locally (a person's act): orca group set-integration {{groupId}} --delivery local --target <branch>; for later groups: orca project set-integration --delivery local --target <branch>",
+      // Working-tree delivery spec §4.6: where a working-tree group's files are, or why not.
+      workingTree: {
+        pending: "Will be written into your working tree, uncommitted, once the group is accepted.",
+        waiting: "Waiting for {{prerequisite}} to be written into your working tree first.",
+        written: "Written into your working tree, not committed (tip {{tip}}), including Orca's decision records under .decisions/. Review: git status · the same files: git diff --name-only HEAD...{{branch}}",
+        notYet: "Not written yet; a driver round writes it into your working tree.",
+        blocked: "Not written into your working tree: {{reason}}",
+      },
       artifact: "Work branch",
       tip: "tip",
       noTip: "no accepted tip recorded yet",

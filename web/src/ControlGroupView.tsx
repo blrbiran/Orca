@@ -288,6 +288,7 @@ import { overviewRegionId } from "./overviewNavigation.js";
 import { AbandonRun, abandonUnresolved } from "./AbandonRun.js";
 import { GroupResults } from "./GroupResults.js";
 import { ResultsConclusion } from "./ResultsConclusion.js";
+import { DeliveryChoice, type ProjectDeliverySender } from "./DeliveryChoice.js";
 import { orderByLayout } from "./dependencyLayout.js";
 import { GroupDetailRegions } from "./GroupDetailRegions.js";
 import { GroupDependencies } from "./GroupDependencies.js";
@@ -339,6 +340,8 @@ export interface ControlGroupViewProps {
 workspaceFor?: (repoId: string) => RepositoryWorkspaceV1 | null;
   /** Integration spec §9.1: a repository's integration read, for the target its confirm step suggests. */
   integrationFor?: (repoId: string) => RepositoryIntegrationV1 | null;
+  /** Working-tree delivery spec §4.2 item 1: the first-use question's project command (App.tsx); absent, its buttons are off. */
+  onProjectDelivery?: ProjectDeliverySender;
   /** Spec 2026-10-08 §2.2(d): this group's last refusal, shown at the top until a later success of this group. */
   refusal?: ControlRefusal | null;
   /** Review-exit spec 2026-11-05 §3.4 (D4): this group's start was queued at the cap; how many groups go first. */
@@ -1027,6 +1030,8 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
         onOpenProblems={() => selectRegion("problem")}
         onOpenIntegration={() => { const target = document.getElementById(overviewRegionId("group", groupId, "integration")); target?.scrollIntoView?.({ block: "start" }); target?.focus(); }}
         onOpenTask={(taskId) => { if (openTask !== taskId) toggleTask(taskId); }} />
+      {/* Working-tree delivery spec §4.2 item 1: beside the card, which itself sends no command. */}
+      <DeliveryChoice key={groupId} view={view} integration={props.integrationFor?.(view.plan.repoId) ?? null} archived={archived} onCommand={onCommand} onProjectDelivery={props.onProjectDelivery} />
       <div id={overviewRegionId("group", groupId, "integration")} tabIndex={-1} data-overview-region="integration">
       {/* Dir-requirements spec §9.3: a dir group's region is its folder placement, not the scheme picker (§7: its delivery is fixed). */}
       {view.summary.multiDir !== undefined ? (
