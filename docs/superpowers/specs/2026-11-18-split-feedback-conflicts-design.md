@@ -198,3 +198,32 @@ The human delegated this round's reversible decisions to the controller ("先按
 - The confirm-anyway gate is client-side (Web dialog, CLI `--despite-conflicts`), like consensus `--unanswered`; a direct
   HTTP POST to the accept route is not gated. Why: the server never refuses on a model's judgment (Rule 5 spirit).
 - Draft edits (`apply-parallel`, `add-implied-path`, `narrow-path`) carry the conflicts over unchanged.
+
+## Correction (2026-11-19, session 3ba26002): split instruction version 8 -- feedback kept across Orca's re-drafts (dogfood finding 3), runtime data paths (tester #362)
+
+**What happened.** In the paid dogfood `dogfood-20261119-count-c` the person's feedback on draft 2 ("Drop the test file
+test/count.test.js entirely") was answered by draft 3, which reported two `requirementConflicts` (AC2, R1.ADR1) and was
+handed back by code (`check-write-scope`, `untraced:AC2`). The automatic re-draft (draft 4) was sent an `earlier-draft`
+block of draft 3's tasks and reasons only: `feedback` was draft 3's own (null) and the conflicts were not sent. Draft 4
+put the test back, reported nothing, and was accepted; the person was never told the feedback was not taken.
+
+**Version 8 (single repository; the multi instruction stays at v5, as for v6 and v7).** V8 is V7 plus three texts, and
+V5-V7 keep their bytes (`buildSplitPrompt` with `instructionVersion` 5, 6 or 7 builds them; a call already started keeps
+its frozen envelope):
+- `earlier-draft`, when Orca drafts again because code handed back a draft written after the person's feedback, carries
+  that feedback (`feedback`), the draft it was given on (`feedbackOnDraft`) and, when the revised draft reported any, its
+  `requirementConflicts`. The standing feedback is the feedback on the latest rejected draft when every later draft ended
+  without a word from the person (`invalid`, `failed` or `interrupted`); a draft rejected without feedback (a revised
+  requirement) or one the person reviewed ends the search (`requirementSplit.ts` `standingFeedback`).
+- A rule: the feedback stays in force until a draft is accepted; a reason such as `untraced` does not cancel it -- trace
+  the criterion and report the conflict.
+- A rule (tester #362): a file where the program keeps data it writes while it runs is not a deliverable -- not in
+  `targetPaths`, not read by checks from the repository -- unless the requirement explicitly asks to commit seed data.
+
+**Code-side notes (hints, never refusals; Rule 5).** The requirement view's drafts with layers gain two optional fields,
+printed by `requirement show` and shown by the Web draft view:
+- `feedbackAfterRedraft` -- on a draft that came from at least one automatic re-draft after the person's feedback and
+  reports no conflict quoting feedback: the feedback, the draft it was given on, the re-drafts in between and the criteria
+  they reported following it breaks. Whether the draft follows the feedback is not judged by code.
+- `runtimeDataPaths` -- each exact target path that is a data file (`.json`, `.jsonl`, `.ndjson`, `.db`, `.sqlite`,
+  `.sqlite3`, `.csv`) inside a dot-directory and that the requirement document names, with `orca requirement drop-path`.

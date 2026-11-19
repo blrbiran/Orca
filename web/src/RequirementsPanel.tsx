@@ -443,6 +443,12 @@ function DraftReview(props: { view: View; draft: Draft; current: boolean; onComm
         {mayEdit && canAddImpliedPath(props.view, draft, entry) && <button type="button" className="ms-2" data-add-implied-path onClick={() => edit({ kind: "add-implied-path", taskId: entry.taskId, path: entry.path })}>{t("requirements.addImpliedPath", { task: entry.taskId, path: entry.path })}</button>}</p>)}
       {/* Tester #345: a path a task's goal names that no task may write (the split adds only files the base commit lacks). */}
       {(draft.goalPathsOutsideTargets ?? []).map((entry) => <p role="note" data-goal-path key={`${entry.taskId}:${entry.path}`}>{t("requirements.goalPath", { task: entry.taskId, path: entry.path })}</p>)}
+      {/* Tester #362: a data file the requirement names, listed as a target path (the program's runtime data is no deliverable). */}
+      {(draft.runtimeDataPaths ?? []).map((entry) => <p role="note" data-runtime-data-path key={`${entry.taskId}:${entry.path}`}>{t("requirements.runtimeDataPath", { task: entry.taskId, path: entry.path })}</p>)}
+      {/* Dogfood finding (3): Orca re-drafted after the person's feedback; nothing in this draft reports on the feedback. */}
+      {draft.feedbackAfterRedraft !== undefined && <p role="note" data-tone="warn" data-feedback-after-redraft>
+        {t("requirements.feedbackAfterRedraft", { n: draft.draftNo, redrafts: draft.feedbackAfterRedraft.redrafts.join(", "), on: draft.feedbackAfterRedraft.feedbackDraftNo, feedback: draft.feedbackAfterRedraft.feedback })}
+        {draft.feedbackAfterRedraft.conflictsBefore.length > 0 && <> {t("requirements.feedbackConflictsBefore", { criteria: draft.feedbackAfterRedraft.conflictsBefore.join(", ") })}</>}</p>}
       {/* #351 addendum: the split's own report that this draft does not meet the requirement as written (code does not judge it). */}
       {conflicts.length > 0 && <RequirementConflicts conflicts={conflicts} current={props.current} />}
       {draft.reasons.length > 0 && <><p>{t("requirements.handedBack")}</p><ul>{draft.reasons.map((reason) => { const words = explainSplitReason(reason); return <li key={reason}>{reason}{words !== null ? ` · ${words}` : ""}</li>; })}</ul></>}

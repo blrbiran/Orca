@@ -85,7 +85,8 @@ import { boundingCeilingOf, liveCeilingRecordSchema } from "../control/liveCeili
 import { abandonRequestSchema, abandonSettlementSchema } from "../control/abandonRun.js";
 import { allTasksDone, prerequisiteDoneFrom, prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { overlapSerialized, parallelCandidates } from "../control/splitParallel.js";
-import { goalPathsOutsideTargets, impliedPathsOutsideTargets } from "../control/splitImpliedPaths.js";
+import { goalPathsOutsideTargets, impliedPathsOutsideTargets, runtimeDataPaths } from "../control/splitImpliedPaths.js";
+import { feedbackAfterRedraft } from "../control/requirementSplit.js";
 import { requirementDraftHash } from "../control/requirementDraftHash.js";
 import { runUsageDetail } from "../control/usageQuery.js";
 import { usageBookedAt, usageBreakdownOf } from "../control/runUsageView.js";
@@ -1953,8 +1954,12 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
       // leave the record untouched: a command still carrying the old hash is rejected and the person reviews this view.
       const shown = plan !== null && rest.output !== null && multiDirOf(group) !== null && rest.draftHash === sha256Canonical(plan)
         ? { ...rest, draftHash: requirementDraftHash(plan, rest.output) } : rest;
+      // Tester #362: and each data file under a dot-directory the requirement names -- a hint only.
+      // Dogfood finding (3): and, when Orca re-drafted after the person's feedback, that nothing reports on it.
+      const carry = shown.output !== null && shown.layers !== null ? feedbackAfterRedraft(drafts, shown.draftNo) : null;
       return shown.output !== null && shown.layers !== null ? { ...shown, parallelCandidates: parallelCandidates(shown.output), impliedPathsOutsideTargets: impliedPathsOutsideTargets(shown.output),
-        goalPathsOutsideTargets: goalPathsOutsideTargets(shown.output), overlapSerialized: overlapSerialized(shown.output) } : shown;
+        goalPathsOutsideTargets: goalPathsOutsideTargets(shown.output), overlapSerialized: overlapSerialized(shown.output), runtimeDataPaths: runtimeDataPaths(shown.output, document),
+        ...(carry === null ? {} : { feedbackAfterRedraft: carry }) } : shown;
     }), spendCapBlock: readSpendCapBlock(store, groupId),
     clarify: { classification: limits.classification, override: limits.override, tier: limits.tier, roundCap: limits.roundCap,
       ...(({ rounds: _rounds, ...perRound }) => perRound)(CLARIFY_CAPS[limits.tier]),

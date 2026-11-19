@@ -342,6 +342,10 @@ export type DraftViewV1 = {
   goalPathsOutsideTargets?: Array<{ taskId: string; path: string }>;
   /** Tester #335: tasks no dependency orders that run one after the other only because a broad target path overlaps (a hint). */
   overlapSerialized?: Array<{ a: string; b: string; paths: string[] }>;
+  /** Tester #362: a data file under a dot-directory the requirement names, listed as a target path (a hint). */
+  runtimeDataPaths?: Array<{ taskId: string; path: string }>;
+  /** Dogfood finding (3): Orca re-drafted after the person's feedback and this draft reports no conflict about it. */
+  feedbackAfterRedraft?: { feedbackDraftNo: number; feedback: string; redrafts: number[]; conflictsBefore: string[] };
   /** Spec 2026-11-16: paths the split added to a task's targetPaths because its success condition named them (#345: or its goal, `source: "goal"`). */
   impliedPathsAdded: Array<{ taskId: string; path: string; writers: string[]; source?: "goal" }> | null;
   reasonCode: null | "split-output-invalid" | "split-call-failed" | "split-validation-exhausted" | "requirement-revised" | "requirement-agent-quota";

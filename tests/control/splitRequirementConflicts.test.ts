@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { readDraft } from "../../src/control/requirementRecords.js";
 import { REQUIREMENT_CONFLICT_BOUNDS, splitOutputSchema } from "../../src/control/requirementSchemas.js";
 import {
-  buildSplitPrompt, REQUIREMENT_CONFLICTS_RULE, SPLIT_INSTRUCTION_V6, SPLIT_INSTRUCTION_V7, SPLIT_JSON_SCHEMA_V7, SPLIT_PROMPT_HEAD_V7, withoutEmptySetup,
+  buildSplitPrompt, REQUIREMENT_CONFLICTS_RULE, SPLIT_INSTRUCTION_V6, SPLIT_INSTRUCTION_V7, SPLIT_JSON_SCHEMA_V7, SPLIT_PROMPT_HEAD_V7, SPLIT_PROMPT_HEAD_V8, withoutEmptySetup,
 } from "../../src/control/requirementSplit.js";
 import { readRequirementView } from "../../src/panel/controlViews.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
@@ -52,7 +52,9 @@ describe("the fold before the schema (D4: codex's strict projection writes null 
 describe("split instruction version 7 (D3)", () => {
   it("the default prompt is v7 with the conflicts rule after the revision rule and the template line before notes", () => {
     const prompt = buildSplitPrompt({ document: "D.", overview: { canonicalJson: "{}", hash: "c".repeat(64) }, earlierDrafts: [] });
-    expect(prompt.split("\n", 1)[0]).toBe(SPLIT_PROMPT_HEAD_V7);
+    // Ruling (session 3ba26002): dogfood finding (3) and tester #362 make a new single-directory split call send instruction version 8;
+    // this criterion now encodes: the default prompt is the newest version, which keeps v7's conflicts rule and template line.
+    expect(prompt.split("\n", 1)[0]).toBe(SPLIT_PROMPT_HEAD_V8);
     expect(SPLIT_PROMPT_HEAD_V7).toBe("Orca requirement split, instruction version 7.");
     // mutation: drop either replace -> red
     expect(prompt).toContain(`\n${REQUIREMENT_CONFLICTS_RULE}\n`);
@@ -92,7 +94,8 @@ describe("a v7 answer with a conflict, after feedback (harness)", () => {
       const second = x.fake.calls.accept[1]!;
       // mutation: prepare still sends SPLIT_JSON_SCHEMA_V6 -> red
       expect(second.work.kind === "single-call" && second.work.responseSchema).toEqual(SPLIT_JSON_SCHEMA_V7);
-      expect(second.work.kind === "single-call" && second.work.prompt.startsWith(SPLIT_PROMPT_HEAD_V7)).toBe(true);
+      // Ruling (session 3ba26002): dogfood finding (3) and tester #362 make a new single-directory split call send instruction version 8 (same answer schema, V7's).
+      expect(second.work.kind === "single-call" && second.work.prompt.startsWith(SPLIT_PROMPT_HEAD_V8)).toBe(true);
       const draft = readDraft(x.store, "r", 2);
       expect((draft.output as { requirementConflicts?: unknown }).requirementConflicts).toEqual([CONFLICT]);
       // mutation: hash the output (or anything carrying the key) instead of the plan -> red

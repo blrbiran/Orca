@@ -162,6 +162,29 @@ export const SPLIT_INSTRUCTION_V7 = SPLIT_INSTRUCTION_V6
   .replace(`${REVISION_RULE}\n`, `${REVISION_RULE}\n${REQUIREMENT_CONFLICTS_RULE}\n`)
   .replace("  \"notes\": anything the person should know about this split", "  \"requirementConflicts\": optional [ { \"criterion\": an acceptance criterion's id or a short quote, \"feedback\": optional, the feedback words that caused it, \"why\": what in this draft does not meet it } ],\n  \"notes\": anything the person should know about this split");
 
+/** The single-directory head a new split call sends since dogfood finding (3) and tester #362 (version 8). */
+export const SPLIT_PROMPT_HEAD_V8 = "Orca requirement split, instruction version 8.";
+/**
+ * Dogfood finding (3) (session 3ba26002): an automatic re-draft after code handed back a draft that answered the
+ * person's feedback used to see that draft's tasks and reasons only. buildSplitPrompt (version 8) now carries the standing
+ * feedback, the draft it was given on and the earlier draft's requirementConflicts; this line says so.
+ */
+const EARLIER_DRAFTS_V8 = `${EARLIER_DRAFTS} When Orca drafts again because code handed back a draft written after the person's feedback, \`feedback\` is that feedback, still in force, \`feedbackOnDraft\` names the draft it was given on, and \`requirementConflicts\`, when present, is what the handed-back draft reported.`;
+/** Dogfood finding (3): the feedback is not dropped to satisfy a reason code; the conflict is reported instead. */
+export const FEEDBACK_STANDS_RULE = "- The person's feedback stays in force until a draft is accepted: when `earlier-draft` carries `feedback`, keep following it while you fix what code handed back. A reason such as `untraced` does not cancel the feedback: trace the criterion to the task closest to it and report in `requirementConflicts` where the draft does not meet it.";
+/**
+ * Tester #362 (session 3ba26002): a split listed `.orca/incidents.json`, where the product under development keeps its
+ * data, as a target path, and the delivery committed an empty data file. Code cannot tell a data store from a deliverable
+ * (Rule 5), so the rule is stated here and the view only hints (splitImpliedPaths.ts runtimeDataPaths).
+ */
+export const RUNTIME_DATA_RULE = "- A file where the program keeps data it writes while it runs (a data file or store the requirement names, such as `.app/items.json`) is not a deliverable: do not list it in `targetPaths`, and do not write checks that read it from the repository, unless the requirement explicitly asks to commit seed or fixture data at that path. Tests that need such a file create it in a temporary directory or point the program at one.";
+/** Version 8 is version 7 plus the three texts above; the V5, V6 and V7 bytes stay as they are. */
+export const SPLIT_INSTRUCTION_V8 = SPLIT_INSTRUCTION_V7
+  .replace(SPLIT_PROMPT_HEAD_V7, SPLIT_PROMPT_HEAD_V8)
+  .replace(`${EARLIER_DRAFTS}\n`, `${EARLIER_DRAFTS_V8}\n`)
+  .replace(`${REQUIREMENT_CONFLICTS_RULE}\n`, `${REQUIREMENT_CONFLICTS_RULE}\n${FEEDBACK_STANDS_RULE}\n`)
+  .replace(`${IMPLIED_PATH_RULE}\n`, `${IMPLIED_PATH_RULE}\n${RUNTIME_DATA_RULE}\n`);
+
 const str = { type: "string" }, strings = { type: "array", items: str };
 /**
  * Multi-directory projects spec §6.4: the instruction for a project of several directories. A task names the
@@ -716,7 +739,7 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
  * Multi-directory projects spec §6.4: `multi` uses the multi instruction and fences the composed overview as
  * `project-overview`; absent, the bytes are the single-repository ones.
  */
-export function buildSplitPrompt(input: { document: string; overview: { canonicalJson: string; hash: string }; earlierDrafts: DraftBody[]; multi?: boolean; instructionVersion?: 5 | 6 | 7 }): string {
+export function buildSplitPrompt(input: { document: string; overview: { canonicalJson: string; hash: string }; earlierDrafts: DraftBody[]; multi?: boolean; instructionVersion?: 5 | 6 | 7 | 8 }): string {
   const nonce = input.overview.hash.slice(0, 16);
   const sent = input.earlierDrafts.filter((draft) => draft.output !== null || draft.reasons.length > 0);
   // Review I2 (session a9f9d6de): the block revises the latest draft that has tasks -- its tasks and the person's feedback
@@ -724,12 +747,59 @@ export function buildSplitPrompt(input: { document: string; overview: { canonica
   const withTasks = sent.filter((draft) => draft.output !== null).at(-1);
   const latest = withTasks ?? sent.at(-1);
   const later = withTasks === undefined ? [] : sent.filter((draft) => draft.draftNo > withTasks.draftNo);
-  const instruction = input.multi === true ? SPLIT_INSTRUCTION_MULTI_V5 : input.instructionVersion === 5 ? SPLIT_INSTRUCTION_V5 : input.instructionVersion === 6 ? SPLIT_INSTRUCTION_V6 : SPLIT_INSTRUCTION_V7;
+  const instruction = input.multi === true ? SPLIT_INSTRUCTION_MULTI_V5 : input.instructionVersion === 5 ? SPLIT_INSTRUCTION_V5 : input.instructionVersion === 6 ? SPLIT_INSTRUCTION_V6
+    : input.instructionVersion === 7 ? SPLIT_INSTRUCTION_V7 : SPLIT_INSTRUCTION_V8;
   const contextName = input.multi === true ? "project-overview" : "repository-overview";
+  // Dogfood finding (3), version 8 only (older versions keep their bytes): a draft Orca drafts again after code handed back
+  // a draft written after the person's feedback carries that feedback, the draft it was given on, and the conflicts the
+  // revised draft reported.
+  const v8 = input.multi !== true && (input.instructionVersion ?? 8) === 8;
+  const standing = v8 && latest !== undefined && latest.feedback === null ? standingFeedback(input.earlierDrafts) : null;
+  const conflicts = v8 && latest !== undefined ? conflictsOfDraft(latest) : [];
   const revision = latest === undefined ? [] : [fence("earlier-draft", nonce, JSON.stringify({
-    draftNo: latest.draftNo, tasks: latest.output?.tasks ?? null, feedback: latest.feedback,
+    draftNo: latest.draftNo, tasks: latest.output?.tasks ?? null, feedback: standing?.feedback ?? latest.feedback,
+    ...(standing === null ? {} : { feedbackOnDraft: standing.draftNo }),
+    ...(conflicts.length === 0 ? {} : { requirementConflicts: conflicts }),
     handedBackFor: [...latest.reasons.map(withMeaning), ...later.flatMap((draft) => draft.reasons.map((reason) => `draft ${draft.draftNo}: ${withMeaning(reason)}`))] }))];
   return `${[instruction, fence("requirement-document", nonce, input.document), fence(contextName, nonce, input.overview.canonicalJson), ...revision].join("\n\n")}\n`;
+}
+
+/** States a draft Orca drafted again after ends in, with no word from the person (recordSplit, stop, recovery-retry). */
+const REDRAFTED_STATES: ReadonlySet<string> = new Set(["invalid", "failed", "interrupted"]);
+const conflictsOfDraft = (draft: DraftBody) => (draft.output !== null && "requirementConflicts" in draft.output ? draft.output.requirementConflicts ?? [] : []);
+
+/**
+ * Dogfood finding (3) (session 3ba26002): the person's feedback still in force for the draft after `before` -- the
+ * feedback on the latest rejected draft, when every draft after it ended without a word from the person (handed back by
+ * code, failed or interrupted, so Orca drafted again). A draft rejected with no feedback (the requirement was revised),
+ * or one the person reviewed or accepted, ends the search with none. `redrafts` are the drafts in between, in order.
+ */
+export function standingFeedback(before: readonly DraftBody[]): { draftNo: number; feedback: string; redrafts: DraftBody[] } | null {
+  const redrafts: DraftBody[] = [];
+  for (const draft of [...before].sort((a, b) => b.draftNo - a.draftNo)) {
+    if (draft.state === "rejected") return draft.feedback === null ? null : { draftNo: draft.draftNo, feedback: draft.feedback, redrafts: redrafts.reverse() };
+    if (!REDRAFTED_STATES.has(draft.state)) return null;
+    redrafts.push(draft);
+  }
+  return null;
+}
+
+/** Dogfood finding (3): what the requirement view says on a draft Orca re-drafted after the person's feedback. */
+export interface FeedbackAfterRedraft { feedbackDraftNo: number; feedback: string; redrafts: number[]; conflictsBefore: string[] }
+
+/**
+ * Dogfood finding (3): draft `draftNo` came from at least one automatic re-draft after the person's feedback (the model
+ * that wrote it never answered the feedback directly) and reports no requirementConflicts entry quoting feedback -- so
+ * nothing tells the person whether it still follows the feedback. Code cannot judge that (Rule 5); it says the facts:
+ * the feedback, the drafts in between, and the criteria they reported following it breaks. Null otherwise.
+ */
+export function feedbackAfterRedraft(drafts: readonly DraftBody[], draftNo: number): FeedbackAfterRedraft | null {
+  const self = drafts.find((draft) => draft.draftNo === draftNo);
+  if (self === undefined || self.output === null || conflictsOfDraft(self).some((entry) => entry.feedback !== undefined)) return null;
+  const standing = standingFeedback(drafts.filter((draft) => draft.draftNo < draftNo));
+  if (standing === null || standing.redrafts.length === 0) return null;
+  const conflictsBefore = [...new Set(standing.redrafts.flatMap((draft) => conflictsOfDraft(draft).filter((entry) => entry.feedback !== undefined).map((entry) => entry.criterion)))];
+  return { feedbackDraftNo: standing.draftNo, feedback: standing.feedback, redrafts: standing.redrafts.map((draft) => draft.draftNo), conflictsBefore };
 }
 
 const PATH_MEANING = "this target path is not legal in the overview's commit: it goes through an existing file (its nearest existing ancestor must be a directory; the repository root counts), names an existing file or submodule as `<directory>/**`, or is not an exact relative path or `<directory>/**`; a new file, or `<directory>/**` for a new directory, under directories that do not exist yet is fine";

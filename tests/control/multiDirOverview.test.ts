@@ -268,7 +268,9 @@ describe("a single-repository group's prompts are byte-equal to today's (M5, §6
       // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); it still encodes: a single-repository group is sent the single instruction.
       // Ruling: 2026-11-17 #328, new single-repository calls advertise the structured history proposal.
       // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) — the #351 addendum makes the single-repository split instruction version 7.
-      expect(envelope.work.prompt.startsWith("Orca requirement split, instruction version 7.")).toBe(true);
+      // Ruling (session 3ba26002): dogfood finding (3) and tester #362 make a new single-directory split call send instruction version 8 (this criterion still
+      // encodes: a single-repository group is sent the single instruction, at the newest version).
+      expect(envelope.work.prompt.startsWith("Orca requirement split, instruction version 8.")).toBe(true);
       expect(envelope.work.prompt).toContain("for one software repository");
       expect(envelope.work.prompt).toContain("<<<ORCA-DATA repository-overview ");
       expect(envelope.work.prompt).not.toContain("project-overview");

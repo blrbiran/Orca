@@ -143,3 +143,25 @@ export function applyGoalPaths(output: SplitOutput, creatable: ReadonlySet<strin
   return { output: copy, added: hints.map((hint) => ({ taskId: hint.taskId, path: hint.path, writers: [], source: "goal" as const })) };
 }
 
+
+/** Tester #362: a task's target path that looks like where the program keeps its data while it runs. */
+export interface RuntimeDataPath { taskId: string; path: string }
+/** Tester #362: the file extensions of data a program keeps (JSON documents and lines, SQLite, CSV). */
+const DATA_FILE = /\.(?:json|jsonl|ndjson|db|sqlite3?|csv)$/i;
+
+/**
+ * Tester #362 (session 3ba26002; Rule 5: code only hints, the model judges in split instruction version 8): each task's
+ * exact target path that is a data file (DATA_FILE) inside a dot-directory (some directory segment starts with `.`, as
+ * the tester's `.orca/incidents.json`) and that the requirement document names as a whole token. A program's runtime
+ * data is not a deliverable unless the requirement asks to commit seed data, which code cannot tell from the words, so it
+ * never refuses a draft. Multi-directory writes are read by path alone. In task order, then target order.
+ */
+export function runtimeDataPaths(output: SplitOutput | MultiSplitOutput, document: string): RuntimeDataPath[] {
+  const out: RuntimeDataPath[] = [];
+  for (const task of output.tasks as readonly Task[]) for (const target of targetsOf(task)) {
+    const path = normal(target), dirs = path.split("/").slice(0, -1);
+    if (path.includes("*") || !DATA_FILE.test(path) || !dirs.some((dir) => dir.startsWith(".") && dir !== "." && dir !== "..") || !mentions(document, path)) continue;
+    if (!out.some((entry) => entry.taskId === task.taskId && entry.path === path)) out.push({ taskId: task.taskId, path });
+  }
+  return out;
+}
