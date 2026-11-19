@@ -66,6 +66,20 @@ describe("review facts carry both sides' failing names (#391)", () => {
       expect(facts).toContain("  failing tests on this tip: the recorded output names no failing test (no output was recorded)");
     } finally { await t.h.dispose(); }
   }, 60_000);
+
+  // Review of #383: task runs reported the suite red, both confirmation runs were green. No tip exit is red, so calling
+  // this "failing tests" (and telling the reviewer the check was red on the tip) feeds it facts the record denies.
+  it("#383: a suite reported red whose two confirmation runs were green is confirmation-run output, not failing tests", async () => {
+    const t = await driverHarness([{ taskId: "a" }]);
+    try {
+      const body = { acceptance: { tip: TIP, result: "passed", at: 1, commands: [],
+        fullSuite: { command: "npm test", suggestion: null, exits: ["0", "0"], flaky: true, reported: 1 } } };
+      const facts = await reviewFacts(t.repo, body, TIP, t.h.store, "g");
+      // mutation: keep the "failing tests on this tip" label for an all-zero flaky record -> red
+      expect(facts).toContain("  confirmation-run output on this tip: the recorded output names no failing test (no output was recorded)");
+      expect(facts.some((line) => line.startsWith("  failing tests on this tip:"))).toBe(false);
+    } finally { await t.h.dispose(); }
+  }, 60_000);
 });
 
 describe("a repository group's review leaves out Orca's own runtime files (#382)", () => {
@@ -111,6 +125,30 @@ describe("the prompt's rules for relative pass and off-plan writes (#391, #392)"
     const text = prompt({ acceptanceBaseline: { command: "npm test", tipExits: ["1", "1"], tipTail: TIP_TAIL } });
     expect(text).toContain("No run of it at the group's base is recorded, so the relative-pass rule below does not apply to it");
     expect(text).toContain("login rejects a bad password");
+  });
+
+  // Review of #383: the record is flaky because task runs reported it red, but both tip runs exited 0. Neither "was red on
+  // this tip" nor "passed on the retry" is true of it, so the prompt says what the record actually holds.
+  it("#383: a suite reported red with two green confirmations does not claim it was red on this tip", () => {
+    const text = prompt({ acceptanceBaseline: { command: "npm test", tipExits: ["0", "0"], flaky: true, reported: 1 } });
+    // mutation: drop the reported>0 phrasing branch -> the old "was red on this tip" line comes back, red
+    expect(text).toContain("task runs reported this suite red; both confirmation runs on this tip were green (exit(s) 0, 0)");
+    // Scoped to the check's own statement: the standing relative-pass rule also says "it was red on this tip" in the abstract.
+    expect(text).not.toContain('Project-wide check "npm test" was red on this tip');
+    expect(text).not.toContain("passed on the retry");
+    expect(text).toContain("Recorded output:");
+  });
+
+  it("a first-red-then-green flaky suite still says it was red and passed on the retry", () => {
+    const text = prompt({ acceptanceBaseline: { command: "npm test", tipExits: ["1", "0"], flaky: true, tipTail: TIP_TAIL } });
+    expect(text).toContain("was red on this tip (exit(s) 1, 0; it passed on the retry, so it is flaky)");
+    expect(text).not.toContain("task runs reported this suite red");
+  });
+
+  it("a red-at-base record keeps its phrasing even when task runs reported it", () => {
+    const text = prompt({ acceptanceBaseline: { command: "npm test", tipExits: ["1", "1"], baseExits: ["1", "1"], reported: 2, tipTail: TIP_TAIL, baseTail: BASE_TAIL } });
+    expect(text).toContain("failed at the group's base and on this tip (tip: 1, 1; base: 1, 1)");
+    expect(text).not.toContain("task runs reported this suite red");
   });
 
   it("an off-plan write superseded by the final content is information, never a failed criterion (#392)", () => {

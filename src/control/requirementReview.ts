@@ -152,18 +152,25 @@ function directoryLines(directories: readonly ReviewDirectory[]): string[] {
  * Tester #391: what the acceptance recorded about the project-wide check, when it was red on the tip (or flaky). The tails
  * are the last 2 KB of each run's output; `baseExits` is present only when the same command also ran at the group's base
  * and was red there (`passed-relative`). The failing-test names in the tails are a reference, not the decision.
+ * Review of #383: `reported` is how many task runs had reported the suite red -- with every tip exit green the record is
+ * flaky without ever having been red on this tip, and the prompt must not say otherwise.
  */
-export interface AcceptanceBaseline { command: string; tipExits: string[]; baseExits?: string[]; flaky?: boolean; tipTail?: string; baseTail?: string }
+export interface AcceptanceBaseline { command: string; tipExits: string[]; baseExits?: string[]; flaky?: boolean; reported?: number; tipTail?: string; baseTail?: string }
 
 const exitList = (exits: readonly string[]): string => exits.length === 0 ? "not recorded" : exits.join(", ");
 
 /** #391: the acceptance section -- its exits on both sides, the failing names the last 2 KB gives, and how to read them. */
 function acceptanceBaselineLines(baseline: AcceptanceBaseline): string[] {
   const baseRed = baseline.baseExits !== undefined;
+  // Review of #383: task runs reported the suite red, yet both confirmation runs on this tip exited 0. It was never red
+  // here, so neither the red-tip phrasing nor "passed on the retry" describes it.
+  const reportedGreen = !baseRed && (baseline.reported ?? 0) > 0 && baseline.tipExits.every((exit) => exit === "0");
   return [
     baseRed
       ? `Project-wide check ${JSON.stringify(baseline.command)} failed at the group's base and on this tip (tip: ${exitList(baseline.tipExits)}; base: ${exitList(baseline.baseExits!)}). This alone does not prove the failures are the same. Base failure: ${failureNamesLine(baseline.baseTail)}. Tip failure: ${failureNamesLine(baseline.tipTail)}.`
-      : `Project-wide check ${JSON.stringify(baseline.command)} was red on this tip (exit(s) ${exitList(baseline.tipExits)}${baseline.flaky === true ? "; it passed on the retry, so it is flaky" : ""}). No run of it at the group's base is recorded, so the relative-pass rule below does not apply to it. Tip failure: ${failureNamesLine(baseline.tipTail)}.`,
+      : reportedGreen
+        ? `Project-wide check ${JSON.stringify(baseline.command)}: task runs reported this suite red; both confirmation runs on this tip were green (exit(s) ${exitList(baseline.tipExits)}). No run of it at the group's base is recorded, so the relative-pass rule below does not apply to it. Recorded output: ${failureNamesLine(baseline.tipTail)}.`
+        : `Project-wide check ${JSON.stringify(baseline.command)} was red on this tip (exit(s) ${exitList(baseline.tipExits)}${baseline.flaky === true ? "; it passed on the retry, so it is flaky" : ""}). No run of it at the group's base is recorded, so the relative-pass rule below does not apply to it. Tip failure: ${failureNamesLine(baseline.tipTail)}.`,
     "Those failures are the last 2 KB of each output only. If they end in the test runner's summary without the failing tests' names, the identities are unavailable -- say so in `missing` if it matters, but do not answer cannot-judge for that reason alone when acceptance has decided the check. Red on this tip with the same exits at the group's base was red before the group; the tip's and the base's failing tests do not have to be the same identities.",
   ];
 }
@@ -591,7 +598,10 @@ export async function reviewFacts(repo: string, body: unknown, tip: string, stor
       // Tester #391: a red (or flaky) full suite's failing tests, on both sides, so the reviewer can compare them -- and an
       // explicit statement when the recorded 2 KB names none, which is common: the runner's summary is all that is left.
       if (suite.flaky || suite.exits.some((exit) => exit !== "0")) {
-        lines.push(`  failing tests on this tip: ${failureNamesLine(accepted.tail)}`);
+        // Review of #383: flaky because task runs reported it red, with both confirmation runs green -- no tip run failed,
+        // so the label must not claim failing tests.
+        const redOnTip = suite.exits.some((exit) => exit !== "0");
+        lines.push(`  ${redOnTip ? "failing tests on this tip" : "confirmation-run output on this tip"}: ${failureNamesLine(accepted.tail)}`);
         if (suite.baseline !== undefined) lines.push(`  failing tests at the group's base: ${failureNamesLine(suite.baseline.tail)}`);
       }
     }
@@ -859,6 +869,7 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
     const suiteRed = suite !== undefined && suite.command !== null && (suite.flaky || suite.exits.some((exit) => exit !== "0"));
     const acceptanceBaseline: AcceptanceBaseline | undefined = suite === undefined || suite.command === null || !suiteRed ? undefined : {
       command: suite.command, tipExits: [...suite.exits], ...(suite.flaky ? { flaky: true } : {}),
+      ...(suite.reported === undefined ? {} : { reported: suite.reported }),
       ...(acceptance?.tail === undefined ? {} : { tipTail: cutUtf8(acceptance.tail, 2_000) }),
       ...(suite.baseline === undefined ? {} : { baseExits: [...suite.baseline.exits], ...(suite.baseline.tail === undefined ? {} : { baseTail: cutUtf8(suite.baseline.tail, 2_000) }) }),
     };
