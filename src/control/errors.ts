@@ -577,6 +577,12 @@ export const nonDurableControlErrorClassifications = {
   // copy (a broken call-site order), or the run can still get a ccloop control call that reads the copy.
   "result-copy-run-active": "internal",
   "result-copy-unarchived": "internal",
+  // Change-sized runs spec 2026-11-19 §7.2 (P2): snapshot v2 verification -- the bundle's header is not exactly base..attempt
+  // at the pin; the target lacks the base; the attempt's tree is not the recorded one; the target cannot be resolved.
+  "snapshot-base-unavailable": "internal",
+  "snapshot-bundle-heads-mismatch": "internal",
+  "snapshot-repository-unavailable": "internal",
+  "snapshot-tree-mismatch": "internal",
   "snapshot-head-mismatch": "internal",
   "snapshot-index-hash-mismatch": "internal",
   "start-outcome-unknown": "internal",
