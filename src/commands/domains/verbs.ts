@@ -381,7 +381,7 @@ export function keptLines(groupId: string, s: KeptSummary | undefined, delivery:
  * Working-tree delivery spec §4.6, §6 (#365): where a `working-tree` group's files went, or why they did not -- from the
  * integration record alone (state, reason, lastIntegrated). Any other delivery says nothing here.
  */
-export interface WorkingTreeView { scheme?: { delivery?: string }; state?: string; reason?: string | null; lastIntegrated?: string | null; retryAfter?: number }
+export interface WorkingTreeView { scheme?: { delivery?: string }; state?: string; reason?: string | null; lastIntegrated?: string | null; retryAfter?: number; waitingFor?: string }
 const WORKING_TREE_NEXT: Readonly<Record<string, (groupId: string) => string>> = {
   "integration-working-tree-conflict": (g) => `commit, move or discard your copies of these paths, then Retry; or take the files yourself: git checkout orca/${g} -- <path>; or orca group set-integration ${g} --delivery keep`,
   "integration-working-tree-busy": () => "finish or abort it, then Retry",
@@ -399,11 +399,25 @@ export function workingTreeLines(groupId: string, s: KeptSummary | undefined, in
     return [`delivery: working-tree blocked: ${integration.reason}`, ...(next === undefined ? [] : [`  next: ${next(groupId)}; orca group retry-integration ${groupId}`])];
   }
   if (s?.state !== "done") return ["delivery: working-tree -- will be written into your working tree once the group is accepted"];
+  // spec §4.4 step 1: the server names the stacked prerequisite whose own working-tree delivery comes first.
+  if (typeof integration.waitingFor === "string") return [`delivery: working-tree -- waiting for ${integration.waitingFor} to be written into your working tree first`];
   const tip = s.acceptance?.tip ?? null;
   if (integration.lastIntegrated != null && (tip === null || integration.lastIntegrated === tip))
     return [`delivery: working-tree -- written into your working tree (uncommitted, tip ${integration.lastIntegrated.slice(0, 12)}), including Orca's decision records under .decisions/`,
       "  review: git status", `  the same files: git diff --name-only HEAD...${branch}`];
   return [`delivery: working-tree -- not written yet; a driver round writes it into your working tree${integration.retryAfter === undefined ? "" : " (backing off)"}`];
+}
+
+/**
+ * Working-tree delivery spec §4.2 item 3: the first-use question, before the #365(a) kept lines, for a done keep group
+ * whose read says the project's delivery was never chosen (`projectDeliveryChosen === false`; absent, an older panel or
+ * a chosen project, asks nothing). The same folder / multi exclusions as the kept lines.
+ */
+export const DELIVERY_NOT_CHOSEN = "delivery: not chosen for this project yet (a person's choice; needs a person token)";
+export const DELIVERY_FOR_LATER = "  and for later groups: orca project set-integration --delivery working-tree   (or --delivery keep)";
+export function deliveryQuestionLines(groupId: string, s: KeptSummary | undefined, delivery: string | undefined, chosen: unknown): string[] {
+  if (chosen !== false || keptLines(groupId, s, delivery).length === 0) return [];
+  return [DELIVERY_NOT_CHOSEN, `  put this group's files in your working tree (uncommitted): orca group set-integration ${groupId} --delivery working-tree`, DELIVERY_FOR_LATER];
 }
 
 export function reviewLines(groupId: string, review: ReviewView | undefined): string[] {
@@ -580,6 +594,8 @@ export function formatWithUnestimated(body: unknown): string {
     ...(typeof groupId === "string" ? deliveryLines(groupId, (b?.summary as { deliveredAcceptance?: DeliveredView } | undefined)?.deliveredAcceptance,
       (b as { integration?: { retryAfter?: number; transient?: number; transientReason?: string | null } } | null)?.integration) : []),
     // A keep group has no integration record (newGroupIntegration returns null for keep): a missing one is keep.
+    ...(typeof groupId === "string" ? deliveryQuestionLines(groupId, b?.summary as KeptSummary | undefined,
+      (b as { integration?: { scheme?: { delivery?: string } } } | null)?.integration?.scheme?.delivery ?? "keep", (b as { projectDeliveryChosen?: unknown } | null)?.projectDeliveryChosen) : []),
     ...(typeof groupId === "string" ? keptLines(groupId, b?.summary as KeptSummary | undefined,
       (b as { integration?: { scheme?: { delivery?: string } } } | null)?.integration?.scheme?.delivery ?? "keep") : []),
     ...(typeof groupId === "string" ? workingTreeLines(groupId, b?.summary as KeptSummary | undefined, (b as { integration?: WorkingTreeView } | null)?.integration) : []),

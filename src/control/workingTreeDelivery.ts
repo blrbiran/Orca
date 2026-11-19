@@ -1,6 +1,6 @@
 import { chmodSync, lstatSync, mkdirSync, readdirSync, readlinkSync, renameSync, rmdirSync, rmSync, statSync, unlinkSync, type Stats } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { groupBaseCommit } from "./groupAcceptanceRecord.js";
+import { acceptanceOf, groupBaseCommit } from "./groupAcceptanceRecord.js";
 import { prerequisitesOf } from "./groupEdges.js";
 import { dirWorkspaceOf } from "./dirGroup.js";
 import { multiDirOf } from "./multiGroup.js";
@@ -166,6 +166,30 @@ async function prerequisiteGate(store: ControlStore, repo: string, groupId: stri
     if (tip === null || record.lastIntegrated !== tip || record.pending !== null || record.state !== "idle") return "wait";
   }
   return "go";
+}
+
+/**
+ * The read side of step 1 (spec §4.4, §4.6 "waiting on a prerequisite"): the first prerequisite this working-tree group
+ * stacks on that is itself `working-tree` and not yet written -- from the store alone (a prerequisite's accepted tip
+ * stands for `orca/<P>`, which the pass reads from git), so a read never runs git. Null when none, or when this group's
+ * own record is not `working-tree`, not idle, or already written (at its accepted tip, when the acceptance names one).
+ */
+export function workingTreeWaitingFor(store: ControlStore, groupId: string, body: unknown): string | null {
+  const own = readGroupIntegration(body);
+  if (own?.scheme.delivery !== "working-tree" || own.state !== "idle") return null;
+  const ownTip = acceptanceOf(body)?.tip ?? null;
+  if (own.lastIntegrated !== null && (ownTip === null || own.lastIntegrated === ownTip) && own.pending === null) return null;
+  for (const prerequisite of prerequisitesOf(store, groupId)) {
+    const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(prerequisite);
+    if (row === undefined) continue;
+    const other = JSON.parse(String(row.body)) as Record<string, unknown>;
+    const record = readGroupIntegration(other);
+    if (dirWorkspaceOf(other) !== null || multiDirOf(other) !== null || record?.scheme.delivery !== "working-tree") continue;
+    const tip = acceptanceOf(other)?.tip ?? null;
+    // An acceptance that names no tip (not-needed, not-run) leaves "written at least once" as the store's only evidence.
+    if (record.lastIntegrated === null || (tip !== null && record.lastIntegrated !== tip) || record.pending !== null || record.state !== "idle") return prerequisite;
+  }
+  return null;
 }
 
 /** The new permission bits of a staged file replacing (or creating) `path` (step 9; controller ruling I8). */

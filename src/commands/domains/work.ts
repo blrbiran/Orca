@@ -7,7 +7,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, WriteContext } from "../types.js";
 import {
-  adoptFullSuiteLine, checkpointOf, type ClarifyRoundView, config, contextHandoffLines, type EstimateHistory, FULL_SUITE_NOT_SET, currentRun, file, fillRoundAnswer, fundingLines, historyLines, withFunding, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, softCeilingLines, unestimatedLines, verb, workItem,
+  adoptFullSuiteLine, checkpointOf, type ClarifyRoundView, config, contextHandoffLines, DELIVERY_FOR_LATER, DELIVERY_NOT_CHOSEN, type EstimateHistory, FULL_SUITE_NOT_SET, currentRun, file, fillRoundAnswer, fundingLines, historyLines, withFunding, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, softCeilingLines, unestimatedLines, verb, workItem,
 } from "./verbs.js";
 import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
 import { SYSTEM_LABELS } from "../../control/labels.js";
@@ -969,6 +969,12 @@ async function fullSuiteConfirmLines(c: WriteContext, repoId: string): Promise<s
   return typeof suggested === "string"
     ? [`full suite: ${FULL_SUITE_NOT_SET}, so group acceptance will run only the tasks' own checks`, ...adoptFullSuiteLine(suggested)] : [];
 }
+/** The repository read's `chosen` (absent: an older panel, read as chosen); a panel without the read says nothing. */
+async function deliveryChoiceConfirmLines(c: WriteContext, repoId: string): Promise<string[]> {
+  let chosen: unknown;
+  try { chosen = (await c.read(`repositories/${encodeURIComponent(repoId)}/integration`) as { chosen?: unknown } | null)?.chosen; } catch { return []; }
+  return chosen === false ? [DELIVERY_NOT_CHOSEN, DELIVERY_FOR_LATER] : [];
+}
 async function confirmPayload(c: WriteContext): Promise<unknown> {
   const view = await groupView(c);
   const funding = await c.read(`groups/${group(c)}/funding-preview`);
@@ -1006,6 +1012,10 @@ async function confirmPayload(c: WriteContext): Promise<unknown> {
   const suiteLines = typeof view.plan.repoId === "string" ? await fullSuiteConfirmLines(c, view.plan.repoId) : [];
   confirmNote.push(...suiteLines);
   instructionWarnings.push(...suiteLines.slice(0, 1));
+  // Working-tree delivery spec §4.2 item 3: on a project nobody chose a delivery for, the question once after the receipt;
+  // confirm proceeds. Not for a folder or multi-directory group (their delivery is fixed).
+  if (typeof view.plan.repoId === "string" && (view.summary as { placement?: unknown; multiDir?: unknown }).placement === undefined
+    && (view.summary as { multiDir?: unknown }).multiDir === undefined) confirmNote.push(...await deliveryChoiceConfirmLines(c, view.plan.repoId));
   return {
     planHash: view.plan.planHash, proposalVersion: view.proposal.proposalVersion, budgetMode,
     profileIds: { estimator: bindings.estimator?.profileId ?? null, worker: bindings.worker!.profileId, handoff: bindings.handoff!.profileId, goalReview: bindings.goalReview!.profileId },

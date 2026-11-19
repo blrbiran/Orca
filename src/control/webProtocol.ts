@@ -2421,6 +2421,8 @@ const groupIntegrationViewSchema = z
       sourceRefs: z.array(z.object({ taskId: idSchema, ref: z.string().min(1), sourceSha: commitShaSchema.nullable(),
         mergeSha: commitShaSchema.nullable() }).strict()) }).strict().optional(),
     pr: z.object({ url: z.string(), number: safeInteger, ready: z.boolean() }).strict().nullable(),
+    // Working-tree delivery spec §4.4 step 1, §4.6: the stacked prerequisite whose working-tree delivery this one waits for.
+    waitingFor: idSchema.optional(),
   })
   .strict();
 
@@ -2508,6 +2510,8 @@ export const groupViewSchema = z
     spendCapBlock: spendCapBlockSchema.nullable().optional(),
     // Integration spec §4: the group's integration as an owner sees it; absent for keep (ruling R5).
     integration: groupIntegrationViewSchema.optional(),
+    // Working-tree delivery spec §4.2, §5: present (false) only where the first-use question is asked; absent reads as chosen.
+    projectDeliveryChosen: z.literal(false).optional(),
     // Issue-fixes spec §5.2 Reads: the group's newest 50 activity rows, newest first. Optional on the wire so older
     // fixtures still parse; the server always gives it.
     activity: z.array(activityEntrySchema).optional(),

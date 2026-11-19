@@ -48,7 +48,7 @@ import type { ControlStore } from "../control/store.js";
 import type { TrustedControlConfig } from "./controlConfig.js";
 import { controlErrorCatalog, sendControlError, sendMappedControlError } from "./controlErrors.js";
 import { registerTranscriptRoutes } from "../agentTranscript/routes.js";
-import { estimatorInstructionOf, readControlGroup, readControlRecovery, readControlSummary, readGroupSummary, readRequirementView, readRunActivityView, readRunEntry, readRunEvidence, readSelectionPreview, readUnreadableRuns, taskHandoffView } from "./controlViews.js";
+import { deliveryQuestionView, estimatorInstructionOf, integrationView, readControlGroup, readControlRecovery, readControlSummary, readGroupSummary, readRequirementView, readRunActivityView, readRunEntry, readRunEvidence, readSelectionPreview, readUnreadableRuns, taskHandoffView } from "./controlViews.js";
 import { readStoredHandoff } from "../control/taskHandoffs.js";
 import { costOutliersOf, phaseEndUsageOf } from "../control/runUsageView.js";
 import { confirmKnownRed, knownRedAtBase, type KnownRedAtBase } from "../control/knownRedAtBase.js";
@@ -71,6 +71,17 @@ function deliveryOf(store: ControlStore, groupId: string): string | null {
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   if (row === undefined) return null;
   try { return readGroupIntegration(JSON.parse(String(row.body)))?.scheme.delivery ?? "keep"; } catch { return null; }
+}
+
+/** The brief's working-tree keys (spec §4.2, §4.6); an unreadable body or record says nothing here (the full view names it). */
+function workingTreeBrief(store: ControlStore, groupId: string, state: string): Record<string, unknown> {
+  const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+  if (row === undefined) return {};
+  try {
+    const body = JSON.parse(String(row.body)) as unknown;
+    const working = readGroupIntegration(body)?.scheme.delivery === "working-tree" ? integrationView(store, groupId, body) : {};
+    return { ...working, ...deliveryQuestionView(store, groupId, body, state) };
+  } catch { return {}; }
 }
 
 /** Task 4 review minor 4: the brief's L4 note never fails the brief -- a failed read is no note, said on stderr once. */
@@ -325,9 +336,12 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       // Batch D re-review: only a done group's, the one the kept lines read; a group still clarifying has no copy yet.
       const delivery = summary.state === "done" ? deliveryOf(deps.store, groupId) : null;
       const estimatorInstruction = estimatorInstructionOf(deps.store, groupId, summary.state);
+      // Working-tree delivery spec §4.2, §4.6: the first-use question's key, and a working-tree group's record (where its
+      // files went, or why not, or which prerequisite it waits for) -- each absent otherwise, so other briefs keep their bytes.
+      const workingTree = workingTreeBrief(deps.store, groupId, summary.state);
       res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }), ...(warnings.length === 0 ? {} : { warnings }),
         ...(costOutliers === null ? {} : { costOutliers }), ...(unreadableRuns.length === 0 ? {} : { unreadableRuns }), ...(knownRed.length === 0 ? {} : { knownRedAtBase: knownRed }),
-        ...(delivery === null ? {} : { delivery }), ...(estimatorInstruction === null ? {} : { estimatorInstruction }) }); }
+        ...(delivery === null ? {} : { delivery }), ...(estimatorInstruction === null ? {} : { estimatorInstruction }), ...workingTree }); }
     catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") {
         sendControlError(res, 404, error.code, "No control group was found.");

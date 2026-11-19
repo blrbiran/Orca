@@ -11,6 +11,7 @@ import { newGroupIntegration, readGroupIntegration, type GroupIntegration, type 
 import { labelDecisions, ledgerSources } from "../../src/control/ledgerAtRef.js";
 import type { ControlStore } from "../../src/control/store.js";
 import { sweepWorkingTreeStaging } from "../../src/control/workingTreeDelivery.js";
+import { integrationView } from "../../src/panel/controlViews.js";
 import { controlWorkspaceRoots, unsetInheritedGitEnv } from "../../src/control/workspace.js";
 import { webFixture } from "./fixtures/web.js";
 
@@ -330,10 +331,15 @@ describe("working-tree delivery (spec §4.4)", { timeout: 60_000 }, () => {
       w.sql("UPDATE runs SET body=? WHERE id='run-a'", JSON.stringify({ runId: "run-a", groupId: "g", workItemId: "a", taskId: "a", phase: "work", state: "settled", drive: { base: zTip } }));
       commitOn(w.repo, "refs/heads/orca/g", { "g.txt": "g\n" }, zTip);
       w.finish();
+      // The read side (spec §4.6): the view names the prerequisite while it is not written, and nothing once it is.
+      // mutations: drop waitingFor from integrationView, or return null from workingTreeWaitingFor -> red here
+      expect(integrationView(w.store, "g", w.groupBody()).integration?.waitingFor).toBe("z");
       // mutation: drop step 1 -> round 1 writes g.txt before z.txt, red
       expect(await w.pass()).toBe(true);
       expect(existsSync(at(w, "z.txt"))).toBe(true);
       expect(existsSync(at(w, "g.txt"))).toBe(false);
+      // mutation: read a prerequisite whose acceptance names no tip as never written (tip === null -> waiting) -> red here
+      expect(integrationView(w.store, "g", w.groupBody()).integration).not.toHaveProperty("waitingFor");
       expect(await w.pass()).toBe(true);
       expect(text(w, "g.txt")).toBe("g\n");
       // A keep prerequisite: the dependent blocks by name.
