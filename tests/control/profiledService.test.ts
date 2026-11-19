@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { claimWork, readRun } from "../../src/control/budget.js";
 import { hashPayload, putWork, setGroupStopped } from "../../src/control/commands.js";
 import type { ExecutionPort, StartEnvelope } from "../../src/control/executionPort.js";
-import { createExecutionProfileRouter, resolveProfile } from "../../src/control/profiles.js";
+import { createExecutionProfileRouter, legacyProfileHash, resolveProfile } from "../../src/control/profiles.js";
 import { ControlService, type ExecutionProfileSelection } from "../../src/control/service.js";
 import type { ExecutionProfileSnapshotV1 } from "../../src/control/webProtocol.js";
 import { collectControlled } from "../../src/control/schedulerBridge.js";
@@ -78,10 +78,12 @@ function port(overrides: Partial<ExecutionPort> = {}): ExecutionPort {
   };
 }
 
-function serviceWith(store: Awaited<ReturnType<typeof openTestStore>>["store"], selected: ExecutionPort, fallback = port(), handoffPort = port()) {
+function serviceWith(store: Awaited<ReturnType<typeof openTestStore>>["store"], selected: ExecutionPort, fallback = port(), handoffPort = port(), legacy = false) {
   const frozen = resolveProfile(profileSnapshot(), selected);
   const handoff = resolveProfile(handoffSnapshot(), handoffPort);
-  const real = createExecutionProfileRouter([frozen, handoff]);
+  // #381 review I2: `legacy` gives the router the aliases a panel start records for both files' whole-snapshot hashes.
+  const aliases = legacy ? new Map([[legacyProfileHash(profileSnapshot()), frozen.profileHash], [legacyProfileHash(handoffSnapshot()), handoff.profileHash]]) : undefined;
+  const real = createExecutionProfileRouter([frozen, handoff], aliases === undefined ? {} : { aliases });
   // Marks the port calls made from inside the router's probe (see `probing`); every other method is the router's own.
   const router: typeof real = Object.freeze({ ...real, probe: async (profile: Parameters<typeof real.probe>[0], agent: Parameters<typeof real.probe>[1]) => { routerProbing += 1; try { return await real.probe(profile, agent); } finally { routerProbing -= 1; } } });
   const selection: ExecutionProfileSelection = { workKind: "task", profileId: "worker", profileHash: frozen.profileHash };
@@ -403,6 +405,30 @@ describe("profiled service execution", () => {
       await expect(service.claimProfiled("g1", "T1", selection, handoffSelection)).rejects.toThrow("group-stopped");
       await expect(service.reconcileBudgetProfiled("g1", "T1", selection, handoffSelection)).rejects.toThrow("group-stopped");
       await service.admissionGate.beginDrain().beforeWriterTransaction;
+    } finally { await h.dispose(); }
+  });
+});
+
+// #381 review I2 (session 3ba26002): the legacy service's binding checks (service.ts sameProfile at the re-claim, the
+// reconcile re-entry and the start) compare a run's frozen hash with the caller's through the router's aliases, so a run
+// claimed under a file's legacy hash is the same binding as the file's current hash.
+describe("a run bound under a legacy profile hash (#381 review I2)", () => {
+  it("is re-claimed, re-reconciled and started under the current hash", async () => {
+    const h = await openTestStore();
+    try {
+      const seeded = seedBudgetCase(h.store);
+      const { service, selection, handoffSelection } = serviceWith(h.store, port(), port(), port(), true);
+      const legacy = { ...selection, profileHash: legacyProfileHash(profileSnapshot()) };
+      const legacyHandoff = { ...handoffSelection, profileHash: legacyProfileHash(handoffSnapshot()) };
+      const claim = await service.claimProfiled("g1", "T1", legacy, legacyHandoff);
+      expect(readRun(h.store, claim.runId).executionProfile).toEqual(legacy);
+      // mutation: drop the aliases from the re-claim check (service.ts claimWithCapabilities) -> profile-changed
+      expect((await service.claimProfiled("g1", "T1", selection, handoffSelection)).runId).toBe(claim.runId);
+      // mutation: drop the aliases from the start check (service.ts startProfiled) -> profile-changed
+      await expect(service.startProfiled(selection, envelope(claim, seeded.w1.contract, h.root))).resolves.toMatchObject({ executionId: `execution-${claim.runId}` });
+      await service.reconcileBudgetProfiled("g1", "T1", legacy, legacyHandoff);
+      // mutation: drop the aliases from the reconcile re-entry check (service.ts reconcileWithCapabilities) -> profile-changed
+      await expect(service.reconcileBudgetProfiled("g1", "T1", selection, handoffSelection)).resolves.toMatchObject({ maxAttempts: 1 });
     } finally { await h.dispose(); }
   });
 });

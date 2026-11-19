@@ -5,6 +5,8 @@ import { normalizeControlPlan, writeImportedPlan } from "../../src/control/planI
 import { createExecutionProfileRouter, legacyProfileHash, resolveProfile } from "../../src/control/profiles.js";
 import { readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
 import { WebControlService } from "../../src/control/webService.js";
+import { deliverScheduledStart } from "../../src/control/webDispatch.js";
+import { readControlGroup } from "../../src/panel/controlViews.js";
 import { readSchedulerControlPlanSource } from "../../src/scheduler/planFile.js";
 import { profileSnapshot, webFixture } from "./fixtures/web.js";
 import { fixtureResolutionFor } from "./fixtures/agents.js";
@@ -66,6 +68,28 @@ describe("an estimate bound through a legacy hash records the binding hash (#381
       expect(first.result?.estimateState).toBe("blocked-capability");
       // mutation: drop the aliases from the dedupe comparison -> a new version, red
       expect((await estimate(LEGACY)).result?.estimateId).toBe(first.result!.estimateId);
+    } finally { await h.dispose(); }
+  });
+
+  // #381 review I2: end to end -- a group whose every binding names the file by its legacy hash (as one confirmed before
+  // the binding hash would) re-estimates, confirms, starts and claims its first task through the aliases, and its view reads.
+  it("a legacy-bound group re-estimates, confirms, starts and claims a task", async () => {
+    const h = await webFixture();
+    try {
+      const router = createExecutionProfileRouter([h.frozen], { aliases: new Map([[LEGACY, h.frozen.profileHash]]) });
+      const deps = { ...h.deps, profileRouter: router };
+      const service = new WebControlService(deps);
+      const estimate = await service.createEstimate(h.command("estimate", { proposalVersion: readBudgetProposal(h.store, "g").proposalVersion, estimatorProfileId: "all", estimatorProfileHash: LEGACY, estimateMode: "soft" }));
+      expect(estimate).toMatchObject({ result: { kind: "estimate-created" } });
+      const payload = await h.confirmPayload();
+      const confirmed = await service.confirm(h.command("confirm", { ...payload, proposalVersion: readBudgetProposal(h.store, "g").proposalVersion, profileHashes: { estimator: LEGACY, worker: LEGACY, handoff: LEGACY, goalReview: LEGACY } }));
+      expect(confirmed).toMatchObject({ result: { kind: "confirmed" } });
+      expect(await service.start(h.command("start", {}))).toMatchObject({ result: { kind: "scheduled" } });
+      const outcome = await deliverScheduledStart({ store: h.store, profileRouter: router }, "g");
+      expect(outcome.kind).toBe("claimed");
+      const view = readControlGroup(h.store, "epoch", "g");
+      // Confirm freezes the resolved (binding) hashes, so the claimed run names the binding hash; the view reads it.
+      expect(view.runs.map((run) => run.profile)).toEqual([{ profileId: "all", profileHash: h.frozen.profileHash }]);
     } finally { await h.dispose(); }
   });
 });
