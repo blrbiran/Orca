@@ -63,3 +63,12 @@ still overrides a `failed` record, unchanged.
 
 Mutations: drop the baseline run → case 1 is `failed` (red); classify on any base exit instead of two
 red runs → case 2 passes (red).
+## Correction (2026-11-19, session 3ba26002): only a red suite is compared with the base (review of #377, C1)
+
+The Decision says "when the tip's suite is red twice, run the same command at the group's base". The build ran the base
+comparison whenever the tip's acceptance failed, including when a task check in the union failed and the suite never ran
+on the tip; a red suite at the base then recorded `passed-relative`, so acceptance was satisfied with a red task check.
+Now the base is compared only when the suite itself ran on the tip and was the red command (`suiteExits` non-empty), and
+`passed-relative` is recorded only then. A red task check is `failed`, with no baseline in the record. The same runner
+serves the acceptance on a delivered commit (delivery tail D3), which follows the same rule.
+Criterion: `tests/control/groupAcceptanceFullSuite.test.ts` "a task check red at the tip with the suite red at the base".

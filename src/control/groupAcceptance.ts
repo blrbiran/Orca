@@ -202,7 +202,8 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
     const { failure, commands, suiteExits, baseline } = inFlight.settled.outcome;
     // Spec 2026-11-16: a red suite is classified against the group's base. Red there too: the failure
     // pre-dated the group, and the acceptance passes relative to it; green there: this group broke it.
-    const baselineRed = baseline !== undefined && baseline.failure !== null;
+    // Review of #377 (C1): relative only when the suite itself was the red command on the tip (it ran there).
+    const baselineRed = baseline !== undefined && baseline.failure !== null && suiteExits.length > 0;
     const result = failure === null ? "passed" : baselineRed ? "passed-relative" : "failed";
     const record: GroupAcceptance = { tip, result, commands, at: store.now(),
       ...(failure === null || failure.tail === "" ? {} : { tail: failure.tail }),
@@ -270,7 +271,9 @@ export async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, gro
     }
     return { failure, commands, suiteExits };
   });
-  if (outcome.failure === null || suite === null || baselineTip === null) return outcome;
+  // Review of #377 (C1): a task check red in the union stops before the suite runs (no suiteExits); that failure is the
+  // group's own and the base is not compared -- the base's suite says nothing about a task check.
+  if (outcome.failure === null || suite === null || baselineTip === null || outcome.suiteExits.length === 0) return outcome;
   // Spec 2026-11-16: the tip's suite is red twice. Run the same command at the group's base; red there too
   // means the failure pre-dated this group. A base that cannot be checked out stays a plain failure.
   let baseline: { failure: PostMergeOutcome["failure"]; commands: PostMergeOutcome["commands"]; exits: string[] };

@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ExecutionDriver } from "../../src/control/executionDriver.js";
 import { readGroupActivity } from "../../src/control/activity.js";
-import { acceptanceProblem, fullSuiteWarning } from "../../src/control/groupAcceptanceRecord.js";
+import { acceptanceProblem, acceptanceSatisfied, fullSuiteWarning } from "../../src/control/groupAcceptanceRecord.js";
 import { landingWatchOf } from "../../src/control/landingWatchRecord.js";
 import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
 import { createWebWakeHandlers } from "../../src/control/webDispatch.js";
@@ -141,6 +141,27 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
       expect(fullSuiteWarning(record)).toBe(`full-suite-pre-existing:${s.command}`);
       expect(acceptanceProblem(record)).toBeNull();
       expect(s.runs()).toEqual(["tip", "tip", "base", "base"]);
+    } finally { await t.h.dispose(); }
+  });
+
+  // Review of #377 (C1): a task check red at the tip stops the union before the suite runs; the base was still compared
+  // and a red suite there made the record passed-relative, so acceptance was satisfied with a red task check.
+  it("a task check red at the tip with the suite red at the base: failed, and the base is not compared (#377 review C1)", async () => {
+    const s = suiteAtBase("false");
+    // Red only in the acceptance's scratch tree, so each task's own run of it passes.
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { requiredChecks: [`case "$PWD" in *group-acceptance-*) exit 7 ;; *) true ;; esac`] }); try {
+      await t.claim(); await t.claim();
+      setSuite(t, s.command);
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).acceptance !== undefined);
+      const record = group(t).acceptance;
+      // mutation: drop the suiteExits test before the base comparison (and at the classification) -> passed-relative, red
+      expect(record.result).toBe("failed");
+      expect(record.fullSuite.baseline).toBeUndefined();
+      expect(record.fullSuite.exits).toEqual([]);
+      expect(commandsOf(t).map(([, exit]) => exit)).toEqual(["7"]);
+      expect(s.runs()).toEqual([]);
+      expect(acceptanceSatisfied(t.h.store, "g", group(t))).toBe(false);
     } finally { await t.h.dispose(); }
   });
 
