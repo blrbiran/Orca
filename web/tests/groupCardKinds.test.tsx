@@ -37,6 +37,8 @@ async function bulk(chipName: string, groupId: string, verb: "Archive" | "Close"
   render(<App />);
   await within(await screen.findByRole("navigation", { name: "Control groups" })).findAllByRole("button");
   fireEvent.click(chip(chipName));
+  // Ruling (2026-11-20, human 「选择模式」, tester #390): a card's box exists only after the toolbar's Select toggle.
+  fireEvent.click(screen.getByRole("button", { name: "Select" }));
   fireEvent.click(await within(nav()).findByRole("checkbox", { name: `Select ${groupId}` }));
   fireEvent.click(within(toolbar()).getByRole("button", { name: verb }));
   await waitFor(() => expect(screen.getByTestId(`bulk-outcome-${groupId}`)).toBeTruthy());

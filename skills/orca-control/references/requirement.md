@@ -100,17 +100,20 @@ accept the current draft: the group becomes a draft task group; a draft reportin
 - `<group>`: a group id or a unique prefix
 - `--despite-conflicts`: accept a draft whose split reports it does not meet the requirement as written
 
-## `orca requirement apply-parallel <group>`
+## `orca requirement apply-parallel <group> [--pair <pair>] [--all]`
 
-drop the dependsOn edges the current draft lists as parallel candidates; the result is the next draft
+drop the dependsOn edges of the parallel-candidate pairs a person names (--pair, repeatable) or of all of them (--all); the result is the next draft
 
 - What it does: sends control verb `requirement-draft-edit`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
+- `--pair <pair>` (repeatable): <before>:<after> of a candidate requirement show lists (repeatable); naming none drops nothing
+- `--all`: drop every listed candidate's edge (the old one-shot behaviour)
 
 ```
-orca requirement show g1   # lists 'could run in parallel'
-orca requirement apply-parallel g1
+orca requirement show g1   # lists the candidates, each as before ∥ after
+orca requirement apply-parallel g1 --pair T3:T4a
+orca requirement apply-parallel g1 --all
 ```
 
 ## `orca requirement add-implied-path <group> --task <task> --path <path>`

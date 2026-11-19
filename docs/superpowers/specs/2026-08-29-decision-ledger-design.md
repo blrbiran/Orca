@@ -784,3 +784,21 @@ D 的对象已按人 2026-09-17 同意的顺序定为**开发会话优先**，cc
 - 依据：上引 goal.md §1.3；ccloop `docs/superpowers/specs/2026-10-20-reported-decisions-and-debug-design.md` §6（Orca 侧设计）。
 
 *** **原文逐字保留（本文已发布），此处即为具名更正。** ***
+
+## Correction (2026-11-20, tester #382): Orca's own runtime files are not deliverables
+
+A person read the group's delivery against a requirement that allowed only N new files, and the review counted two
+`.decisions/<run>.jsonl` files Orca itself had written — the acceptance-relative work of the earlier Correction still
+stands; this one speaks only to what a delivery review sees.
+
+- **The review and the acceptance changed-files exclude Orca's own paths for repository groups too** — `.decisions/`
+  and the requirement document — as they already did for folder groups (ruling #337 §4.1–§4.2). The reviewer is told
+  in the prompt that these are Orca's runtime files, never a criterion's business.
+- **The journal stays in the delivery tree for now.** The per-run file under `.decisions/<runId>.jsonl` is still
+  committed with the landing (driverLanding.ts) and still read as the crash-replay marker and by the panel's decision
+  page; moving it to a side ref or the control store is a separate design (it would also take the blame semantics the
+  ledger was built for). What was wrong was the review reading it as a deliverable, and that is what this correction
+  fixes. The remaining noise — one journal file per run in the delivered branch — is registered, not fixed.
+- Ruling (human, 2026-11-20): 「你看最终如何做是最好的，允许改旧裁定」.
+
+*** **原文逐字保留（本文已发布），此处即为具名更正。** ***

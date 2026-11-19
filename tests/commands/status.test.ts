@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { ccloopBinCheck, DOCTOR_CHECKS, orcaModesCheck, runDoctor, staleSocketsCheck } from "../../src/commands/doctor.js";
 import { runRegistered } from "../../src/commands/run.js";
-import { projectsCheck, runStatus, agentsTableCheck, ccmemCheck, schemaCheck, skillCheck, STATUS_CHECKS, workHealthCheck, type Check, type CheckContext } from "../../src/commands/status.js";
+import { projectsCheck, runStatus, agentsTableCheck, ccmemCheck, panelSocketCheck, schemaCheck, skillCheck, STATUS_CHECKS, workHealthCheck, type Check, type CheckContext } from "../../src/commands/status.js";
 import type { CommandIo, ParsedArgs } from "../../src/commands/types.js";
 import { fakePanel, useFakePanels } from "./fixtures/fakePanel.js";
 
@@ -154,6 +154,24 @@ describe("orca status (spec §8)", () => {
     const unknown = await workHealthCheck({ env, stateDirFlag: join(home, "no-panel"), checkout: CHECKOUT });
     expect(unknown).toMatchObject({ level: "warn", subject: "work" });
     expect(unknown.fact).toMatch(/unknown/);
+  });
+});
+
+describe("orca status requests the summary once (tester #399)", () => {
+  useFakePanels();
+  it("the panel and work checks share one GET summary in one run, keeping both answers", async () => {
+    const { env } = sandbox();
+    const p = await fakePanel({
+      "GET summary": { status: 200, body: { schema: "orca-control-summary-v1", groups: [{ groupId: "g1", counts: { blocked: 0 } }] } },
+      "GET recovery": { status: 200, body: { schema: "orca-control-recovery-v1", blockers: [] } },
+    });
+    const flagged = { ...args(), global: { ...args().global, controlStateDir: p.dir } };
+    const { io, out } = capture(env);
+    expect(await runStatus(flagged, io, [panelSocketCheck, workHealthCheck])).toBe(0);
+    // mutation: drop the memo, each check requests its own summary -> red (2)
+    expect(p.requests.filter((request) => request.method === "GET" && request.path === "summary")).toHaveLength(1);
+    expect(out()).toMatch(/^ok panel: .*\(1 group\)$/m);
+    expect(out()).toMatch(/^ok work: 1 group, 0 blocked tasks, 0 stopped, 0 refused persistently, 0 recovery blockers, 0 needing you$/m);
   });
 });
 

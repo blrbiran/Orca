@@ -47,14 +47,32 @@ export async function serviceCheck(ctx: CheckContext): Promise<StatusCheck> {
   return { level: "ok", subject: "service", fact: `${manager.kind} ${state.state} pid=${state.pid ?? "-"}` };
 }
 
+/**
+ * Tester #399: the panel check and the work check both want the panel's summary, and asking twice sent the whole
+ * (large) document twice. One request per run: the cache is keyed on the run's context, which `contextOf` makes fresh
+ * for every invocation, so a later run (or a direct call with its own context) asks again.
+ */
+const summaryRequests = new WeakMap<CheckContext, Promise<{ status: number; body: unknown }>>();
+function sharedSummary(ctx: CheckContext): Promise<{ status: number; body: unknown }> {
+  const prior = summaryRequests.get(ctx);
+  if (prior !== undefined) return prior;
+  const request = (async () => {
+    const { discoverSocketPath } = await import("../entry/discovery.js");
+    const { requestOverSocket } = await import("../entry/socketClient.js");
+    const socketPath = discoverSocketPath({ stateDirFlag: ctx.stateDirFlag, env: envOf(ctx) });
+    return await requestOverSocket({ socketPath, method: "GET", path: "summary", client: "cli", timeoutMs: 10_000 });
+  })();
+  summaryRequests.set(ctx, request);
+  return request;
+}
+
 /** Is the panel answering on its control socket. A GET, never a start. */
 export async function panelSocketCheck(ctx: CheckContext): Promise<StatusCheck> {
   const { discoverSocketPath } = await import("../entry/discovery.js");
-  const { requestOverSocket } = await import("../entry/socketClient.js");
   const { EntryRejection } = await import("../entry/envelope.js");
   try {
     const socketPath = discoverSocketPath({ stateDirFlag: ctx.stateDirFlag, env: envOf(ctx) });
-    const { status, body } = await requestOverSocket({ socketPath, method: "GET", path: "summary", client: "cli", timeoutMs: 10_000 });
+    const { status, body } = await sharedSummary(ctx);
     if (status !== 200) return { level: "fail", subject: "panel", fact: `${socketPath} answered ${status}`, fix: "orca panel logs" };
     const groups = (body as { groups?: unknown[] }).groups?.length ?? 0;
     return { level: "ok", subject: "panel", fact: `answering on ${socketPath} (${groups} group${groups === 1 ? "" : "s"})` };
@@ -74,7 +92,7 @@ export async function workHealthCheck(ctx: CheckContext): Promise<StatusCheck> {
   let blockers = 0, dispatchBlocked = false;
   try {
     const socketPath = discoverSocketPath({ stateDirFlag: ctx.stateDirFlag, env: envOf(ctx) });
-    const summary = await requestOverSocket({ socketPath, method: "GET", path: "summary", client: "cli", timeoutMs: 10_000 });
+    const summary = await sharedSummary(ctx);
     if (summary.status !== 200) return { level: "warn", subject: "work", fact: `unknown: the panel answered summary ${summary.status}`, fix: "orca panel logs" };
     const body = summary.body as { groups?: typeof groups; dispatchBlocked?: boolean };
     const archived = new Set((body.groups ?? []).filter((group) => group.archived === true).flatMap((group) => group.groupId === undefined ? [] : [group.groupId]));

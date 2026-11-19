@@ -7,7 +7,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, WriteContext } from "../types.js";
 import {
-  adoptFullSuiteLine, checkpointOf, type ClarifyRoundView, config, contextHandoffLines, DELIVERY_FOR_LATER, DELIVERY_NOT_CHOSEN, type EstimateHistory, FULL_SUITE_NOT_SET, currentRun, file, fillRoundAnswer, fundingLines, historyLines, withFunding, group, GROUP, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, softCeilingLines, unestimatedLines, verb, workItem,
+  adoptFullSuiteLine, checkpointOf, type ClarifyRoundView, config, contextHandoffLines, DELIVERY_FOR_LATER, DELIVERY_NOT_CHOSEN, type EstimateHistory, FULL_SUITE_NOT_SET, currentRun, file, fillRoundAnswer, fundingLines, historyLines, withFunding, group, GROUP, type GroupView, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, softCeilingLines, unestimatedLines, verb, workItem,
 } from "./verbs.js";
 import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
 import { SYSTEM_LABELS } from "../../control/labels.js";
@@ -149,14 +149,29 @@ const acceptedSplit = {
 /**
  * #379-381 review (M3): apply-parallel drops only declared edges; a pair ordered because both tasks list the same file
  * (an implicit edge; requirement show names it) is freed by dropping the file from the task that only reads it.
+ * Tester #384: a candidate is now a declared edge whose pair a broad write-set overlap already orders, a person names the
+ * pairs (`--pair`, repeatable) or asks for all of them (`--all`), and naming none drops nothing.
  */
 const applyParallelRefusals = {
   ...acceptedSplit,
-  hint: async (error: { code: string; message: string }, c?: WriteContext): Promise<string | undefined> =>
-    error.message === "group-state-invalid:draft-edit-no-parallel-candidates"
-      ? `no declared dependsOn edge is a parallel candidate; two tasks that run one after the other because both list the same file as a target path (requirement show names them) run together after orca requirement drop-path ${c === undefined ? "<group>" : group(c)} --task <task> --path <file> on the one that only reads it`
-      : await acceptedSplit.hint(error),
+  hint: async (error: { code: string; message: string }, c?: WriteContext): Promise<string | undefined> => {
+    const name = c === undefined ? "<group>" : group(c);
+    if (error.message === "group-state-invalid:draft-edit-no-parallel-candidates")
+      return `no declared dependsOn edge is a parallel candidate (a candidate is a declared edge whose pair a broad target path already orders); two tasks that run one after the other because both list the same file as a target path (requirement show names them) run together after orca requirement drop-path ${name} --task <task> --path <file> on the one that only reads it`;
+    if (error.message === "group-state-invalid:draft-edit-no-pairs-selected")
+      return `name the pairs to drop: orca requirement apply-parallel ${name} --pair <before>:<after> (repeatable; requirement show lists each as before ∥ after), or --all to drop every candidate`;
+    if (error.message === "group-state-invalid:draft-edit-pairs-and-all") return `name the pairs with --pair, or drop every candidate with --all -- not both`;
+    if (error.message.startsWith("group-state-invalid:draft-edit-not-a-parallel-candidate:"))
+      return `that pair is not a candidate on this draft; requirement show lists the candidates as before ∥ after, and --pair takes before:after`;
+    return await acceptedSplit.hint(error);
+  },
 };
+/** Tester #384: one `--pair before:after` (taskIds carry no colon). */
+function pairOf(value: string): { before: string; after: string } {
+  const at = value.indexOf(":");
+  if (at <= 0 || at === value.length - 1) throw invalid(`--pair wants before:after (a candidate as requirement show lists it, before ∥ after), got ${JSON.stringify(value)}`);
+  return { before: value.slice(0, at), after: value.slice(at + 1) };
+}
 const decision = (value: string, flag: string): { id: string; accept: boolean } => {
   const at = value.lastIndexOf("=");
   const verdict = value.slice(at + 1);
@@ -301,6 +316,56 @@ async function closeRunNext(error: { code: string; message: string }, c: WriteCo
   const taskId = (await groupView(c)).runs.find((run) => run.runId === runId)?.taskId ?? null;
   if (detail === "usage-unknown" && taskId !== null) return [settleUsageCommand(group(c), taskId)];
   return [`orca run show ${runId}`, ...(taskId === null ? [] : [`orca task retry ${group(c)} ${taskId}`])];
+}
+
+/**
+ * Tester #386 (a): `task continue` of a run that ended `exhausted` and recorded no checkpoint used to stop at
+ * `checkpoint-not-found` with no way on. The refusal names the retry, and -- when the group has a finite token limit --
+ * the complete four-field limit a further attempt needs (its tokens raised by what this run used).
+ */
+async function continueNext(error: { code: string; message: string }, c: WriteContext): Promise<string[] | undefined> {
+  if (error.code !== "checkpoint-not-found") return undefined;
+  const runId = await currentRun(c);
+  const view = await groupView(c);
+  const run = view.runs.find((entry) => entry.runId === runId);
+  if (run?.outcome !== "exhausted") return undefined;
+  const retry = `orca task retry ${group(c)} ${run.taskId ?? task(c)}`;
+  const limit = view.ledger.groupLimit;
+  if (limit.tokens === null) return [retry];
+  const raised = JSON.stringify({ tokens: limit.tokens + Math.max(1, run.used?.tokens ?? 0), activeMs: limit.activeMs, attempts: limit.attempts, sessions: limit.sessions });
+  return [`orca group set-limit ${group(c)} --limit '${raised}'`, retry];
+}
+
+const LIMIT_DIMENSIONS = ["tokens", "activeMs", "attempts", "sessions"] as const;
+type LimitAmount = GroupView["ledger"]["groupLimit"];
+const limitCount = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+
+/**
+ * Tester #386 (b): `--limit` takes the whole budget object, a partial one (the group's current limit fills what it leaves
+ * out), or a bare token count. The merge happens here, on this side of the socket, so the panel's budgetAmountSchema stays
+ * strict on the wire; an object that names an unknown field, or merges to a value the schema would refuse, is refused here
+ * with the field that is wrong.
+ */
+export function mergedLimit(raw: string, current: LimitAmount): LimitAmount {
+  const wanted = `--limit wants a budget object {"tokens":<n|null>,"activeMs":<n>,"attempts":<n>,"sessions":<n>}, a partial one of it (the group's current limit fills the rest), or a token count`;
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw) as unknown; } catch { throw invalid(wanted); }
+  if (typeof parsed === "number") {
+    if (!limitCount(parsed)) throw invalid(`--limit: tokens wants a non-negative safe integer or null, not ${JSON.stringify(parsed)}`);
+    return { ...current, tokens: parsed };
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) throw invalid(wanted);
+  const patch = parsed as Record<string, unknown>;
+  const unknown = Object.keys(patch).filter((key) => !(LIMIT_DIMENSIONS as readonly string[]).includes(key));
+  if (unknown.length > 0) throw invalid(`--limit: unknown field${unknown.length === 1 ? "" : "s"} ${unknown.map((key) => JSON.stringify(key)).join(", ")}; it takes ${LIMIT_DIMENSIONS.join(", ")}`);
+  const merged: Record<string, unknown> = { ...current };
+  const invalidFields = LIMIT_DIMENSIONS.filter((dimension) => dimension in patch
+    && (dimension === "tokens" ? patch[dimension] !== null && !limitCount(patch[dimension]) : !limitCount(patch[dimension])));
+  for (const dimension of LIMIT_DIMENSIONS) if (dimension in patch && !invalidFields.includes(dimension)) merged[dimension] = patch[dimension];
+  if (invalidFields.length > 0) throw invalid(`--limit: invalid ${invalidFields.join(", ")} (tokens takes a non-negative safe integer or null; the other dimensions take a non-negative safe integer)`);
+  const incomplete = LIMIT_DIMENSIONS.filter((dimension) => dimension === "tokens" ? merged.tokens !== null && !limitCount(merged.tokens) : !limitCount(merged[dimension]));
+  if (incomplete.length > 0) throw invalid(`--limit: the merged limit has no usable value for ${incomplete.join(", ")}; pass ${incomplete.join(" and ")} so the group limit is complete`);
+  return merged as unknown as LimitAmount;
 }
 
 /**
@@ -514,10 +579,20 @@ export const WORK_ROWS: CommandDef[] = [
     } }),
   // Tester follow-up K (#284, #265): apply one of the current draft's hints (requirement show lists them); Orca re-validates
   // the edited split as the next draft, awaiting review. No model call is made.
-  verb({ domain: "requirement", action: "apply-parallel", summary: "drop the dependsOn edges the current draft lists as parallel candidates; the result is the next draft", verb: "requirement-draft-edit", positionals: [GROUP],
+  verb({ domain: "requirement", action: "apply-parallel", summary: "drop the dependsOn edges of the parallel-candidate pairs a person names (--pair, repeatable) or of all of them (--all); the result is the next draft", verb: "requirement-draft-edit", positionals: [GROUP],
     route: (c) => `groups/${group(c)}/requirement/edit`,
-    payload: async (c) => { const d = await latestDraft(c); if (d.draftHash === null) throw missing(c, await requirement(c), "requirement-no-draft", `draft ${d.draftNo} has no output yet`); return { draftNo: d.draftNo, draftHash: d.draftHash, edit: { kind: "apply-parallel-candidates" } }; },
-    examples: ["orca requirement show g1   # lists 'could run in parallel'", "orca requirement apply-parallel g1"], ...applyParallelRefusals }),
+    flags: [{ name: "pair", type: "string", repeatable: true, summary: "<before>:<after> of a candidate requirement show lists (repeatable); naming none drops nothing" },
+      { name: "all", type: "boolean", summary: "drop every listed candidate's edge (the old one-shot behaviour)" }],
+    payload: async (c) => {
+      const d = await latestDraft(c);
+      if (d.draftHash === null) throw missing(c, await requirement(c), "requirement-no-draft", `draft ${d.draftNo} has no output yet`);
+      const pairs = list(c, "pair").map(pairOf), all = c.args.flags["all"] === true;
+      if (all && pairs.length > 0) throw invalid("--all and --pair cannot be combined; name the pairs to drop, or ask for all of them");
+      return { draftNo: d.draftNo, draftHash: d.draftHash,
+        edit: { kind: "apply-parallel-candidates", ...(pairs.length === 0 ? {} : { pairs }), ...(all ? { all: true as const } : {}) } };
+    },
+    examples: ["orca requirement show g1   # lists the candidates, each as before ∥ after", "orca requirement apply-parallel g1 --pair T3:T4a",
+      "orca requirement apply-parallel g1 --all"], ...applyParallelRefusals }),
   verb({ domain: "requirement", action: "add-implied-path", summary: "add a path the current draft lists as implied to that task's target paths; the result is the next draft", verb: "requirement-draft-edit", positionals: [GROUP],
     flags: [{ name: "task", type: "string", required: true, summary: "the task whose success condition names the path" }, { name: "path", type: "string", required: true, summary: "the path, as requirement show lists it" }],
     route: (c) => `groups/${group(c)}/requirement/edit`,
@@ -682,15 +757,27 @@ export const WORK_ROWS: CommandDef[] = [
       ? "only a run that is starting or running can be abandoned; a stopped one is retried (orca task retry) or closed (orca group close-run)"
       : undefined }),
   verb({ domain: "group", action: "set-limit", summary: "set the group's budget limit", verb: "set-limit", positionals: [GROUP], access: "token",
-    flags: [{ name: "limit", type: "string", required: true, summary: "JSON {tokens,activeMs,attempts,sessions}" }],
-    route: (c) => `groups/${group(c)}/set-limit`, payload: (c) => ({ limit: json(c, "limit") }) }),
+    flags: [{ name: "limit", type: "string", required: true, summary: "a token count, or a budget object {tokens,activeMs,attempts,sessions} (a partial one keeps the group's current values for the rest)" }],
+    route: (c) => `groups/${group(c)}/set-limit`,
+    // Tester #386 (b): the panel's budgetAmountSchema stays strict; a partial --limit is merged here with the group's
+    // current limit, so the wire always carries the complete four-field object.
+    payload: async (c) => ({ limit: mergedLimit(str(c, "limit")!, (await groupView(c)).ledger.groupLimit) }),
+    examples: ["orca group set-limit g1 --limit 24000000", "orca group set-limit g1 --limit '{\"tokens\":24000000}'", "orca group set-limit g1 --limit '{\"tokens\":24000000,\"activeMs\":3600000,\"attempts\":6,\"sessions\":6}'"] }),
   verb({ domain: "group", action: "cap", summary: "lower a draft group's token ceiling; raising or removing it requires a person", verb: "proposal-edit", positionals: [GROUP],
     flags: [{ name: "tokens", type: "string", required: true, summary: "finite token ceiling below the current one" }],
     route: (c) => `groups/${group(c)}/proposal/edit`, payload: async (c) => {
       const raw = str(c, "tokens")!;
       if (!/^(0|[1-9][0-9]*)$/.test(raw) || !Number.isSafeInteger(Number(raw))) throw invalid("--tokens wants a non-negative safe integer");
       const tokens = Number(raw), view = await groupView(c), current = view.ledger.groupLimit;
-      if (view.proposal.state !== "editable" || (current.tokens !== null && tokens >= current.tokens)) throw invalid("group cap needs an editable proposal and a lower token ceiling");
+      if (view.proposal.state !== "editable") {
+        // Tester #389: an unlimited group can be confirmed by Orca itself; then its proposal is closed to cap, and a person
+        // changes the ceiling with set-limit (the command the message names).
+        const autoConfirmed = (view.recentCommandIds ?? []).some((id) => id.startsWith("orca-auto-confirm-unlimited-v"));
+        throw invalid(autoConfirmed
+          ? `group ${group(c)} was already auto-confirmed (Orca confirmed it as an unlimited group), so group cap cannot edit it; a person sets the ceiling with orca group set-limit ${group(c)} --limit <a lower token ceiling>`
+          : "group cap needs an editable proposal and a lower token ceiling");
+      }
+      if (current.tokens !== null && tokens >= current.tokens) throw invalid("group cap needs an editable proposal and a lower token ceiling");
       return { baseProposalVersion: view.proposal.proposalVersion, operations: [], proposedGroupLimit: { ...current, tokens }, capOnly: true };
     }, examples: ["orca group cap g1 --tokens 300000"] }),
   verb({ domain: "group", action: "set-integration", summary: "where this group's finished work goes", verb: "set-group-integration", positionals: [GROUP], flags: SCHEME_FLAGS,
@@ -813,7 +900,7 @@ export const WORK_ROWS: CommandDef[] = [
       const note = operatorNote(c);
       const runId = await currentRun(c);
       return { predecessorRunId: runId, checkpointId: await checkpointOf(c, runId), ...(note === undefined ? {} : { operatorNote: note }) };
-    } }),
+    }, next: continueNext }),
   // Tester follow-up G Part 5: a note for the task's agent; it reaches the agent at its next phase start, never mid-call.
   verb({ domain: "task", action: "note", summary: "add a note to a task's agent, delivered at its next step (plan, execute, verify, next attempt or continuation)", verb: "add-live-note", positionals: [GROUP, TASK],
     flags: [{ name: "text", type: "string", required: true, summary: "the note, at most 2048 UTF-8 bytes" }],

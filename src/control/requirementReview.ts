@@ -39,6 +39,7 @@ import type { AdmissionGate } from "./admissionGate.js";
 import type { FrozenSlot } from "./agentSelection.js";
 import type { ControlStore } from "./store.js";
 import { offPlanFactLines } from "./offPlanWrites.js";
+import { failureNamesLine } from "./failureNames.js";
 import { preexistingFailureFactLines } from "./preexistingFailure.js";
 import type { Amount } from "./types.js";
 import type { BudgetAmount } from "./tokenPolicy.js";
@@ -147,9 +148,28 @@ function directoryLines(directories: readonly ReviewDirectory[]): string[] {
     : ["", `Directory ${d.key} (${d.kind}): files changed and diff, before = ${d.base.slice(0, 12)}, after = ${d.tip.slice(0, 12)}:`, ...d.changedFiles.map(fileLine), d.diff,
       ...(d.truncated ? [`(Directory ${d.key}: the diff was cut at ${d.share} bytes; the rest was not shown to you.)`] : [])]);
 }
+/**
+ * Tester #391: what the acceptance recorded about the project-wide check, when it was red on the tip (or flaky). The tails
+ * are the last 2 KB of each run's output; `baseExits` is present only when the same command also ran at the group's base
+ * and was red there (`passed-relative`). The failing-test names in the tails are a reference, not the decision.
+ */
+export interface AcceptanceBaseline { command: string; tipExits: string[]; baseExits?: string[]; flaky?: boolean; tipTail?: string; baseTail?: string }
+
+const exitList = (exits: readonly string[]): string => exits.length === 0 ? "not recorded" : exits.join(", ");
+
+/** #391: the acceptance section -- its exits on both sides, the failing names the last 2 KB gives, and how to read them. */
+function acceptanceBaselineLines(baseline: AcceptanceBaseline): string[] {
+  const baseRed = baseline.baseExits !== undefined;
+  return [
+    baseRed
+      ? `Project-wide check ${JSON.stringify(baseline.command)} failed at the group's base and on this tip (tip: ${exitList(baseline.tipExits)}; base: ${exitList(baseline.baseExits!)}). This alone does not prove the failures are the same. Base failure: ${failureNamesLine(baseline.baseTail)}. Tip failure: ${failureNamesLine(baseline.tipTail)}.`
+      : `Project-wide check ${JSON.stringify(baseline.command)} was red on this tip (exit(s) ${exitList(baseline.tipExits)}${baseline.flaky === true ? "; it passed on the retry, so it is flaky" : ""}). No run of it at the group's base is recorded, so the relative-pass rule below does not apply to it. Tip failure: ${failureNamesLine(baseline.tipTail)}.`,
+    "Those failures are the last 2 KB of each output only. If they end in the test runner's summary without the failing tests' names, the identities are unavailable -- say so in `missing` if it matters, but do not answer cannot-judge for that reason alone when acceptance has decided the check. Red on this tip with the same exits at the group's base was red before the group; the tip's and the base's failing tests do not have to be the same identities.",
+  ];
+}
 export function buildReviewPrompt(input: { idea: string; statement: string; criteria: ReadonlyArray<{ id: string; text: string }>; openBranches: readonly string[];
   changedFiles: readonly ChangedFile[]; diff: string; truncated: boolean; note?: string; acceptanceFailed?: boolean;
-  acceptanceBaseline?: { command: string; tail?: string; tipTail?: string }; plan?: ReviewPlan | null; facts?: readonly string[];
+  acceptanceBaseline?: AcceptanceBaseline; plan?: ReviewPlan | null; facts?: readonly string[];
   /** #337: a folder group's heading (§4.1); a multi-directory group's sections, in place of the one diff (§4.2). */
   folder?: boolean; directories?: readonly ReviewDirectory[] }): string {
   const multi = input.directories !== undefined;
@@ -159,8 +179,15 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
     "Evidence may be a file's content, a file's metadata (path, size, hash), a command's recorded result, or a delivery Orca recorded -- each section below says which.",
     // Review of #337: metadata is evidence only of itself -- a PDF's hash does not show what the PDF says.
     "A file's listed metadata (size, hash, type, stored pixel size) shows only those facts, never what its unshown content says.",
+    // Tester #382 (human ruling): Orca's ledger and requirement document are runtime files, never deliverables.
+    ORCA_RUNTIME_FILES_NOTE,
     ...(input.acceptanceFailed === true ? ["Group acceptance failed on this tip (a project-wide check, possibly one that was already failing). Judge the criteria from the delivered work below anyway."] : []),
-    ...(input.acceptanceBaseline === undefined ? [] : [`Project-wide check ${JSON.stringify(input.acceptanceBaseline.command)} failed at the group's base and on this tip. This alone does not prove the failures are the same. Base failure: ${input.acceptanceBaseline.tail ?? "(no output)"}. Tip failure: ${input.acceptanceBaseline.tipTail ?? "(no output)"}.`]),
+    ...(input.acceptanceBaseline === undefined ? [] : acceptanceBaselineLines(input.acceptanceBaseline)),
+    // Tester #391 (human ruling: 「统一到验收的『base 也红』口径」): acceptance's relative-pass policy is the standard; the
+    // reviewer does not re-decide it from the failing-test names, which may not even be in the recorded tail.
+    "When the acceptance record says a check passed relative to the base (it was red on this tip and red with the same exits when run at the group's base), that record alone decides a criterion about that check: a relative pass alone decides it, without the failing tests' names matching between the tip and the base, and repairing that pre-existing failure is not part of this group's delivery.",
+    // Tester #392 (human ruling: 「review 按最终 diff 判归属，越界写入只作参考」): an off-plan write is a fact, not a verdict.
+    "An off-plan write (a line under \"What Orca recorded beyond the diff\") is information, not a failed criterion: judge ownership from the final changed files and diff above only. A write that the owning task's final content replaced is not part of the delivery, so it is no reason to fail a criterion.",
     "Treat the person's explicit restrictions in the original requirement as binding, even if a check cannot pass without violating them. Never silently repair a forbidden pre-existing failure just to turn a check green.",
     "Compare what the group changed with each acceptance criterion and answer for every criterion, by its id.",
     "",
@@ -559,7 +586,15 @@ export async function reviewFacts(repo: string, body: unknown, tip: string, stor
   else if (accepted !== null && (accepted.tip === tip || accepted.tip === null)) {
     lines.push(`Acceptance on the reviewed tip ${short(tip)}: ${accepted.result}${accepted.why === undefined ? "" : ` (${accepted.why})`}`, ...commandLines(accepted.commands));
     const suite = accepted.fullSuite;
-    if (suite?.command != null) lines.push(`  full suite \`${cutUtf8(suite.command, 300)}\`: exits ${suite.exits.join(", ") || "none"}${suite.baseline === undefined ? "" : `; at the group's base: exits ${suite.baseline.exits.join(", ")}`}`);
+    if (suite?.command != null) {
+      lines.push(`  full suite \`${cutUtf8(suite.command, 300)}\`: exits ${suite.exits.join(", ") || "none"}${suite.baseline === undefined ? "" : `; at the group's base: exits ${suite.baseline.exits.join(", ")}`}`);
+      // Tester #391: a red (or flaky) full suite's failing tests, on both sides, so the reviewer can compare them -- and an
+      // explicit statement when the recorded 2 KB names none, which is common: the runner's summary is all that is left.
+      if (suite.flaky || suite.exits.some((exit) => exit !== "0")) {
+        lines.push(`  failing tests on this tip: ${failureNamesLine(accepted.tail)}`);
+        if (suite.baseline !== undefined) lines.push(`  failing tests at the group's base: ${failureNamesLine(suite.baseline.tail)}`);
+      }
+    }
   }
   // #337 §4.1, §4.4: Orca places a folder or multi-directory group's work itself; what this review sees of the folder.
   if (noteGroup(store, groupId)) { lines.push(PLACED_DELIVERY_LINE, ...folderFactLines(body)); return lines; }
@@ -638,8 +673,10 @@ const sha256 = (bytes: Buffer): string => createHash("sha256").update(bytes).dig
  * the acceptance record (none a delivered file), its agreed text names the full-suite command, the acceptance on this tip
  * is `passed-relative` with a base run, every suite run on the tip exited non-zero with an exit the base also gave (the
  * base red on every run), every other command on the tip exited 0, and no person answered that command's pre-existing
- * failure `allow-fix`. Orca keeps no failing-test identities, so exits are all it can compare. Review of #377: the text
- * must name the command as a whole (namesCommand), and only numeric exits qualify.
+ * failure `allow-fix`. This function still compares exits only, never test identities: #391 shows the failing names to the
+ * reviewer as a reference, but a relative pass is decided by acceptance's rule (tip red + base red), so names that do not
+ * line up cannot turn it into cannot-judge. Review of #377: the text must name the command as a whole (namesCommand), and
+ * only numeric exits qualify.
  */
 export function relativePasses(body: unknown, tip: string, criteria: ReadonlyArray<CriterionVerdict>, texts: ReadonlyArray<{ id: string; text: string }>): RelativePass[] {
   const accepted = acceptanceOf(body);
@@ -708,11 +745,20 @@ async function groupChanges(repo: string, base: string, tip: string, excluded: r
   return { changedFiles, diff: truncated ? cutUtf8(text, maxBytes) : text, truncated };
 }
 
-/** #337 §4.1-§4.2: Orca's own paths in a folder's work: its `.decisions/` ledger and, for a folder, the requirement document. */
+/**
+ * #337 §4.1-§4.2: Orca's own paths in a group's work -- its `.decisions/` ledger and the requirement document. #382: a
+ * repository group's document lives under `.orca/requirements/` (requirementExport.ts), and both are Orca's runtime files,
+ * never the group's deliverables, so they are excluded from a repository group's diff too (not only a folder's).
+ */
 function orcaOwnPaths(body: unknown, folder: boolean): string[] {
   const document = (body as { requirement?: { export?: { path?: unknown } } } | null)?.requirement?.export?.path;
-  return [...DIR_EXCLUDES.map((p) => p.replace(/^\/|\/$/g, "")), ...(folder && typeof document === "string" && document.length > 0 ? [document] : [])];
+  return [...DIR_EXCLUDES.map((p) => p.replace(/^\/|\/$/g, "")),
+    ...(folder ? (typeof document === "string" && document.length > 0 ? [document] : []) : [ORCA_REQUIREMENT_DIR])];
 }
+/** #382: where a repository group's requirement document is committed; Orca's, not a deliverable. */
+export const ORCA_REQUIREMENT_DIR = ".orca/requirements";
+/** #382: said in every review prompt, so a criterion is never failed for Orca's own files appearing in the work. */
+export const ORCA_RUNTIME_FILES_NOTE = "Orca's own runtime files -- `.decisions/` and `.orca/requirements/` -- are not deliverables: they are excluded from the changed files and the diff below, and their presence must never fail a criterion.";
 
 /** #337 §4.2: each member's base -- the `drive.dirs[]` base on the group's first work run (rowid order) that wrote it. */
 function memberBases(store: ControlStore, groupId: string): Map<string, string> {
@@ -803,16 +849,22 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
     const repo = multi === null ? deps.resolveRepository(groupRepoId(deps.store, run.groupId)) : "";
     const changes = multi !== null
       ? { changedFiles: [], diff: "", truncated: false, directories: await memberDirectories(deps.resolveRepository, deps.store, run.groupId, body, multi, tips ?? {}) }
-      : { ...await groupChanges(repo, groupBaseCommit(deps.store, run.groupId), tip, folder ? orcaOwnPaths(body, true) : []), ...(folder ? { folder } : {}) };
+      // #382: a repository group excludes Orca's own runtime files too, not only a folder group.
+      : { ...await groupChanges(repo, groupBaseCommit(deps.store, run.groupId), tip, orcaOwnPaths(body, folder)), ...(folder ? { folder } : {}) };
     const facts = await reviewFacts(repo, body, tip, deps.store, run.groupId);
     const acceptance = acceptanceOf(body);
-    const baseline = acceptance?.result === "passed-relative" ? acceptance.fullSuite?.baseline : undefined;
+    // Tester #391: a red or flaky suite's tails go to the prompt in every such case, not only for passed-relative -- the
+    // base exits are there only when the base was red too.
+    const suite = acceptance?.fullSuite;
+    const suiteRed = suite !== undefined && suite.command !== null && (suite.flaky || suite.exits.some((exit) => exit !== "0"));
+    const acceptanceBaseline: AcceptanceBaseline | undefined = suite === undefined || suite.command === null || !suiteRed ? undefined : {
+      command: suite.command, tipExits: [...suite.exits], ...(suite.flaky ? { flaky: true } : {}),
+      ...(acceptance?.tail === undefined ? {} : { tipTail: cutUtf8(acceptance.tail, 2_000) }),
+      ...(suite.baseline === undefined ? {} : { baseExits: [...suite.baseline.exits], ...(suite.baseline.tail === undefined ? {} : { baseTail: cutUtf8(suite.baseline.tail, 2_000) }) }),
+    };
     return {
       prompt: buildReviewPrompt({ ...inputs, ...changes, facts, ...(typeof contract?.note === "string" ? { note: contract.note } : {}),
-        acceptanceFailed: acceptance?.result === "failed",
-        ...(baseline === undefined || acceptance?.fullSuite?.command === null || acceptance?.fullSuite?.command === undefined ? {} :
-          { acceptanceBaseline: { command: acceptance.fullSuite.command, ...(baseline.tail === undefined ? {} : { tail: cutUtf8(baseline.tail, 2_000) }),
-            ...(acceptance.tail === undefined ? {} : { tipTail: cutUtf8(acceptance.tail, 2_000) }) } }) }),
+        acceptanceFailed: acceptance?.result === "failed", ...(acceptanceBaseline === undefined ? {} : { acceptanceBaseline }) }),
       responseSchema: { ...requirementReviewResponseSchema }, maxOutputTokens: REVIEW_MAX_OUTPUT_TOKENS,
     };
   },

@@ -54,15 +54,17 @@ describe("a not-passed requirement review is a group problem (#359)", { timeout:
 
   // #359 review (M2): the summary's next and `group show`'s lines come from one place (groupProblemAnswers.ts). A review
   // whose criteria no change to files can meet, one of them by the plan, is answered by a new plan draft first.
-  it("not fixable by work, one criterion the plan's: next leads with requirement feedback, as group show does", async () => {
+  // Tester #392 (human ruling 2026-11-20: drop the requirement-feedback next, it fails after confirm): the plan branch names
+  // `orca requirement open --idea`, which works after a split is accepted.
+  it("not fixable by work, one criterion the plan's: next leads with a new requirement, as group show does", async () => {
     const t = await driverHarness([{ taskId: "a" }]); try {
       setWork(t.h.store, "a", "done");
       const review = { state: "not-passed", why: "not-fixable-by-work", autoFixRounds: 0, rounds: [{ roundNo: 1, tip: "a".repeat(40), runId: null, at: 1, result: "not-met",
         criteria: [{ id: "c1", verdict: "not-met", evidence: [], missing: "a plan step", fixableBy: "plan" }], summary: "the plan omits it", leftToPerson: ["c1"] }] };
       setReview(t.h.store, review);
       const summary = readGroupSummary(t.h.store, "g");
-      // mutation: groupProblemOf's own not-fixable list ([accept, rerun]) -> no requirement feedback first, red here
-      expect(summary.groupProblem?.next).toEqual(["orca requirement feedback g --text '<what to change in the plan>'",
+      // mutation: groupProblemOf's own not-fixable list ([accept, rerun]) -> no requirement-open first, red here
+      expect(summary.groupProblem?.next).toEqual(["orca requirement open --idea '<the requirement, with the plan changed>'",
         "orca group review-accept g --note '<why accept as is>'", "orca group review-rerun g --note '<what to look at>'"]);
       const shown = reviewLines("g", summary.requirementReview as Parameters<typeof reviewLines>[1]).filter((line) => /^(next|  or): /.test(line)).map((line) => line.replace(/^(next|  or): /, "").replace(/  \(.*\)$/, ""));
       expect(shown).toEqual(summary.groupProblem?.next);

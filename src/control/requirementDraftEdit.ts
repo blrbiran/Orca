@@ -9,7 +9,7 @@ import type { DraftBody, MultiSplitOutput, SplitOutput } from "./requirementSche
 import type { SplitPlanFile } from "./requirementSplit.js";
 import type { SingleCallPrepareDeps, SingleCallRunRow } from "./singleCallPurposes.js";
 import { impliedPathsOutsideTargets } from "./splitImpliedPaths.js";
-import { parallelCandidates } from "./splitParallel.js";
+import { parallelCandidates, type ParallelCandidate } from "./splitParallel.js";
 import { contains } from "../scheduler/pathTrie.js";
 import { normalizeClaim } from "../scheduler/writeSet.js";
 import { commandSuccess, readRunBody, readStopIntent } from "./stopIntent.js";
@@ -43,20 +43,22 @@ function reviewed(store: ControlStore, groupId: string, payload: RequirementDraf
 }
 
 /**
- * Tester follow-up K (Rule 5: code edits, from code's own hints only): the split with every listed parallel candidate's
- * dependsOn edge dropped (#284), one target path narrowed (#335) or dropped (#380), or with one listed implied path added
- * to the task's targets (#265) -- in a multi split, to the task's write in the directory the path's first writer lists it
- * in (a new write there when it has none). Returns the edited output and the line the superseded draft keeps as its
- * feedback.
+ * Tester follow-up K (Rule 5: code edits, from code's own hints only): the split with the selected parallel candidates'
+ * dependsOn edges dropped (#384: each is a declared edge whose pair a broad write-set overlap already orders; a pair the
+ * author's task words justify is no candidate), one target path narrowed (#335) or dropped (#380), or with one listed
+ * implied path added to the task's targets (#265) -- in a multi split, to the task's write in the directory the path's
+ * first writer lists it in (a new write there when it has none). Returns the edited output and the line the superseded
+ * draft keeps as its feedback.
  */
 export function editedSplit(output: Output, edit: Edit): { output: Output; note: string } {
   const copy = structuredClone(output) as Output;
   const tasks = copy.tasks as Array<Output["tasks"][number]>;
   if (edit.kind === "apply-parallel-candidates") {
-    const pairs = parallelCandidates(output);
-    if (pairs.length === 0) return invalid("draft-edit-no-parallel-candidates");
-    for (const task of tasks) task.dependsOn = task.dependsOn.filter((before) => !pairs.some((pair) => pair.after === task.taskId && pair.before === before));
-    return { output: copy, note: `person edit: dropped dependsOn ${pairs.map((pair) => `${pair.before} -> ${pair.after}`).join(", ")} (parallel candidates)` };
+    const candidates = parallelCandidates(output);
+    if (candidates.length === 0) return invalid("draft-edit-no-parallel-candidates");
+    const selected = selectedPairs(edit, candidates);
+    for (const task of tasks) task.dependsOn = task.dependsOn.filter((before) => !selected.some((pair) => pair.after === task.taskId && pair.before === before));
+    return { output: copy, note: `person edit: dropped dependsOn ${selected.map((pair) => `${pair.before} -> ${pair.after}`).join(", ")} (parallel candidates)` };
   }
   if (edit.kind === "narrow-target-path") return narrowedSplit(copy, edit);
   if (edit.kind === "drop-target-path") return droppedSplit(copy, edit);
@@ -71,6 +73,28 @@ export function editedSplit(output: Output, edit: Edit): { output: Output; note:
     else own.targetPaths.push(entry.path);
   } else task.targetPaths.push(entry.path);
   return { output: copy, note: `person edit: added ${entry.path} to ${edit.taskId}'s target paths (implied path)` };
+}
+
+/**
+ * Tester #384: the candidate pairs an apply-parallel edit names. Dropping every candidate at once -- the old behaviour --
+ * turned a live policy draft's semantic edges into layer 0, so a person selects pairs (`--pair T1:T2`, repeatable) or
+ * asks for the whole list on purpose (`--all`). Naming nothing selects nothing and is refused; so is a pair the draft
+ * does not list, or both forms at once.
+ */
+function selectedPairs(edit: Extract<Edit, { kind: "apply-parallel-candidates" }>, candidates: readonly ParallelCandidate[]): ParallelCandidate[] {
+  if (edit.all === true) {
+    if (edit.pairs !== undefined) return invalid("draft-edit-pairs-and-all");
+    return [...candidates];
+  }
+  const named = edit.pairs ?? [];
+  if (named.length === 0) return invalid("draft-edit-no-pairs-selected");
+  const out: ParallelCandidate[] = [];
+  for (const pair of named) {
+    const found = candidates.find((candidate) => candidate.before === pair.before && candidate.after === pair.after);
+    if (found === undefined) return invalid(`draft-edit-not-a-parallel-candidate:${pair.before}:${pair.after}`);
+    if (!out.some((seen) => seen.before === found.before && seen.after === found.after)) out.push(found);
+  }
+  return out;
 }
 
 /**

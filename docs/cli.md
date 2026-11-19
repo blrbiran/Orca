@@ -97,7 +97,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca requirement feedback <group> --text <text>` — ask for a new draft of the split
 - `orca requirement resplit <group> --text <text> [--group <group>]` — split an accepted requirement again as a new group (before confirm): the clarification is copied, the new split gets the feedback, this group is archived
 - `orca requirement accept <group> [--despite-conflicts]` — accept the current draft: the group becomes a draft task group; a draft reporting requirement conflicts is refused unless --despite-conflicts
-- `orca requirement apply-parallel <group>` — drop the dependsOn edges the current draft lists as parallel candidates; the result is the next draft
+- `orca requirement apply-parallel <group> [--pair <pair>] [--all]` — drop the dependsOn edges of the parallel-candidate pairs a person names (--pair, repeatable) or of all of them (--all); the result is the next draft
 - `orca requirement add-implied-path <group> --task <task> --path <path>` — add a path the current draft lists as implied to that task's target paths; the result is the next draft
 - `orca requirement narrow-path <group> --task <task> --path <path> --to <to>` — replace one of a task's target paths in the current draft with paths inside it; the result is the next draft
 - `orca requirement drop-path <group> --task <task> --path <path>` — remove one of a task's target paths in the current draft (never its last); the result is the next draft

@@ -519,6 +519,8 @@ export const en = {
     // Tester #357: the list's selection toolbar.
     groupBulk: {
       region: "Selected groups", select: "Select {{groupId}}", selected: "{{n}} selected", clear: "Clear selection",
+      // Tester #390 (human ruling 2026-11-20, 「选择模式」): the mode is entered from the toolbar and left from it.
+      startSelect: "Select", exitSelection: "Exit selection",
       archive: "Archive", close: "Close", closeNeedsDone: "Close takes done groups only; deselect the others.", outcomes: "What each group did",
       outcome: {
         succeeded: { "archive-group": "{{groupId}}: archived", "close-group": "{{groupId}}: closed" },
@@ -1739,7 +1741,7 @@ export const en = {
     layer: "Layer {{n}}: {{tasks}}",
     implicitEdge: "{{from}} before {{to}}: {{paths}}",
     overlapSerialized: "{{a}} and {{b}} run one after the other only because their target paths overlap ({{paths}}); nothing in the plan says one needs the other. Narrow a broad path to the files each task writes (orca requirement narrow-path) and they can run together, or send feedback.",
-    parallelCandidates: "These tasks could run in parallel: {{pairs}}. Only a dependsOn edge orders each pair, and the later task neither writes, checks nor mentions a file the earlier one writes. If the later tasks do not need the earlier ones' output, drop the edges (Orca re-checks the split as the next draft), or send feedback.",
+    parallelCandidates: "These tasks could run in parallel: {{pairs}}. Each pair is also ordered by a broad target-path claim (src/**), so dropping the declared edge does not move the later task earlier. Dropping it (Orca re-checks the split as the next draft) turns the declared order into the overlap order; send feedback instead if the order is meant.",
     impliedPath: "{{task}}'s success condition names {{path}}, which only {{writers}} may write (implied-path-outside-targets); its run would stop on an allowlist miss. Add the file to {{task}}'s target paths (Orca re-checks the split as the next draft), or send feedback to move that change to {{writers}}.",
     runtimeDataPath: "{{task}} lists {{path}}, a data file the requirement names, as a target path. If that is where the program keeps its data (not seed data the requirement asks to commit), send feedback to drop it.",
     feedbackAfterRedraft: "This draft came from Orca re-drafting draft {{first}}, which answered your feedback on draft {{on}} (\"{{feedback}}\"). Draft {{n}} reports no conflict with that feedback: check that it still follows it, and send the feedback again if it does not.",

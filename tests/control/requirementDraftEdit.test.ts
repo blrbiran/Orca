@@ -15,37 +15,63 @@ import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 const base = VALID_SPLIT.tasks[0]!;
 const task = (taskId: string, targetPaths: string[], dependsOn: string[], extra: Record<string, unknown> = {}) =>
   ({ ...base, taskId, title: taskId, targetPaths, checks: ["true"], dependsOn, traces: ["AC1", "AC2"], ...extra });
-const CHAIN = { tasks: [
-  task("core", ["src/core.ts"], []),
-  task("a", ["src/a.ts"], ["core"], { checks: ["grep -q core ./src/core.ts"] }),
-  task("b", ["src/b.ts"], ["a"]),
-  task("c", ["src/c.ts"], ["b"]),
+// Tester #384: a candidate is a declared edge whose pair a broad write-set overlap already orders (#268), so applying it
+// keeps code's own order; an edge between disjoint write sets is the author's semantic dependency and is never listed.
+// A person selects pairs; the old command dropped every candidate at once, which turned a live policy draft's semantic
+// edges -- T3 -> T4a/T4b, whose CLI imports the engine -- into layer 0.
+const OVERLAP = { tasks: [
+  task("core", ["src/**"], []),
+  task("later", ["src/later.ts"], ["core"]),
+  task("more", ["src/more.ts"], ["core"]),
 ], notes: "" };
-const dependsOn = (output: unknown) => Object.fromEntries((output as typeof CHAIN).tasks.map((t) => [t.taskId, t.dependsOn]));
+const dependsOn = (output: unknown) => Object.fromEntries((output as typeof OVERLAP).tasks.map((t) => [t.taskId, t.dependsOn]));
 type Harness = Awaited<ReturnType<typeof requirementHarness>>;
 const edit = (x: Harness, draftNo: number, change: Record<string, unknown>) =>
   x.service.editRequirementDraft(x.command("requirement-draft-edit", { draftNo, draftHash: readDraft(x.store, "r", draftNo).draftHash, edit: change }));
 
-describe("a person applies a split draft's hint (tester follow-up K)", () => {
-  it("apply-parallel-candidates drops exactly the listed edges and makes the next draft, re-validated and awaiting review", async () => {
-    const x = await requirementHarness({ answers: [{ purpose: "split", output: CHAIN }], startAt: "split" });
+describe("a person applies a split draft's parallel candidates (#284, #384)", () => {
+  it("apply-parallel drops exactly the pair a person names, and makes the next draft, re-validated and awaiting review", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: OVERLAP }], startAt: "split" });
     try {
       await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
       // Never auto-applied: the hint is there and draft 1 is as the model wrote it.
-      expect(readRequirementView(x.store, "e", "r").drafts[0]).toMatchObject({ draftNo: 1, parallelCandidates: [{ before: "a", after: "b" }, { before: "b", after: "c" }] });
+      expect(readRequirementView(x.store, "e", "r").drafts[0]).toMatchObject({ draftNo: 1, parallelCandidates: [{ before: "core", after: "later" }, { before: "core", after: "more" }] });
+      // Tester #384: naming no pair drops nothing and is refused, changing nothing.
+      expect(await edit(x, 1, { kind: "apply-parallel-candidates" }))
+        .toMatchObject({ error: { code: "group-state-invalid", message: "group-state-invalid:draft-edit-no-pairs-selected" } });
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "awaiting-review", feedback: null });
       // mutation: drop the edge filter in editedSplit -> draft 2 keeps every edge, red
-      const result = await edit(x, 1, { kind: "apply-parallel-candidates" });
+      const result = await edit(x, 1, { kind: "apply-parallel-candidates", pairs: [{ before: "core", after: "more" }] });
       expect(result).toMatchObject({ result: { kind: "requirement-draft-edited", draftNo: 1, nextDraftNo: 2 } });
-      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "rejected", feedback: "person edit: dropped dependsOn a -> b, b -> c (parallel candidates)" });
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "rejected", feedback: "person edit: dropped dependsOn core -> more (parallel candidates)" });
       const next = readDraft(x.store, "r", 2);
-      expect(dependsOn(next.output)).toEqual({ core: [], a: ["core"], b: [], c: [] });
-      // Re-validated: its layers are code's, its plan and hash the new split's, and no hint is left.
-      expect(next).toMatchObject({ state: "awaiting-review", reasons: [], calls: [], layers: [["b", "c", "core"], ["a"]] });
+      // mutation: drop a pair it was not asked for -> later loses its edge too, red
+      expect(dependsOn(next.output)).toEqual({ core: [], later: ["core"], more: [] });
+      // Re-validated: the overlap's implicit edge still orders core before more (a layer each side), the untouched declaration
+      // stays, and only that declaration is left as a candidate.
+      expect(next).toMatchObject({ state: "awaiting-review", reasons: [], calls: [], layers: [["core"], ["later", "more"]] });
       expect(next.draftHash).not.toBe(readDraft(x.store, "r", 1).draftHash);
-      expect(readRequirementView(x.store, "e", "r").drafts.find((d) => d.draftNo === 2)).toMatchObject({ parallelCandidates: [] });
+      expect(readRequirementView(x.store, "e", "r").drafts.find((d) => d.draftNo === 2)).toMatchObject({ parallelCandidates: [{ before: "core", after: "later" }] });
       // The edited draft is accepted as any other.
       const accepted = await x.service.acceptRequirementDraft(x.command("requirement-draft-accept", { draftNo: 2, draftHash: next.draftHash }));
       expect(accepted).not.toHaveProperty("error");
+    } finally { await x.dispose(); }
+  });
+
+  it("apply-parallel refuses a pair the draft does not list, both selection forms at once, and --all drops every candidate on purpose", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: OVERLAP }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
+      expect(await edit(x, 1, { kind: "apply-parallel-candidates", pairs: [{ before: "later", after: "more" }] }))
+        .toMatchObject({ error: { code: "group-state-invalid", message: "group-state-invalid:draft-edit-not-a-parallel-candidate:later:more" } });
+      expect(await edit(x, 1, { kind: "apply-parallel-candidates", pairs: [{ before: "core", after: "later" }], all: true }))
+        .toMatchObject({ error: { code: "group-state-invalid", message: "group-state-invalid:draft-edit-pairs-and-all" } });
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ state: "awaiting-review", feedback: null });
+      // Ruling: the old one-shot behaviour stays, but only when asked for by name.
+      // mutation: --all drops nothing (the filter ignores the selection) -> draft 2 keeps every edge, red
+      expect(await edit(x, 1, { kind: "apply-parallel-candidates", all: true })).toMatchObject({ result: { nextDraftNo: 2 } });
+      expect(readDraft(x.store, "r", 1)).toMatchObject({ feedback: "person edit: dropped dependsOn core -> later, core -> more (parallel candidates)" });
+      expect(dependsOn(readDraft(x.store, "r", 2).output)).toEqual({ core: [], later: [], more: [] });
     } finally { await x.dispose(); }
   });
 

@@ -931,7 +931,8 @@ export type RequirementDraftFeedbackPayloadV1 = { draftNo: number; feedback: str
 export type RequirementDraftAcceptPayloadV1 = { draftNo: number; draftHash: string };
 /** Tester follow-up K: apply one of the draft's hints; the server re-validates the edited split as the next draft. */
 export type RequirementDraftEditPayloadV1 = { draftNo: number; draftHash: string;
-  edit: { kind: "apply-parallel-candidates" } | { kind: "add-implied-path"; taskId: string; path: string } };
+  // Tester #384: the edit names the pairs (`--pair`) or asks for all of them; the Web button keeps the old one-shot meaning.
+  edit: { kind: "apply-parallel-candidates"; pairs?: Array<{ before: string; after: string }>; all?: true } | { kind: "add-implied-path"; taskId: string; path: string } };
 /** Agent selection spec §3: model and context window are opaque here; ccloop's descriptor judges them. */
 export type ContextWindowV1 = "agent-default" | number;
 /** Spec §6.3: where a resolved selection field came from. */

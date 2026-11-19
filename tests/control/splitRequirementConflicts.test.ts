@@ -109,12 +109,14 @@ describe("a draft edit carries the conflicts over", () => {
   it("apply-parallel on a draft with a conflict makes a next draft whose output still has them", async () => {
     const base = VALID_SPLIT.tasks[0]!;
     const task = (taskId: string, targetPaths: string[], dependsOn: string[]) => ({ ...base, taskId, title: taskId, targetPaths, checks: ["true"], dependsOn, traces: ["AC1", "AC2"] });
-    const chain = { tasks: [task("core", ["src/core.ts"], []), task("a", ["src/a.ts"], ["core"])], notes: "", requirementConflicts: [CONFLICT] };
+    // Tester #384 (2026-11-20): a candidate is a declared edge a broad target-path claim also orders; a disjoint pair is
+    // the author's semantic dependency and is never listed. The fixture claims src/** so the pair stays a candidate.
+    const chain = { tasks: [task("core", ["src/**"], []), task("later", ["src/later.ts"], ["core"])], notes: "", requirementConflicts: [CONFLICT] };
     const x = await requirementHarness({ answers: [{ purpose: "split", output: chain }], startAt: "split" });
     try {
       await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
-      expect(readRequirementView(x.store, "e", "r").drafts[0]).toMatchObject({ parallelCandidates: [{ before: "core", after: "a" }] });
-      expect(await x.service.editRequirementDraft(x.command("requirement-draft-edit", { draftNo: 1, draftHash: readDraft(x.store, "r", 1).draftHash, edit: { kind: "apply-parallel-candidates" } })))
+      expect(readRequirementView(x.store, "e", "r").drafts[0]).toMatchObject({ parallelCandidates: [{ before: "core", after: "later" }] });
+      expect(await x.service.editRequirementDraft(x.command("requirement-draft-edit", { draftNo: 1, draftHash: readDraft(x.store, "r", 1).draftHash, edit: { kind: "apply-parallel-candidates", pairs: [{ before: "core", after: "later" }] } })))
         .toMatchObject({ result: { kind: "requirement-draft-edited", nextDraftNo: 2 } });
       const next = readDraft(x.store, "r", 2);
       expect(next.state).toBe("awaiting-review");

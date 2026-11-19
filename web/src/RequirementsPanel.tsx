@@ -436,7 +436,7 @@ function DraftReview(props: { view: View; draft: Draft; current: boolean; onComm
       {draft.implicitEdges?.map((edge) => <p key={`${edge.from}>${edge.to}`}>{t("requirements.implicitEdge", { from: edge.from, to: edge.to, paths: [...new Set(edge.conflicts.map((c) => `${c.a} ∩ ${c.b}`))].join(", ") })}</p>)}
       {(draft.parallelCandidates ?? []).length > 0 && <p role="note" data-parallel-candidates>{t("requirements.parallelCandidates", { pairs: draft.parallelCandidates!.map((pair) => `${pair.before} ∥ ${pair.after}`).join(", ") })}
         {/* Tester follow-up K: the person applies the hint; the server re-validates the edited split as the next draft. */}
-        {mayEdit && <button type="button" className="ms-2" data-apply-parallel onClick={() => edit({ kind: "apply-parallel-candidates" })}>{t("requirements.applyParallel")}</button>}</p>}
+        {mayEdit && <button type="button" className="ms-2" data-apply-parallel onClick={() => edit({ kind: "apply-parallel-candidates", all: true })}>{t("requirements.applyParallel")}</button>}</p>}
       {/* Tester #335: a broad claim (src/**) shared by tasks no dependency orders makes them take turns; narrowing frees them. */}
       {(draft.overlapSerialized ?? []).map((entry) => <p role="note" data-overlap-serialized key={`${entry.a}|${entry.b}`}>{t("requirements.overlapSerialized", { a: entry.a, b: entry.b, paths: entry.paths.join(", ") })}</p>)}
       {(draft.impliedPathsOutsideTargets ?? []).map((entry) => <p role="note" data-implied-path key={`${entry.taskId}:${entry.path}`}>{t("requirements.impliedPath", { task: entry.taskId, path: entry.path, writers: entry.writers.join(", ") })}

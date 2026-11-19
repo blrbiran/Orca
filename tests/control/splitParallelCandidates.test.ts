@@ -8,77 +8,71 @@ import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 
 // Tester #284: splits routinely chained independent modules (dag-core -> graph-cli -> planning-cli -> readme), so a group
 // ran its longest wall-clock and each task re-read its predecessor's output; only a person's feedback fanned it out.
-// The instruction now says to partition first and chain only on real need, and code lists, as a hint that never refuses
-// a draft, each declared edge it sees no reason for.
+// Tester #384 (supersedes #284's rule and follow-up K's prose filters): reading the task's words could not tell an import
+// from silence, and a live policy draft listed T3 -> T4a/T4b though the CLI imports the engine. A candidate is now only a
+// declared edge whose pair a broad write-set overlap already orders (#268) -- dropping the declaration keeps code's own
+// order, so applying it can never move a task in front of what it needs. An edge between disjoint write sets is the
+// author's semantic dependency and is never listed.
 const base = VALID_SPLIT.tasks[0]!;
 const task = (taskId: string, targetPaths: string[], dependsOn: string[], checks = ["true"]) => ({ ...base, taskId, title: taskId, targetPaths, checks, dependsOn, traces: ["AC1", "AC2"] });
-/** A core, then a chain of three tasks with disjoint writes; `a` checks a file core writes, so core -> a is real. */
-const CHAIN = { tasks: [
-  task("core", ["src/core.ts"], []),
-  task("a", ["src/a.ts"], ["core"], ["grep -q core ./src/core.ts"]),
-  task("b", ["src/b.ts"], ["a"]),
-  task("c", ["src/c.ts"], ["b"]),
+/** `core` claims a directory, so code orders core before later and more whether or not the edges are declared. */
+const OVERLAP = { tasks: [
+  task("core", ["src/**"], []),
+  task("later", ["src/later.ts"], ["core"]),
+  task("more", ["src/more.ts"], ["core"]),
 ], notes: "" };
 
-describe("the split's parallel candidates (#284)", () => {
-  it("a chain of disjoint-write tasks lists each edge; an edge whose later task checks the earlier's file does not", () => {
-    // mutation: drop the check-reference test in parallelCandidates -> core ∥ a listed, red
-    expect(parallelCandidates(CHAIN)).toEqual([{ before: "a", after: "b" }, { before: "b", after: "c" }]);
+describe("the split's parallel candidates (#384)", () => {
+  it("lists a declared edge whose pair a broad overlap already orders, and no edge between disjoint write sets", () => {
+    // mutation: drop the overlap requirement in parallelCandidates -> [] here, red
+    expect(parallelCandidates(OVERLAP)).toEqual([{ before: "core", after: "later" }, { before: "core", after: "more" }]);
+    // mutation: list every declared edge -> the disjoint edge is listed here, red
+    expect(parallelCandidates({ tasks: [task("core", ["src/core.ts"], []), task("later", ["src/later.ts"], ["core"])], notes: "" })).toEqual([]);
   });
 
-  it("a pair whose write sets intersect is not listed (a directory claim containing the other's file)", () => {
-    // mutation: drop the write-set intersect test -> a ∥ b listed, red
-    expect(parallelCandidates({ tasks: [task("a", ["src/**"], []), task("b", ["src/b.ts"], ["a"])], notes: "" })).toEqual([]);
+  it("does not list two tasks naming the same exact file (they must take turns, and the author sets the turn)", () => {
+    // mutation: accept an equal, non-directory conflict -> a -> b listed, red
+    expect(parallelCandidates({ tasks: [task("a", ["src/x.ts"], []), task("b", ["src/x.ts"], ["a"])], notes: "" })).toEqual([]);
   });
 
-  it("an edge another dependency path already implies is not listed (dropping it would not let the two run at once)", () => {
-    // a -> b -> c and a -> c: the direct a -> c is redundant, the others are candidates.
-    // mutation: reachesOtherwise always false -> a ∥ c listed, red
-    const out = { tasks: [task("a", ["src/a.ts"], []), task("b", ["src/b.ts"], ["a"]), task("c", ["src/c.ts"], ["b", "a"])], notes: "" };
-    expect(parallelCandidates(out)).toEqual([{ before: "a", after: "b" }, { before: "b", after: "c" }]);
+  it("does not list an edge another dependency path already implies (dropping it would not let the two run at once)", () => {
+    // a -> b -> c and a -> c: the direct a -> c is redundant, a -> b is a candidate (a claims the directory).
+    // mutation: reachesOtherwise always false -> a -> c listed, red
+    const out = { tasks: [task("a", ["src/**"], []), task("b", ["src/b.ts"], ["a"]), task("c", ["src/c.ts"], ["b", "a"])], notes: "" };
+    expect(parallelCandidates(out)).toEqual([{ before: "a", after: "b" }]);
   });
 
-  it("tester follow-up K: an edge whose later task's goal, success condition or checks name the earlier task's files is not listed", () => {
-    // The follow-up I false positive: `search ∥ cli` was listed though cli imports search. The cli task's own words are
-    // all code has at split time (the import is what the task is about to write), so a mention of what search writes --
-    // its path, the path without extension, its file name or its module name -- or of the task itself keeps the edge.
-    const pair = (cli: Partial<ReturnType<typeof task>>) => ({ tasks: [task("search", ["src/search.js"], []), { ...task("cli", ["src/cli.js"], ["search"]), ...cli }], notes: "" });
-    // mutation: drop the text-mention test in parallelCandidates -> search ∥ cli listed for every case below, red
-    expect(parallelCandidates(pair({ successCondition: "src/cli.js runs `bm search <q>` through the search module." }))).toEqual([]);
-    expect(parallelCandidates(pair({ goal: "Import ./search.js from the CLI." }))).toEqual([]);
-    expect(parallelCandidates(pair({ checks: ["node --test test/cli.test.js src/search.js"] }))).toEqual([]);
-    expect(parallelCandidates(pair({ successCondition: "The CLI wires in what the Search task built." }))).toEqual([]);
-    // A directory claim: its last segment is the module's name.
-    expect(parallelCandidates({ tasks: [task("index", ["lib/search/**"], []), { ...task("cli", ["src/cli.js"], ["index"]), goal: "Call lib/search from the CLI." }], notes: "" })).toEqual([]);
-    // No mention: still listed. Names under three characters (a.ts, b.ts) are not matched as words, so `a` the article
-    // never counts; a longer word that merely contains the name (`searching`) does not either.
-    // mutation: match the stem inside longer words -> [] here, red
-    expect(parallelCandidates(pair({ goal: "Parse argv; searching is out of scope.", successCondition: "src/cli.js prints usage." }))).toEqual([{ before: "search", after: "cli" }]);
+  it("does not list an edge whose removal would reverse the pair (code's implicit edge follows the plan's order)", () => {
+    // `a` sorts before `z`, so without the declaration the implicit edge runs a -> z: the declaration is the only thing
+    // keeping z first, and it is not dropped. mutation: skip keepsOrder -> z -> a listed, red
+    expect(parallelCandidates({ tasks: [task("z", ["src/**"], []), task("a", ["src/a.ts"], ["z"])], notes: "" })).toEqual([]);
   });
 
-  it("multi-directory writes: a check in one directory names a file the earlier task writes in that directory only", () => {
+  it("multi-directory: only a broad overlap in the same directory counts", () => {
     const multi = (taskId: string, writes: Array<{ dir: string; targetPaths: string[]; checks: string[] }>, dependsOn: string[]) =>
       ({ taskId, title: taskId, labels: ["feature"], goal: "g", successCondition: "s", writes, dependsOn, traces: ["AC1"] });
     const output = { tasks: [
-      multi("core", [{ dir: "d1", targetPaths: ["lib/core.ts"], checks: ["true"] }], []),
-      multi("reads", [{ dir: "d1", targetPaths: ["lib/r.ts"], checks: ["cat lib/core.ts"] }], ["core"]),
-      multi("other", [{ dir: "d2", targetPaths: ["lib/core.ts"], checks: ["cat lib/core.ts"] }], ["core"]),
+      multi("core", [{ dir: "d1", targetPaths: ["lib/**"], checks: ["true"] }], []),
+      multi("reads", [{ dir: "d1", targetPaths: ["lib/r.ts"], checks: ["true"] }], ["core"]),
+      // The same path in another directory never intersects (writeSet.ts qualifies by directory).
+      multi("other", [{ dir: "d2", targetPaths: ["lib/core.ts"], checks: ["true"] }], ["core"]),
     ], notes: "" };
-    expect(parallelCandidates(output)).toEqual([{ before: "core", after: "other" }]);
+    // mutation: compare unqualified claims -> core -> other listed, red
+    expect(parallelCandidates(output)).toEqual([{ before: "core", after: "reads" }]);
   });
 
   it("an accepted-shape draft carries the candidates on the requirement view, and they add no hand-back reason", async () => {
-    const x = await requirementHarness({ answers: [{ purpose: "split", output: CHAIN }], startAt: "split" });
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: OVERLAP }], startAt: "split" });
     try {
       await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
       const draft = readDraft(x.store, "r", 1);
-      expect(draft).toMatchObject({ state: "awaiting-review", reasons: [], layers: [["core"], ["a"], ["b"], ["c"]] });
+      expect(draft).toMatchObject({ state: "awaiting-review", reasons: [], layers: [["core"], ["later", "more"]] });
       // mutation: drop parallelCandidates from readRequirementView -> undefined, red
-      expect(readRequirementView(x.store, "e", "r").drafts[0]).toMatchObject({ reasons: [], parallelCandidates: [{ before: "a", after: "b" }, { before: "b", after: "c" }] });
+      expect(readRequirementView(x.store, "e", "r").drafts[0]).toMatchObject({ reasons: [], parallelCandidates: [{ before: "core", after: "later" }, { before: "core", after: "more" }] });
     } finally { await x.dispose(); }
   });
 
-  it("orca requirement show prints the layers and the candidates", async () => {
+  it("orca requirement show prints the layers and the candidates, with how to apply them by pair", async () => {
     const { findCommand } = await import("../../src/commands/registry.js");
     const found = findCommand(["requirement", "show"]);
     if (!("def" in found)) throw new Error("no requirement show row");
@@ -86,7 +80,9 @@ describe("the split's parallel candidates (#284)", () => {
     // mutation: drop the row's format (text only) -> neither line, red
     const out = found.def.format(body);
     expect(out).toContain("draft 2 layers: [core] -> [a, b]");
-    expect(out).toContain("draft 2 could run in parallel");
+    expect(out).toContain("draft 2 has dependsOn edges whose pairs their overlapping target paths already order");
+    // mutation: drop the selection hint -> the line names no --pair, red
+    expect(out).toContain("--pair <before>:<after>");
     expect(out).toContain("a ∥ c");
     expect(out).not.toContain("draft 1 layers");
   });

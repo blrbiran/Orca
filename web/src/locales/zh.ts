@@ -365,6 +365,7 @@ export const zh: Translation<typeof en> = {
     groupCategory: { "not-started": "未开始", running: "进行中", attention: "需要处理", done: "已完成", closed: "已关闭", archived: "已归档" },
     groupBulk: {
       region: "已选的组", select: "选择 {{groupId}}", selected: "已选 {{n}} 个", clear: "清除选择",
+      startSelect: "选择", exitSelection: "退出选择",
       archive: "归档", close: "关闭", closeNeedsDone: "只有已完成的组能关闭；请取消选择其他组。", outcomes: "每个组的结果",
       outcome: {
         succeeded: { "archive-group": "{{groupId}}：已归档", "close-group": "{{groupId}}：已关闭" },
@@ -1551,7 +1552,7 @@ export const zh: Translation<typeof en> = {
     layer: "第 {{n}} 层：{{tasks}}",
     implicitEdge: "{{from}} 先于 {{to}}：{{paths}}",
     overlapSerialized: "{{a}} 和 {{b}} 只是因为目标路径重叠（{{paths}}）才一个接一个地跑；计划里没有哪一条说其中一个依赖另一个。把宽泛的路径收窄到各自真正写的文件（orca requirement narrow-path），它们就能并行，也可以发反馈。",
-    parallelCandidates: "这些任务可以并行：{{pairs}}。每一对之间只有 dependsOn 一条边在排先后，后一个任务既不写、不检查、也不提及前一个任务写的文件。如果后面的任务并不需要前面的产物，可以去掉这些边（Orca 会把拆分重新校验一遍，作为下一稿），也可以发反馈。",
+    parallelCandidates: "这些任务可以并行：{{pairs}}。每一对之间还各有一条宽泛的目标路径声明（如 src/**）在排先后，所以去掉声明的边并不会让后一个任务提前。去掉（Orca 会把拆分重新校验一遍，作为下一稿）只是把声明的先后交还给路径冲突的先后；如果这个先后是有意的，请发反馈。",
     impliedPath: "{{task}} 的完成条件提到了 {{path}}，但只有 {{writers}} 可以写它（implied-path-outside-targets）；它的 run 会因 allowlist miss 停下。可以把这个文件加进 {{task}} 的目标路径（Orca 会把拆分重新校验一遍，作为下一稿），或发反馈把这处改动交给 {{writers}}。",
     runtimeDataPath: "{{task}} 把需求提到的数据文件 {{path}} 列为目标路径。如果这是程序存放数据的位置（而不是需求要求提交的种子数据），请发反馈把它去掉。",
     feedbackAfterRedraft: "这一稿来自 Orca 对第 {{first}} 稿的重新拆分（那一稿是按你对第 {{on}} 稿的反馈「{{feedback}}」写的）。第 {{n}} 稿没有报告与该反馈的冲突：请检查它是否仍按反馈来做，如果没有，请再发一次反馈。",

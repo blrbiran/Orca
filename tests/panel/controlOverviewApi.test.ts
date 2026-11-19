@@ -1,4 +1,7 @@
 import {canonicalBytes} from "../../src/control/canonicalJson.js";
+import {recordProjectionChange} from "../../src/control/projectionJournal.js";
+import {readControlOverview, withNeedsYou, withNeedsYouFromOverview} from "../../src/panel/controlOverview.js";
+import {readControlSummary} from "../../src/panel/controlViews.js";
 import {createOverviewFixtures} from "./controlOverviewFixtures.js";
 import { login, seedUser } from "./fixtures/auth.js";
 import { afterAll, describe, expect, it } from "vitest";
@@ -10,6 +13,48 @@ import { newRound, writeRound } from "../../src/control/requirementRecords.js";
 const h = createHarness();
 afterAll(() => h.dispose());
 const {panelFixture,confirm,overview,seedZeroQuestion} = createOverviewFixtures(h);
+// Tester #393(a): the overview answers what moved since a changeSeq, as the summary does. An unchanged since is the
+// same tiny shape the summary returns; a reset (a since ahead of the store) is a complete answer.
+describe("summary needs-you reuses the overview pass (tester #393b)", () => {
+  it("matches the store-reading rule byte for byte and agrees with the overview's own flags", async () => {
+    const { panel } = await panelFixture(); seedZeroQuestion(panel, "healthy"); seedZeroQuestion(panel, "old");
+    panel.store.db.prepare("UPDATE groups SET body=json_set(body,'$.archived',json(?)) WHERE id='old'").run(JSON.stringify({ at: 100, actor: "human" }));
+    panel.store.db.prepare("UPDATE groups SET body=json_set(body,'$.status','blocked') WHERE id=?").run(GROUP);
+    const read = readControlSummary(panel.store, "overview-epoch", null);
+    expect(withNeedsYouFromOverview(readControlOverview(panel.store, "overview-epoch"), read.groups)).toEqual(withNeedsYou(panel.store, read.groups));
+    // The served bytes are the rule's, so nothing that read this view changes.
+    const served = await json(await get(panel, "/api/control/summary")) as { groups: Array<{ groupId: string; needsYou?: boolean }> };
+    expect(served.groups).toEqual(withNeedsYou(panel.store, read.groups));
+    expect(served.groups.filter(group => group.needsYou === true).map(group => group.groupId)).toEqual([GROUP]);
+  });
+});
+describe("incremental overview read", () => {
+  it("serves only the groups that moved, the tiny shape when none did, and everything when the since is ahead", async () => {
+    const { panel } = await panelFixture(); seedZeroQuestion(panel, "zero-questions");
+    const complete = await overview(panel) as unknown as { changeSeq: number; groups: Array<{ groupId: string }>; steps: Array<{ groupId: string | null }> };
+    const seq = complete.changeSeq;
+    expect(complete.groups.map(g => g.groupId)).toEqual([GROUP, "zero-questions"]);
+    const unchanged = await json(await get(panel, `/api/control/overview?sinceChangeSeq=${seq}`));
+    expect(unchanged).toEqual({ schema: "orca-control-overview-v1", epoch: "overview-epoch", changeSeq: seq, groups: [], steps: [], issues: [] });
+    recordProjectionChange(panel.store, [GROUP]);
+    const changedComplete = await overview(panel) as { groups: Array<{ groupId: string }>; steps: Array<{ groupId: string | null }> };
+    const partial = await json(await get(panel, `/api/control/overview?sinceChangeSeq=${seq}`)) as { groups: Array<{ groupId: string }>; steps: Array<{ groupId: string | null }> };
+    expect(partial.groups.map((group) => group.groupId)).toEqual([GROUP]);
+    expect(partial.groups[0]).toEqual(changedComplete.groups.find(group => group.groupId === GROUP));
+    expect(partial.steps.filter((step) => step.groupId === GROUP))
+      .toEqual(changedComplete.steps.filter(step => step.groupId === GROUP));
+    const ahead = await json(await get(panel, "/api/control/overview?sinceChangeSeq=9007199254740991")) as { groups: Array<{ groupId: string }> };
+    expect(ahead.groups.map((group) => group.groupId)).toEqual([GROUP, "zero-questions"]);
+  });
+  it("refuses a non-canonical sinceChangeSeq as the summary does", async () => {
+    const { panel } = await panelFixture();
+    for (const query of ["", "00", "-1", "+1", "1.0", "1e2", "%201", "9007199254740992", "1&sinceChangeSeq=2"]) {
+      const response = await get(panel, `/api/control/overview?sinceChangeSeq=${query}`);
+      expect(response.status, query).toBe(400);
+      expect(await response.json(), query).toEqual({ error: { code: "query-invalid", message: "sinceChangeSeq must be a canonical decimal safe integer", commandRevision: null, evidenceIds: [], retryable: false } });
+    }
+  });
+});
 describe("authenticated overview read", () => {
   it("serves stored facts without changing any database bytes or probing a model", async () => {
     const { panel, probe } = await panelFixture(); probe.mockClear();

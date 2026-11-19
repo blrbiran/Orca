@@ -3,7 +3,7 @@ import { readFlowJournal, readFlowList, readFlowRun } from "../flow/views.js";
 import { asFlowControlError, dirProjectOf, registeredDirProject } from "../flow/flowCommands.js";
 import { FLOW_VAULT_REPO_PREFIX } from "../flow/groups.js";
 import { readResultOutputBytes } from './taskResultOutputs.js';
-import { readControlOverview, withNeedsYou } from "./controlOverview.js";
+import { readControlOverview, withNeedsYouFromOverview } from "./controlOverview.js";
 import { readGroupDecisionsView } from "./groupDecisions.js";
 import { groupRepoId } from "../control/executionDriver.js";
 import { fundingPreview } from "../control/fundedAllowance.js";
@@ -279,11 +279,19 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       return;
     }
     const summary = readControlSummary(deps.store, deps.epoch, since);
-    res.json({ ...summary, groups: withNeedsYou(deps.store, summary.groups) });
+    // Tester #393(b): the needs-you flags are the overview pass's own result, not a second withNeedsYou walk over the groups.
+    res.json({ ...summary, groups: withNeedsYouFromOverview(readControlOverview(deps.store, deps.epoch, since), summary.groups) });
   }));
 
-  app.get("/api/control/overview", asyncRoute((_req, res) => {
-    res.json(readControlOverview(deps.store, deps.epoch));
+  // Tester #393(a): `?sinceChangeSeq=` answers only what moved, as the summary does; unchanged is the same tiny shape.
+  app.get("/api/control/overview", asyncRoute((req, res) => {
+    let since: number | null;
+    try { since = sinceChangeSeq(req); }
+    catch {
+      sendControlError(res, 400, "query-invalid", "sinceChangeSeq must be a canonical decimal safe integer");
+      return;
+    }
+    res.json(readControlOverview(deps.store, deps.epoch, since));
   }));
 
   // Accounts spec §5.3: every principal reads usage (the permission table's reading is open to every row).
@@ -311,7 +319,7 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
 
   app.get("/api/control/groups", (_req, res) => {
     const summary = readControlSummary(deps.store, deps.epoch, null, true);
-    res.json({ ...summary, groups: withNeedsYou(deps.store, summary.groups) });
+    res.json({ ...summary, groups: withNeedsYouFromOverview(readControlOverview(deps.store, deps.epoch), summary.groups) });
   });
 
   // N1 spec §11.2: a requirement's details; its group view is refused while it is clarifying (DR25).

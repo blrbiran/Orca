@@ -66,7 +66,7 @@ describe("group show names the requirement review (tester follow-up G §3.3)", (
       "  AC1 not-met: every task names files",
       "  AC2 not-met: the person must pick one",
       "left to a person (no change to files can meet them): AC1 (plan), AC2 (person)",
-      "next: orca requirement feedback g-alpha --text '<what to change in the plan>'  (AC1: a new draft of the plan)",
+      "next: orca requirement open --idea '<the requirement, with the plan changed>'  (AC1: a new requirement whose plan is changed)",
       "  or: orca group review-accept g-alpha --note '<why accept as is>'  (AC2: only a person can decide)",
       "  or: orca group review-rerun g-alpha --note '<what to look at>'",
     ]);

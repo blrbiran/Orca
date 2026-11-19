@@ -5,6 +5,8 @@
  * Tester #357 (human ruling 2026-11-19 on #92: list multi-select with bulk archive/close, no bulk retry, nothing on the
  * Board): every chip says how many groups it holds; where the page can send card actions, each card has a selection box
  * beside its button, and a toolbar sends one command per selected group -- no server batch -- listing each one's outcome.
+ * Tester #390 (human ruling 2026-11-20, 「选择模式」): the boxes are not always there. The toolbar's Select toggle enters
+ * a selection mode; only then does a card show its box; Exit selection leaves the mode and clears the selection.
  */
 import { useEffect, useId, useRef, useState } from "react";
 import type { GroupCardVerb } from "./controlApi.js";
@@ -22,7 +24,7 @@ import { groupStateText } from "./i18n.js";
 import { inScope, type GroupScope } from "./projectScope.js";
 import { hashFor } from "./sections.js";
 import { GroupActionsMenu } from "./GroupActionsMenu.js";
-import { groupBadge, groupBulk, groupCard, groupCardAnchor, groupCardDetail, groupCardGoal, groupCardLead, groupCardName, groupChip, groupFilter, groupList, groupSelect } from "./ui/classes.js";
+import { groupBadge, groupBulk, groupCard, groupCardAnchor, groupCardDetail, groupCardGoal, groupCardLead, groupCardName, groupChip, groupFilter, groupList, groupSelect, groupSelectToggle, groupToolbar } from "./ui/classes.js";
 import type { ControlRefusal } from "./controlState.js";
 
 export interface GroupListProps {
@@ -55,6 +57,7 @@ export function bulkCloseOpen(groups: readonly GroupSummaryV1[]): boolean {
 /**
  * Tester #357: a card's selection box, a sibling of the card's button or link (one cannot hold the other). #355 review
  * (minor 1): both sit in one positioned wrapper, so the box is placed on the card, never on a refusal notice under it.
+ * Tester #390: shown only in select mode; the label is the 44px hit area, the input keeps the accessible name.
  */
 function SelectBox(props: { groupId: string; checked: boolean; onChange: (checked: boolean) => void }): JSX.Element {
   const { t } = useTranslation();
@@ -147,12 +150,14 @@ export function GroupList(props: GroupListProps): JSX.Element {
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const [outcomes, setOutcomes] = useState<ReadonlyArray<{ groupId: string; verb: BulkVerb; outcome: BulkOutcome }>>([]);
   const [busy, setBusy] = useState(false);
+  // Tester #390 (human ruling 2026-11-20, 「选择模式」): the boxes exist only while the Select toggle is on.
+  const [selecting, setSelecting] = useState(false);
   const choose = (next: GroupFilter): void => { setFilter(next); writeGroupFilter(groupFilterStorage(), next); setPicked(new Set()); setOutcomes([]); };
   // #355 review (minor 2): another project scope starts a new selection too, and its outcomes go with the old one.
   const scopeKey = scope === undefined ? "" : JSON.stringify(scope);
   const scopeNow = useRef(scopeKey);
   scopeNow.current = scopeKey;
-  useEffect(() => { setPicked(new Set()); setOutcomes([]); }, [scopeKey]);
+  useEffect(() => { setPicked(new Set()); setOutcomes([]); setSelecting(false); }, [scopeKey]);
   const bulk = props.onBulkAction;
   const selection = shown.filter((group) => picked.has(group.groupId));
   const pick = (groupId: string) => (checked: boolean): void => setPicked((all) => {
@@ -160,7 +165,9 @@ export function GroupList(props: GroupListProps): JSX.Element {
     if (checked) next.add(groupId); else next.delete(groupId);
     return next;
   });
-  const selectBox = (groupId: string): JSX.Element | undefined => bulk === undefined ? undefined
+  // Tester #390: leaving the mode clears what it held, so the list comes back plain.
+  const exitSelection = (): void => { setSelecting(false); setPicked(new Set()); setOutcomes([]); };
+  const selectBox = (groupId: string): JSX.Element | undefined => bulk === undefined || !selecting ? undefined
     : <SelectBox groupId={groupId} checked={picked.has(groupId)} onChange={pick(groupId)} />;
   // One command per group, in order, each at the revision its own fresh read gives (App's card action); a refusal stops
   // nothing else. No bulk retry or pause (#92 ruling).
@@ -189,16 +196,21 @@ export function GroupList(props: GroupListProps): JSX.Element {
   const archiveOpen = selection.some((group) => !(group.archived === true && (group.archiveKind ?? "archived") === "archived"));
   return (
     <>
-      <div role="group" aria-label={t("control.groupFilter.region")} className={`group-filter ${groupFilter}`}>
-        {GROUP_FILTERS.map((option) => (
-          <button key={option} type="button" aria-pressed={filter === option} onClick={() => choose(option)}>
-            {option === "all" ? t("control.groupFilter.all") : t(`control.groupCategory.${option}` as const)}
-            {/* Tester #357: each chip says how many groups of this project scope it holds. */}
-            {" "}<span className="tabular-nums">({listed.filter((group) => matchesGroupFilter(group, option)).length})</span>
-          </button>
-        ))}
+      <div className={groupToolbar}>
+        <div role="group" aria-label={t("control.groupFilter.region")} className={`group-filter ${groupFilter}`}>
+          {GROUP_FILTERS.map((option) => (
+            <button key={option} type="button" aria-pressed={filter === option} onClick={() => choose(option)}>
+              {option === "all" ? t("control.groupFilter.all") : t(`control.groupCategory.${option}` as const)}
+              {/* Tester #357: each chip says how many groups of this project scope it holds. */}
+              {" "}<span className="tabular-nums">({listed.filter((group) => matchesGroupFilter(group, option)).length})</span>
+            </button>
+          ))}
+        </div>
+        {/* Tester #390 (human ruling 2026-11-20, 「选择模式」): the list is plain until this toggle is pressed. */}
+        {bulk !== undefined && <button type="button" aria-pressed={selecting} className={groupSelectToggle}
+          onClick={() => { if (selecting) exitSelection(); else setSelecting(true); }}>{t("control.groupBulk.startSelect")}</button>}
       </div>
-      {bulk !== undefined && (selection.length > 0 || outcomes.length > 0) && (
+      {bulk !== undefined && (selecting || outcomes.length > 0) && (
         <div role="group" aria-label={t("control.groupBulk.region")} className={groupBulk} aria-busy={busy}>
           {selection.length > 0 && <>
             <span>{t("control.groupBulk.selected", { n: selection.length })}</span>
@@ -208,6 +220,7 @@ export function GroupList(props: GroupListProps): JSX.Element {
             {!closeOpen && <small id="group-bulk-close-reason">{t("control.groupBulk.closeNeedsDone")}</small>}
             <button type="button" className="btn-quiet" disabled={busy} onClick={() => setPicked(new Set())}>{t("control.groupBulk.clear")}</button>
           </>}
+          <button type="button" className="btn-quiet" disabled={busy} onClick={exitSelection}>{t("control.groupBulk.exitSelection")}</button>
           {outcomes.length > 0 && (
             <ul aria-label={t("control.groupBulk.outcomes")}>
               {outcomes.map((row) => (

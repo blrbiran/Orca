@@ -14,12 +14,14 @@ export function leftToPerson(last: { leftToPerson?: string[]; criteria: Readonly
 
 /**
  * Follow-up G §3.5: a review that did not pass -- fix, rerun, accept. Tester #343: one whose criteria no change to files can
- * meet gets no fix task; a criterion only the plan can meet is answered by a new plan draft first.
+ * meet gets no fix task; a criterion only the plan can meet is answered by a new requirement first. Tester #392: that used
+ * to suggest `orca requirement feedback`, which refuses after confirm (`requirement-already-accepted`); a new requirement is
+ * the step that works on a confirmed group.
  */
 export function reviewAnswers(groupId: string, why: string | undefined, left: ReadonlyArray<LeftCriterion>): string[] {
   const rerun = `orca group review-rerun ${groupId} --note '<what to look at>'`, accept = `orca group review-accept ${groupId} --note '<why accept as is>'`;
   if (why !== "not-fixable-by-work") return [`orca group review-fix ${groupId} --goal '<what to fix>'`, rerun, accept];
-  const plan = left.some((c) => c.by === "plan") ? [`orca requirement feedback ${groupId} --text '<what to change in the plan>'`] : [];
+  const plan = left.some((c) => c.by === "plan") ? ["orca requirement open --idea '<the requirement, with the plan changed>'"] : [];
   return [...plan, accept, rerun];
 }
 

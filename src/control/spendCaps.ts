@@ -141,6 +141,9 @@ export function assertNoActiveUnbounded(store:ControlStore,scope:string,groupId:
   if(scope!=="all"&&groupRepoIdOf(JSON.parse(String(row.gbody)))!==scope.slice(5))continue;
   const run=JSON.parse(String(row.body));
   // Tester follow-up G spec §2.1: a run of a finite group bounded by a live ceiling is bounded, so a new limit or cap may be installed.
-  if(run.grant?.work?.tokens===null&&!(boundingCeilingOf(run)!==null&&JSON.parse(String(row.gbody)).limit?.tokens!==null))throw new ControlError("active-unbounded-budget-conflict",`${run.runId}: stop and reconcile before installing a finite limit`);
+  if(run.grant?.work?.tokens===null&&!(boundingCeilingOf(run)!==null&&JSON.parse(String(row.gbody)).limit?.tokens!==null))throw new ControlError("active-unbounded-budget-conflict",
+    // Tester #389: the refusal names the run and the exact ways out, then the retry; a bare "stop and reconcile" left an
+    // operator trying commands. The limit cannot bind a provider grant that was already unbounded.
+    `${run.runId}: this run holds an unbounded grant, so a finite limit cannot bound it; close its accounting (orca group close-run ${String(row.group_id)} --run ${run.runId}) or, while it is running, have a person end the attempt (orca run abandon ${String(row.group_id)} --run ${run.runId} --note <why>), then run this command again`);
  }
 }

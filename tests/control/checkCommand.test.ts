@@ -3,7 +3,7 @@ import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { firstFailingSetup, runAsCheck } from "../../src/control/checkCommand.js";
+import { firstFailingSetup, runAsCheck, runCheckRecorded } from "../../src/control/checkCommand.js";
 
 // Human ruling 2026-11-05 (session e2ad4802): every command Orca runs itself as a check -- the criteria base run, the
 // reproduce-first check and the integration check, setup and checks alike -- goes through one runner, so a failure reads
@@ -25,6 +25,15 @@ describe("runAsCheck", () => {
   it("a command past its bound is a failure named by the bound, with no tail", async () => {
     const dir = await workdir();
     expect(await runAsCheck(dir, "sleep 5", 200, { runId: "run-c" })).toEqual({ command: "sleep 5", exit: "timeout 200 ms", tail: "" });
+  });
+
+  it("names the failing tests a node:test tail gives, only for a non-zero exit (#391)", async () => {
+    const dir = await workdir();
+    const failed = await runAsCheck(dir, "printf 'not ok 1 - login rejects\\nnot ok 2 - signup works\\n# fail 2\\n'; exit 1", 10_000, { runId: "run-c" });
+    // mutation: drop the parseFailureSummary call -> failures absent, red
+    expect(failed).toMatchObject({ failures: ["login rejects", "signup works"] });
+    // A reading of a green command's output is not a failure list.
+    expect((await runCheckRecorded(dir, "printf 'not ok 1 - reported but exit 0\\n'", 10_000, { runId: "run-c" })).failures).toBeUndefined();
   });
 
   it("runs as the dispatched run", async () => {

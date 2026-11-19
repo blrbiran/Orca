@@ -1177,7 +1177,10 @@ export const requirementDraftAcceptPayloadSchema = z.object({ draftNo: positiveS
 export const requirementDraftEditPayloadSchema = z.object({
   draftNo: positiveSafeInteger, draftHash: hashSchema,
   edit: z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("apply-parallel-candidates") }).strict(),
+    // Tester #384: a person applies chosen pairs (`--pair T1:T2`, repeatable) or the whole list on purpose (`--all`);
+    // naming neither selects nothing, so the old apply-everything behaviour is never the default.
+    z.object({ kind: z.literal("apply-parallel-candidates"), pairs: z.array(z.object({ before: nonemptyString, after: nonemptyString }).strict()).min(1).max(64).optional(),
+      all: z.literal(true).optional() }).strict(),
     z.object({ kind: z.literal("add-implied-path"), taskId: nonemptyString, path: nonemptyString }).strict(),
     // Tester #335: one claim replaced by paths inside it (requirementDraftEdit.ts narrowedSplit).
     z.object({ kind: z.literal("narrow-target-path"), taskId: nonemptyString, path: nonemptyString, to: z.array(nonemptyString).min(1).max(16) }).strict(),
@@ -1795,7 +1798,8 @@ export const groupSummarySchema = z
       // Full suite spec 2026-11-12 §4-§5 (#279): the project's full-suite command and its runs' exits (null: none set, with
       // the suggestion code detected); `warning` is `full-suite-not-set` or `full-suite-flaky:<command>`, never blocking.
       fullSuite: z.object({ command: nonemptyString.nullable(), suggestion: nonemptyString.nullable(), exits: z.array(nonemptyString).max(2), flaky: z.boolean(),
-        baseline: z.object({ tip: commitShaSchema, exits: z.array(nonemptyString).max(2), tail: z.string().max(2048).optional() }).strict().optional() }).strict().optional(),
+        baseline: z.object({ tip: commitShaSchema, exits: z.array(nonemptyString).max(2), tail: z.string().max(2048).optional(), tests: safeInteger.nullable().optional() }).strict().optional(),
+        tests: safeInteger.nullable().optional(), reported: safeInteger.optional() }).strict().optional(),
       warning: nonemptyString.optional(),
       // Tester follow-up K, item 2: present (true) only on a `passed` acceptance that ran no full suite (none adopted).
       passedWithoutFullSuite: z.literal(true).optional(),

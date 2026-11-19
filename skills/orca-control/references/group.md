@@ -173,7 +173,13 @@ set the group's budget limit
 - What it does: sends control verb `set-limit`.
 - Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
 - `<group>`: a group id or a unique prefix
-- `--limit <limit>` (required): JSON {tokens,activeMs,attempts,sessions}
+- `--limit <limit>` (required): a token count, or a budget object {tokens,activeMs,attempts,sessions} (a partial one keeps the group's current values for the rest)
+
+```
+orca group set-limit g1 --limit 24000000
+orca group set-limit g1 --limit '{"tokens":24000000}'
+orca group set-limit g1 --limit '{"tokens":24000000,"activeMs":3600000,"attempts":6,"sessions":6}'
+```
 
 ## `orca group cap <group> --tokens <tokens>`
 

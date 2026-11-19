@@ -87,7 +87,10 @@ export interface GroupView {
   ledger: { groupLimit: { tokens: number | null; activeMs: number; attempts: number; sessions: number } };
   allocations: Array<{ ownerKind: string; ownerId: string; bucket: string; amount: Record<string, number | null>; fieldProvenance?: Record<string, { provenance: string; estimateId: string | null }> }>;
   workItems: Array<{ taskId: string; currentRunId: string | null; labelsVersion?: number; loopPlan?: { loopVersion: number } | null }>;
-  runs: Array<{ runId: string; taskId: string | null; checkpointId?: string | null; unknownUsageSettlement?: { generation: number } }>;
+  // Tester #386: the run's outcome and what it used, for `task continue`'s next command; #389: the newest command ids,
+  // which say whether Orca auto-confirmed the group (its confirm row is `orca-auto-confirm-unlimited-v<n>`).
+  runs: Array<{ runId: string; taskId: string | null; checkpointId?: string | null; unknownUsageSettlement?: { generation: number }; outcome?: string | null; used?: { tokens: number } }>;
+  recentCommandIds?: string[];
   checkpoints: Array<{ checkpointId: string; runId: string; taskId: string; state: string }>;
   integration?: { schemeHash: string };
 }
@@ -337,7 +340,7 @@ const answerLines = (commands: readonly string[], note: (command: string) => str
 function notFixableLines(groupId: string, left: ReadonlyArray<LeftCriterion>): string[] {
   const plan = left.filter((c) => c.by === "plan").map((c) => c.id), person = left.filter((c) => c.by !== "plan").map((c) => c.id);
   return answerLines(reviewAnswers(groupId, "not-fixable-by-work", left), (command) =>
-    command.startsWith("orca requirement feedback") ? `  (${plan.join(", ")}: a new draft of the plan)`
+    command.startsWith("orca requirement open") ? `  (${plan.join(", ")}: a new requirement whose plan is changed)`
       : command.startsWith("orca group review-accept") && person.length > 0 ? `  (${person.join(", ")}: only a person can decide)` : "");
 }
 

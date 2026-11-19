@@ -59,6 +59,37 @@ function suiteAtBase(script: string): { command: string; runs: () => string[] } 
 }
 
 describe("group acceptance and the project's full suite (spec §4)", { timeout: 90_000 }, () => {
+  it("#387: the record carries what the suite said it ran (`# tests N`), the evidence a partial run cannot fake", async () => {
+    const s = suite("echo '# tests 79'; echo '# pass 79'; echo '# fail 0'; true");
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
+      await t.claim(); await t.claim();
+      setSuite(t, s.command);
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).status === "done");
+      const record = group(t).acceptance;
+      expect(record.fullSuite).toMatchObject({ exits: ["0"], flaky: false, tests: 79 });
+      expect(fullSuiteWarning(record)).toBeNull();
+    } finally { await t.h.dispose(); }
+  });
+
+  it("#383: a suite task runs already reported red is run twice even when the first run is green, and the record says so", async () => {
+    const s = suite("true");
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
+      await t.claim(); await t.claim();
+      setSuite(t, s.command);
+      // What a task run's report leaves behind (preexistingFailure.ts's activity row).
+      t.h.store.db.prepare("INSERT INTO activity(group_id,kind,body,at) VALUES ('g','preexisting-failure',?,0)")
+        .run(JSON.stringify({ taskId: "a", runId: "run-reported", command: s.command, chose: "left it for the owner" }));
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).status === "done");
+      const record = group(t).acceptance;
+      expect(record.result).toBe("passed");
+      expect(record.fullSuite).toMatchObject({ exits: ["0", "0"], flaky: false, reported: 1 });
+      expect(s.runs()).toHaveLength(2);
+      expect(fullSuiteWarning(record)).toBe(`full-suite-reported-flaky:${s.command}`);
+    } finally { await t.h.dispose(); }
+  });
+
   it("unset: only the union runs, the group is done, and the record names the suggestion without running it", async () => {
     const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
       // The repository's checkout has a test script: "npm test" is suggested. Run in the scratch tree it would fail (no

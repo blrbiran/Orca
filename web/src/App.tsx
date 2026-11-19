@@ -970,9 +970,12 @@ export function App(): JSX.Element {
     if (controlConfig === null) return;
     // A command id that survived the reload is resolved before anything else reads.
     for (const command of controlNow.current.uncertainCommandIds) void resolveUncertain(command);
-    void readControlTick();
-    const timer = setInterval(() => void readControlTick(), CONTROL_POLL_MS);
-    return () => clearInterval(timer);
+    // Tester #393(c): a hidden tab polls nothing; coming back reads once, then the timer resumes.
+    const tick = (): void => { if (!pageHidden()) void readControlTick(); };
+    tick();
+    const timer = setInterval(tick, CONTROL_POLL_MS);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", tick); };
   }, [controlConfig]);
 
   // Project switcher spec D2, project registry spec §7: the stored (or current) choice while it is still listed, else
@@ -1092,9 +1095,13 @@ export function App(): JSX.Element {
     if (section === "overview" || todoSource.identity !== sourceIdentity) void readTodo();
     if (section !== "overview") return;
     void readOverview(); void readOverviewRecovery();
-    const todoTimer = setInterval(() => void readTodo(), 5_000);
-    const controlTimer = setInterval(() => { void readOverview(); void readOverviewRecovery(); }, CONTROL_POLL_MS);
-    return () => { clearInterval(todoTimer); clearInterval(controlTimer); todoSeq.current++; overviewSeq.current++; recoverySeq.current++; };
+    // Tester #393(c): a hidden tab polls nothing; the return to view reads each once, then the timers resume.
+    const refresh = (): void => { void readTodo(); void readOverview(); void readOverviewRecovery(); };
+    const tick = (): void => { if (!pageHidden()) refresh(); };
+    const todoTimer = setInterval(() => { if (!pageHidden()) void readTodo(); }, 5_000);
+    const controlTimer = setInterval(() => { if (!pageHidden()) { void readOverview(); void readOverviewRecovery(); } }, CONTROL_POLL_MS);
+    document.addEventListener("visibilitychange", tick);
+    return () => { clearInterval(todoTimer); clearInterval(controlTimer); document.removeEventListener("visibilitychange", tick); todoSeq.current++; overviewSeq.current++; recoverySeq.current++; };
   }, [sourceIdentity, section === "overview"]);
   useEffect(() => () => { todoSeq.current++; overviewSeq.current++; recoverySeq.current++; navigationSeq.current++; }, []);
 

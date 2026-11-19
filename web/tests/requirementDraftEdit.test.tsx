@@ -34,7 +34,9 @@ describe("applying a split draft's hint from the panel (tester follow-up K)", ()
     expect(add.textContent).toBe("Add README.md to images");
     fireEvent.click(add);
     expect(sent).toEqual([
-      { verb: "requirement-draft-edit", groupId: "r", expectedRevision: 3, payload: { draftNo: 1, draftHash: "d".repeat(64), edit: { kind: "apply-parallel-candidates" } } },
+      // Ruling (2026-11-20, tester #384): the server now takes the pairs to drop; a Web button without a pair picker
+      // keeps the old one-shot meaning (`all: true`), and the CLI is where a person names pairs.
+      { verb: "requirement-draft-edit", groupId: "r", expectedRevision: 3, payload: { draftNo: 1, draftHash: "d".repeat(64), edit: { kind: "apply-parallel-candidates", all: true } } },
       { verb: "requirement-draft-edit", groupId: "r", expectedRevision: 3, payload: { draftNo: 1, draftHash: "d".repeat(64), edit: { kind: "add-implied-path", taskId: "images", path: "README.md" } } },
     ]);
   });

@@ -1,6 +1,6 @@
 import { recordActivity } from "./activity.js";
 import { isGroupArchived } from "./archivedMark.js";
-import { runCheckSequence, type CheckFailure, type PostMergeOutcome } from "./checkCommand.js";
+import { runCheckRecorded, runCheckSequence, type CheckFailure, type PostMergeOutcome } from "./checkCommand.js";
 import { groupRepoId, isDirGroup } from "./dirGroup.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { isMultiGroup } from "./multiGroup.js";
@@ -14,6 +14,7 @@ import { git } from "../scheduler/gitExec.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import { acceptanceOf, groupBaseCommit, landedRunCount, landedTaskCount, maxLandingsWithoutAcceptance, type FullSuiteRecord, type GroupAcceptance } from "./groupAcceptanceRecord.js";
 import { fullSuiteCommand, suggestFullSuiteCommand } from "./fullSuite.js";
+import { readPreexistingFailures } from "./preexistingFailure.js";
 import type { ControlStore } from "./store.js";
 
 /**
@@ -61,8 +62,12 @@ export interface GroupAcceptanceCheck { controller: AbortController; tip: string
 /** The union's outcome and, after it, the full suite's: each of its runs' exits (empty when it did not run). */
 export interface AcceptanceOutcome extends PostMergeOutcome {
   suiteExits: string[];
+  /** Tester #383 (2026-11-20): task runs that had already reported this suite red when the check started. */
+  reported?: number;
+  /** Tester #387 (2026-11-20): what the suite's last run said it ran (`# tests N`), null when it said nothing. */
+  tests?: number | null;
   /** Spec 2026-11-16: the suite's runs at the group's base, when the tip was red. */
-  baseline?: { tip: string; exits: string[]; failure: CheckFailure | null };
+  baseline?: { tip: string; exits: string[]; failure: CheckFailure | null; tests?: number | null };
 }
 
 export interface GroupAcceptanceDeps {
@@ -200,7 +205,8 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
     checks.delete(groupId);
     if ("error" in inFlight.settled) throw inFlight.settled.error;
     if (inFlight.tip !== tip) return false;
-    const { failure, commands, suiteExits, baseline } = inFlight.settled.outcome;
+    const outcome = inFlight.settled.outcome;
+    const { failure, commands, suiteExits, baseline } = outcome;
     // Spec 2026-11-16: a red suite is classified against the group's base. Red there too: the failure
     // pre-dated the group, and the acceptance passes relative to it; green there: this group broke it.
     // Review of #377 (C1): relative only when the suite itself was the red command on the tip (it ran there).
@@ -208,7 +214,7 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
     const result = failure === null ? "passed" : baselineRed ? "passed-relative" : "failed";
     const record: GroupAcceptance = { tip, result, commands, at: store.now(),
       ...(failure === null || failure.tail === "" ? {} : { tail: failure.tail }),
-      fullSuite: fullSuiteRecord(inFlight.suite, repo, suiteExits, baseline) };
+      fullSuite: fullSuiteRecord(inFlight.suite, repo, suiteExits, outcome) };
     deps.write(() => {
       saveAcceptance(store, groupId, record);
       recordActivity(store, { groupId, kind: "group-acceptance", body: { ...record } });
@@ -231,20 +237,35 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
   if (deps.stopped()) return false;
   const controller = new AbortController();
   const entry: GroupAcceptanceCheck = { controller, tip, suite, settled: null, done: Promise.resolve() };
-  entry.done = runAcceptance(deps, repo, groupId, groupAcceptancePathOf(deps.roots, groupId, ++checkSeq), tip, baselineTip, setup, commands, suite, timeoutMs, controller.signal)
+  entry.done = runAcceptance(deps, repo, groupId, groupAcceptancePathOf(deps.roots, groupId, ++checkSeq), tip, baselineTip, setup, commands, suite, timeoutMs, controller.signal, reportedCount(store, groupId, body, suite))
     .then((outcome) => { entry.settled = { outcome }; }, (error: unknown) => { entry.settled = { error }; });
   checks.set(groupId, entry);
   return recorded !== null;
 }
 
 /**
+ * Tester #383 (2026-11-20): how many task runs had already reported this same suite command red (by the person's
+ * reading of the rows -- unanswered or answered, the report is what makes one green insufficient). The suite command is
+ * matched exactly, or as the prefix of a longer reported command (`npm test -- --x`).
+ */
+function reportedCount(store: ControlStore, groupId: string, body: Record<string, unknown>, suite: string | null): number {
+  if (suite === null) return 0;
+  try {
+    return readPreexistingFailures(store, groupId, body).filter((row) => row.command === suite || row.command.startsWith(`${suite} `)).reduce((n, row) => n + Math.max(1, row.reportedBy.length), 0);
+  } catch { return 0; }
+}
+
+/**
  * Full suite spec §3-§4: what the record says of the suite. Unset: the suggestion code detects in the repository's checkout
  * (never run; human: 「人采纳才用」). Set: each run's exit, and flaky when it passed only on the retry.
  */
-function fullSuiteRecord(suite: string | null, repo: string, exits: string[], baseline?: AcceptanceOutcome["baseline"]): FullSuiteRecord {
+function fullSuiteRecord(suite: string | null, repo: string, exits: string[], outcome?: AcceptanceOutcome): FullSuiteRecord {
+  const reported = outcome?.reported ?? 0;
   return {
-    command: suite, suggestion: suite === null ? suggestFullSuiteCommand(repo) : null, exits, flaky: exits.length === 2 && exits[1] === "0",
-    ...(baseline === undefined ? {} : { baseline: { tip: baseline.tip, exits: baseline.exits, ...(baseline.failure?.tail ? { tail: baseline.failure.tail } : {}) } }),
+    command: suite, suggestion: suite === null ? suggestFullSuiteCommand(repo) : null, exits, flaky: exits.length === 2 && exits[0] !== "0" && exits[1] === "0",
+    ...(outcome?.tests === undefined || outcome.tests === null ? {} : { tests: outcome.tests }),
+    ...(reported === 0 ? {} : { reported }),
+    ...(outcome?.baseline === undefined ? {} : { baseline: { tip: outcome.baseline.tip, exits: outcome.baseline.exits, ...(outcome.baseline.failure?.tail ? { tail: outcome.baseline.failure.tail } : {}), ...(outcome.baseline.tests === undefined || outcome.baseline.tests === null ? {} : { tests: outcome.baseline.tests }) } }),
   };
 }
 
@@ -254,42 +275,48 @@ export function nextAcceptancePath(roots: WorkspaceRoots, groupId: string): stri
 }
 
 /** Also D3's runner (deliveredAcceptance.ts): `baselineTip` null skips the base comparison. */
-export async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, groupId: string, path: string, tip: string, baselineTip: string | null, setup: string[], checks: string[], suite: string | null, timeoutMs: number, signal: AbortSignal): Promise<AcceptanceOutcome> {
+export async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, groupId: string, path: string, tip: string, baselineTip: string | null, setup: string[], checks: string[], suite: string | null, timeoutMs: number, signal: AbortSignal, reported = 0): Promise<AcceptanceOutcome> {
   // The commands are the group's tasks'; they run as the group's acceptance, with the panel's empty person directory.
   const as = { runId: `group-acceptance-${groupId}`, ...(deps.dispatchedPersonDir === undefined ? {} : { personDir: deps.dispatchedPersonDir }) };
-  const outcome = await runOnScratchTip(deps, repo, path, (name) => isGroupAcceptancePathOf(name, groupId), tip, async (tree) => {
+  const outcome: AcceptanceOutcome = { ...await runOnScratchTip(deps, repo, path, (name) => isGroupAcceptancePathOf(name, groupId), tip, async (tree) => {
     const union = await runCheckSequence(tree, setup, checks, timeoutMs, as, signal);
     if (union.failure !== null || suite === null) return { ...union, suiteExits: [] };
     // Full suite spec §4: after a green union, the project's suite in the same tree and bound; a red run is run once more.
+    // Tester #383 (2026-11-20): when task runs already reported this suite red, a green first run is confirmed by a
+    // second one -- one green cannot tell a stable suite from a flaky one that happened to pass.
     const commands = [...union.commands], suiteExits: string[] = [];
-    let failure: PostMergeOutcome["failure"] = null;
+    let failure: PostMergeOutcome["failure"] = null, tests: number | null = null;
     for (let run = 0; run < 2; run += 1) {
-      const runOutcome = await runCheckSequence(tree, [], [suite], timeoutMs, as, signal);
-      commands.push(...runOutcome.commands);
-      suiteExits.push(runOutcome.commands[0]!.exit);
-      failure = runOutcome.failure;
-      if (failure === null) break;
+      const started = performance.now();
+      const answer = await runCheckRecorded(tree, suite, timeoutMs, as, signal);
+      commands.push({ command: suite, exit: answer.exit, ms: Math.round(performance.now() - started) });
+      suiteExits.push(answer.exit);
+      tests = testsRan(answer.tail) ?? tests;
+      failure = answer.exit === "0" ? null : { command: suite, exit: answer.exit, tail: answer.tail };
+      if (failure === null && !(reported > 0 && run === 0)) break;
     }
-    return { failure, commands, suiteExits };
-  });
+    return { failure, commands, suiteExits, tests };
+  }), ...(reported === 0 ? {} : { reported }) };
   // Review of #377 (C1): a task check red in the union stops before the suite runs (no suiteExits); that failure is the
   // group's own and the base is not compared -- the base's suite says nothing about a task check.
   if (outcome.failure === null || suite === null || baselineTip === null || outcome.suiteExits.length === 0) return outcome;
   // Spec 2026-11-16: the tip's suite is red twice. Run the same command at the group's base; red there too
   // means the failure pre-dated this group. A base that cannot be checked out stays a plain failure.
-  let baseline: { failure: PostMergeOutcome["failure"]; commands: PostMergeOutcome["commands"]; exits: string[] };
+  let baseline: { failure: PostMergeOutcome["failure"]; commands: PostMergeOutcome["commands"]; exits: string[]; tests: number | null };
   try {
     baseline = await runOnScratchTip(deps, repo, groupAcceptancePathOf(deps.roots, groupId, ++checkSeq), (name) => isGroupAcceptancePathOf(name, groupId), baselineTip, async (tree) => {
       const baselineCommands: PostMergeOutcome["commands"] = [], exits: string[] = [];
-      let failure: PostMergeOutcome["failure"] = null;
+      let failure: PostMergeOutcome["failure"] = null, tests: number | null = null;
       for (let run = 0; run < 2; run += 1) {
-        const runOutcome = await runCheckSequence(tree, [], [suite], timeoutMs, as, signal);
-        baselineCommands.push(...runOutcome.commands.map((command) => ({ ...command, command: `baseline: ${command.command}` })));
-        exits.push(runOutcome.commands[0]!.exit);
-        failure = runOutcome.failure;
+        const started = performance.now();
+        const answer = await runCheckRecorded(tree, suite, timeoutMs, as, signal);
+        baselineCommands.push({ command: `baseline: ${suite}`, exit: answer.exit, ms: Math.round(performance.now() - started) });
+        exits.push(answer.exit);
+        tests = testsRan(answer.tail) ?? tests;
+        failure = answer.exit === "0" ? null : { command: `baseline: ${suite}`, exit: answer.exit, tail: answer.tail };
         if (failure === null) break;
       }
-      return { failure, commands: baselineCommands, exits };
+      return { failure, commands: baselineCommands, exits, tests };
     });
   } catch {
     return outcome;
@@ -297,9 +324,18 @@ export async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, gro
   // Green at the base: this group introduced the failure, so the failed tip's own commands stay the evidence.
   if (baseline.failure === null) return outcome;
   return {
-    failure: outcome.failure, commands: [...outcome.commands, ...baseline.commands], suiteExits: outcome.suiteExits,
-    baseline: { tip: baselineTip, exits: baseline.exits, failure: baseline.failure },
+    failure: outcome.failure, commands: [...outcome.commands, ...baseline.commands], suiteExits: outcome.suiteExits, tests: outcome.tests,
+    baseline: { tip: baselineTip, exits: baseline.exits, failure: baseline.failure, tests: baseline.tests },
   };
+}
+
+/**
+ * Tester #387 (2026-11-20): node:test's own count of what it ran (`# tests 552`). The tail is 2 KB of the end, and the
+ * summary is the end, so it survives even when the failure names were cut. Null when the output names no count.
+ */
+export function testsRan(tail: string): number | null {
+  const found = /^# tests (\d+)$/m.exec(tail);
+  return found === null ? null : Number(found[1]);
 }
 
 /**

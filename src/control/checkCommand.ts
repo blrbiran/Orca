@@ -1,6 +1,7 @@
 import { dispatchedEnv, type DispatchedAs } from "./commandClient.js";
 import { ChildTimeout, spawnRunChild } from "./integrationGit.js";
 import type { CheckRunCommand } from "./driveRecord.js";
+import { parseFailureSummary } from "./failureNames.js";
 
 /**
  * One command Orca runs itself the way ccloop runs a contract's required checks (runLoop.js runRequiredChecks): `sh -lc` in
@@ -9,7 +10,14 @@ import type { CheckRunCommand } from "./driveRecord.js";
  * 建议抽公共函数"): the criteria base run, the reproduce-first check and the integration check all run their setup and
  * check commands through here, so the bound, the environment and what a timeout means cannot drift apart.
  */
-export interface CheckFailure { command: string; exit: string; tail: string }
+export interface CheckFailure {
+  command: string; exit: string; tail: string;
+  /**
+   * Tester #391: the failing test names a node:test output gives (failureNames.ts), for a non-zero exit that printed any.
+   * Optional so records written before it still parse; `tail` stays as it always was.
+   */
+  failures?: string[];
+}
 
 const TAIL_CHARS = 2048;
 const tail = (text: string): string => text.length <= TAIL_CHARS ? text : text.slice(text.length - TAIL_CHARS);
@@ -27,7 +35,10 @@ export async function runAsCheck(cwd: string, command: string, timeoutMs: number
 export async function runCheckRecorded(cwd: string, command: string, timeoutMs: number, as: DispatchedAs, signal?: AbortSignal): Promise<CheckFailure> {
   try {
     const answer = await spawnRunChild("sh", ["-lc", command], { cwd, timeoutMs, inheritEnv: true, env: dispatchedEnv(as), ...(signal ? { signal } : {}) });
-    return { command, exit: String(answer.code), tail: tail(`${answer.stdout}\n${answer.stderr}`.trim()) };
+    const output = tail(`${answer.stdout}\n${answer.stderr}`.trim()), exit = String(answer.code);
+    // Tester #391: name the failing tests beside the tail; a runner other than node:test simply gives none.
+    const failures = exit === "0" ? [] : parseFailureSummary(output).failures;
+    return { command, exit, tail: output, ...(failures.length === 0 ? {} : { failures }) };
   } catch (error) {
     if (!(error instanceof ChildTimeout)) throw error;
     return { command, exit: `timeout ${timeoutMs} ms`, tail: "" };

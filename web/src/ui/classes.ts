@@ -108,7 +108,12 @@ export const groupMore = "absolute top-2 right-2 z-[1] ms-0 min-h-control min-w-
 /** Tester #357: a card's selection box, a sibling of the card button (a checkbox cannot sit inside a button), bottom-right. */
 /** #355 review (minor 1): the card and its selection box, positioned together so the box sits on the card itself. */
 export const groupCardAnchor = "relative flex min-w-0 flex-1";
-export const groupSelect = "absolute right-3 bottom-3 z-[1] flex items-center";
+/** Tester #390 (human ruling 2026-11-20, 「选择模式」): the box exists only in select mode; its label is a 44px hit area around the native box. */
+export const groupSelect = "absolute right-3 bottom-3 z-[1] flex min-h-[44px] min-w-[44px] items-center justify-center";
+/** Tester #390: the list's toolbar -- the filter chips and the Select toggle on one wrapping row. */
+export const groupToolbar = "flex flex-wrap items-center gap-2";
+/** Tester #390: the Select toggle sits at the row's end (touch gets 44px). */
+export const groupSelectToggle = "ms-auto pointer-coarse:min-h-[44px]";
 /** Tester #357: the list's selection toolbar -- quiet buttons only (no primary), each row's outcome listed under it. */
 export const groupBulk = "my-2 flex flex-wrap items-center gap-2 [&>button]:ms-0 [&>ul]:basis-full [&>ul]:m-0 [&>ul]:ps-4";
 /** Tester #17: what the group is for leads the card; its id and state follow as the smaller line. */

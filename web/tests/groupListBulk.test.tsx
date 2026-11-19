@@ -3,6 +3,8 @@
  * Tester #355 / #357 (human rulings 2026-11-19: #355 「同意该方案，同意允许互转」; #92 「同意」 to list multi-select with bulk
  * archive/close, no bulk retry, nothing on the Board): the Closed and Archived chips (both out of All), a count on every chip,
  * a selection box beside each card's button, and a toolbar that sends one command per selected group and lists each outcome.
+ * Ruling (2026-11-20, human 「选择模式」, tester #390): the boxes are behind the toolbar's Select toggle; every test that
+ * wants one enters select mode first, and the plain list shows none.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
@@ -32,6 +34,8 @@ const ids = () => [...nav().querySelectorAll(":scope > .group-card-row > .group-
 const chips = () => within(screen.getByRole("group", { name: "Show groups" }));
 const chip = (name: string) => chips().getByRole("button", { name: new RegExp(`^${name} \\(\\d+\\)$`) });
 const toolbar = () => screen.getByRole("group", { name: "Selected groups" });
+/** Ruling (2026-11-20, human 「选择模式」, tester #390): the toolbar's Select toggle is the only way into select mode. */
+const enterSelect = () => fireEvent.click(screen.getByRole("button", { name: "Select" }));
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); try { window.localStorage.clear(); } catch { /* none */ } });
 
@@ -95,17 +99,23 @@ describe("multi-select and the bulk toolbar (#357)", () => {
 
   it("puts each card's selection box beside its button, never inside it, and offers none without a bulk handler", () => {
     render(<Owner groups={GROUPS} answer={() => "succeeded"} calls={[]} />);
+    // Ruling (2026-11-20, human 「选择模式」, tester #390): a plain list has no box at all.
+    expect(screen.queryAllByRole("checkbox")).toEqual([]);
+    enterSelect();
     const card = screen.getByRole("button", { name: /^d1 · done/ });
     expect(card.querySelector("input")).toBeNull();
     expect(box("d1").closest(".group-card-row")).toBe(card.closest(".group-card-row"));
     cleanup();
     render(<GroupList groups={GROUPS} selected={null} onSelect={vi.fn()} now={0} />);
     expect(screen.queryAllByRole("checkbox")).toEqual([]);
+    // Without a bulk handler there is no Select toggle to enter the mode with.
+    expect(screen.queryByRole("button", { name: "Select" })).toBeNull();
   });
 
   it("offers Close only when every selected group is done, and never a retry or pause", () => {
     render(<Owner groups={GROUPS} answer={() => "succeeded"} calls={[]} />);
     expect(screen.queryByRole("group", { name: "Selected groups" })).toBeNull();
+    enterSelect();
     fireEvent.click(box("d1"));
     fireEvent.click(box("d2"));
     expect(within(toolbar()).getByText("2 selected")).toBeTruthy();
@@ -116,7 +126,7 @@ describe("multi-select and the bulk toolbar (#357)", () => {
     expect(close().disabled).toBe(true);
     expect(within(toolbar()).getByText("Close takes done groups only; deselect the others.")).toBeTruthy();
     expect((within(toolbar()).getByRole("button", { name: "Archive" }) as HTMLButtonElement).disabled).toBe(false);
-    expect(within(toolbar()).getAllByRole("button").map((button) => button.textContent)).toEqual(["Archive", "Close", "Clear selection"]);
+    expect(within(toolbar()).getAllByRole("button").map((button) => button.textContent)).toEqual(["Archive", "Close", "Clear selection", "Exit selection"]);
     // DESIGN.md: one primary per view -- the toolbar adds none.
     expect(toolbar().querySelector(".btn-primary")).toBeNull();
   });
@@ -125,6 +135,7 @@ describe("multi-select and the bulk toolbar (#357)", () => {
     const calls: Array<[string, BulkVerb]> = [];
     const refusal: ControlRefusal = { status: 409, code: "archive-run-active", message: "archive-run-active:run-1", commandRevision: 1 };
     render(<Owner groups={GROUPS} calls={calls} answer={(groupId) => groupId === "r1" ? refusal : groupId === "n1" ? "skipped" : "succeeded"} />);
+    enterSelect();
     for (const id of ["n1", "r1", "d1"]) fireEvent.click(box(id));
     fireEvent.click(within(toolbar()).getByRole("button", { name: "Archive" }));
     await waitFor(() => expect(screen.getByTestId("bulk-outcome-d1")).toBeTruthy());
@@ -142,6 +153,7 @@ describe("multi-select and the bulk toolbar (#357)", () => {
   it("closes a selection of done groups through close-group", async () => {
     const calls: Array<[string, BulkVerb]> = [];
     render(<Owner groups={GROUPS} calls={calls} answer={() => "succeeded"} />);
+    enterSelect();
     fireEvent.click(box("d1"));
     fireEvent.click(box("d2"));
     fireEvent.click(within(toolbar()).getByRole("button", { name: "Close" }));
@@ -157,6 +169,7 @@ describe("the bulk toolbar after the #355 review", () => {
   it("anchors each selection box to its card, never to the refusal notice under it", async () => {
     const refusal: ControlRefusal = { status: 409, code: "archive-run-active", message: "archive-run-active:run-1", commandRevision: 1 };
     render(<Owner groups={GROUPS} calls={[]} answer={(groupId) => groupId === "r1" ? refusal : "succeeded"} />);
+    enterSelect();
     fireEvent.click(box("r1"));
     fireEvent.click(within(toolbar()).getByRole("button", { name: "Archive" }));
     await waitFor(() => expect(screen.getByTestId("bulk-outcome-r1")).toBeTruthy());
@@ -173,6 +186,7 @@ describe("the bulk toolbar after the #355 review", () => {
   it("drops the selection and the outcomes when the project scope changes", async () => {
     const onBulkAction = vi.fn(async (): Promise<BulkOutcome> => "succeeded");
     const { rerender } = render(<GroupList groups={GROUPS} selected={null} onSelect={vi.fn()} now={0} onBulkAction={onBulkAction} scope={{ kind: "all" }} />);
+    enterSelect();
     fireEvent.click(box("d1"));
     fireEvent.click(within(toolbar()).getByRole("button", { name: "Archive" }));
     await waitFor(() => expect(screen.getByTestId("bulk-outcome-d1")).toBeTruthy());
@@ -180,12 +194,16 @@ describe("the bulk toolbar after the #355 review", () => {
     rerender(<GroupList groups={GROUPS} selected={null} onSelect={vi.fn()} now={0} onBulkAction={onBulkAction} scope={{ kind: "project", repoId: "orca" }} />);
     // mutation: drop the scope effect -> d2 stays selected and d1's outcome stays listed, red here
     expect(screen.queryByRole("group", { name: "Selected groups" })).toBeNull();
+    // Ruling (2026-11-20, human 「选择模式」, tester #390): a scope change leaves select mode, so the list comes back plain.
+    expect(screen.queryAllByRole("checkbox")).toEqual([]);
+    enterSelect();
     expect((box("d2") as HTMLInputElement).checked).toBe(false);
   });
 
   // Minor 3: archive has nothing to do when every selected group is archived already; a closed one converts.
   it("offers Archive only while some selected group is not archived already", () => {
     render(<Owner groups={GROUPS} answer={() => "succeeded"} calls={[]} />);
+    enterSelect();
     fireEvent.click(chip("Archived"));
     fireEvent.click(box("x1"));
     fireEvent.click(box("x2"));
@@ -199,6 +217,7 @@ describe("the bulk toolbar after the #355 review", () => {
   // Minor 4: a command sent with no answer may have happened; it is not said as refused.
   it("labels an outcome with no answer as unknown, not as not archived", async () => {
     render(<Owner groups={GROUPS} calls={[]} answer={() => "uncertain"} />);
+    enterSelect();
     fireEvent.click(box("d1"));
     fireEvent.click(within(toolbar()).getByRole("button", { name: "Archive" }));
     await waitFor(() => expect(screen.getByTestId("bulk-outcome-d1").textContent).toBe("d1: no answer -- it may or may not be archived; check the group"));

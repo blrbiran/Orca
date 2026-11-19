@@ -34,7 +34,18 @@ export interface FullSuiteRecord {
    * Spec 2026-11-16: when the suite was red on the tip, the same command run at the group's base. `exits` red
    * twice there means the failure pre-dated the group (`passed-relative`); green there means a regression.
    */
-  baseline?: { tip: string; exits: string[]; tail?: string };
+  baseline?: { tip: string; exits: string[]; tail?: string; tests?: number | null };
+  /**
+   * Tester #387 (2026-11-20): what the suite itself said it ran -- node:test's `# tests N` from the last run's output
+   * (null when the output carried none). It is the evidence that separates a full run (552) from a checkout that
+   * discovered only some files (79); the exits alone cannot.
+   */
+  tests?: number | null;
+  /**
+   * Tester #383 (2026-11-20): how many task runs in this group had already reported this same command red before the
+   * acceptance ran. Above zero, the suite ran twice even when the first run was green, and the warning says so.
+   */
+  reported?: number;
 }
 
 const SATISFIED: ReadonlySet<GroupAcceptanceResult> = new Set(["passed", "passed-relative", "not-needed", "not-run", "waived"]);
@@ -109,6 +120,8 @@ export function fullSuiteWarning(record: GroupAcceptance | null): string | null 
   if (suite === undefined) return record.result === "passed" || record.result === "not-needed" ? "full-suite-not-set" : null;
   if (suite.command === null) return "full-suite-not-set";
   if (suite.baseline !== undefined) return `full-suite-pre-existing:${suite.command}`;
+  // Tester #383 (2026-11-20): task runs had already reported this suite red; a green here is one green, not a stable suite.
+  if ((suite.reported ?? 0) > 0) return `full-suite-reported-flaky:${suite.command}`;
   return suite.flaky ? `full-suite-flaky:${suite.command}` : null;
 }
 

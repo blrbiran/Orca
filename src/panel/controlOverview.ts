@@ -1,7 +1,7 @@
 import type { ControlStore } from "../control/store.js";
 import { flowRoleSql } from "../flow/groups.js";
 import { ControlError } from "../control/errors.js";
-import { readProjectionState } from "../control/projectionJournal.js";
+import { readProjectionChanges, readProjectionState } from "../control/projectionJournal.js";
 import { readGroupIntegration } from "../control/integrationScheme.js";
 import { multiDirOf } from "../control/multiGroup.js";
 import { readMultiLanding } from "../control/multiLandingRecord.js";
@@ -73,6 +73,21 @@ export function withNeedsYou<T extends { groupId: string }>(store: ControlStore,
   return groups.map((group) => {
     const needsYou = groupNeedsYou(store, group.groupId);
     return needsYou === undefined ? group : { ...group, needsYou };
+  });
+}
+
+/**
+ * Tester #393(b): the summary's needs-you flags taken from an overview read that already computed them, instead of a
+ * second walk that re-reads every group. A group the overview lists takes its flag; one it could not read (an issue)
+ * keeps no flag, as before; one it deliberately skipped (an archived or closed group) has no problem row.
+ */
+export function withNeedsYouFromOverview<T extends { groupId: string }>(overview: Pick<OverviewV1, "groups" | "issues">, groups: T[]): Array<T & { needsYou?: boolean }> {
+  const needs = new Map(overview.groups.map((group) => [group.groupId, group.needsYou] as const));
+  const unread = new Set(overview.issues.flatMap((issue) => issue.groupId === null ? [] : [issue.groupId]));
+  return groups.map((group) => {
+    const needsYou = needs.get(group.groupId);
+    if (needsYou !== undefined) return { ...group, needsYou };
+    return unread.has(group.groupId) ? group : { ...group, needsYou: false };
   });
 }
 
@@ -207,9 +222,27 @@ function groupSteps(store: ControlStore, source: Source, add: Add) {
     }
 }
 
-/** Synchronous, request-local stored facts only. Navigation never asserts command eligibility. */
-export function readControlOverview(store: ControlStore, epoch: string): OverviewV1 {
-  const changeSeq = readProjectionState(store).changeSeq;
+/**
+ * Tester #393(a): the groups an incremental read has to walk -- null for every visible group (a complete read), or the
+ * changed ids the journal names, minus flow runs' groups (shown by the run page, as in a complete read). Empty means
+ * nothing moved: the caller answers the tiny shape the summary answers for an unchanged since.
+ */
+function overviewGroupIds(store: ControlStore, changes: ReturnType<typeof readProjectionChanges> | null): string[] | null {
+  if (changes === null || changes.resetRequired) return null;
+  const ids = changes.groups.map((group) => group.groupId);
+  if (ids.length === 0) return [];
+  const flow = new Set(store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${flowRoleSql("g")} IS NOT NULL`).all().map((row) => String(row.id)));
+  return ids.filter((groupId) => !flow.has(groupId));
+}
+
+/** Synchronous, request-local stored facts only. Navigation never asserts command eligibility. `sinceChangeSeq`: only
+ * the groups that moved since it, or -- when none did -- the tiny empty shape the summary also answers. */
+export function readControlOverview(store: ControlStore, epoch: string, sinceChangeSeq: number | null = null): OverviewV1 {
+  const state = readProjectionState(store);
+  const changes = sinceChangeSeq === null ? null : readProjectionChanges(store, sinceChangeSeq);
+  const changed = overviewGroupIds(store, changes);
+  const changeSeq = changes === null ? state.changeSeq : changes.changeSeq;
+  if (changed !== null && changed.length === 0) return overviewSchema.parse({ schema: "orca-control-overview-v1", epoch, changeSeq, groups: [], steps: [], issues: [] });
   const groups: OverviewV1["groups"] = [], issues: OverviewV1["issues"] = [];
   const steps = new Map<string, OverviewStepV1>();
   const add: Add = (kind, groupId, repoId, reason, destination, identity, taskId = null, runId = null, ownerRequired = false) => {
@@ -217,7 +250,10 @@ export function readControlOverview(store: ControlStore, epoch: string): Overvie
     steps.set(key, { key, kind, groupId, repoId, taskId, runId, reason, ownerRequired: ownerRequired || (steps.get(key)?.ownerRequired ?? false), destination });
   };
   // Flow engine spec §6.2: a flow run's groups are shown by its run page (Task 16), not here.
-  for (const row of store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${flowRoleSql("g")} IS NULL ORDER BY g.id`).all()) {
+  const rows = changed === null
+    ? store.db.prepare(`SELECT g.id AS id FROM groups g WHERE ${flowRoleSql("g")} IS NULL ORDER BY g.id`).all()
+    : changed.map((id) => ({ id }));
+  for (const row of rows) {
     const groupId = String(row.id);
     let repoId: string | null = null;
     try {

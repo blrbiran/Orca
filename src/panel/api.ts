@@ -40,6 +40,7 @@ import { readReviews } from "./reviewsStore.js";
 import type { ReviewsWriter } from "./reviewsStore.js";
 import { activeReviewers, keyOf, reviewStates } from "./reviewState.js";
 import type { PanelOptions } from "./server.js";
+import { registerStaticRoutes } from "./staticFiles.js";
 import type { StaticFiles } from "./staticFiles.js";
 import type { PanelAuth } from "./auth.js";
 import { authMiddleware, registerAuthRoutes } from "./authRoutes.js";
@@ -390,18 +391,10 @@ export function buildApi(app: Express, deps: ApiDeps): void {
   // (`/../../etc/passwd` -> 404) had nothing to run against, and the injected
   // token could never reach a browser. Task 4 unit-tested the LOADER and the
   // Self-Review recorded §2.2 as covered.
-  app.get(/.*/, (req: Request, res: Response, next: NextFunction) => {
-    if (req.path.startsWith("/api/")) return next();
-    // Exact key only. req.path is never joined to anything, so a traversal has
-    // no path to travel: "/" is the sole rewrite, and it is a fixed string.
-    const name = req.path === "/" ? "index.html" : req.path.slice(1);
-    const asset = deps.statics.get(name);
-    if (asset === undefined) {
-      res.status(404).type("text/plain").send("not found");
-      return;
-    }
-    res.status(200).type(asset.contentType).send(asset.bytes);
-  });
+  // Tester #394: gzip and the exact-key lookup live in `registerStaticRoutes`
+  // (staticFiles.ts), so the serving handler and its compression criteria are
+  // one implementation rather than two that can drift apart.
+  registerStaticRoutes(app, deps.statics);
 
   app.use("/api", authMiddleware(deps.auth));
   // Ruling Q8: after the middleware, so every auth route but POST /api/auth/login gets the login, CSRF and
