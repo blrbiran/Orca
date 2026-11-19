@@ -77,21 +77,23 @@ describe("the execution driver in the panel's assembly (spec §2.1)", () => {
   });
 
   // Working-tree delivery spec §7 (ruling Q4): the staging sweep runs at panel start and finishes before the driver's
-  // first round -- no pass may stage while it sweeps. Measured at the moment `driver.start` is called, not afterwards.
-  it("sweeps every registered repository's working-tree staging before it starts the driver", async () => {
+  // first round -- no pass may stage while it sweeps. That first round is the kick at the end of `recover` (the timer
+  // `startPump` arms comes later), so the moment measured is the kick.
+  // Ruling: rewritten in the #365 review (session 3ba26002) under the human's 「这次批准改写所有必要的判据」 -- the earlier
+  // criterion measured `driver.start`, after `recover`'s kick had already run a round beside the sweep.
+  it("sweeps every registered repository's working-tree staging before the driver's first round (recover's kick)", async () => {
     const runtime = await assembled(true); try {
       const repo = runtime.config.listRepositories()[0]!.path;
       execFileSync("git", ["init", "-q", repo]);
       const staging = join(repo, ".git", "orca", "deliver-g1");
       await mkdir(join(staging, "tree"), { recursive: true });
       await writeFile(join(staging, "index"), "stale");
-      const seenAtStart: boolean[] = [];
-      const start = vi.spyOn(runtime.driver!, "start").mockImplementation(() => { seenAtStart.push(existsSync(staging)); return true; });
-      expect(runtime.startPump(60_000)).toBe(true);
-      await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
-      // Mutations: drop the sweep -> [true]; start the driver beside the sweep instead of after it -> [true]. Both red.
-      expect(seenAtStart).toEqual([false]);
-      expect(start).toHaveBeenCalledWith(60_000);
+      const seenAtKick: boolean[] = [];
+      const kick = vi.spyOn(runtime.driver!, "kick").mockImplementation(() => { seenAtKick.push(existsSync(staging)); });
+      await runtime.recover();
+      // Mutations: drop the sweep -> [true]; sweep without awaiting it before the kick -> [true]. Both red.
+      expect(kick).toHaveBeenCalledTimes(1);
+      expect(seenAtKick).toEqual([false]);
     } finally { await runtime.shutdown(); runtime.close(); }
   });
 

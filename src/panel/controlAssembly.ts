@@ -463,6 +463,15 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
     recover: async () => {
       await recoverControl(store, port, { handlers: wakeHandlers }, { driverOwnsWebRuns: driver !== null });
       await service.recoverAgentUpdates();
+      // Working-tree delivery spec §7 (controller ruling Q4; #365 review): every registered repository's
+      // `<git-dir>/orca/deliver-*` is removed before the driver's first round -- which is this kick, not the timer
+      // `startPump` arms later, so the sweep runs here and is awaited. A repository that fails is logged, never fatal.
+      if (driver !== null) {
+        let paths: string[] = [];
+        try { paths = config.listRepositories().map((repository) => repository.path).filter((path): path is string => typeof path === "string"); }
+        catch (error) { process.stderr.write(`orca-panel: working-tree staging sweep: ${error instanceof Error ? error.message : String(error)}\n`); }
+        await sweepWorkingTreeStaging(paths, (line) => process.stderr.write(`${line}\n`));
+      }
       driver?.kick();
     },
     shutdown() {
@@ -487,15 +496,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
       // stay alive. A panel that has closed its server should exit.
       timer = setInterval(() => { void pump(); }, intervalMs);
       timer.unref();
-      // Working-tree delivery spec §7 (controller ruling Q4): every registered repository's `<git-dir>/orca/deliver-*` is
-      // removed before the driver's first round (no pass is running yet); a repository that fails is logged, never fatal.
-      const started = driver;
-      if (started !== null) {
-        let paths: string[] = [];
-        try { paths = config.listRepositories().map((repository) => repository.path).filter((path): path is string => typeof path === "string"); }
-        catch (error) { process.stderr.write(`orca-panel: working-tree staging sweep: ${error instanceof Error ? error.message : String(error)}\n`); }
-        void sweepWorkingTreeStaging(paths, (line) => process.stderr.write(`${line}\n`)).finally(() => started.start(intervalMs));
-      }
+      driver?.start(intervalMs);
       return true;
     },
     // Controller ruling P10: a shutdown already stopped the driver and awaited it; close does not
