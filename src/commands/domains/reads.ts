@@ -578,7 +578,7 @@ export const READ_ROWS: CommandDef[] = [
         ...(typeof groupId === "string" ? deliveryQuestionLines(groupId, body as KeptSummary, field(body, "delivery") as string | undefined, field(body, "projectDeliveryChosen")) : []),
         ...(typeof groupId === "string" ? keptLines(groupId, body as KeptSummary, field(body, "delivery") as string | undefined) : []),
         // spec §4.6: a working-tree group's record, as the brief carries it (absent for every other delivery).
-        ...(typeof groupId === "string" ? workingTreeLines(groupId, body as KeptSummary, field(body, "integration") as WorkingTreeView | undefined) : []),
+        ...(typeof groupId === "string" ? workingTreeLines(groupId, body as KeptSummary, field(body, "integration") as WorkingTreeView | undefined, field(body, "checkoutPath")) : []),
         // Tester #381: the older estimate instruction group confirm warned about, kept.
         ...groupInstructionLines(field(body, "estimatorInstruction"))].join("\n"); } }),
   read({ domain: "requirement", action: "show", summary: "a requirement's rounds, drafts and document", positionals: [GROUP], paths: (c) => [`groups/${ids(c, "group")}/requirement`],

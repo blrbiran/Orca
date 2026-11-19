@@ -81,6 +81,19 @@ describe("the first-use question on Results (spec §4.2 item 1)", () => {
     await waitFor(() => expect(sent).toEqual([{ kind: "project", scheme: WT, revision: 3 }, { kind: "group", action: groupWorkingTree }]));
   });
 
+  // #365 review (controller ruling Q2): the view carries the registered checkout, and the question names it.
+  it("names the registered checkout when the view carries it, and still sends both commands", async () => {
+    const value = done({ projectDeliveryChosen: false, checkoutPath: "/Users/p/proj" }); value.summary.commandRevision = 7;
+    const { sent } = show(value);
+    // mutation: keep the generic label when checkoutPath is present -> no such button, red
+    fireEvent.click(screen.getByRole("button", { name: "Put them in /Users/p/proj (uncommitted)" }));
+    await waitFor(() => expect(sent).toEqual([{ kind: "project", scheme: WT, revision: 3 }, { kind: "group", action: groupWorkingTree }]));
+    cleanup();
+    await i18n.changeLanguage("zh");
+    show(done({ projectDeliveryChosen: false, checkoutPath: "/Users/p/proj" }));
+    expect(screen.getByRole("button", { name: "放进 /Users/p/proj（不提交）" })).not.toBeNull();
+  });
+
   it("a no-op-command answer to the first still sends the second", async () => {
     const value = done({ projectDeliveryChosen: false }); value.summary.commandRevision = 7;
     const { sent } = show(value, { project: ["no-op-command"] });
@@ -141,6 +154,10 @@ describe("the conclusion card's working-tree row (spec §4.6)", () => {
     cleanup();
     show(done({ integration: record({ lastIntegrated: TIP }) }));
     expect(row()).toBe("Written into your working tree, not committed (tip abcdef012345), including Orca's decision records under .decisions/. Review: git status · the same files: git diff --name-only HEAD...orca/g");
+    cleanup();
+    show(done({ integration: record({ lastIntegrated: TIP }), checkoutPath: "/Users/p/proj" }));
+    // #365 review (Q2): mutation -- ignore checkoutPath in the written row -> red
+    expect(row()).toBe("Written into your working tree at /Users/p/proj, not committed (tip abcdef012345), including Orca's decision records under .decisions/. Review: git -C /Users/p/proj status · the same files: git diff --name-only HEAD...orca/g");
     cleanup();
     show(done({ integration: record({ lastIntegrated: "b".repeat(40) }) }));
     // mutation: drop the lastIntegrated == tip comparison -> an older write reads as written, red

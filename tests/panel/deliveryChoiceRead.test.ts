@@ -13,6 +13,9 @@ const { panelFixture, confirm } = createOverviewFixtures(h);
 describe("projectDeliveryChosen on the brief and the view (spec §4.2)", () => {
   it("is false for a done keep group of a never-chosen project, and absent before done and once a person chose", async () => {
     const { panel } = await panelFixture(); await confirm(panel);
+    // The shared fixture's service has no repository resolver (the panel's assembly always gives one); this read needs it.
+    const checkout = "/registered/checkout";
+    Object.assign(panel.service.deps, { resolveRepository: (repoId: string) => { if (repoId !== "repo") throw new Error(repoId); return checkout; } });
     const reads = async () => ({
       brief: await json(await get(panel, `/api/control/groups/${GROUP}/brief`)) as Record<string, unknown>,
       view: await json(await get(panel, `/api/control/groups/${GROUP}`)) as Record<string, unknown>,
@@ -29,6 +32,11 @@ describe("projectDeliveryChosen on the brief and the view (spec §4.2)", () => {
     // mutations: drop deliveryQuestionView from the brief route, or from readControlGroup -> red here (each separately)
     expect(done.brief.projectDeliveryChosen).toBe(false);
     expect(done.view.projectDeliveryChosen).toBe(false);
+    // #365 review (controller ruling Q2): the registered checkout's path rides with the question, so the Web question and
+    // the CLI can name it. mutation: drop checkoutPathOf from the view route, or from the brief -> red here (each)
+    expect(done.view.checkoutPath).toBe(checkout);
+    expect(done.brief.checkoutPath).toBe(checkout);
+    expect(running.view).not.toHaveProperty("checkoutPath");
 
     // A person stores keep: chosen, so the key is gone from both reads.
     const current = readRepositorySettingsBody(panel.store, "repo") ?? { workspaceMode: "worktree" as const, revision: 0 };
@@ -37,5 +45,7 @@ describe("projectDeliveryChosen on the brief and the view (spec §4.2)", () => {
     // mutation: ignore integrationChosen in deliveryQuestionView -> red here
     expect(chosen.brief).not.toHaveProperty("projectDeliveryChosen");
     expect(chosen.view).not.toHaveProperty("projectDeliveryChosen");
+    expect(chosen.brief).not.toHaveProperty("checkoutPath");
+    expect(chosen.view).not.toHaveProperty("checkoutPath");
   });
 });

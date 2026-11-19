@@ -74,7 +74,7 @@ export function DeliveryChoice(props: {
           <p>{t("control.deliveryChoice.why")}</p>
           {mayChange ? (
             <p className="flex flex-wrap gap-2">
-              <button type="button" disabled={!ready} onClick={() => choose(WORKING_TREE)}>{t("control.deliveryChoice.workingTree")}</button>
+              <button type="button" disabled={!ready} onClick={() => choose(WORKING_TREE)}>{view.checkoutPath === undefined ? t("control.deliveryChoice.workingTree") : t("control.deliveryChoice.workingTreeAt", { path: view.checkoutPath })}</button>
               <button type="button" className="btn-quiet" disabled={!ready} onClick={() => choose({ delivery: "keep" })}>{t("control.deliveryChoice.keep")}</button>
             </p>
           ) : <p role="note">{t("control.deliveryChoice.ownerOnly")}</p>}

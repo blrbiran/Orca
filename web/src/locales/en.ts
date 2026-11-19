@@ -1132,6 +1132,8 @@ export const en = {
       question: "Where should finished files go for this project?",
       why: "This group's files are on its branch, not in your working tree, and nobody has chosen where finished files go for this project yet.",
       workingTree: "Put them in my working tree",
+      // #365 review (controller ruling Q2): the registered checkout, named, for a person with several projects.
+      workingTreeAt: "Put them in {{path}} (uncommitted)",
       keep: "Keep them on the branch",
       others: "Other deliveries (merge into a branch, push, pull request): Project settings.",
       ownerOnly: "Only the panel owner chooses this.",
@@ -1361,6 +1363,7 @@ export const en = {
         pending: "Will be written into your working tree, uncommitted, once the group is accepted.",
         waiting: "Waiting for {{prerequisite}} to be written into your working tree first.",
         written: "Written into your working tree, not committed (tip {{tip}}), including Orca's decision records under .decisions/. Review: git status · the same files: git diff --name-only HEAD...{{branch}}",
+        writtenAt: "Written into your working tree at {{path}}, not committed (tip {{tip}}), including Orca's decision records under .decisions/. Review: git -C {{path}} status · the same files: git diff --name-only HEAD...{{branch}}",
         notYet: "Not written yet; a driver round writes it into your working tree.",
         blocked: "Not written into your working tree: {{reason}}",
       },

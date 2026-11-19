@@ -97,7 +97,8 @@ export function ResultsConclusion(props: ResultsConclusionProps): JSX.Element {
     : record.state === "blocked" && record.reason !== null ? t("control.results.workingTree.blocked", { reason: integrationReasonText(record.reason) })
     : summary.state !== "done" ? t("control.results.workingTree.pending")
     : record.waitingFor !== undefined ? t("control.results.workingTree.waiting", { prerequisite: record.waitingFor })
-    : record.lastIntegrated !== null && (tip === null || record.lastIntegrated === tip) ? t("control.results.workingTree.written", { tip: short(record.lastIntegrated), branch })
+    : record.lastIntegrated !== null && (tip === null || record.lastIntegrated === tip) ? (view.checkoutPath === undefined ? t("control.results.workingTree.written", { tip: short(record.lastIntegrated), branch })
+      : t("control.results.workingTree.writtenAt", { tip: short(record.lastIntegrated), branch, path: view.checkoutPath }))
     : t("control.results.workingTree.notYet");
 
   return (

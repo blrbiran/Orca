@@ -390,7 +390,7 @@ const WORKING_TREE_NEXT: Readonly<Record<string, (groupId: string) => string>> =
   "integration-working-tree-prerequisite": (g) => `deliver that group to the working tree too, take this group's files by hand, or orca group set-integration ${g} --delivery keep`,
   "integration-working-tree-write-failed": () => "fix the cause, then Retry; files already written are kept and skipped",
 };
-export function workingTreeLines(groupId: string, s: KeptSummary | undefined, integration: WorkingTreeView | undefined): string[] {
+export function workingTreeLines(groupId: string, s: KeptSummary | undefined, integration: WorkingTreeView | undefined, checkoutPath?: unknown): string[] {
   if (integration?.scheme?.delivery !== "working-tree") return [];
   const branch = `orca/${groupId}`;
   if (integration.state === "blocked" && typeof integration.reason === "string") {
@@ -398,13 +398,15 @@ export function workingTreeLines(groupId: string, s: KeptSummary | undefined, in
     const next = WORKING_TREE_NEXT[code];
     return [`delivery: working-tree blocked: ${integration.reason}`, ...(next === undefined ? [] : [`  next: ${next(groupId)}; orca group retry-integration ${groupId}`])];
   }
-  if (s?.state !== "done") return ["delivery: working-tree -- will be written into your working tree once the group is accepted"];
+  // #365 review (controller ruling Q2): the read names the registered checkout when the panel knows it (spec §4.6 <path>).
+  const into = typeof checkoutPath === "string" ? checkoutPath : "your working tree";
+  if (s?.state !== "done") return [`delivery: working-tree -- will be written into ${into} once the group is accepted`];
   // spec §4.4 step 1: the server names the stacked prerequisite whose own working-tree delivery comes first.
   if (typeof integration.waitingFor === "string") return [`delivery: working-tree -- waiting for ${integration.waitingFor} to be written into your working tree first`];
   const tip = s.acceptance?.tip ?? null;
   if (integration.lastIntegrated != null && (tip === null || integration.lastIntegrated === tip))
-    return [`delivery: working-tree -- written into your working tree (uncommitted, tip ${integration.lastIntegrated.slice(0, 12)}), including Orca's decision records under .decisions/`,
-      "  review: git status", `  the same files: git diff --name-only HEAD...${branch}`];
+    return [`delivery: working-tree -- written into ${into} (uncommitted, tip ${integration.lastIntegrated.slice(0, 12)}), including Orca's decision records under .decisions/`,
+      `  review: git${typeof checkoutPath === "string" ? ` -C ${checkoutPath}` : ""} status`, `  the same files: git diff --name-only HEAD...${branch}`];
   return [`delivery: working-tree -- not written yet; a driver round writes it into your working tree${integration.retryAfter === undefined ? "" : " (backing off)"}`];
 }
 
@@ -598,7 +600,7 @@ export function formatWithUnestimated(body: unknown): string {
       (b as { integration?: { scheme?: { delivery?: string } } } | null)?.integration?.scheme?.delivery ?? "keep", (b as { projectDeliveryChosen?: unknown } | null)?.projectDeliveryChosen) : []),
     ...(typeof groupId === "string" ? keptLines(groupId, b?.summary as KeptSummary | undefined,
       (b as { integration?: { scheme?: { delivery?: string } } } | null)?.integration?.scheme?.delivery ?? "keep") : []),
-    ...(typeof groupId === "string" ? workingTreeLines(groupId, b?.summary as KeptSummary | undefined, (b as { integration?: WorkingTreeView } | null)?.integration) : []),
+    ...(typeof groupId === "string" ? workingTreeLines(groupId, b?.summary as KeptSummary | undefined, (b as { integration?: WorkingTreeView } | null)?.integration, (b as { checkoutPath?: unknown } | null)?.checkoutPath) : []),
     ...(typeof groupId === "string" ? reviewLines(groupId, (b?.summary as { requirementReview?: ReviewView } | undefined)?.requirementReview) : []),
     ...(typeof groupId === "string" ? landingWatchLines(groupId, b?.summary?.landingWatch) : []),
     ...allowanceLines(b?.summary?.allowances),

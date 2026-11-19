@@ -79,6 +79,15 @@ describe("the first-use question in the CLI (spec §4.2 item 3)", () => {
     const written = await cli(["group", "brief", "g-alpha"], (await brief({ delivery: "working-tree", integration: { ...WT, lastIntegrated: TIP } })).dir);
     // mutation: drop workingTreeLines from the brief formatter -> red
     expect(written.stdout.split("\n")).toContain("delivery: working-tree -- written into your working tree (uncommitted, tip aaaaaaaaaaaa), including Orca's decision records under .decisions/");
+      // #365 review (controller ruling Q2): a brief that carries the registered checkout names it (spec §4.6 <path>), in show too.
+    const named = await cli(["group", "brief", "g-alpha"], (await brief({ delivery: "working-tree", integration: { ...WT, lastIntegrated: TIP }, checkoutPath: "/Users/p/proj" })).dir);
+    // mutation: drop checkoutPath from the brief formatter's workingTreeLines call -> "your working tree", red
+    expect(named.stdout.split("\n")).toEqual(expect.arrayContaining([
+      "delivery: working-tree -- written into /Users/p/proj (uncommitted, tip aaaaaaaaaaaa), including Orca's decision records under .decisions/",
+      "  review: git -C /Users/p/proj status"]));
+    // mutation: drop checkoutPath from the show formatter's call -> red
+    expect(formatWithUnestimated(doneKeep({ integration: { ...WT, lastIntegrated: TIP }, checkoutPath: "/Users/p/proj" })).split("\n"))
+      .toContain("delivery: working-tree -- written into /Users/p/proj (uncommitted, tip aaaaaaaaaaaa), including Orca's decision records under .decisions/");
   });
 
   it("group confirm names the question once after its receipt on a never-chosen project, and proceeds", async () => {

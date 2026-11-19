@@ -73,14 +73,27 @@ function deliveryOf(store: ControlStore, groupId: string): string | null {
   try { return readGroupIntegration(JSON.parse(String(row.body)))?.scheme.delivery ?? "keep"; } catch { return null; }
 }
 
+/**
+ * #365 review (controller ruling Q2): the registered checkout's path, beside the first-use question or a working-tree
+ * record -- where the files go -- so the question and the rows name it (a person may have several projects). Absent
+ * everywhere else, and when the path does not resolve, so every other read keeps its bytes.
+ */
+function checkoutPathOf(service: WebControlService | undefined, repoId: unknown, read: { projectDeliveryChosen?: unknown; integration?: unknown }): { checkoutPath?: string } {
+  const delivery = (read.integration as { scheme?: { delivery?: unknown } } | undefined)?.scheme?.delivery;
+  if (service === undefined || typeof repoId !== "string" || (read.projectDeliveryChosen !== false && delivery !== "working-tree")) return {};
+  const path = service.repositoryPathOf(repoId);
+  return path === null ? {} : { checkoutPath: path };
+}
+
 /** The brief's working-tree keys (spec §4.2, §4.6); an unreadable body or record says nothing here (the full view names it). */
-function workingTreeBrief(store: ControlStore, groupId: string, state: string): Record<string, unknown> {
+function workingTreeBrief(store: ControlStore, service: WebControlService | undefined, groupId: string, state: string): Record<string, unknown> {
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   if (row === undefined) return {};
   try {
     const body = JSON.parse(String(row.body)) as unknown;
     const working = readGroupIntegration(body)?.scheme.delivery === "working-tree" ? integrationView(store, groupId, body) : {};
-    return { ...working, ...deliveryQuestionView(store, groupId, body, state) };
+    const read = { ...working, ...deliveryQuestionView(store, groupId, body, state) };
+    return { ...read, ...checkoutPathOf(service, groupRepoIdOf(body as Record<string, unknown>), read) };
   } catch { return {}; }
 }
 
@@ -338,7 +351,7 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       const estimatorInstruction = estimatorInstructionOf(deps.store, groupId, summary.state);
       // Working-tree delivery spec §4.2, §4.6: the first-use question's key, and a working-tree group's record (where its
       // files went, or why not, or which prerequisite it waits for) -- each absent otherwise, so other briefs keep their bytes.
-      const workingTree = workingTreeBrief(deps.store, groupId, summary.state);
+      const workingTree = workingTreeBrief(deps.store, deps.service, groupId, summary.state);
       res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }), ...(warnings.length === 0 ? {} : { warnings }),
         ...(costOutliers === null ? {} : { costOutliers }), ...(unreadableRuns.length === 0 ? {} : { unreadableRuns }), ...(knownRed.length === 0 ? {} : { knownRedAtBase: knownRed }),
         ...(delivery === null ? {} : { delivery }), ...(estimatorInstruction === null ? {} : { estimatorInstruction }), ...workingTree }); }
@@ -364,7 +377,7 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
 
   app.get("/api/control/groups/:groupId", (req, res) => {
     const groupId = String(req.params.groupId);
-    try { res.json(readControlGroup(deps.store, deps.epoch, groupId)); }
+    try { const view = readControlGroup(deps.store, deps.epoch, groupId); res.json({ ...view, ...checkoutPathOf(deps.service, view.plan.repoId, view) }); }
     catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") {
         sendControlError(res, 404, error.code, "No control group was found.");

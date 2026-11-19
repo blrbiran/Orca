@@ -2512,6 +2512,8 @@ export const groupViewSchema = z
     integration: groupIntegrationViewSchema.optional(),
     // Working-tree delivery spec §4.2, §5: present (false) only where the first-use question is asked; absent reads as chosen.
     projectDeliveryChosen: z.literal(false).optional(),
+    // #365 review (controller ruling Q2): the registered checkout's path, beside the question or a working-tree record.
+    checkoutPath: z.string().min(1).optional(),
     // Issue-fixes spec §5.2 Reads: the group's newest 50 activity rows, newest first. Optional on the wire so older
     // fixtures still parse; the server always gives it.
     activity: z.array(activityEntrySchema).optional(),

@@ -639,6 +639,8 @@ export type GroupViewV1 = {
   integration?: GroupIntegrationViewV1;
   /** Working-tree delivery spec §4.2: false only where the first-use question is asked; absent reads as chosen. */
   projectDeliveryChosen?: false;
+  /** #365 review (controller ruling Q2): the registered checkout's path, beside the question or a working-tree record. */
+  checkoutPath?: string;
   /** Issue-fixes spec §5.2: the group's newest 50 activity rows, newest first. Optional so literal fixtures need no edit. */
   activity?: ActivityEntryV1[];
   /** Tester round 2 §7.3: whether Orca confirms this group on its own; absent reads as not eligible (an older server). */
