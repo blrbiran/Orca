@@ -122,3 +122,15 @@ The CLI flag is `--text`, not `--feedback` (controller ruling, Rule 11): the sib
 (`requirement-draft-feedback`'s `{ draftNo, feedback }`) names it. So §2's command reads
 `orca requirement resplit <group> --text "<what was wrong with the split>" [--group <new>]`, and §6's `next` line
 `orca requirement resplit <group> --text "<what was wrong>"`.
+
+## Correction 2 (same review; the text above is kept as written)
+
+§3 gains a refusal. Group edges (`group_edges`, kanban spec §3.3) name groups, not requirements, and the re-split
+archives the old group: a group that waits for it would wait forever (an archived group that is not done is never done;
+`add-group-dependency` refuses exactly that edge, `group-edge-prerequisite-archived`), and the new group would not wait
+for the old group's prerequisites. So an old group with any edge, either way, is refused
+`requirement-resplit-group-edges` (409, detail `prerequisites:<ids>` and/or `dependents:<ids>`, `;`-joined), changing
+nothing. The CLI's `next` lines remove each edge, re-split with `--group <new>`, and add each edge on the new group; the
+hint says to pause a confirmed dependent first, since removing its edge lets it start. Edges are not re-pointed inside the
+command: a re-pointed edge would skip add-group-dependency's own checks (stack ambiguity is computed against the new
+group's delivery, which a clarifying group does not have yet).

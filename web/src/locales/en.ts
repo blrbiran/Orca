@@ -2903,6 +2903,7 @@ export const enErrors: Record<string, string> = {
   "no-op-command": "This command would change nothing.",
   "requirement-already-accepted": "A split draft of this requirement was accepted, so its rounds and drafts no longer change. To split it again before confirm, re-split it as a new group with what was wrong (orca requirement resplit): the clarification is copied and this group is archived.",
   "requirement-not-accepted": "This requirement's split is not accepted yet, so it is not re-split as a new group; send feedback on the draft under review instead.",
+  "requirement-resplit-group-edges": "This group has group dependencies ({{detail}}). Re-splitting archives it, so a group waiting for it would wait forever and the new group would not wait for its prerequisites: remove those dependencies, re-split, then add them on the new group.",
   "requirement-limit-too-low": "This limit cannot pay for even one clarification call. Raise each dimension named here to at least the value shown (for example tokens:1000000), or leave the limit empty.",
   "flow-dir-unregistered": "A flow runs only on the folder of a registered folder project: add the folder to the projects file with kind \"dir\", then start the flow there.",
   "flow-child-managed": "This group is a step of a flow run, settled by the run itself: retry the step from the run's page, not the group.",

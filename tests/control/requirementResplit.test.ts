@@ -166,6 +166,30 @@ describe("requirement-resplit refuses, changing nothing (#379)", () => {
     } finally { await x.dispose(); }
   });
 
+  // #379 review (I1): a re-split archives the old group, and group edges name groups, not requirements. A dependent would
+  // wait for the archived group forever (it is never done: add-group-dependency refuses exactly that edge,
+  // group-edge-prerequisite-archived), and the new group would not wait for the old group's prerequisites. Refused by
+  // name, changing nothing; the CLI names removing the edges, re-splitting, and adding them on the new group.
+  const otherGroup = (x: Harness, id: string) => x.store.db.prepare("INSERT INTO groups(id,revision,graph_version,projection_seq,body) VALUES (?,0,1,0,?)")
+    .run(id, JSON.stringify({ groupId: id, status: "draft" }));
+  const edge = (x: Harness, from: string, to: string) => x.store.db.prepare("INSERT INTO group_edges(from_group,to_group,body) VALUES (?,?,'{}')").run(from, to);
+  it.each([
+    ["another group waits for it", (x: Harness) => { otherGroup(x, "d"); edge(x, "r", "d"); }, "requirement-resplit-group-edges:dependents:d"],
+    ["it waits for another group", (x: Harness) => { otherGroup(x, "p"); edge(x, "p", "r"); }, "requirement-resplit-group-edges:prerequisites:p"],
+    ["both", (x: Harness) => { otherGroup(x, "d"); otherGroup(x, "p"); edge(x, "r", "d"); edge(x, "p", "r"); }, "requirement-resplit-group-edges:prerequisites:p;dependents:d"],
+  ])("an old group with group dependencies (%s): requirement-resplit-group-edges", async (_name, arrange, message) => {
+    const x = await accepted();
+    try {
+      arrange(x);
+      const edges = x.store.db.prepare("SELECT from_group,to_group FROM group_edges ORDER BY rowid").all();
+      const before = { drafts: readDrafts(x.store, "r"), body: bodyOf(x, "r") };
+      // mutation: drop the edge refusal -> resplit succeeds (r archived, r2 created), red
+      expect(await resplit(x)).toMatchObject({ error: { code: "requirement-resplit-group-edges", message } });
+      unchanged(x, before);
+      expect(x.store.db.prepare("SELECT from_group,to_group FROM group_edges ORDER BY rowid").all()).toEqual(edges);
+    } finally { await x.dispose(); }
+  });
+
   it("a new group id already taken: group-already-exists", async () => {
     const x = await accepted();
     try {

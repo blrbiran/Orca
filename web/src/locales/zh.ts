@@ -2779,6 +2779,7 @@ export const zhErrors: Record<string, string> = {
   "no-op-command": "这条命令不会改变任何东西。",
   "requirement-already-accepted": "这条需求的拆分草稿已被接受，它的各轮与草稿不再改变。要在确认前重新拆分：带上哪里不对，把它重新拆分成新的任务组（orca requirement resplit）；澄清结果会被复制，这个组会被归档。",
   "requirement-not-accepted": "这条需求的拆分还没被接受，所以不能重新拆分成新组；请对正在审阅的草稿提反馈。",
+  "requirement-resplit-group-edges": "这个组有组间依赖（{{detail}}）。重新拆分会归档它，等它的组会永远等下去，新组也不会等它的前置组：先移除这些依赖，再重新拆分，然后在新组上加回去。",
   "requirement-limit-too-low": "这个上限连一次澄清调用都付不起。请把这里列出的每一项提高到所示的最小值（例如 tokens:1000000），或者留空不设上限。",
   "flow-dir-unregistered": "流程只能在已登记的文件夹项目上运行：先把这个文件夹以 kind \"dir\" 加进项目文件，再在那里启动流程。",
   "flow-child-managed": "这个任务组是某次流程运行里的一步，由流程自己收尾：请在流程运行页重试这一步，而不是重试这个任务组。",

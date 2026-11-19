@@ -34,6 +34,11 @@ export function prerequisitesOf(store: ControlStore, groupId: string): string[] 
   return store.db.prepare("SELECT from_group FROM group_edges WHERE to_group=? ORDER BY rowid").all(groupId).map((row) => String(row.from_group));
 }
 
+/** #379 review (I1): the groups that wait for this one, in the order their edges were added. */
+export function dependentsOf(store: ControlStore, groupId: string): string[] {
+  return store.db.prepare("SELECT to_group FROM group_edges WHERE from_group=? ORDER BY rowid").all(groupId).map((row) => String(row.to_group));
+}
+
 function groupBody(store: ControlStore, groupId: string): Record<string, unknown> | null {
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   return row === undefined ? null : JSON.parse(String(row.body)) as Record<string, unknown>;

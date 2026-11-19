@@ -179,6 +179,13 @@ const unarchiveFormat = (row: CommandDef): CommandDef => ({ ...row, format: (bod
     ? `${result.kind} ${String(result.groupId)}; paused so it does not run on its own -- let it run with: orca group resume ${String(result.groupId)}` : row.format(body);
 } });
 
+/** #379 review (I1): the edges a re-split was refused for (requirement-resplit-group-edges), null for another refusal. */
+function resplitEdgesOf(error: { code: string; message: string }): { prerequisites: string[]; dependents: string[] } | null {
+  if (error.code !== "requirement-resplit-group-edges") return null;
+  const parts = new Map(error.message.slice(`${error.code}:`.length).split(";").map((part) => [part.slice(0, part.indexOf(":")), part.slice(part.indexOf(":") + 1)] as const));
+  const ids = (role: string) => parts.get(role)?.split(",").filter((id) => id.length > 0) ?? [];
+  return { prerequisites: ids("prerequisites"), dependents: ids("dependents") };
+}
 /** Tester #379: a re-split names the new group and that this one is archived. */
 const resplitFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) => {
   const result = (body as { result?: { kind?: unknown; groupId?: unknown; newGroupId?: unknown; draftNo?: unknown } } | null)?.result;
@@ -472,10 +479,22 @@ export const WORK_ROWS: CommandDef[] = [
     hint: async (error, c) => {
       const status = error.code === "proposal-confirmed" ? /^proposal-confirmed:resplit:(.+)$/.exec(error.message)?.[1] : undefined;
       if (status !== undefined) return `${c === undefined ? "the group" : group(c)} is confirmed (${status}), so it is not re-split: it may start at any time. To start over, archive it and open a new requirement (the next lines)`;
+      const edges = resplitEdgesOf(error);
+      if (edges !== null) {
+        const named = [edges.prerequisites.length === 0 ? null : `it waits for ${edges.prerequisites.join(", ")}`, edges.dependents.length === 0 ? null : `${edges.dependents.join(", ")} wait${edges.dependents.length === 1 ? "s" : ""} for it`].filter((part) => part !== null).join("; ");
+        return `${c === undefined ? "the group" : group(c)} has group dependencies (${named}): a re-split archives it, so a group waiting for it would wait forever and the new group would not wait for its prerequisites. Remove them, re-split, and add them on the new group (the next lines); pause a confirmed dependent first (orca group pause <group>) so it does not start in between`;
+      }
       return error.code === "requirement-not-accepted" ? "the split is not accepted yet: a draft under review takes orca requirement feedback <group> --text \"...\"" : undefined;
     },
-    next: async (error, c) => error.code === "proposal-confirmed" && error.message.startsWith("proposal-confirmed:resplit:")
-      ? [`orca group archive ${group(c)}`, "orca requirement open --idea \"<the requirement, changed>\""] : undefined,
+    next: async (error, c) => {
+      if (error.code === "proposal-confirmed" && error.message.startsWith("proposal-confirmed:resplit:")) return [`orca group archive ${group(c)}`, "orca requirement open --idea \"<the requirement, changed>\""];
+      const edges = resplitEdgesOf(error);
+      if (edges === null) return undefined;
+      const old = group(c);
+      return [...edges.prerequisites.map((id) => `orca group undepend ${old} --on ${id}`), ...edges.dependents.map((id) => `orca group undepend ${id} --on ${old}`),
+        `orca requirement resplit ${old} --text "<what was wrong with the split>" --group <new>`,
+        ...edges.prerequisites.map((id) => `orca group depend <new> --on ${id}`), ...edges.dependents.map((id) => `orca group depend ${id} --on <new>`)];
+    },
     examples: ["orca requirement resplit g-1 --text \"the two modules do not import each other; run them in parallel\""] })),
   // #351 addendum (spec D2): a draft whose split reports it does not meet the requirement as written is accepted only on
   // purpose (the Web's "Accept anyway"); the refusal is the CLI's own, the payload is the same either way.

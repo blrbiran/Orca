@@ -6,6 +6,7 @@ import { sha256Canonical } from "./canonicalJson.js";
 import { applyWebCommand, updateRevision } from "./commandLedger.js";
 import { dirWorkspaceOf } from "./dirGroup.js";
 import { ControlError } from "./errors.js";
+import { dependentsOf, prerequisitesOf } from "./groupEdges.js";
 import { multiDirOf } from "./multiGroup.js";
 import {
   hasRequirementBlock, insertClarifyingGroup, newDraft, queueRequirementCall, readDrafts, readRequirementGroup, readRounds, saveRequirementGroup, writeDraft, writeRound,
@@ -45,6 +46,15 @@ export function applyRequirementResplit(deps: RequirementResplitDeps, command: R
         if (acceptedDraftNo === null) throw new ControlError("requirement-not-accepted", old.status);
         if (old.status !== "draft") throw new ControlError("proposal-confirmed", `resplit:${old.status}`);
         refuseArchive(store, oldId, oldBody);
+        // #379 review (I1): group edges name groups, not requirements. Re-split, a dependent would wait for the archived
+        // group forever (never done; add-group-dependency refuses that very edge, group-edge-prerequisite-archived) and the
+        // new group would not wait for the old one's prerequisites. Refused by name; the person moves the edges (the CLI's
+        // next lines) -- never silently re-pointed here.
+        const prerequisites = prerequisitesOf(store, oldId), dependents = dependentsOf(store, oldId);
+        if (prerequisites.length > 0 || dependents.length > 0) {
+          throw new ControlError("requirement-resplit-group-edges", [prerequisites.length === 0 ? null : `prerequisites:${prerequisites.join(",")}`,
+            dependents.length === 0 ? null : `dependents:${dependents.join(",")}`].filter((part) => part !== null).join(";"));
+        }
         if (store.db.prepare("SELECT id FROM groups WHERE id=?").get(newGroupId)) throw new ControlError("group-already-exists");
         const now = (deps.now ?? (() => new Date()))(), at = now.toISOString();
         // §4: copied verbatim, or regenerated as requirement-open would; the limit is open's default (§4 "The limit").

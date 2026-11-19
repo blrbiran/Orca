@@ -408,6 +408,9 @@ export const durableCommandErrorStatuses = {
   "requirement-already-accepted": 422,
   // Tester #379: requirement-resplit on a group whose split is not accepted (still clarifying, or no requirement at all).
   "requirement-not-accepted": 422,
+  // #379 review (I1): requirement-resplit on a group another group waits for, or that waits for another (detail:
+  // `prerequisites:<ids>` and/or `dependents:<ids>`, `;`-joined); the edges name the group the re-split archives.
+  "requirement-resplit-group-edges": 409,
   // Issue #211 (session 9179cdad): requirement-open with a limit below one requirement call's grant; the detail names
   // each short dimension with the minimum it needs (`tokens:1000000`).
   "requirement-limit-too-low": 422,

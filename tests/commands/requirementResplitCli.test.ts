@@ -45,4 +45,21 @@ describe("orca requirement resplit (#379)", () => {
     // mutation: drop the row's hint -> the generic line, red
     expect(out.stderr).toContain("orca: g-alpha is confirmed (ready), so it is not re-split: it may start at any time");
   });
+
+  // #379 review (I1): a group with group dependencies is refused; the next lines move each edge around the re-split, so a
+  // dependent never waits for the archived group and the new group waits for the old one's prerequisites.
+  it("a group with group dependencies: the next lines remove each edge, re-split, and add each on the new group", async () => {
+    const w = await world({}, { [ROUTE]: { status: 409, body: { error: { code: "requirement-resplit-group-edges", message: "requirement-resplit-group-edges:prerequisites:g-pre;dependents:g-d1,g-d2", commandRevision: 6, evidenceIds: [], retryable: false } } } });
+    const json = await cli(["requirement", "resplit", "g-alpha", "--text", "x", "--json"], w.dir);
+    expect(json.code).toBe(2);
+    // mutation: drop the edge lines from the row's next -> undefined, red
+    expect((json.json().body as { next?: string[] }).next).toEqual([
+      "orca group undepend g-alpha --on g-pre", "orca group undepend g-d1 --on g-alpha", "orca group undepend g-d2 --on g-alpha",
+      "orca requirement resplit g-alpha --text \"<what was wrong with the split>\" --group <new>",
+      "orca group depend <new> --on g-pre", "orca group depend g-d1 --on <new>", "orca group depend g-d2 --on <new>",
+    ]);
+    const out = await cli(["requirement", "resplit", "g-alpha", "--text", "x"], w.dir);
+    // mutation: drop the edge hint -> the generic line, red
+    expect(out.stderr).toContain("orca: g-alpha has group dependencies (it waits for g-pre; g-d1, g-d2 wait for it): a re-split archives it");
+  });
 });
