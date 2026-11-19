@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -29,7 +29,8 @@ function target(files = 50) {
   git(repo, "reflog", "expire", "--expire=now", "--all");
   return { root, repo, base, attempt };
 }
-const state = (repo: string) => ({ refs: git(repo, "for-each-ref", "--format=%(refname) %(objectname)"), objects: git(repo, "count-objects", "-v") });
+// P2 review: FETCH_HEAD counts too -- a fetch with no destination writes nothing else, and its objects may already be there.
+const state = (repo: string) => ({ refs: git(repo, "for-each-ref", "--format=%(refname) %(objectname)"), objects: git(repo, "count-objects", "-v"), fetchHead: existsSync(join(repo, ".git", "FETCH_HEAD")) });
 
 describe("snapshot v2 (§7, P2-5)", () => {
   it("captures one range bundle base..pin and verifies at both levels without writing the target", async () => {
@@ -46,6 +47,8 @@ describe("snapshot v2 (§7, P2-5)", () => {
     expect(readdirSync(join(h.store.stateDir, "staging")).filter((name) => name.endsWith(".bundle"))).toEqual([]);
     const before = state(t.repo);
     await expect(verifySnapshotInRepository(h.store, ref, () => t.repo)).resolves.toMatchObject({ attempt: t.attempt });
+    // Mutation: fetch the bundle into the target while it holds the attempt -> FETCH_HEAD appears, red.
+    expect(state(t.repo)).toEqual(before);
     // With the pin deleted and the objects pruned, the attempt is read through a temporary alternates repository.
     git(t.repo, "update-ref", "-d", "refs/orca/runs/run-1");
     git(t.repo, "gc", "-q", "--prune=now");
@@ -54,7 +57,9 @@ describe("snapshot v2 (§7, P2-5)", () => {
     await expect(verifySnapshotInRepository(h.store, ref, () => t.repo)).resolves.toMatchObject({ attempt: t.attempt });
     // Mutation: fetch the bundle into the target instead of the alternates repository -> objects grow, red.
     expect(state(t.repo)).toEqual(pruned);
-    expect(before.refs).toContain("refs/orca/runs/run-1");
+    // Ruling (P2 review; human approval 「同意这样大改，并且同意改所有必要的判据」): `expect(before.refs).toContain(...)` stood
+    // here. It read back the pin this test wrote before any verification, so it could never be red (Rule 9); the state
+    // is now compared after the in-target verification above.
     expect(readdirSync(join(h.store.stateDir, "staging"))).toEqual([]);
   });
 
