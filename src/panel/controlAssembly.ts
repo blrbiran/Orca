@@ -19,6 +19,7 @@ import { controlWorkspaceRoots } from "../control/workspace.js";
 import { createWebWakeHandlers } from "../control/webDispatch.js";
 import { resolveAstGrepBin } from "../control/requirementOverview.js";
 import { createExecutionProfileRouter, resolveProfile, type ExecutionProfileRouter, type FrozenProfile } from "../control/profiles.js";
+import { carryProfileBindings } from "../control/profileCarryOver.js";
 import { openControlStore, type ControlStore } from "../control/store.js";
 import { recordSoftLoopSince } from "../control/softLoopSince.js";
 import { stagingSweepLine } from "../control/stagingSweep.js";
@@ -199,7 +200,6 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   const chosen = choosePort(control, env, () => dispatchedPersonDir);
   const port = input.wrapPort ? input.wrapPort(chosen) : chosen;
   const profiles = loadProfiles(control.profilePaths, port);
-  const router = createExecutionProfileRouter(profiles);
 
   // Created with explicit modes rather than inherited from the umask, and only underneath the
   // relocated root, so a criterion that sets ORCA_CONTROL_DIR cannot reach a person's real ~/.orca.
@@ -220,6 +220,11 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
   if (swept !== null) process.stderr.write(swept);
   // Spec 2026-11-06 soft-mode loop run settlement §3.6 (Q1): the first start of this version marks the cutoff, once.
   recordSoftLoopSince(store, Date.now());
+  // #381 (session 3ba26002, human ruling 6): bindings frozen before the binding hash keep resolving through an alias of
+  // each loaded file's legacy hash, recorded after one backup of the database; a changed secret is said here, once.
+  const carried = carryProfileBindings(store, profiles);
+  for (const note of carried.notes) process.stderr.write(`${note}\n`);
+  const router = createExecutionProfileRouter(profiles, { aliases: carried.aliases });
   // The store canonicalises its own directory; its siblings are built from that rather than from
   // the spelling we were given, because /tmp is a symlink on this platform and the trusted config
   // refuses a path with a symlink in it.
