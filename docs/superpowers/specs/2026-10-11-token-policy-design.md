@@ -79,3 +79,16 @@ Confirmed ready legacy finite tasks participate with their full current fixed wo
 Actual work-token proof depends on the funded grant and is rechecked after awaited probes inside fresh-time claim transaction. Mechanical handoff has no modeltoken request; finite model-assisted handoff needs its handoff proof. General strict-proof-unimplemented driver guard remains; this round does not establish strict/hard execution.
 
 A proved before-provider restartable stop releases or transfers the exact optional funded token reservation once, preserves future non-token preallocation, unknown holds and predecessor readiness, and leaves historical fixed-grant semantics unchanged. Client task ceiling editing uses authoritative per-task accounting mode: optional authored ceiling changes do not debit draft tokens, while legacy and non-token reserve checks remain.
+
+## Correction 1 — #389: the operator's `set-limit` installs a finite limit beside an active unbounded run (2026-11-20)
+
+Ruling: human approval of #389 on 2026-11-20 (Orca tester batch 3, Task 4). This is appended; the sections above are kept verbatim.
+
+§2 ("Setting finite group/cap limits while an affected truly unbounded run is active refuses `active-unbounded-budget-conflict`...") and §6.3 ("Funded allowances separately represent actual null work authority so active-unbounded cap/limit edits refuse even if numeric reserved tokens is 0") no longer hold for the operator's `orca group set-limit`, which is `WebControlService.setLimit` in `src/control/webService.ts`. It now installs the finite limit beside the active unbounded run: the run keeps its unbounded grant and may overspend until it ends (the repository's accepted one-turn overshoot), every later claim is bounded by the new limit, and `close-run` first is not required.
+
+What still holds:
+
+- The spend-cap path (`set-spend-cap`, `src/control/spendCommands.ts`) and the agent group-cap path (`orca group cap` / `src/control/commands.ts` `setGroupLimit`) still refuse `active-unbounded-budget-conflict`, with the message naming the run, `orca group close-run`, `orca run abandon`, and the retry. A finite spend cap or agent group cap cannot bind a provider grant that is already unbounded.
+- A limit decrease below used + committed still refuses with the existing conservation semantics (`group-budget-unavailable` from the residual check, rolled back), and a top-up is admitted.
+
+Evidence: `tests/control/autoConfirmUnlimited.test.ts` (the #389 criterion: install beside the active run, the run stays active, a decrease below used + committed refuses, a top-up works, the next claim's finite live ceiling does not exceed the new limit), `tests/control/tokenPolicyStop.test.ts` and `tests/control/liveCeilingLedger.test.ts` (set-limit installs beside an active unbounded run), and `tests/control/spendcap-unbounded.test.ts` (the remaining agent-path refusal).

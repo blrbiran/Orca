@@ -2709,7 +2709,7 @@ export const enErrors: Record<string, string> = {
   "continuation-budget-unavailable": "There is not enough budget for the continuation.",
   "continuation-identity-conflict": "The continuation's identity conflicts with the recorded one.",
   "continuation-predecessor-unrecoverable": "The previous run cannot be recovered, so it cannot be continued.",
-  "active-unbounded-budget-conflict": "Stop and reconcile the active unlimited run before setting a finite limit.",
+  "active-unbounded-budget-conflict": "Stop and reconcile the active unlimited run before setting a spend cap.",
   "control-token-policy-unsupported": "This ccloop installation does not support unlimited token policies.",
   "control-saved-result-unsupported": "This ccloop installation does not support saved-result verification.",
   "saved-result-source-stale": "The saved result no longer matches this task's current authority. Refresh the task before retrying.",

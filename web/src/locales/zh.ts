@@ -2580,7 +2580,7 @@ export const zhErrors: Record<string, string> = {
   "continuation-budget-unavailable": "续跑所需的预算不够。",
   "continuation-identity-conflict": "续跑身份冲突。",
   "continuation-predecessor-unrecoverable": "前一个运行无法恢复，不能续跑。",
-  "active-unbounded-budget-conflict": "设置有限上限前，请停止并结算正在进行的不限额运行。",
+  "active-unbounded-budget-conflict": "设置花费上限前，请停止并结算正在进行的不限额运行。",
   "control-token-policy-unsupported": "当前 ccloop 安装不支持不限 token 的策略。",
   "control-saved-result-unsupported": "当前 ccloop 安装不支持验证已保存成果。",
   "saved-result-source-stale": "已保存成果与任务当前的授权状态不再一致，请刷新任务后重试。",
