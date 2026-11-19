@@ -14,7 +14,7 @@ import { acceptanceOf, acceptanceSatisfied, deliveredAcceptanceOf, deliveredAcce
 import { gitOk, isAncestor, refTip } from "./integrationGit.js";
 import { readGroupIntegration } from "./integrationScheme.js";
 import { appendConfirmedTaskInTransaction } from "./groupTaskAppend.js";
-import { readArchivedContract, readArchivedPlan } from "./queries.js";
+import { readArchivedContract, readArchivedPlan, readBudgetProposal } from "./queries.js";
 import { boundedGroupGrant, claimGroupSingleCallInTransaction, completeGroupSingleCallInTransaction, interruptGroupSingleCall, readGroupCallContract } from "./groupSingleCall.js";
 import { saveRun } from "./budget.js";
 import { closeSingleCall } from "./singleCallLedger.js";
@@ -765,10 +765,15 @@ export function fixTaskAllowlist(taskAllowlists: readonly string[][], targetPath
 /** Tester #343 (spec S5, agent's call for review: the number): an automatic fix task's token ceiling. */
 export const AUTO_FIX_USED_MULTIPLE = 2;
 export const AUTO_FIX_MIN_TOKENS = 1_000_000;
-/** The ceiling: twice the tokens the source task's runs used, at least AUTO_FIX_MIN_TOKENS, never above the source's own grant. */
-export function autoFixTokenCeiling(used: number, sourceGrantTokens: number | null): number {
+/**
+ * The ceiling: twice the tokens the source task's runs used, at least AUTO_FIX_MIN_TOKENS, never above the source's own grant.
+ * Tester #377 (stuck-runs spec Correction of 2026-11-19): nor above `groupLeftTokens`, what the group can still fund for the
+ * fix's work (null: no token limit) -- so the floor holds only when the group can pay it.
+ */
+export function autoFixTokenCeiling(used: number, sourceGrantTokens: number | null, groupLeftTokens: number | null = null): number {
   const ceiling = Math.max(AUTO_FIX_USED_MULTIPLE * used, AUTO_FIX_MIN_TOKENS);
-  return sourceGrantTokens === null ? ceiling : Math.min(sourceGrantTokens, ceiling);
+  const bounded = sourceGrantTokens === null ? ceiling : Math.min(sourceGrantTokens, ceiling);
+  return groupLeftTokens === null ? bounded : Math.min(groupLeftTokens, bounded);
 }
 
 /**
@@ -786,7 +791,12 @@ export function openFixTask(store: ControlStore, groupId: string, round: ReviewR
   const sourceId = fixSourceTaskId(store, groupId, scope);
   const taskId = fixTaskIdOf(store, groupId, round.roundNo);
   const grant = (readWork(store, groupId, sourceId) as unknown as { grant: { work: BudgetAmount; handoff: Amount } }).grant;
-  const work: BudgetAmount = auto ? { ...grant.work, tokens: autoFixTokenCeiling(taskWorkTokens(store, groupId, sourceId), grant.work.tokens) } : grant.work;
+  // Tester #377: what the group's unallocated reserve can fund for the work once the handoff is reserved beside it -- the
+  // two allocations appendConfirmedTaskInTransaction checks together. Nothing left: unfunded, as that check would say.
+  const reserve = readBudgetProposal(store, groupId).explicitUnallocatedReserve.tokens;
+  const groupLeft = reserve === null ? null : reserve - grant.handoff.tokens;
+  if (auto && groupLeft !== null && groupLeft <= 0) return { refused: "unfunded", detail: "group-budget-unavailable:tokens" };
+  const work: BudgetAmount = auto ? { ...grant.work, tokens: autoFixTokenCeiling(taskWorkTokens(store, groupId, sourceId), grant.work.tokens, groupLeft) } : grant.work;
   store.db.exec("SAVEPOINT review_fix");
   try {
     appendConfirmedTaskInTransaction(store, groupId, { taskId, contract: fixTaskContract(store, groupId, scope, criteria, taskId, sourceId, goal, paths), agentFrom: sourceId,
