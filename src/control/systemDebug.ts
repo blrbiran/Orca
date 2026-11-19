@@ -456,7 +456,10 @@ export function ladderLevelOneCommandId(taskId: string): string { return `orca-a
  */
 // Tester follow-up J (#299): `model-unavailable` (ccloop 9c83b38: the provider answered 404 for the frozen model) would fail
 // the same way on the same model; failover ruling D2 keeps a person's or plan's agent, so the person chooses another.
-export const LADDER_EXEMPT_CAUSES: ReadonlySet<string> = new Set(["auth", "quota", "executable-missing", "tool-rule-violated", "setup-failed", MODEL_UNAVAILABLE_CAUSE]);
+// Tester #369 residual (human approval 2026-11-20 of the research recommendation): ccloop ends a non-retryable provider 4xx
+// (`provider-error`) terminally, and the panel's copy says Orca does not retry it; a debug run would meet the same refusal
+// at the same cost, so the task stays with the person.
+export const LADDER_EXEMPT_CAUSES: ReadonlySet<string> = new Set(["auth", "quota", "executable-missing", "tool-rule-violated", "setup-failed", "provider-error", MODEL_UNAVAILABLE_CAUSE]);
 /** §5: how long a quota wait holds a failed task before Orca retries it (re-probe interval; no reset time is reported today). */
 export const QUOTA_REPROBE_MS = 30 * 60_000;
 

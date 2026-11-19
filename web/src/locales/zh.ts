@@ -925,7 +925,7 @@ export const zh: Translation<typeof en> = {
         auth: "重新登录 agent（或修好它的 key），再重试这个任务。", quota: "等额度恢复或充值后，再重试这个任务。",
         "rate-limited": "稍后重试；如果一直发生，调低同时运行的组数上限。", "provider-5xx": "稍后重试；是 provider 那边在出错。",
         network: "检查网络或代理后，再重试这个任务。", "context-overflow": "拆分任务或换更大的上下文窗口后重试。",
-        stalled: "重试这个任务；如果再次卡住，去证据里看它当时在做什么。", "executable-missing": "安装 agent 或在 agents 表里改对路径后重试。",
+        stalled: "重试这个任务；如果再次卡住，去证据里看它当时在做什么。ccloop 默认在 10 分钟没有输出或工具事件后停下这次调用；在 `~/.orca/agents.json` 里设 `idleTimeoutMs`（设为 null 即关闭）并重启面板即可修改。", "executable-missing": "安装 agent 或在 agents 表里改对路径后重试。",
         "required-check-failed": "看下方失败检查的输出；组在自动编排下时，Orca 会自动升级处理。",
         "verifier-rejected": "看下方 verifier 给出的原因；组在自动编排下时，Orca 会自动升级处理。",
         "budget-exhausted": "调高任务预算或拆分任务后重试。", "tool-rule-violated": "看下方工具规则报告和证据，改好这一步的 tools 或任务后重试。", "setup-failed": "有一条准备命令没能完成。看它的输出，改命令或改仓库后重试。", "worker-lost": "Orca 会自动重新开始这个任务，不占用它的尝试次数（连续最多三次）。", "provider-error": "Orca 不会自动重试。看详情里的 HTTP 状态和消息，改请求、模型或账号，或换一个 agent 或模型重试任务（task retry --agent）。", "model-unavailable": "Orca 不会自动重试，也不会自己换模型。换一个 agent 或模型重试任务（task retry --agent），或在 agent 偏好、组的 agent 选择里改模型。",

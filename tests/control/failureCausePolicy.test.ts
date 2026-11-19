@@ -55,6 +55,19 @@ describe("the escalation ladder leaves environment causes to the person (§4)", 
       expect(ladderCandidates(w.t.h.store).map((c) => [c.groupId, c.taskId, c.run.runId])).toEqual([["g", "a", w.runId]]);
     } finally { await w.t.h.dispose(); }
   });
+
+  // Tester #369 residual (human approval 2026-11-20 of the research recommendation): ccloop ends a non-retryable provider
+  // 4xx (`provider-error`) terminally, and the panel's copy says Orca does not retry it; a debug run would meet the same
+  // refusal at the same cost. `model-unavailable` (the 404 sibling) stays exempt for the same reason (failover ruling D2).
+  for (const cause of ["provider-error", "model-unavailable"]) {
+    it(`does not escalate a task that failed with ${cause}`, async () => {
+      const w = await world(cause); try {
+        // mutation: provider-error not in LADDER_EXEMPT_CAUSES -> the provider-error case is red here.
+        expect(ladderCandidates(w.t.h.store)).toEqual([]);
+        expect((await w.service.systemDebugPass()).opened).toEqual([]);
+      } finally { await w.t.h.dispose(); }
+    });
+  }
 });
 
 describe("a quota wait retries the task after the re-probe interval (§5)", { timeout: 120_000 }, () => {

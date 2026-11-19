@@ -86,6 +86,23 @@ describe("run failure cause (failure-cause spec §5)", () => {
     expect(renderToStaticMarkup(<RunReason run={failed("tool-rule-violated")} />)).toContain("停止原因：agent 违反了这一步的工具规则。看下方工具规则报告和证据，改好这一步的 tools 或任务后重试。");
   });
 
+  // Tester #369 residual: Ruling (human approval 2026-11-20 of the research recommendation) -- the stalled next step names
+  // the idle limit and the dial, so an operator whose agent went silent knows what to change.
+  it("tells the operator the idle limit and where to change it (#369)", async () => {
+    const html = renderToStaticMarkup(<RunReason run={failed("stalled")} />);
+    // mutation: revert the stalled next step to the old sentence -> red here.
+    expect(html).toContain("10 minutes without output or a tool event by default");
+    expect(html).toContain("idleTimeoutMs");
+    expect(html).toContain("~/.orca/agents.json");
+    expect(html).toContain("null turns that off");
+    expect(html).toContain("restart the panel");
+    await i18n.changeLanguage("zh");
+    const zh = renderToStaticMarkup(<RunReason run={failed("stalled")} />);
+    expect(zh).toContain("10 分钟没有输出或工具事件");
+    expect(zh).toContain("idleTimeoutMs");
+    expect(zh).toContain("重启面板");
+  });
+
   it("setup-failed has its own label and next step in en and zh", async () => {
     const setup = run({ runId: "run-s", state: "blocked", outcome: "failed", stopReason: "Error: setup-failed", failureCause: { cause: "setup-failed", phase: "setup", retries: 0, detail: "npm ci exit=1" } });
     // Ruling: 2026-11-04 session af2ceee1, human 「这次批准改写所有必要的判据」: final-review fix wave -- the label is a
