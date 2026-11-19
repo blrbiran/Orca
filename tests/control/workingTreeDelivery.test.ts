@@ -529,3 +529,78 @@ describe("working-tree delivery guard clauses (spec §4.4 steps 3-6, WT-9)", { t
       { workingTree: { devOf: (path) => (path.endsWith(".git") ? 2 : 1) } });
   });
 });
+
+// #365 review (session 3ba26002): an adversarial review of the delivery found these; each criterion was seen red first.
+describe("working-tree delivery, review findings (#365 review)", { timeout: 60_000 }, () => {
+  it("a path a crashed attempt wrote to its tip, which the moved tip no longer changes, is put back to the tip", async () => {
+    const w = await world(); try {
+      w.land({ "a.txt": "A1\n", "n1.txt": "1\n" });
+      w.finish();
+      // The first rename (a.txt) lands, then the attempt dies: a.txt holds the crashed tip's bytes, n1.txt is not written.
+      await expect(w.pass({ crash: (point) => { if (point === "wt-after-rename") throw new Error("died"); } })).rejects.toThrow("died");
+      expect(text(w, "a.txt")).toBe("A1\n");
+      // The tip moves before the re-entry and puts a.txt back to the group's base: from..tip no longer names a.txt.
+      const second = w.land({ "a.txt": "one\n", "n2.txt": "2\n" });
+      // mutation: drop the crashed tip's own paths from the set -> a.txt stays "A1\n" and the pass settles done, red
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: second, pending: null });
+      expect([text(w, "a.txt"), text(w, "n1.txt"), text(w, "n2.txt")]).toEqual(["one\n", "1\n", "2\n"]);
+    } finally { await w.dispose(); }
+  });
+
+  it("a group archived or paused after the pass read it is not written: the write-ahead re-reads it", async () => {
+    for (const late of [
+      (w: World) => w.writeBody({ ...w.groupBody(), archived: { at: 1, actor: "human" } }),
+      (w: World) => w.writeBody({ ...w.groupBody(), stopped: true }),
+    ]) {
+      const w = await world(); try {
+        w.land({ "n.txt": "n\n" });
+        w.finish();
+        const before = snapshot(w.repo);
+        // The device seam runs after the pass read the group's row and before the write-ahead: the person acts there.
+        const devOf = (path: string): number => { late(w); return statSync(path).dev; };
+        // mutation: record the write-ahead without re-reading the archived / stopped mark -> n.txt is written, red
+        expect(await w.pass({ workingTree: { devOf } })).toBe(false);
+        expect(snapshot(w.repo)).toEqual(before);
+        expect(w.record()).toMatchObject({ state: "idle", lastIntegrated: null, pending: null });
+      } finally { await w.dispose(); }
+    }
+  });
+
+  it("a symlinked <git-dir>/orca is never followed: the delivery blocks by name and the sweep leaves its target", async () => {
+    const w = await world(); try {
+      w.land({ "n.txt": "n\n" });
+      w.finish();
+      const outside = join(w.root, "outside");
+      mkdirSync(join(outside, "deliver-g"), { recursive: true });
+      writeFileSync(join(outside, "deliver-g", "precious"), "p\n");
+      mkdirSync(join(outside, "deliver-x"));
+      writeFileSync(join(outside, "deliver-x", "precious"), "p\n");
+      symlinkSync(outside, join(w.repo, ".git", "orca"));
+      // mutation: stage through <git-dir>/orca without lstat-ing it -> outside/deliver-g is removed, red
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "blocked", reason: "integration-working-tree-write-failed:.git/orca:not-a-directory:written 0" });
+      expect(existsSync(at(w, "n.txt"))).toBe(false);
+      const lines: string[] = [];
+      // mutation: sweep without lstat-ing <git-dir>/orca -> outside/deliver-x is removed, red
+      await sweepWorkingTreeStaging([w.repo], (line) => lines.push(line));
+      expect(readFileSync(join(outside, "deliver-g", "precious"), "utf8")).toBe("p\n");
+      expect(readFileSync(join(outside, "deliver-x", "precious"), "utf8")).toBe("p\n");
+      expect(lines).toEqual([`orca-panel: working-tree staging sweep ${w.repo}: ${join(w.repo, ".git", "orca")} is not a directory`]);
+    } finally { await w.dispose(); }
+  });
+
+  it("a read that fails before the first write (a required clean filter that fails) blocks by name, never a backoff", async () => {
+    const w = await world(); try {
+      g(w.repo, ["config", "filter.bad.clean", "false"]); g(w.repo, ["config", "filter.bad.required", "true"]);
+      writeFileSync(at(w, ".gitattributes"), "a.txt filter=bad\n");
+      w.land({ "a.txt": "two\n" });
+      w.finish();
+      // mutation: leave the step-5/6 reads outside the catch -> the pass backs off (retryAfter set), red
+      expect(await w.pass()).toBe(true);
+      expect(w.record()).toMatchObject({ state: "blocked", retryAfter: null });
+      expect(w.record().reason).toMatch(/^integration-working-tree-write-failed:-:error:written 0$/);
+      expect(text(w, "a.txt")).toBe("one\n");
+    } finally { await w.dispose(); }
+  });
+});

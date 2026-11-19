@@ -222,7 +222,10 @@ async function integrateGroup(deps: IntegrationDeps, groupId: string, integratio
     const workTip = await refTip(repo, workBranchRef(groupId));
     if (workTip === null || (workTip === integration.lastIntegrated && reentry(integration) === null)) return null;
     return integrateWorkingTree(deps.store, repo, groupId, integration, workTip, {
-      recordPending: (pending) => recordPending(deps, groupId, integration.schemeHash, pending),
+      // #365 review: the pass read this group's row at the start of the round; a person who archived or paused it since
+      // must not find it written into their checkout. The write-ahead re-reads both marks in its own transaction.
+      recordPending: (pending) => recordPending(deps, groupId, integration.schemeHash, pending,
+        (group) => archivedMarkOf(group) === null && !groupStopped(deps.store, groupId)),
       crash: (point) => crash(deps, point), isCrash: (error) => error instanceof Crashed, ...deps.workingTree,
     });
   }
@@ -574,11 +577,11 @@ async function settleAndNote(deps: IntegrationDeps, groupId: string, hash: strin
 }
 
 /** The write-ahead record (null clears it), only while the group still has this scheme. */
-function recordPending(deps: IntegrationDeps, groupId: string, hash: string, pending: GroupIntegration["pending"]): boolean {
+function recordPending(deps: IntegrationDeps, groupId: string, hash: string, pending: GroupIntegration["pending"], still: (group: ReturnType<typeof readGroup>) => boolean = () => true): boolean {
   return write(deps, () => {
     const group = readGroup(deps.store, groupId);
     const current = readGroupIntegration(group);
-    if (current === null || current.schemeHash !== hash) return false;
+    if (current === null || current.schemeHash !== hash || !still(group)) return false;
     saveGroup(deps.store, { ...group, integration: { ...current, pending } } as typeof group);
     return true;
   });

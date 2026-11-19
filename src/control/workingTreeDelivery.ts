@@ -1,5 +1,5 @@
 import { chmodSync, lstatSync, mkdirSync, readdirSync, readlinkSync, renameSync, rmdirSync, rmSync, statSync, unlinkSync, type Stats } from "node:fs";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { acceptanceOf, groupBaseCommit } from "./groupAcceptanceRecord.js";
 import { prerequisitesOf } from "./groupEdges.js";
 import { dirWorkspaceOf } from "./dirGroup.js";
@@ -245,34 +245,45 @@ export async function integrateWorkingTree(store: ControlStore, repo: string, gr
   // Step 4: the staging directory must be on the checkout's device, or `rename` fails with EXDEV.
   const devOf = hooks.devOf ?? ((path: string) => statSync(path).dev);
   if (devOf(gitDir) !== devOf(repo)) return { kind: "blocked", reason: "integration-working-tree-unsupported:cross-device" };
-  // Step 5: the paths, validated.
-  const diff = await rawDiff(repo, from, tip);
-  const pendingTip = pending !== null && pending.tip !== tip && pending.tip !== from ? await rawDiff(repo, from, pending.tip) : null;
-  const lower = new Map<string, string>();
-  for (const [path, { old, new: next }] of diff) {
-    if (!safePath(path)) return { kind: "blocked", reason: `integration-working-tree-unsafe-path:${path}` };
-    if (old?.mode === "160000" || next?.mode === "160000") return { kind: "blocked", reason: `integration-working-tree-unsupported:gitlink:${path}` };
-    const folded = path.toLowerCase();
-    if (lower.has(folded)) return { kind: "blocked", reason: `integration-working-tree-unsupported:case-rename:${path}` };
-    lower.set(folded, path);
+  // The staging parent must be Orca's own directory, never a link elsewhere (#365 review): `rmSync` / `mkdirSync` below
+  // would follow a symlinked `<git-dir>/orca` and remove or write another directory's `deliver-<g>`.
+  const stagingParent = join(gitDir, "orca");
+  const parentStat = lstatOrNull(stagingParent);
+  if (parentStat !== null && !parentStat.isDirectory()) {
+    return { kind: "blocked", reason: `integration-working-tree-write-failed:${relative(repo, stagingParent)}:not-a-directory:written 0` };
   }
-  if (diff.size === 0) return { kind: "done", tip, integrated: null };
-  const set = new Map<string, { want: Entry; was: Entry[] }>();
-  // `was` (review M1): `from`'s entry, and a crashed attempt's `pending.tip`'s.
-  for (const [path, entry] of diff) set.set(path, { want: entry.new, was: [entry.old, ...(pendingTip === null ? [] : [pendingTip.has(path) ? pendingTip.get(path)!.new : entry.old])] });
-  const fileMode = (await gitChild(repo, ["config", "--bool", "core.fileMode"])).stdout.trim() !== "false";
-  // Step 6.
-  const first = await judge(repo, set, fileMode);
-  if (first.kind === "blocked") return first;
-  // Step 7: write-ahead.
-  if (!hooks.recordPending({ schemeHash: integration.schemeHash, tip, base: from, new: tip })) return { kind: "dropped" };
   const staging = stagingOf(gitDir, groupId);
   const written: string[] = [];
   let at = "-";
   try {
+    // Step 5: the paths, validated. Steps 5-6 read the checkout and run git; a failure there (a required clean filter that
+    // fails, a directory the panel may not read) is blocked by name like a write's (#365 review), never a backoff.
+    const diff = await rawDiff(repo, from, tip);
+    const pendingTip = pending !== null && pending.tip !== tip && pending.tip !== from ? await rawDiff(repo, from, pending.tip) : null;
+    const set = new Map<string, { want: Entry; was: Entry[] }>();
+    // `was` (review M1): `from`'s entry, and a crashed attempt's `pending.tip`'s.
+    for (const [path, entry] of diff) set.set(path, { want: entry.new, was: [entry.old, ...(pendingTip === null ? [] : [pendingTip.has(path) ? pendingTip.get(path)!.new : entry.old])] });
+    // #365 review: a path the crashed attempt's tip changed and this tip does not (the tip moved back) may hold that
+    // attempt's bytes, which Orca wrote; it is put back to the tip's entry (= `from`'s), else it would stay half-delivered.
+    for (const [path, entry] of pendingTip ?? []) if (!set.has(path)) set.set(path, { want: entry.old, was: [entry.new] });
+    const lower = new Map<string, string>();
+    for (const [path, { want, was }] of set) {
+      if (!safePath(path)) return { kind: "blocked", reason: `integration-working-tree-unsafe-path:${path}` };
+      if ([want, ...was].some((entry) => entry?.mode === "160000")) return { kind: "blocked", reason: `integration-working-tree-unsupported:gitlink:${path}` };
+      const folded = path.toLowerCase();
+      if (lower.has(folded)) return { kind: "blocked", reason: `integration-working-tree-unsupported:case-rename:${path}` };
+      lower.set(folded, path);
+    }
+    if (set.size === 0) return { kind: "done", tip, integrated: null };
+    const fileMode = (await gitChild(repo, ["config", "--bool", "core.fileMode"])).stdout.trim() !== "false";
+    // Step 6.
+    const first = await judge(repo, set, fileMode);
+    if (first.kind === "blocked") return first;
+    // Step 7: write-ahead.
+    if (!hooks.recordPending({ schemeHash: integration.schemeHash, tip, base: from, new: tip })) return { kind: "dropped" };
     // Step 8: stage the writable non-deleted paths through a temporary index (the live index is never touched).
     rmSync(staging, { recursive: true, force: true });
-    mkdirSync(join(gitDir, "orca"), { recursive: true, mode: 0o700 });
+    if (parentStat === null) { mkdirSync(stagingParent, { mode: 0o700 }); chmodSync(stagingParent, 0o700); }
     mkdirSync(staging, { mode: 0o700 });
     chmodSync(staging, 0o700);
     const toWrite = first.writable.filter((path) => set.get(path)!.want !== null);
@@ -340,7 +351,10 @@ export async function sweepWorkingTreeStaging(repoPaths: readonly string[], log:
       const answer = await gitChild(repo, ["rev-parse", "--git-dir"]);
       if (answer.code !== 0) throw new Error(oneLine(answer.stderr) || `exit ${answer.code}`);
       const dir = join(resolve(repo, answer.stdout.trim()), "orca");
-      if (lstatOrNull(dir) === null) continue;
+      const stat = lstatOrNull(dir);
+      if (stat === null) continue;
+      // #365 review: never through a link -- a symlinked `<git-dir>/orca` names another directory's entries.
+      if (!stat.isDirectory()) throw new Error(`${dir} is not a directory`);
       for (const name of readdirSync(dir)) if (name.startsWith("deliver-")) rmSync(join(dir, name), { recursive: true, force: true });
     } catch (error) {
       log(`orca-panel: working-tree staging sweep ${repo}: ${error instanceof Error ? error.message : String(error)}`);
