@@ -356,3 +356,22 @@ temp `ORCA_GATE_DIR` only. The PreToolUse gate and the chain's gate check (`src/
     pushes from (`git -C <other> push origin …`), for 12 h or until `deny-push`.
 16. `origin` itself is whatever the repository's config says; `remote.origin.mirror` or a `push` refspec in the
     repository's own config is the person's configuration, not judged.
+
+## Correction (2026-11-19, Orca session 3ba26002): a message pasted whole still grants; a mention that grants nothing says so
+
+Observed: the human's message `allow-push 这个session中…` wrote no grant. The session transcript records the prompt as
+`\n\n<pasted_content id="cb3c">\nallow-push …` — the person composed the message elsewhere and pasted it whole, so the
+leading-token test of §12 saw `<pasted_content …>` first. The prompt hook itself ran in about 0.5 s under load 18
+(three timed runs), so the 10 s hook timeout was not the cause.
+
+- A paste block that opens the message is unwrapped once before the leading-token test: `\s*<pasted_content id="…">`
+  followed by `allow-push` grants. A paste that does not open the message, a paste whose own text does not start with the
+  token, or a second paste after an opening one still grants nothing (§12's reason — quoted reports must not grant —
+  stands).
+- When the prompt names `allow-push` as a standalone word but grants nothing, the hook prints one stdout line (shown to
+  the model): `orca gate: allow-push is not at the start of this message, so no push grant was written; a push grant
+  needs a message that starts with allow-push`. Before, nothing was said until a push was refused, often hours later.
+- Not changed: revoke tokens anywhere still win; chain sessions get no grant; the grant's 12 h and its session binding.
+- Unverified and left open: whether Claude Code runs UserPromptSubmit for a message the person sends while a turn is
+  still running (a queued mid-turn message). If it does not, such a message cannot grant; the person should start a new
+  message with `allow-push` once the turn ends.

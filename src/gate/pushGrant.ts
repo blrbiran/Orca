@@ -22,10 +22,24 @@ const SESSION_ID = /^[A-Za-z0-9_-]{1,128}$/;
  */
 const GRANT = /^\s*\/?allow-push(?![\w-])/i;
 const REVOKE = /(?<![\w-])\/?(?:deny|revoke)-push(?![\w-])/i;
+/** Any standalone mention of the grant token, used only to tell the person why a mention granted nothing. */
+const MENTION = /(?<![\w-])\/?allow-push(?![\w-])/i;
+/**
+ * Orca session 3ba26002 (human: 「这个 allow-push 方法经常会无效」): a person who composes a message elsewhere and pastes it
+ * whole reaches the hook as `<pasted_content id="…">` + their text. The text the person pasted FIRST is theirs, so a
+ * paste block that opens the message is unwrapped once before the leading-token test; a paste later in the message
+ * (a quoted report) still grants nothing.
+ */
+const LEADING_PASTE = /^\s*<pasted_content(?:\s+id="[^"]*")?\s*>/;
 
 export function promptIntent(prompt: string): "grant" | "revoke" | null {
   if (REVOKE.test(prompt)) return "revoke";
-  return GRANT.test(prompt) ? "grant" : null;
+  return GRANT.test(prompt.replace(LEADING_PASTE, "")) ? "grant" : null;
+}
+
+/** True when the prompt names allow-push somewhere but not where it grants (the hook then says so). */
+export function mentionsGrantElsewhere(prompt: string): boolean {
+  return promptIntent(prompt) === null && MENTION.test(prompt);
 }
 
 /** True when a grant for exactly this session exists and `now` lies inside it. Anything unreadable is no grant. */
@@ -59,7 +73,11 @@ export function promptHookClaudeCode(stdinText: string, env: NodeJS.ProcessEnv, 
     const sessionId = fields.session_id;
     if (prompt === null) return { stdout: "", stderr: "orca gate: prompt hook input has no prompt; no push grant changed\n" };
     const intent = promptIntent(prompt);
-    if (intent === null) return { stdout: "", stderr: "" };
+    if (intent === null) {
+      return mentionsGrantElsewhere(prompt)
+        ? { stdout: "orca gate: allow-push is not at the start of this message, so no push grant was written; a push grant needs a message that starts with allow-push\n", stderr: "" }
+        : { stdout: "", stderr: "" };
+    }
     if (typeof sessionId !== "string" || !SESSION_ID.test(sessionId)) {
       return { stdout: "", stderr: "orca gate: prompt hook input has no usable session_id; no push grant changed\n" };
     }

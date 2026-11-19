@@ -56,6 +56,13 @@ describe("promptIntent: only the human's own leading token grants (spec §12)", 
     ["allow-push … actually deny-push", "revoke"],
     ["undeny-push", null],
     ["deny-pushes", null],
+    // Orca session 3ba26002: a message the person pasted whole arrives wrapped; the paste that opens it is theirs.
+    ["\n\n<pasted_content id=\"cb3c\">\nallow-push 这个session中…\n</pasted_content id=\"cb3c\">", "grant"],
+    ["<pasted_content>allow-push", "grant"],
+    // A paste that does not open the message, or whose own text does not start with the token, grants nothing.
+    ["see this: <pasted_content id=\"x\">\nallow-push\n</pasted_content id=\"x\">", null],
+    ["<pasted_content id=\"x\">\nthe human can type allow-push\n</pasted_content id=\"x\">", null],
+    ["<pasted_content id=\"x\">\nreport\n</pasted_content id=\"x\">\n<pasted_content id=\"y\">\nallow-push\n</pasted_content id=\"y\">", null],
   ])("%j → %s", (text, expected) => {
     expect(promptIntent(text)).toBe(expected);
   });
@@ -75,12 +82,31 @@ describe("the UserPromptSubmit hook writes, keeps and revokes the grant (spec §
     expect((await stat(env.ORCA_GATE_DIR!)).mode & 0o777).toBe(0o700);
   });
 
+  // Ruling (session 3ba26002, human: 「这次批准改写所有必要的判据」 and 「这个 allow-push 方法经常会无效…你帮我看下如何修复、优化」):
+  // "please allow-push" moved to the next test -- a mention that grants nothing now says so, so the person learns it at
+  // once instead of at the refused push. Prompts that do not name the token stay silent.
   it("writes nothing and prints nothing for a prompt without the leading token", async () => {
     const env = await gateEnv();
-    for (const text of ["push it now", "disallow-push", "please allow-push", "allow-pushes"]) {
+    for (const text of ["push it now", "disallow-push", "allow-pushes"]) {
       expect(promptHookClaudeCode(prompt(text), env, NOW)).toEqual({ stdout: "", stderr: "" });
     }
     expect(await exists(env.ORCA_GATE_DIR!)).toBe(false);
+  });
+
+  it("a mention of allow-push that grants nothing writes nothing and says why in one stdout line", async () => {
+    const env = await gateEnv();
+    for (const text of ["please allow-push", "the human can type allow-push", "see: <pasted_content id=\"x\">\nallow-push\n</pasted_content id=\"x\">"]) {
+      expect(promptHookClaudeCode(prompt(text), env, NOW)).toEqual({
+        stdout: "orca gate: allow-push is not at the start of this message, so no push grant was written; a push grant needs a message that starts with allow-push\n", stderr: "" });
+    }
+    expect(await exists(env.ORCA_GATE_DIR!)).toBe(false);
+  });
+
+  it("a message pasted whole that starts with allow-push writes the grant (the recorded failing shape)", async () => {
+    const env = await gateEnv();
+    const out = promptHookClaudeCode(prompt("\n\n<pasted_content id=\"cb3c\">\nallow-push 这个session中…\n</pasted_content id=\"cb3c\">"), env, NOW);
+    expect(out.stdout).toContain("orca gate: push allowed for this session until");
+    expect(await exists(pushGrantPath(env.ORCA_GATE_DIR!, "sess-a"))).toBe(true);
   });
 
   it("reads `user_prompt` when `prompt` is absent", async () => {
