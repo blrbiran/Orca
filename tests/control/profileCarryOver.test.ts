@@ -43,6 +43,18 @@ describe("profile binding carry-over at panel start (#381)", () => {
     expect(await backups(s)).toEqual(["control.sqlite.bak.1000"]);
   });
 
+  // #381 review M1: the copy is staged in a 0700 directory and renamed into place, so it never exists under its name at
+  // the umask's mode; the staging directory is gone afterwards. (The window itself is not observable from here.)
+  it("stages the backup in a private directory it removes, and the copy is 0600 under a permissive umask", async () => {
+    const s = await store();
+    const previous = process.umask(0o000);
+    let backup: string | null;
+    try { backup = carryProfileBindings(s, [resolveProfile(profileSnapshot())]).backup; } finally { process.umask(previous); }
+    expect((await stat(backup!)).mode & 0o777).toBe(0o600);
+    // mutation: leave the staging directory behind -> red
+    expect((await readdir(s.stateDir)).filter((name) => name.startsWith(".profile-carry-"))).toEqual([]);
+  });
+
   it("keeps an earlier file's alias when the file's unbound fields change, so a record bound to it still resolves", async () => {
     const s = await store();
     const before = profileSnapshot();

@@ -9,10 +9,11 @@
  *
  * Writes (Rule 17, registered in the 2026-09-19 spec's #381 Correction): rows `profileHashAlias:<legacy hash>` and
  * `profileSecretsSeen:<profileId>` in the control database's `meta` table -- no schema change -- each preceded by one
- * consistent copy `control.sqlite.bak.<epoch ms>` (0600) beside the database. Idempotent: a start that has nothing new to
- * record writes nothing and copies nothing.
+ * consistent copy `control.sqlite.bak.<epoch ms>` (0600, staged in a removed `.profile-carry-*` 0700 directory) beside
+ * the database; backups are never pruned. Idempotent: a start that has nothing new to record writes nothing and copies
+ * nothing.
  */
-import { chmodSync, existsSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { canonicalBytes } from "./canonicalJson.js";
 import { legacyProfileHash, type FrozenProfile, type ProfileHashAliases } from "./profiles.js";
@@ -38,13 +39,24 @@ function changedNames(before: SecretEntry[], after: SecretEntry[]): string[] {
   return [...new Set([...old.keys(), ...now.keys()])].filter((name) => old.get(name) !== now.get(name)).sort();
 }
 
-/** A consistent copy beside the database, under a name never reused (a numeric suffix finds a free one). */
+/**
+ * A consistent copy beside the database, under a name never reused (a numeric suffix finds a free one). #381 review M1:
+ * the copy is written inside a fresh 0700 directory in the state directory, made 0600 there, and only then renamed into
+ * place, so the backup never exists under its name at the umask's mode. The staging directory is removed either way.
+ * Backups are never pruned: removing them is the person's decision.
+ */
 function backupControlDb(store: ControlStore, at: number): string {
   const base = join(store.stateDir, `control.sqlite.bak.${at}`);
   let path = base;
   for (let n = 1; existsSync(path); n++) path = `${base}-${n}`;
-  store.db.exec(`VACUUM INTO '${path.replaceAll("'", "''")}'`);
-  chmodSync(path, 0o600);
+  const staging = mkdtempSync(join(store.stateDir, ".profile-carry-"));
+  try {
+    chmodSync(staging, 0o700);
+    const staged = join(staging, "control.sqlite");
+    store.db.exec(`VACUUM INTO '${staged.replaceAll("'", "''")}'`);
+    chmodSync(staged, 0o600);
+    renameSync(staged, path);
+  } finally { rmSync(staging, { recursive: true, force: true }); }
   return path;
 }
 
