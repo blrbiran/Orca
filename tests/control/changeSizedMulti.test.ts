@@ -82,6 +82,27 @@ describe("a keyed multi-directory run pins each extra in its own target (§5.7, 
     } finally { await t.h.dispose(); }
   }, 90_000);
 
+  // Tester follow-up G §1.1 for a v2 multi run: the no-change proof is measured from each directory's target, where the pins
+  // are. Mutation: measure the trees in <sourceDir>/repo and repos/<key> (absent under the key) -> C throws, never landed, red.
+  it("proves an empty keyed multi run unchanged from each directory's target", async () => {
+    const t = await driverHarness([{ taskId: "a", tokenBudget: 4_000_000, targetPaths: ["**"], contextExtra: CONTEXT }],
+      { repositories: withAlpha, tokenPolicy: "optional-v1", attemptRef: true, files: () => ({}) });
+    try {
+      freeze(t);
+      const runId = await t.claim();
+      await t.until(t.driver(), () => t.body(runId).state === "landed" || t.body(runId).state === "blocked");
+      const drive = t.body(runId).drive;
+      expect(t.body(runId).state).toBe("landed");
+      const dirs = drive.noChangeDirs as Array<{ key: string; attempt: string; baseTree: string; attemptTree: string }>;
+      expect(dirs.map((dir) => dir.key)).toEqual(["main", "alpha"]);
+      for (const [index, dir] of dirs.entries()) {
+        expect(dir.attempt).toBe(drive.dirs[index].attemptSha);
+        expect(dir.attemptTree).toBe(dir.baseTree);
+      }
+      expect(git(t.repositories[alphaKey]!, "rev-parse", `refs/orca/runs/${runId}^{tree}`)).toBe(dirs[1]!.baseTree);
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+
   // §5.4 failure paths: a failed terminal is archived at C, which never ran the success branch's pins. Mutation:
   // archiveDriveRun archives the primary only -> alpha has no pin and dirs[1].runRef is absent, red.
   it("a failed keyed run's archive at C pins the extra too", async () => {
