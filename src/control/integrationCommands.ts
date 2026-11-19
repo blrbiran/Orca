@@ -9,7 +9,7 @@ import { multiDirOf } from "./multiGroup.js";
 import { ControlError } from "./errors.js";
 import { acceptanceSatisfied } from "./groupAcceptanceRecord.js";
 import { approveResolution, type ResolutionPrepared } from "./integrationResolve.js";
-import { ENVIRONMENT_CHECKS, newGroupIntegration, readGroupIntegration, readIntegrationDefault, schemeHash, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
+import { ENVIRONMENT_CHECKS, integrationChosen, newGroupIntegration, readGroupIntegration, readIntegrationDefault, schemeHash, type GroupIntegration, type IntegrationScheme } from "./integrationScheme.js";
 import { readRepositorySettingsBody, writeRepositorySettingsBody, type RepositorySettingsBody } from "./workspaceSettings.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
@@ -33,7 +33,8 @@ function refuseFailedCheck(failedCheck: string | null): void {
 /**
  * Integration spec §3.1, §3.3: sets the repository's default scheme under the settings body's revision, keeping the
  * body's workspace mode. `failedCheck` is what checkScheme found before the transaction (null: passed); a failure is
- * refused here as integration-invalid naming the check. Setting keep removes the field (ruling R5).
+ * refused here as integration-invalid naming the check. Working-tree delivery spec §4.2 (ruling R5 narrowed): `keep` is
+ * stored explicitly, so "a person chose keep" and "never chosen" differ; the no-op check compares the stored field.
  */
 export function applySetIntegrationScheme(
   deps: { store: ControlStore; admissionGate?: AdmissionGate; knownRepository(repoId: string): boolean; dirProjectOf?: DirProjectOf },
@@ -55,12 +56,12 @@ export function applySetIntegrationScheme(
         if ((deps.dirProjectOf?.(target.repoId) ?? null) !== null) throw new ControlError("dir-group-delivery-fixed");
         refuseFailedCheck(failedCheck);
         const integration = (context.effectiveCommand.payload as { integration: IntegrationScheme }).integration;
-        if (canonicalBytes(readIntegrationDefault(deps.store, target.repoId).scheme).equals(canonicalBytes(integration))) throw new ControlError("no-op-command");
+        if (integrationChosen(deps.store, target.repoId) && canonicalBytes(readIntegrationDefault(deps.store, target.repoId).scheme).equals(canonicalBytes(integration))) throw new ControlError("no-op-command");
         // The body's other field (the workspace mode; no row is worktree, execution driver spec §3.2) is kept.
         // Checks spec 2026-10-22 §4.1: so are the project's check settings.
         const current = readRepositorySettingsBody(deps.store, target.repoId);
         const workspaceMode = current?.workspaceMode ?? "worktree";
-        const next: RepositorySettingsBody = { workspaceMode, revision: context.nextCommandRevision, ...(integration.delivery === "keep" ? {} : { integration }),
+        const next: RepositorySettingsBody = { workspaceMode, revision: context.nextCommandRevision, integration,
           ...(current?.checks === undefined ? {} : { checks: current.checks }) };
         writeRepositorySettingsBody(deps.store, target.repoId, next);
         return { status: 200, body: {

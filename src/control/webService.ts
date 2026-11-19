@@ -114,7 +114,7 @@ import { recordActivity } from "./activity.js";
 import { DISPATCHED_PERSON_DIRNAME, commandClientFor, commandContextFor, commandPrincipalFor, withCommandContext } from "./commandClient.js";
 import { applyApprovePendingDecision, applyRatifyFlaggedDecision, applyRejectPendingDecision, prepareApproval, prepareRejection, type ApprovePendingDecisionCommand, type ApprovePrepared, type RatifyFlaggedDecisionCommand, type RejectPendingDecisionCommand, type RejectPrepared } from "./decisionCommands.js";
 import { readCorrections } from "../corrections/store.js";
-import { autoConfirmBlocker, autoConfirmCommandId } from "./autoConfirm.js";
+import { autoConfirmBlocker, autoConfirmCommandId, workingTreeDefaultCopy } from "./autoConfirm.js";
 import { autoStartPass, ORCHESTRATION_ACTOR, readOrchestrationSettings, recordConfirmed, type PrerequisiteReader } from "./orchestration.js";
 import { applySetOrchestrationSettings, type SetOrchestrationSettingsCommand } from "./orchestrationCommands.js";
 import { applyAddGroupDependency, applyRemoveGroupDependency, prerequisiteDone, waitingPrerequisites, type AddGroupDependencyCommand, type RemoveGroupDependencyCommand } from "./groupEdges.js";
@@ -908,7 +908,8 @@ export class WebControlService {
    * predicate `autoConfirmBlocker` (autoConfirm.ts) clears -- an unlimited-token draft a person created, nothing blocking
    * it -- has its agent slots resolved as orca-auto (condition 10), then is confirmed through the unchanged `confirm` as
    * orca-auto, start authorized (D7), under one command id per proposal version; an unresolved slot is booked under that
-   * id as auto-confirm-selections-unresolved (N5). Never `integrationHash`, never `hold`, never a flow effect (§2.2).
+   * id as auto-confirm-selections-unresolved (N5). Never `hold`, never a flow effect (§2.2); `integrationHash` only for a
+   * `working-tree` copy equal to the stored project default (working-tree delivery spec §4.2, ruling C1).
    * The panel pump calls it after the flow pass and before `autoStart`, so a group it confirms starts in the same pass.
    */
   async autoConfirmUnlimitedPass(defaults: () => ImportDefaults | null = this.deps.defaults): Promise<{ confirmed: string[]; refused: Array<{ groupId: string; code: string }> }> {
@@ -918,7 +919,9 @@ export class WebControlService {
       const groupId = String(row.id);
       let command: ConfirmCommand;
       try {
-        if (autoConfirmBlocker(this.store, JSON.parse(String(row.body)) as Record<string, unknown>, current) !== null || current === null) continue;
+        const body = JSON.parse(String(row.body)) as Record<string, unknown>;
+        if (autoConfirmBlocker(this.store, body, current) !== null || current === null) continue;
+        const integrationHash = workingTreeDefaultCopy(this.store, body);
         const proposal = readBudgetProposal(this.store, groupId), plan = readArchivedPlan(this.store, groupId);
         const profileId = current.estimatorProfileId!, profileHash = current.estimatorProfileHash!;
         // Tester follow-up F §1 (#195, human ruling 「要改」): the proposal's threshold is sent as it stands -- confirm accepts
@@ -941,6 +944,7 @@ export class WebControlService {
             profileHashes: { estimator: profileHash, worker: profileHash, handoff: profileHash, goalReview: profileHash },
             contextPolicy: { handoffAtContextTokens: proposal.contextPolicy.handoffAtContextTokens },
             selectionsHash: selectionsHash ?? "0".repeat(64),
+            ...(integrationHash === null ? {} : { integrationHash }),
           },
         };
         if (selectionsHash === null) {

@@ -255,7 +255,9 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "resume-check": "open",
   // R3a: confirming under the configured integration (any delivery) carries only its hash; a mismatch is refused anyway.
   "confirm.integrationHash": "open",
-  "set-integration-scheme": deliveryTier,
+  // Working-tree delivery spec §4.2 (controller ruling I2): the repository default is where every later group's work goes,
+  // and a stored `keep` silences the first-use question for good -- a person's act for every payload.
+  "set-integration-scheme": "token",
   "set-group-integration": deliveryTier,
   "set-limit": "token",
   "requirement-open.limit": "token",

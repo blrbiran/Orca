@@ -16,7 +16,7 @@ import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 import { webFixture } from "./fixtures/web.js";
 import { applySetIntegrationScheme, type SetIntegrationSchemeCommand } from "../../src/control/integrationCommands.js";
 import {
-  checkBranchName, checkScheme, githubRepoOf, newGroupIntegration, preflightScheme, readGroupIntegration, readIntegrationDefault, schemeHash,
+  checkBranchName, checkScheme, githubRepoOf, integrationSchemeSchema, newGroupIntegration, preflightScheme, readGroupIntegration, readIntegrationDefault, schemeHash,
   validBranchName, validRemoteName, type GroupIntegration, type IntegrationScheme,
 } from "../../src/control/integrationScheme.js";
 import { applySetWorkspaceMode, readWorkspaceSetting, type SetWorkspaceModeCommand } from "../../src/control/workspaceSettings.js";
@@ -65,13 +65,16 @@ describe("the repository's integration default (integration spec §3.1)", () => 
     } finally { await h.dispose(); }
   });
 
-  it("setting keep removes the field from the body, and setting keep again is a no-op", async () => {
+  // Ruling: 这次批准改写所有必要的判据 (Orca session 3ba26002, working-tree delivery spec §10.2): this case was "setting
+  // keep removes the field from the body". It now encodes R5 narrowed (spec §4.2): the repository default stores `keep`
+  // explicitly, so "a person chose keep" differs from "never chosen"; keep again is still a no-op.
+  it("setting keep stores it in the body, and setting keep again is a no-op", async () => {
     const h = await openTestStore(); try {
       const deps = { store: h.store, knownRepository: known };
       applySetIntegrationScheme(deps, cmd(PB));
       expect(Object.keys(body(h))).toContain("integration");
       expect(applySetIntegrationScheme(deps, cmd({ delivery: "keep" }, 1))).toMatchObject({ result: { kind: "integration-scheme-set", integration: { delivery: "keep" } } });
-      expect(body(h)).toEqual({ workspaceMode: "worktree", revision: 2 });
+      expect(body(h)).toEqual({ workspaceMode: "worktree", revision: 2, integration: { delivery: "keep" } });
       expect(readIntegrationDefault(h.store, "repo")).toEqual({ scheme: { delivery: "keep" }, revision: 2 });
       expect(errorCode(applySetIntegrationScheme(deps, cmd({ delivery: "keep" }, 2)))).toBe("no-op-command");
       expect(errorCode(applySetIntegrationScheme({ store: h.store, knownRepository: known }, cmd({ delivery: "keep" }, 0, "fresh", "repo")))).toBe("revision-conflict");
@@ -81,13 +84,16 @@ describe("the repository's integration default (integration spec §3.1)", () => 
   it("refuses the scheme it already has, an unknown repository, and a failed check by name, writing nothing", async () => {
     const h = await openTestStore(); try {
       const deps = { store: h.store, knownRepository: known };
-      expect(errorCode(applySetIntegrationScheme(deps, cmd({ delivery: "keep" })))).toBe("no-op-command");
+      // Ruling: 这次批准改写所有必要的判据 (Orca session 3ba26002, working-tree delivery spec §10.2): keep on a fresh
+      // repository was a no-op; it is now applied, because it records the person's choice (spec §4.2). The scheme the
+      // repository already has is the stored PB below.
       expect(errorCode(applySetIntegrationScheme(deps, cmd(PB, 0, "elsewhere", "elsewhere")))).toBe("control-target-not-allowed");
       const refused = applySetIntegrationScheme(deps, cmd(PB, 0, "bad"), "remote-missing");
       expect(refused).toEqual({ error: { code: "integration-invalid", message: "integration-invalid:remote-missing", commandRevision: 0, evidenceIds: [], retryable: false } });
       expect(h.store.db.prepare("SELECT COUNT(*) AS n FROM repository_settings").get()!.n).toBe(0);
-      expect(errorCode(applySetIntegrationScheme(deps, cmd(PB, 0, "set")))).toBe("applied");
-      expect(errorCode(applySetIntegrationScheme(deps, cmd(PB, 1, "again")))).toBe("no-op-command");
+      expect(errorCode(applySetIntegrationScheme(deps, cmd({ delivery: "keep" }, 0, "fresh-keep")))).toBe("applied");
+      expect(errorCode(applySetIntegrationScheme(deps, cmd(PB, 1, "set")))).toBe("applied");
+      expect(errorCode(applySetIntegrationScheme(deps, cmd(PB, 2, "again")))).toBe("no-op-command");
     } finally { await h.dispose(); }
   });
 
@@ -154,6 +160,22 @@ describe("checkScheme (integration spec §3.3)", () => {
     expect(await checkScheme(repo, { delivery: "push-target", trigger: "group", method: "squash", target: "main", remote: "origin" })).toBeNull();
     expect(await checkScheme(repo, PB)).toBeNull();
     expect(await checkScheme(repo, { ...PB, delivery: "github-pr" })).toBeNull();
+  });
+  // Working-tree delivery spec §4.1, §10.1: the scheme has no field of its own, and the registered path must be a work
+  // tree's top level (a bare repository and a subdirectory answer working-tree-missing).
+  it("working-tree: the schema refuses any extra field; the check wants a work tree's top level", async () => {
+    expect(integrationSchemeSchema.safeParse({ delivery: "working-tree" }).success).toBe(true);
+    for (const extra of [{ target: "main" }, { trigger: "group" }, { remote: "origin" }, { method: "merge" }])
+      expect(integrationSchemeSchema.safeParse({ delivery: "working-tree", ...extra }).success).toBe(false);
+    expect(await checkScheme(repo, { delivery: "working-tree" })).toBeNull();
+    expect(await preflightScheme(repo, { delivery: "working-tree" }, "/nonexistent/gh")).toBeNull();
+    const bare = join(root, "bare.git"), sub = join(repo, "sub");
+    execFileSync("git", ["init", "-q", "--bare", bare]);
+    await mkdir(sub, { recursive: true });
+    // mutations: drop the is-inside-work-tree check -> the bare one passes; drop the top-level comparison -> sub passes
+    expect(await preflightScheme(bare, { delivery: "working-tree" }, "/nonexistent/gh")).toBe("working-tree-missing");
+    expect(await preflightScheme(sub, { delivery: "working-tree" }, "/nonexistent/gh")).toBe("working-tree-missing");
+    expect(await checkScheme(join(root, "missing"), { delivery: "working-tree" })).toBe("working-tree-missing");
   });
   it("names the failing check", async () => {
     expect(await checkScheme(repo, { delivery: "local", trigger: "task", method: "merge", target: "a..b" })).toBe("target-name");

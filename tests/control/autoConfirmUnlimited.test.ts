@@ -1,4 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
 import { ControlError } from "../../src/control/errors.js";
 import { hasPersonAuthority, principalLabel, type Principal } from "../../src/panel/permissions.js";
 import { autoConfirmBlocker, autoConfirmCommandId } from "../../src/control/autoConfirm.js";
@@ -90,6 +93,42 @@ describe("H4: the automatic confirm of unlimited-token groups", () => {
       expect(h.store.db.prepare("SELECT count(*) AS n FROM commands WHERE group_id='g' AND effective_payload_json LIKE '%integrationHash%'").get()!.n).toBe(0);
       expect(readControlGroup(h.store, "epoch", "g").autoConfirm).toEqual({ eligible: false, refusedCode: null });
     } finally { await h.dispose(); }
+  });
+
+  // Working-tree delivery spec §4.2 (controller ruling C1, amending §7.2 condition 6 / H4): a `working-tree` copy equal to
+  // the stored project default passes condition 6 and its confirm carries `integrationHash`; anything else is unchanged.
+  describe("C1 (#365): a working-tree copy of the stored default", () => {
+    const WT = { delivery: "working-tree" } as const;
+    const LOCAL = { delivery: "local", trigger: "group", method: "merge", target: "main" } as const;
+    const store = (h: Fixture, integration: Record<string, unknown>) => writeRepositorySettingsBody(h.store, "repo", { workspaceMode: "worktree", revision: 1, integration: integration as never });
+    const gitRepo = (h: Fixture) => execFileSync("git", ["init", "-q", join(h.root, "repo")], { stdio: "pipe" });
+    it("is confirmed automatically, its confirm carrying integrationHash", async () => {
+      const h = await unlimited({ integration: WT }); try {
+        gitRepo(h); store(h, WT);
+        // The registered path confirm's preflight checks (a work tree's top level).
+        const service = new WebControlService({ ...h.deps, resolveRepository: () => join(h.root, "repo") });
+        // mutations: remove the exemption -> blocker condition 6, red; send no hash -> refused integration-unapproved, red
+        const { blocker, result } = await passWithPredicate(h, service);
+        expect(blocker).toBeNull();
+        expect(result).toEqual({ confirmed: ["g"], refused: [] });
+        expect(JSON.parse(String(attemptRow(h)!.effective_payload_json))).toMatchObject({ integrationHash: (body(h).integration as { schemeHash: string }).schemeHash });
+        expect(readBudgetProposal(h.store, "g").state).toBe("confirmed");
+      } finally { await h.dispose(); }
+    });
+    it("a working-tree record while the stored default is keep (a person set only that group) is refused delivery-scheme", async () => {
+      const h = await unlimited({ integration: WT }); try {
+        gitRepo(h); store(h, { delivery: "keep" });
+        // mutation: drop the equality check -> confirmed, red
+        expect(autoConfirmBlocker(h.store, body(h), defaultsOf(h))).toEqual({ condition: 6, code: "delivery-scheme" });
+        expect((await new WebControlService(h.deps).autoConfirmUnlimitedPass(() => defaultsOf(h)))).toEqual({ confirmed: [], refused: [] });
+      } finally { await h.dispose(); }
+    });
+    it("a local record equal to the stored default is still refused delivery-scheme", async () => {
+      const h = await unlimited({ integration: LOCAL }); try {
+        store(h, LOCAL);
+        expect(autoConfirmBlocker(h.store, body(h), defaultsOf(h))).toEqual({ condition: 6, code: "delivery-scheme" });
+      } finally { await h.dispose(); }
+    });
   });
 
   it.each([

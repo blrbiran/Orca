@@ -35,7 +35,7 @@ import { correctionDebugOpenPayloadSchema, orchestrationViewSchema, savedResultE
 import { parseUsageScope, readUsageView, type UsageGroupBy, type UsageQuery } from "../control/usageQuery.js";
 import { groupRepoIdOf } from "../control/usageLedger.js";
 import { readWorkspaceSetting } from "../control/workspaceSettings.js";
-import { readGroupIntegration, readIntegrationDefault } from "../control/integrationScheme.js";
+import { integrationChosen, readGroupIntegration, readIntegrationDefault } from "../control/integrationScheme.js";
 import { checksRead, readReviewRecord, reviewDismissals } from "../control/checks/settings.js";
 import { suggestFullSuiteCommand } from "../control/fullSuite.js";
 import { readFlowSettings } from "../flow/settings.js";
@@ -497,7 +497,7 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     try {
       const suggestedTarget = await deps.service.suggestedTarget(repoId);
       const { scheme, revision } = readIntegrationDefault(deps.store, repoId);
-      res.json(repositoryIntegrationSchema.parse({ schema: "orca-repository-integration-v1", repoId, integration: scheme, revision, suggestedTarget }));
+      res.json(repositoryIntegrationSchema.parse({ schema: "orca-repository-integration-v1", repoId, integration: scheme, revision, suggestedTarget, chosen: integrationChosen(deps.store, repoId) }));
     } catch (error) { sendMappedControlError(res, error); }
   }));
 

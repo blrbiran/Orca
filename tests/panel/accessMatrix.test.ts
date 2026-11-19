@@ -81,7 +81,10 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "run-check-now", payload: { kind: "model-review" }, tier: "open", member: V },
   { entry: "resume-check", payload: { kind: "model-review" }, tier: "open", member: V },
   { entry: "confirm.integrationHash", payload: { integrationHash: "d".repeat(64) }, tier: "open", member: F },
-  { entry: "set-integration-scheme", payload: { integration: { delivery: "keep" } }, tier: "open", member: V },
+  // Ruling: 这次批准改写所有必要的判据 (Orca session 3ba26002, working-tree delivery spec §10.2, controller ruling I2):
+  // this row was `open`. It now encodes that only a person records the project's delivery: a stored `keep` silences the
+  // first-use question for good, so the repository setter is `token` for every payload; the group setter is unchanged.
+  { entry: "set-integration-scheme", payload: { integration: { delivery: "keep" } }, tier: "token", member: V },
   { entry: "set-group-integration", payload: { integration: { delivery: "keep" } }, tier: "open", member: V },
   { entry: "set-integration-scheme", payload: { integration: LOCAL }, tier: "token", member: V },
   { entry: "set-group-integration", payload: { integration: PUSH }, tier: "token", member: V },

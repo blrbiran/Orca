@@ -1,5 +1,7 @@
 import { archivedMarkOf } from "./archivedMark.js";
-import { readGroupIntegration } from "./integrationScheme.js";
+import { canonicalBytes } from "./canonicalJson.js";
+import { groupRepoId } from "./dirGroup.js";
+import { integrationChosen, readGroupIntegration, readIntegrationDefault } from "./integrationScheme.js";
 import type { ImportDefaults } from "./planImport.js";
 import { readBudgetProposal } from "./queries.js";
 import { readStopIntent } from "./stopIntent.js";
@@ -54,6 +56,20 @@ export function personCreated(store: ControlStore, group: Body): boolean {
   return principal === "web" || (principal !== null && principal.startsWith("user:"));
 }
 
+/**
+ * Working-tree delivery spec §4.2 (controller ruling C1, amending tester round 2 §7.2 condition 6 / H4): a group whose
+ * record is `working-tree` and canonical-byte-equal to the repository's stored default (only a person can store one)
+ * passes condition 6; the answer is the record's scheme hash, which the automatic confirmer sends as `integrationHash`.
+ * Any other non-keep record (a publishing delivery an owner approves per group) answers null.
+ */
+export function workingTreeDefaultCopy(store: ControlStore, group: Body): string | null {
+  const record = readGroupIntegration(group);
+  if (record === null || record.scheme.delivery !== "working-tree") return null;
+  let repoId: string;
+  try { repoId = groupRepoId(store, groupIdOf(group), group); } catch { return null; }
+  return integrationChosen(store, repoId) && canonicalBytes(readIntegrationDefault(store, repoId).scheme).equals(canonicalBytes(record.scheme)) ? record.schemeHash : null;
+}
+
 const CHECKS: ReadonlyArray<readonly [AutoConfirmBlocker["condition"], Check]> = [
   [1, (_store, group) => group.status === "draft" && Object.hasOwn(group, "planHash") ? null : { condition: 1, code: "not-draft" }],
   [2, (_store, group) => (group.limit as { tokens?: unknown } | undefined)?.tokens === null ? null : { condition: 2, code: "limited" }],
@@ -64,7 +80,7 @@ const CHECKS: ReadonlyArray<readonly [AutoConfirmBlocker["condition"], Check]> =
     : readSystemDebugMark(group) !== null ? { condition: 4, code: "system-debug" }
       : typeof group.debug === "object" && group.debug !== null ? { condition: 4, code: "correction-debug" } : null],
   [5, (store, group) => readBudgetProposal(store, groupIdOf(group)).state === "editable" ? null : { condition: 5, code: "proposal-not-editable" }],
-  [6, (_store, group) => readGroupIntegration(group) === null ? null : { condition: 6, code: "delivery-scheme" }],
+  [6, (store, group) => workingTreeDefaultCopy(store, group) !== null || readGroupIntegration(group) === null ? null : { condition: 6, code: "delivery-scheme" }],
   [7, (store, group) => store.db.prepare("SELECT 1 FROM estimates WHERE group_id=? AND state IN ('running','start-unknown') LIMIT 1").get(groupIdOf(group)) === undefined
     ? null : { condition: 7, code: "estimate-running" }],
   [8, (_store, _group, defaults) => defaults !== null && defaults.estimatorProfileId !== null && defaults.estimatorProfileHash !== null

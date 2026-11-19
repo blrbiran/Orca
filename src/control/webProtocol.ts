@@ -3001,6 +3001,8 @@ export const repositoryIntegrationSchema = z
   // suggestedTarget (controller ruling, Task 7): the target the panel pre-fills for a repository with no scheme yet.
   .object({
     schema: z.literal("orca-repository-integration-v1"), repoId: idSchema, integration: integrationSchemeSchema, revision: safeInteger, suggestedTarget: z.string().nullable(),
+    // Working-tree delivery spec §4.2, §5: whether a person ever stored a delivery for this project (always sent).
+    chosen: z.boolean(),
   })
   .strict();
 export type RepositoryIntegrationV1 = z.infer<typeof repositoryIntegrationSchema>;

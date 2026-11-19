@@ -250,6 +250,22 @@ describe("working-tree delivery (spec §4.4)", { timeout: 60_000 }, () => {
     }
   });
 
+  it("set-group-integration working-tree on a done keep group freezes at once, and the next pass delivers (spec §3 A2)", async () => {
+    const w = await world(); try {
+      const body = w.groupBody(); delete body.integration;
+      w.writeBody({ ...body, proposal: { ...(body.proposal as object), state: "confirmed" } });
+      w.land({ "n.txt": "n\n" });
+      w.finish();
+      expect(await w.pass()).toBe(false);
+      const { applySetGroupIntegration } = await import("../../src/control/integrationCommands.js");
+      const set = applySetGroupIntegration({ store: w.store }, w.command("set-group-integration", { integration: WT }));
+      if ("error" in set) throw new Error(JSON.stringify(set));
+      expect(w.record()).toMatchObject({ frozen: true, lastIntegrated: null });
+      expect(await w.pass()).toBe(true);
+      expect(text(w, "n.txt")).toBe("n\n");
+    } finally { await w.dispose(); }
+  });
+
   it("WT-10: a path edited between the guard and the re-check is a conflict, nothing written", async () => {
     const w = await world(); try {
       w.land({ "a.txt": "theirs\n", "n.txt": "n\n" });

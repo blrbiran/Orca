@@ -1099,7 +1099,7 @@ export type GroupIntegrationViewV1 = {
     sourceRefs: Array<{ taskId: string; ref: string; sourceSha: string | null; mergeSha: string | null }> };
 };
 /** `suggestedTarget` (controller ruling, Task 7): origin's HEAD branch, else the current branch, else null; never stored. */
-export type RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1"; repoId: string; integration: IntegrationSchemeV1; revision: number; suggestedTarget: string | null };
+export type RepositoryIntegrationV1 = { schema: "orca-repository-integration-v1"; repoId: string; integration: IntegrationSchemeV1; revision: number; suggestedTarget: string | null; /** Working-tree delivery spec §4.2: absent (an older panel) reads as chosen. */ chosen?: boolean };
 // Checks spec 2026-10-22 §2.2, §2.4, §4.1: a trigger, a scheduled check and one settings layer's `checks` field.
 export type CheckKindV1 = "integration-check" | "model-review";
 export type CheckConditionV1 =

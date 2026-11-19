@@ -39,6 +39,14 @@ export function readIntegrationDefault(store: ControlStore, repoId: string): { s
 }
 
 /**
+ * Working-tree delivery spec §4.2: whether a person stored a default for the repository (a stored `keep` included);
+ * absent is "never chosen", which the first-use question reads.
+ */
+export function integrationChosen(store: ControlStore, repoId: string): boolean {
+  return readRepositorySettingsBody(store, repoId)?.integration !== undefined;
+}
+
+/**
  * §8, the pattern half: git's own check-ref-format is the other half (checkBranchName). The spec's "no `@{`" needs no
  * clause of its own: the pattern admits neither `@` nor `{`.
  */
@@ -142,11 +150,11 @@ async function schemeCheck(repo: string, scheme: IntegrationScheme): Promise<str
  * `--is-inside-work-tree` with `true` and `--show-toplevel` is the registered path's realpath. Else working-tree-missing.
  */
 async function workingTreeCheck(repo: string): Promise<string | null> {
+  let real: string;
+  try { real = realpathSync(repo); } catch { return "working-tree-missing"; }
   const inside = await runGit(repo, ["rev-parse", "--is-inside-work-tree"]);
   if (!inside.ok || inside.stdout.trim() !== "true") return "working-tree-missing";
   const top = await runGit(repo, ["rev-parse", "--show-toplevel"]);
-  let real: string;
-  try { real = realpathSync(repo); } catch { return "working-tree-missing"; }
   return top.ok && top.stdout.replace(/\n$/, "") === real ? null : "working-tree-missing";
 }
 

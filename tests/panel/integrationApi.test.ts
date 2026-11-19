@@ -55,11 +55,13 @@ describe("the repository integration default over HTTP (integration spec §3.4)"
       // the repository's integration check (kanban spec §7 layer 1), off and never run here.
       // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): the check settings moved to GET /api/control/checks (checks spec
       // 2026-10-22 §4.3), so this read no longer names them.
-      .toEqual({ schema: "orca-repository-integration-v1", repoId: repo, integration: { delivery: "keep" }, revision: 0, suggestedTarget: "trunk" });
+      // Ruling: 这次批准改写所有必要的判据 (Orca session 3ba26002, working-tree delivery spec §10.2): the read carries
+      // `chosen` -- false until a person stores a delivery, true after (spec §4.2, §5).
+      .toEqual({ schema: "orca-repository-integration-v1", repoId: repo, integration: { delivery: "keep" }, revision: 0, suggestedTarget: "trunk", chosen: false });
     const set = await post(`repositories/${repo}/integration`, { commandId: "int-o", expectedRevision: 0, payload: { integration: LOCAL } });
     expect([set.status, ((await set.json()) as { result: unknown }).result]).toEqual([200, { kind: "integration-scheme-set", repoId: repo, integration: LOCAL }]);
     expect(await (await owner.fetch(`/api/control/repositories/${repo}/integration`)).json())
-      .toEqual({ schema: "orca-repository-integration-v1", repoId: repo, integration: LOCAL, revision: 1, suggestedTarget: "trunk" });
+      .toEqual({ schema: "orca-repository-integration-v1", repoId: repo, integration: LOCAL, revision: 1, suggestedTarget: "trunk", chosen: true });
     expect(await (await owner.fetch(`/api/control/repositories/${repo}/workspace`)).json())
       .toEqual({ schema: "orca-repository-workspace-v1", repoId: repo, workspaceMode: "worktree", revision: 1 });
   });
