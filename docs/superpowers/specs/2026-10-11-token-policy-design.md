@@ -88,7 +88,7 @@ Ruling: human approval of #389 on 2026-11-20 (Orca tester batch 3, Task 4). This
 
 What still holds:
 
-- The spend-cap path (`set-spend-cap`, `src/control/spendCommands.ts`) and the agent group-cap path (`orca group cap` / `src/control/commands.ts` `setGroupLimit`) still refuse `active-unbounded-budget-conflict`, with the message naming the run, `orca group close-run`, `orca run abandon`, and the retry. A finite spend cap or agent group cap cannot bind a provider grant that is already unbounded.
+- The spend-cap path (`set-spend-cap`, `src/control/spendCommands.ts`) and the internal agent group-cap API (`src/control/commands.ts` `setGroupLimit`; no production dispatch at head, exercised by tests) still refuse `active-unbounded-budget-conflict`, with the message naming the run, `orca group close-run`, `orca run abandon`, and the retry. A finite spend cap or agent group cap cannot bind a provider grant that is already unbounded.
 - A limit decrease below used + committed still refuses with the existing conservation semantics (`group-budget-unavailable` from the residual check, rolled back), and a top-up is admitted.
 
 Evidence: `tests/control/autoConfirmUnlimited.test.ts` (the #389 criterion: install beside the active run, the run stays active, a decrease below used + committed refuses, a top-up works, the next claim's finite live ceiling does not exceed the new limit), `tests/control/tokenPolicyStop.test.ts` and `tests/control/liveCeilingLedger.test.ts` (set-limit installs beside an active unbounded run), and `tests/control/spendcap-unbounded.test.ts` (the remaining agent-path refusal).
