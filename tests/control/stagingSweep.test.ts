@@ -4,7 +4,7 @@
 // every staging entry, once the store's service lock is this process's: archives write staging only through an open
 // store, a second open of the same state directory is refused while one is open, and a previous owner is proved dead
 // before its lock is retired. So no live archive can own an entry when the sweep runs.
-import { lstatSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -79,6 +79,23 @@ describe("staging entries a killed archive left are removed when the store opens
       expect(readdirSync(outside)).toEqual(["keep"]);
       expect(lstatSync(s.staging).isSymbolicLink()).toBe(true);
     } finally { s.dispose(); }
+  });
+
+  it("never throws: an entry it cannot remove is counted and left; a staging it cannot read is reported and left", () => {
+    const s = stateRoot();
+    const locked = join(s.staging, "locked");
+    try {
+      mkdirSync(locked, { recursive: true });
+      writeFileSync(join(locked, "data"), Buffer.alloc(7));
+      writeFileSync(join(s.staging, "loose"), Buffer.alloc(3));
+      chmodSync(locked, 0o500);
+      // mutation: let a removal failure throw -> sweepStaging throws, red
+      expect(sweepStaging(s.stateDir)).toEqual({ removed: 1, bytes: 3, left: 0, failed: 1, skipped: null });
+      chmodSync(locked, 0o700);
+      chmodSync(s.staging, 0o000);
+      // mutation: let a readdir failure throw -> red
+      expect(sweepStaging(s.stateDir)).toEqual({ removed: 0, bytes: 0, left: 0, failed: 0, skipped: "staging-unreadable" });
+    } finally { chmodSync(s.staging, 0o700); chmodSync(locked, 0o700); s.dispose(); }
   });
 
   it("is bounded: at most maxEntries per start, the rest counted as left for the next", () => {
