@@ -1091,3 +1091,61 @@ target (`attemptPin.ts`, from step C, `archiveRunV2`, accept-attempt's re-pin); 
 `<stateDir>/staging/verify-<uuid>/` (removed in `finally`); `refs/orca/incoming/<runId>` now set by `update-ref`. Every new
 command in a person's repository carries `-c gc.auto=0 -c maintenance.auto=false` except the check `worktree add`'s
 removal (the existing `removeOwnPath`).
+
+## Correction (2026-11-19, change-sized runs P2 second wave: §5.7, the remaining criteria, A2)
+
+Appended by the second P2 implementer (Orca session `3ba26002`, branch `feat/change-sized-p2`, worktree `.wt-p2`, over
+`e9d43c8e`), against ccloop P1 at `633534c`; the npm pin is still `57b6d15`. Human approval for the criteria: 「同意这样大改，
+并且同意改所有必要的判据」 (no existing criterion was rewritten in this wave; the fixture change is named below). The text
+above is unchanged; where it and this section differ, this section is what ships. The previous Correction's "Not built in
+this wave" line is superseded for §5.7 and A2; A1 and A3 are still not run.
+
+**§5.7 as built.** Under a ccloop that advertises `features.attemptRef: "v1"`, `stepA2Multi` asks for the key on
+protocol 4 and the run records `snapshotVersion: 2` (and `attemptDelivery` when the envelope carries the key), as `stepA2`
+does. Step C resolves each written directory's attempt -- the primary exactly as a one-directory run; an extra from
+collect's `dirs[].attemptSha` (keyed) checked in that directory's own workspace, or from `repos/<key>` committed by Orca
+(legacy envelope) -- and pins it create-only at `refs/orca/runs/<runId>` in that directory's target before anything reads
+it. Differences from §5.7's text:
+- An extra is checked only for `attempt-missing` and `attempt-not-from-base`: collect's `dirs[]` carries no tree and no
+  ref for an extra (ccloop's extras share `refs/ccloop/run/attempts/<n>`), so the other two checks have nothing to compare.
+- A refusal for an extra is the same block reason prefixed with its key (`alpha:attempt-not-from-base`,
+  `alpha:run-ref-conflict:<sha>`); in an archive the same as missing evidence (`attempt-unpinned:alpha:…`).
+- The primary's pin stays on `drive.runRef`; `drive.dirs[i].runRef` is written for extras only (i ≥ 1).
+- Readers after the pin read each directory's target: harvest, the no-change trees, the multi criteria flag
+  (`driverLanding.ts`, the `multiCriteriaFlag` loop) and the landing (`produceMultiMerge` sets
+  `refs/orca/incoming/<runId>` with `update-ref` when the directory's pin holds the attempt; a v1 run fetches as before).
+- `archiveDriveRun` pins every extra too (the failure paths that never ran C); extras are never snapshotted (N6).
+- `repos/` at a settle that did not land (`stepCleanupFailed`, `dropResultCopyAfterSettle`) goes iff the run is v2 and
+  every extra is pinned (`extrasPinned`); a v1 run keeps it exactly as P0 left it. Step E removes it as before.
+  `cleanupPredecessor` is unchanged (a multi run is never continued).
+
+**A2 as built** (`tests/bench/changeSizedSettle.ts`, not in any test tier). The bench clones `ORCA_BENCH_REPO`
+`--local --no-checkout` under `ORCA_CONTROL_DIR` and never writes the measured repository; it refuses a control directory
+under `~/.orca` and an existing one. `stepE_ms` is the real `archiveRunV2` plus the real `cleanupRunWorkspace`;
+`artifactBytes` is the growth of `<state>/artifacts/*/data` on disk across the archive; `logsBytes` the 70 run-directory
+files as written; `changeBytes` the bundle artifact; `metaBytes` the snapshot artifact plus the archive manifest;
+`targetObjectsGrowthBytes` the growth of the target clone's `.git/objects` (apparent sizes). Measured once, on the
+measured repository class (26,200 tracked files, 3,828,534,171 bytes tracked at HEAD), Orca `f8d12edb` with the bench as
+committed in `77516016`: exit 0; `stepE_ms` 3,979 (archive 3,826, cleanup 152); `verify_ms` 234; `changeBytes` 796;
+`logsBytes` 145,055; `metaBytes` 17,027; `artifactBytes` 162,878; `sourceBytes` 145,055; `workspacesEntries` 0;
+`targetObjectsGrowthBytes` 2,560; load averages 40.62 before, 44.23 after. The original's `git worktree list`,
+`git status --porcelain` and HEAD were byte-identical before and after.
+
+**A gap the criteria cannot see (measured).** With an empty global git config (every criterion runs under a relocated
+`HOME`), `git fetch --no-tags <missing path> +<oid>:<ref>` exits 0 when `<oid>` is already in the repository; under the
+person's own `HOME` on this machine the same command exits 128 (`/usr/bin/git` 2.50.1, measured in a scratch repository
+both ways). So the landing's `update-ref` branch (one-directory `stepD` and `produceMultiMerge`) is invisible to every
+criterion: the mutation "always fetch from the result copy" stays green in `changeSizedDriver.test.ts` and
+`changeSizedMulti.test.ts` alike. The branch is kept (it is what works under a person's configuration); no criterion
+claims it.
+
+**Rule 17 (§9).** No writer beyond §9's table: the extras' pins and their objects are §9's "each written directory's
+target" row. The bench writes only under `ORCA_CONTROL_DIR`.
+
+**Criteria added (additive).** `tests/control/changeSizedMulti.test.ts` (P2-9: keyed multi with an extra in clone mode,
+the failed keyed archive, the empty keyed run's no-change trees, a legacy-envelope multi run's failed cleanup and handoff
+settle dropping `repos/`); `tests/control/changeSizedReaders.test.ts` (accept-attempt `snapshot-base-unavailable` after
+the target's history was rewritten and pruned; the `!record` gate on a saved-result recovery envelope; `sourceRecord`'s
+`-v2` / `-v1` kinds and `saved-result-source-v2-unsupported` before the source port is asked). Fixture change, not a
+criterion: the synthetic ccloop (`driverPort.ts`) records keyed extras as ccloop P1's `recordExtras` does and answers
+`dirs[]` (option `extraFiles`); without the key it is unchanged.
