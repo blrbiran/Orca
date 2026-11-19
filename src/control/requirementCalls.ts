@@ -21,7 +21,7 @@ import {
 import { AGENT_QUOTA_REASON, CALL_DETAIL_MAX_BYTES, MAX_AUTO_RETRIES, multiSplitOutputSchema, QUOTA_CAUSE, REQUIREMENT_CALL_GRANT, splitOutputSchema, type CallRecord, type DraftBody, type RequirementWaiting } from "./requirementSchemas.js";
 import { parseResetAt } from "./quotaRest.js";
 import {
-  buildSplitPrompt, expandMultiSplitDraft, expandSplitDraft, SPLIT_JSON_SCHEMA_V7, SPLIT_JSON_SCHEMA_MULTI, validateMultiSplitDraft, validateSplitDraft, withoutEmptySetup,
+  buildSplitPrompt, expandMultiSplitDraft, expandSplitDraft, SPLIT_JSON_SCHEMA_V7, SPLIT_JSON_SCHEMA_MULTI_V6, validateMultiSplitDraft, validateSplitDraft, withoutEmptyConflicts, withoutEmptySetup,
   type SplitPlanFile,
 } from "./requirementSplit.js";
 import { assertCallUsageBooked, closeSingleCall, insertSingleCallRun, verifyStoppedSingleCall, type StoppedSingleCallRun } from "./singleCallLedger.js";
@@ -455,7 +455,9 @@ export interface SplitEvaluation extends Omit<DraftBody, "draftNo" | "state" | "
  * one commit per member; a member it does not name is a recovery block, as a single call's missing commit is.
  */
 async function evaluateMultiSplit(deps: SingleCallPrepareDeps, run: SingleCallRunRow, multi: FrozenMultiDir, rawOutput: unknown): Promise<SplitEvaluation> {
-  const parsed = multiSplitOutputSchema.safeParse(rawOutput);
+  // Multi instruction version 6: an empty or null requirementConflicts (and a null feedback) is folded away as the single
+  // split's is; a multi task has no setup, so that half of the fold is not applied.
+  const parsed = multiSplitOutputSchema.safeParse(withoutEmptyConflicts(rawOutput));
   if (!parsed.success) {
     const issue = parsed.error.issues[0];
     return { schemaValid: false, ok: false, output: null, plan: null, draftHash: null, reasons: [`schema:${issue?.path.join(".") ?? ""}:${issue?.message ?? "invalid"}`], layers: null, implicitEdges: null, impliedPathsAdded: null };
@@ -548,7 +550,7 @@ export const SPLIT_HANDLER: SingleCallHandler = {
   async prepare(deps, run) {
     // Multi-directory projects spec §6.4: a multi group's split names writes per directory, in the multi schema.
     const multi = multiDirOf(readRequirementGroup(deps.store, run.groupId)) !== null;
-    return prepareRequirementCall(deps, run, multi ? SPLIT_JSON_SCHEMA_MULTI : SPLIT_JSON_SCHEMA_V7, (target) => readDraft(deps.store, run.groupId, target.no).state === "drafting", (group, target, built) =>
+    return prepareRequirementCall(deps, run, multi ? SPLIT_JSON_SCHEMA_MULTI_V6 : SPLIT_JSON_SCHEMA_V7, (target) => readDraft(deps.store, run.groupId, target.no).state === "drafting", (group, target, built) =>
       buildSplitPrompt({
         document: renderRequirementDocument({ groupId: run.groupId, requirement: group.requirement, rounds: chainRounds(readRounds(deps.store, run.groupId)), acceptedSplit: null }),
         overview: built, earlierDrafts: readDrafts(deps.store, run.groupId).filter((draft) => draft.draftNo < target.no), ...(multi ? { multi: true } : {}),

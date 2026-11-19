@@ -136,7 +136,9 @@ export const multiSplitTaskSchema = z.object({
     seen.add(write.dir);
   });
 });
-export const multiSplitOutputSchema = z.object({ tasks: z.array(multiSplitTaskSchema).min(1), notes: z.string() }).strict();
+// Multi instruction version 6: the same optional, never defaulted requirementConflicts as the single split's (D4/D5).
+export const multiSplitOutputSchema = z.object({ tasks: z.array(multiSplitTaskSchema).min(1), notes: z.string(),
+  requirementConflicts: z.array(requirementConflictSchema).min(1).max(REQUIREMENT_CONFLICT_BOUNDS.entries).optional() }).strict();
 /** Spec §8.4: an implicit edge, with the write-set conflict behind it (graph.ts buildGraph). */
 export const implicitEdgeSchema = z.object({ from: nonempty, to: nonempty, conflicts: z.array(z.object({ a: nonempty, b: nonempty }).strict()).min(1) }).strict();
 export const draftBodySchema = z.object({

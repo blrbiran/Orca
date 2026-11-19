@@ -144,8 +144,11 @@ export function applyGoalPaths(output: SplitOutput, creatable: ReadonlySet<strin
 }
 
 
-/** Tester #362: a task's target path that looks like where the program keeps its data while it runs. */
-export interface RuntimeDataPath { taskId: string; path: string }
+/**
+ * Tester #362: a task's target path that looks like where the program keeps its data while it runs. Multi instruction
+ * version 6: a multi task's entry also names the directory (`dir`, its key) whose write lists the path.
+ */
+export interface RuntimeDataPath { taskId: string; dir?: string; path: string }
 /** Tester #362: the file extensions of data a program keeps (JSON documents and lines, SQLite, CSV). */
 const DATA_FILE = /\.(?:json|jsonl|ndjson|db|sqlite3?|csv)$/i;
 
@@ -154,14 +157,18 @@ const DATA_FILE = /\.(?:json|jsonl|ndjson|db|sqlite3?|csv)$/i;
  * exact target path that is a data file (DATA_FILE) inside a dot-directory (some directory segment starts with `.`, as
  * the tester's `.orca/incidents.json`) and that the requirement document names as a whole token. A program's runtime
  * data is not a deliverable unless the requirement asks to commit seed data, which code cannot tell from the words, so it
- * never refuses a draft. Multi-directory writes are read by path alone. In task order, then target order.
+ * never refuses a draft. A multi-directory write's path carries its directory key (multi instruction version 6), since
+ * one path may name a file in several directories. In task order, then (directory and) target order.
  */
 export function runtimeDataPaths(output: SplitOutput | MultiSplitOutput, document: string): RuntimeDataPath[] {
   const out: RuntimeDataPath[] = [];
-  for (const task of output.tasks as readonly Task[]) for (const target of targetsOf(task)) {
-    const path = normal(target), dirs = path.split("/").slice(0, -1);
-    if (path.includes("*") || !DATA_FILE.test(path) || !dirs.some((dir) => dir.startsWith(".") && dir !== "." && dir !== "..") || !mentions(document, path)) continue;
-    if (!out.some((entry) => entry.taskId === task.taskId && entry.path === path)) out.push({ taskId: task.taskId, path });
+  for (const task of output.tasks as readonly Task[]) {
+    const writes: ReadonlyArray<{ dir?: string; targetPaths: readonly string[] }> = "writes" in task ? task.writes : [{ targetPaths: task.targetPaths }];
+    for (const write of writes) for (const target of write.targetPaths) {
+      const path = normal(target), dirs = path.split("/").slice(0, -1);
+      if (path.includes("*") || !DATA_FILE.test(path) || !dirs.some((dir) => dir.startsWith(".") && dir !== "." && dir !== "..") || !mentions(document, path)) continue;
+      if (!out.some((entry) => entry.taskId === task.taskId && entry.dir === write.dir && entry.path === path)) out.push({ taskId: task.taskId, ...(write.dir === undefined ? {} : { dir: write.dir }), path });
+    }
   }
   return out;
 }

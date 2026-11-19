@@ -444,7 +444,11 @@ function DraftReview(props: { view: View; draft: Draft; current: boolean; onComm
       {/* Tester #345: a path a task's goal names that no task may write (the split adds only files the base commit lacks). */}
       {(draft.goalPathsOutsideTargets ?? []).map((entry) => <p role="note" data-goal-path key={`${entry.taskId}:${entry.path}`}>{t("requirements.goalPath", { task: entry.taskId, path: entry.path })}</p>)}
       {/* Tester #362: a data file the requirement names, listed as a target path (the program's runtime data is no deliverable). */}
-      {(draft.runtimeDataPaths ?? []).map((entry) => <p role="note" data-runtime-data-path key={`${entry.taskId}:${entry.path}`}>{t("requirements.runtimeDataPath", { task: entry.taskId, path: entry.path })}</p>)}
+      {(draft.runtimeDataPaths ?? []).map((entry) => {
+        // Multi split instruction version 6: a multi draft's entry names its directory key, shown `<dir>:<path>`.
+        const path = entry.dir === undefined ? entry.path : `${entry.dir}:${entry.path}`;
+        return <p role="note" data-runtime-data-path key={`${entry.taskId}:${path}`}>{t("requirements.runtimeDataPath", { task: entry.taskId, path })}</p>;
+      })}
       {/* Dogfood finding (3): Orca re-drafted after the person's feedback; nothing in this draft reports on the feedback. */}
       {draft.feedbackAfterRedraft !== undefined && <p role="note" data-tone="warn" data-feedback-after-redraft>
         {t("requirements.feedbackAfterRedraft", { n: draft.draftNo, first: draft.feedbackAfterRedraft.redrafts[0], on: draft.feedbackAfterRedraft.feedbackDraftNo, feedback: draft.feedbackAfterRedraft.feedback })}

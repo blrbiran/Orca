@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
 import { buildRepositoryOverview, dividedOverviewLimits, OVERVIEW_LIMITS, type ProjectOverview } from "../../src/control/requirementOverview.js";
 import { buildClarifyPrompt, CLARIFY_INSTRUCTION_V3 } from "../../src/control/requirementClarify.js";
-import { buildSplitPrompt, SPLIT_INSTRUCTION_MULTI_V5, SPLIT_INSTRUCTION_V6, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_V7, SPLIT_JSON_SCHEMA_MULTI } from "../../src/control/requirementSplit.js";
+import { buildSplitPrompt, SPLIT_INSTRUCTION_MULTI_V6, SPLIT_INSTRUCTION_V6, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_V7, SPLIT_JSON_SCHEMA_MULTI, SPLIT_JSON_SCHEMA_MULTI_V6 } from "../../src/control/requirementSplit.js";
 import { multiSplitOutputSchema } from "../../src/control/requirementSchemas.js";
 import { readRequirementGroup } from "../../src/control/requirementRecords.js";
 import { vaultKeyOf } from "../../src/flow/vault/paths.js";
@@ -173,12 +173,13 @@ describe("the split prompt across directories (M5, §6.4)", () => {
     try {
       await x.until(() => x.fake.calls.accept.length > 0);
       const envelope = x.fake.calls.accept[0]! as { work: { kind: string; prompt: string; responseSchema: unknown } };
-      expect(envelope.work.responseSchema).toEqual(SPLIT_JSON_SCHEMA_MULTI);
+      // Ruling: human 「这次批准改写所有必要的判据」 (Orca session 3ba26002, 2026-11-19): multi-directory requirementConflicts (human 「同意」) make a new multi split call send multi instruction version 6 and its schema (the multi writes schema plus requirementConflicts); it still encodes: a multi group gets the multi instruction and the writes schema.
+      expect(envelope.work.responseSchema).toEqual(SPLIT_JSON_SCHEMA_MULTI_V6);
       const prompt = envelope.work.prompt;
       // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27 (version 1 -> 2)
       // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); it still encodes: a multi group gets the multi instruction.
-      expect(prompt.startsWith("Orca requirement split (several directories), instruction version 5.")).toBe(true);
-      expect(prompt).toContain(SPLIT_INSTRUCTION_MULTI_V5.split("\n", 1)[0]!);
+      expect(prompt.startsWith("Orca requirement split (several directories), instruction version 6.")).toBe(true);
+      expect(prompt).toContain(SPLIT_INSTRUCTION_MULTI_V6.split("\n", 1)[0]!);
       expect(prompt).toContain("`writes[].targetPaths` are paths relative to that directory's root");
       expect(prompt).toContain("`writes[].checks` are shell commands, run in that directory");
       expect(prompt).toContain("`dir` is a directory's `key`");

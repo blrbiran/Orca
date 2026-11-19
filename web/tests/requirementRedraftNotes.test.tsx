@@ -37,6 +37,12 @@ describe("the split draft's runtime-data note (#362)", () => {
     cleanup();
     expect(show(withDraft({ runtimeDataPaths: [] })).querySelector("[data-runtime-data-path]")).toBeNull();
   });
+
+  it("names a multi-directory entry's file with its directory key (multi split instruction version 6)", () => {
+    // mutation: render entry.path alone -> "lists .app/items.json", red
+    expect(show(withDraft({ runtimeDataPaths: [{ taskId: "both", dir: "alpha", path: ".app/items.json" }] })).querySelector("[data-runtime-data-path]")?.textContent)
+      .toBe("both lists alpha:.app/items.json, a data file the requirement names, as a target path. If that is where the program keeps its data (not seed data the requirement asks to commit), send feedback to drop it.");
+  });
 });
 
 describe("the split draft's note after a re-draft that left the feedback unreported (dogfood finding 3)", () => {

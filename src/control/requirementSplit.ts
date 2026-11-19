@@ -97,7 +97,8 @@ const IMPLIED_PATH_RULE = "- Give a task every file its `successCondition` requi
  * A call already started keeps the prompt frozen in its envelope at A2 (stepA2SingleCall), whatever version built it.
  * Version 4 (#188) adds the bugfix test-scope rule; version 5 (#168) ties required checks to writable work.
  * Version 6 (#328, SPLIT_INSTRUCTION_V6) adds the optional historyExpectation; version 7 (#351 addendum,
- * SPLIT_INSTRUCTION_V7) the optional requirementConflicts. Both are single-repository only; the multi instruction stays 5.
+ * SPLIT_INSTRUCTION_V7) the optional requirementConflicts. Both are single-repository only; the multi instruction reaches
+ * conflicts, the standing feedback and the runtime-data rule at its own version 6 (SPLIT_INSTRUCTION_MULTI_V6).
  * In-flight calls keep their frozen envelope.
  */
 const SPLIT_INSTRUCTION_V5 = [
@@ -234,6 +235,23 @@ export const SPLIT_INSTRUCTION_MULTI_V5 = [
   "No other key at any level. Every string is non-empty except notes.",
 ].join("\n");
 
+/** The multi-directory head a new split call sends since multi instruction version 6. */
+export const SPLIT_PROMPT_HEAD_MULTI_V6 = "Orca requirement split (several directories), instruction version 6.";
+/**
+ * Multi-directory split instruction version 6 (session 3ba26002, 2026-11-19; the human's 「同意」 to multi-directory
+ * requirementConflicts once single-repository v7 had worked in a paid dogfood, session 543e800e): multi v5 plus what
+ * single-repository v7 and v8 added -- the conflicts rule and template line, the standing-feedback text and rule, and the
+ * runtime-data rule. Multi names a path per directory, so a path in `why` carries its directory key (as `<key>:<path>`,
+ * the form requirement show prints a multi claim in) and the runtime-data rule names `writes[].targetPaths`. Multi v5's
+ * bytes stay as they are; a call already started keeps its frozen envelope.
+ */
+export const SPLIT_INSTRUCTION_MULTI_V6 = SPLIT_INSTRUCTION_MULTI_V5
+  .replace(SPLIT_PROMPT_HEAD_MULTI, SPLIT_PROMPT_HEAD_MULTI_V6)
+  .replace(`${EARLIER_DRAFTS}\n`, `${EARLIER_DRAFTS_V8}\n`)
+  .replace(`${REVISION_RULE}\n`, `${REVISION_RULE}\n${REQUIREMENT_CONFLICTS_RULE} A path in \`why\` names its directory's key first, as \`<key>:<path>\`.\n${FEEDBACK_STANDS_RULE}\n`)
+  .replace(`${IMPLIED_PATH_RULE}\n`, `${IMPLIED_PATH_RULE}\n${RUNTIME_DATA_RULE.replace("in `targetPaths`", "in `writes[].targetPaths`")}\n`)
+  .replace("  \"notes\": anything the person should know about this split", "  \"requirementConflicts\": optional [ { \"criterion\": an acceptance criterion's id or a short quote, \"feedback\": optional, the feedback words that caused it, \"why\": what in this draft does not meet it } ],\n  \"notes\": anything the person should know about this split");
+
 /** N1 spec §8.1 as a hand-written JSON Schema, in the keyword subset clarify uses; everything else is splitOutputSchema's and validateSplitDraft's. */
 export const SPLIT_JSON_SCHEMA: Readonly<Record<string, unknown>> = deepFreeze({
   type: "object", additionalProperties: false, required: ["tasks", "notes"],
@@ -272,6 +290,11 @@ export const SPLIT_JSON_SCHEMA_MULTI: Readonly<Record<string, unknown>> = deepFr
           properties: { dir: str, targetPaths: strings, checks: strings } } } } } },
   },
 });
+/** Multi instruction version 6: the multi schema plus single-repository v7's `requirementConflicts`. */
+export const SPLIT_JSON_SCHEMA_MULTI_V6: Readonly<Record<string, unknown>> = deepFreeze({
+  ...SPLIT_JSON_SCHEMA_MULTI,
+  properties: { ...(SPLIT_JSON_SCHEMA_MULTI.properties as object), requirementConflicts: (SPLIT_JSON_SCHEMA_V7.properties as Record<string, unknown>).requirementConflicts },
+});
 
 /**
  * Task setup spec §4.2: codex's strict projection makes every optional key required (ccloop strictSingleCall.ts); its
@@ -283,15 +306,22 @@ export const SPLIT_JSON_SCHEMA_MULTI: Readonly<Record<string, unknown>> = deepFr
  */
 export function withoutEmptySetup(raw: unknown): unknown {
   if (raw === null || typeof raw !== "object" || !Array.isArray((raw as { tasks?: unknown }).tasks)) return raw;
+  return withoutEmptyTaskSetup(withoutEmptyConflicts(raw) as { tasks: unknown[] });
+}
+/**
+ * The `requirementConflicts` half of withoutEmptySetup. Multi instruction version 6 uses it alone: a multi task has no
+ * `setup` (spec §5.4), so an empty one there stays a schema refusal as before.
+ */
+export function withoutEmptyConflicts(raw: unknown): unknown {
+  if (raw === null || typeof raw !== "object" || !Array.isArray((raw as { tasks?: unknown }).tasks)) return raw;
   const { requirementConflicts: conflicts, ...others } = raw as Record<string, unknown>;
-  const folded = conflicts === null || (Array.isArray(conflicts) && conflicts.length === 0) ? others
+  return conflicts === null || (Array.isArray(conflicts) && conflicts.length === 0) ? others
     : !Array.isArray(conflicts) ? raw
     : { ...others, requirementConflicts: conflicts.map((entry) => {
       if (entry === null || typeof entry !== "object" || (entry as { feedback?: unknown }).feedback !== null) return entry;
       const { feedback: _null, ...rest } = entry as Record<string, unknown>;
       return rest;
     }) };
-  return withoutEmptyTaskSetup(folded as { tasks: unknown[] });
 }
 function withoutEmptyTaskSetup(raw: { tasks: unknown[] }): unknown {
   const tasks = (raw as { tasks: unknown[] }).tasks.map((task) => {
@@ -740,7 +770,8 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
  * overview, and no block for draft 1 -- so drafts of one requirement at one commit share the prefix up to it (the
  * nonce is the overview hash's).
  * Multi-directory projects spec §6.4: `multi` uses the multi instruction and fences the composed overview as
- * `project-overview`; absent, the bytes are the single-repository ones.
+ * `project-overview`; absent, the bytes are the single-repository ones. With `multi`, `instructionVersion` is the multi
+ * instruction's own: 5, or 6 (the default).
  */
 export function buildSplitPrompt(input: { document: string; overview: { canonicalJson: string; hash: string }; earlierDrafts: DraftBody[]; multi?: boolean; instructionVersion?: 5 | 6 | 7 | 8;
   /** Review M1: the latest draft when a revision withdrew the consensus (consensusWithdrawn.lastDraftNo); feedback before it is not carried. */
@@ -752,14 +783,19 @@ export function buildSplitPrompt(input: { document: string; overview: { canonica
   const withTasks = sent.filter((draft) => draft.output !== null).at(-1);
   const latest = withTasks ?? sent.at(-1);
   const later = withTasks === undefined ? [] : sent.filter((draft) => draft.draftNo > withTasks.draftNo);
-  const instruction = input.multi === true ? SPLIT_INSTRUCTION_MULTI_V5 : input.instructionVersion === 5 ? SPLIT_INSTRUCTION_V5 : input.instructionVersion === 6 ? SPLIT_INSTRUCTION_V6
+  // Multi instruction version 6: a multi prompt has its own numbering, 5 or 6 (the default); no other version exists there.
+  if (input.multi === true && input.instructionVersion !== undefined && input.instructionVersion !== 5 && input.instructionVersion !== 6) {
+    throw new ControlError("recovery-blocked", `split-instruction-unknown:multi:${input.instructionVersion}`);
+  }
+  const instruction = input.multi === true ? (input.instructionVersion === 5 ? SPLIT_INSTRUCTION_MULTI_V5 : SPLIT_INSTRUCTION_MULTI_V6)
+    : input.instructionVersion === 5 ? SPLIT_INSTRUCTION_V5 : input.instructionVersion === 6 ? SPLIT_INSTRUCTION_V6
     : input.instructionVersion === 7 ? SPLIT_INSTRUCTION_V7 : SPLIT_INSTRUCTION_V8;
   const contextName = input.multi === true ? "project-overview" : "repository-overview";
-  // Dogfood finding (3), version 8 only (older versions keep their bytes): a draft Orca drafts again after code handed back
-  // a draft written after the person's feedback carries that feedback, the draft it was given on, and the conflicts the
-  // revised draft reported.
-  const v8 = input.multi !== true && (input.instructionVersion ?? 8) === 8;
-  const standing = v8 && latest !== undefined && latest.feedback === null ? standingFeedback(input.earlierDrafts, input.revisionBoundary ?? null) : null;
+  // Dogfood finding (3), single version 8 and multi version 6 only (older versions keep their bytes): a draft Orca drafts
+  // again after code handed back a draft written after the person's feedback carries that feedback, the draft it was given
+  // on, and the conflicts the revised draft reported.
+  const carries = instruction === SPLIT_INSTRUCTION_V8 || instruction === SPLIT_INSTRUCTION_MULTI_V6;
+  const standing = carries && latest !== undefined && latest.feedback === null ? standingFeedback(input.earlierDrafts, input.revisionBoundary ?? null) : null;
   // Review M5: the revised draft's conflicts go with the carried feedback only (the spec correction's words).
   const conflicts = standing !== null ? conflictsOfDraft(latest!) : [];
   const revision = latest === undefined ? [] : [fence("earlier-draft", nonce, JSON.stringify({

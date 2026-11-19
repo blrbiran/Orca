@@ -161,7 +161,7 @@ function feedbackAfterRedraftLine(draftNo: number, carry: FeedbackAfterRedraft):
 }
 
 function requirementShow(body: unknown): string {
-  const drafts = (field(body, "drafts") ?? []) as Array<{ draftNo: number; layers: string[][] | null; parallelCandidates?: Array<{ before: string; after: string }>; impliedPathsOutsideTargets?: ImpliedPathOutsideTargets[]; goalPathsOutsideTargets?: GoalPathOutsideTargets[]; runtimeDataPaths?: Array<{ taskId: string; path: string }>; feedbackAfterRedraft?: FeedbackAfterRedraft; impliedPathsAdded?: ImpliedPathAddition[] | null; overlapSerialized?: Array<{ a: string; b: string; paths: string[] }>; implicitEdges?: Array<{ from: string; to: string; conflicts: Array<{ a: string; b: string }> }> | null; output?: { tasks?: Array<object>; requirementConflicts?: Array<{ criterion: string; feedback?: string; why: string }> } | null }>;
+  const drafts = (field(body, "drafts") ?? []) as Array<{ draftNo: number; layers: string[][] | null; parallelCandidates?: Array<{ before: string; after: string }>; impliedPathsOutsideTargets?: ImpliedPathOutsideTargets[]; goalPathsOutsideTargets?: GoalPathOutsideTargets[]; runtimeDataPaths?: Array<{ taskId: string; dir?: string; path: string }>; feedbackAfterRedraft?: FeedbackAfterRedraft; impliedPathsAdded?: ImpliedPathAddition[] | null; overlapSerialized?: Array<{ a: string; b: string; paths: string[] }>; implicitEdges?: Array<{ from: string; to: string; conflicts: Array<{ a: string; b: string }> }> | null; output?: { tasks?: Array<object>; requirementConflicts?: Array<{ criterion: string; feedback?: string; why: string }> } | null }>;
   const lines = drafts.flatMap((draft) => [
     ...(draft.layers === null ? [] : [`draft ${draft.draftNo} layers: ${draft.layers.map((layer) => `[${layer.join(", ")}]`).join(" -> ")}`]),
     ...((draft.parallelCandidates ?? []).length === 0 ? [] : [`draft ${draft.draftNo} could run in parallel (a dependsOn edge is all that orders each pair; no file the earlier writes is written, checked or mentioned by the later; orca requirement apply-parallel drops the edges, or send feedback): ${draft.parallelCandidates!.map((pair) => `${pair.before} ∥ ${pair.after}`).join(", ")}`]),
@@ -181,8 +181,9 @@ function requirementShow(body: unknown): string {
     ...(draft.impliedPathsAdded ?? []).map((entry) => `draft ${draft.draftNo} ${impliedPathAddedLine(entry)}`),
     // #351 addendum: where the split itself reports its draft does not meet the requirement as written (not checked by code).
     ...(draft.output?.requirementConflicts ?? []).map((entry) => `draft ${draft.draftNo} requirement-conflict: ${entry.criterion} -- ${entry.why}${entry.feedback === undefined ? "" : ` (feedback: "${entry.feedback}")`}`),
-    // Tester #362: a data file under a dot-directory the requirement names, listed as a target path (a hint).
-    ...(draft.runtimeDataPaths ?? []).map((entry) => `draft ${draft.draftNo} ${entry.taskId} lists ${entry.path}, a data file the requirement names, as a target path; if that is where the program keeps its data (not seed data the requirement asks to commit), drop it: orca requirement drop-path <group> --task ${entry.taskId} --path ${entry.path}`),
+    // Tester #362: a data file under a dot-directory the requirement names, listed as a target path (a hint). A multi
+    // draft's entry is printed `<dir>:<path>`, as a multi claim is above; drop-path takes the path alone.
+    ...(draft.runtimeDataPaths ?? []).map((entry) => `draft ${draft.draftNo} ${entry.taskId} lists ${entry.dir === undefined ? "" : `${entry.dir}:`}${entry.path}, a data file the requirement names, as a target path; if that is where the program keeps its data (not seed data the requirement asks to commit), drop it: orca requirement drop-path <group> --task ${entry.taskId} --path ${entry.path}`),
     // Dogfood finding (3): Orca re-drafted after the person's feedback and nothing in this draft reports on it.
     ...(draft.feedbackAfterRedraft === undefined ? [] : [feedbackAfterRedraftLine(draft.draftNo, draft.feedbackAfterRedraft)]),
   ]);

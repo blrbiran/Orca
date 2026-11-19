@@ -328,8 +328,8 @@ export type DraftViewV1 = {
   autoRetry: number;
   waiting: null | "requirement-budget-exhausted" | "requirement-usage-unknown";
   feedback: string | null;
-  /** #351 addendum: `requirementConflicts`, only on a single-repository split that reported any (never defaulted). */
-  output: { tasks: SplitTaskV1[]; notes: string; requirementConflicts?: RequirementConflictV1[] } | { tasks: MultiSplitTaskV1[]; notes: string } | null;
+  /** #351 addendum: `requirementConflicts`, only on a split that reported any (never defaulted); multi split instruction version 6 too. */
+  output: { tasks: SplitTaskV1[]; notes: string; requirementConflicts?: RequirementConflictV1[] } | { tasks: MultiSplitTaskV1[]; notes: string; requirementConflicts?: RequirementConflictV1[] } | null;
   draftHash: string | null;
   reasons: string[];
   layers: string[][] | null;
@@ -342,8 +342,8 @@ export type DraftViewV1 = {
   goalPathsOutsideTargets?: Array<{ taskId: string; path: string }>;
   /** Tester #335: tasks no dependency orders that run one after the other only because a broad target path overlaps (a hint). */
   overlapSerialized?: Array<{ a: string; b: string; paths: string[] }>;
-  /** Tester #362: a data file under a dot-directory the requirement names, listed as a target path (a hint). */
-  runtimeDataPaths?: Array<{ taskId: string; path: string }>;
+  /** Tester #362: a data file under a dot-directory the requirement names, listed as a target path (a hint); `dir` on a multi draft. */
+  runtimeDataPaths?: Array<{ taskId: string; dir?: string; path: string }>;
   /** Dogfood finding (3): Orca re-drafted after the person's feedback and this draft reports no conflict about it. */
   feedbackAfterRedraft?: { feedbackDraftNo: number; feedback: string; redrafts: number[]; conflictsBefore: string[] };
   /** Spec 2026-11-16: paths the split added to a task's targetPaths because its success condition named them (#345: or its goal, `source: "goal"`). */
