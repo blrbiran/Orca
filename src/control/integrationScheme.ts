@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { z } from "zod";
 import { sha256Canonical } from "./canonicalJson.js";
 import { reconcileRecordSchema } from "./driveRecord.js";
@@ -125,6 +126,7 @@ export function checkScheme(repo: string, scheme: IntegrationScheme): Promise<st
 
 async function schemeCheck(repo: string, scheme: IntegrationScheme): Promise<string | null> {
   if (scheme.delivery === "keep") return null;
+  if (scheme.delivery === "working-tree") return workingTreeCheck(repo);
   if ("remote" in scheme && !validRemoteName(scheme.remote)) return "remote-name";
   // Final review Minor 5: `orca/` is Orca's own namespace (every group's work branch); a target there is refused.
   if (scheme.target.startsWith("orca/") || !(await checkBranchName(repo, scheme.target))) return "target-name";
@@ -133,6 +135,19 @@ async function schemeCheck(repo: string, scheme: IntegrationScheme): Promise<str
   if (url === null) return "remote-missing";
   if (scheme.delivery === "github-pr" && githubRepoOf(url) === null) return "remote-not-github";
   return null;
+}
+
+/**
+ * Working-tree delivery spec §4.1: the registered path must be the top level of a non-bare work tree -- git answers
+ * `--is-inside-work-tree` with `true` and `--show-toplevel` is the registered path's realpath. Else working-tree-missing.
+ */
+async function workingTreeCheck(repo: string): Promise<string | null> {
+  const inside = await runGit(repo, ["rev-parse", "--is-inside-work-tree"]);
+  if (!inside.ok || inside.stdout.trim() !== "true") return "working-tree-missing";
+  const top = await runGit(repo, ["rev-parse", "--show-toplevel"]);
+  let real: string;
+  try { real = realpathSync(repo); } catch { return "working-tree-missing"; }
+  return top.ok && top.stdout.replace(/\n$/, "") === real ? null : "working-tree-missing";
 }
 
 /** The GitHub repository a remote URL names: https, scp-like and ssh:// shapes on github.com; anything else is null. */
@@ -153,7 +168,7 @@ export function preflightScheme(repo: string, scheme: IntegrationScheme, ghBin: 
 
 async function preflight(repo: string, scheme: IntegrationScheme, ghBin: string): Promise<string | null> {
   const failed = await schemeCheck(repo, scheme);
-  if (failed !== null || scheme.delivery === "keep") return failed;
+  if (failed !== null || scheme.delivery === "keep" || scheme.delivery === "working-tree") return failed;
   if (scheme.delivery === "local") {
     if (!(await runGit(repo, ["rev-parse", "--verify", "--quiet", `refs/heads/${scheme.target}`])).ok) return "target";
   } else {

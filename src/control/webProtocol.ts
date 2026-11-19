@@ -1050,6 +1050,9 @@ export const integrationSchemeSchema = z.discriminatedUnion("delivery", [
   z.object({ delivery: z.literal("local"), trigger: integrationTriggerSchema, method: integrationMethodSchema, target: z.string(), historyExpectation: historyExpectationSchema.optional() }).strict(),
   z.object({ delivery: z.literal("push-target"), trigger: integrationTriggerSchema, method: integrationMethodSchema, target: z.string(), remote: z.string() }).strict(),
   z.object({ delivery: z.enum(["push-branch", "github-pr"]), trigger: integrationTriggerSchema, target: z.string(), remote: z.string() }).strict(),
+  // Working-tree delivery spec 2026-11-19 §4.1 (#365): the group's change written into the registered checkout,
+  // uncommitted. No trigger (always "group"), method, target or remote.
+  z.object({ delivery: z.literal("working-tree") }).strict(),
 ]).superRefine((scheme, ctx) => {
   if (scheme.delivery === "local" && scheme.historyExpectation && (scheme.trigger !== "group" || scheme.method !== "merge" || scheme.historyExpectation.targetRef !== `refs/heads/${scheme.target}`))
     ctx.addIssue({ code: "custom", message: "history-scheme-invalid", path: ["historyExpectation"] });

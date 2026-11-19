@@ -19,7 +19,7 @@ import { Select } from "./ui/Select.js";
 type Delivery = IntegrationSchemeV1["delivery"];
 type Trigger = "task" | "group";
 type Method = "merge" | "squash";
-const DELIVERIES: readonly Delivery[] = ["keep", "local", "push-target", "push-branch", "github-pr"];
+const DELIVERIES: readonly Delivery[] = ["keep", "local", "push-target", "push-branch", "github-pr", "working-tree"];
 const TRIGGERS: readonly Trigger[] = ["task", "group"];
 const METHODS: readonly Method[] = ["merge", "squash"];
 
@@ -28,6 +28,8 @@ const tx = (key: string, values?: Record<string, string | number>): string => St
 /** Spec §9.1: the scheme in plain words, e.g. "After each task: push orca/g to origin and keep one draft GitHub PR ...". */
 export function integrationSentence(scheme: IntegrationSchemeV1, groupId: string): string {
   if (scheme.delivery === "keep") return tx("control.integration.says.keep");
+  // Working-tree delivery spec §4.1: no trigger, method, target or remote.
+  if (scheme.delivery === "working-tree") return tx("control.integration.says.working-tree", { groupId });
   const key = scheme.delivery === "github-pr" ? `github-pr-${scheme.trigger}` : scheme.delivery;
   return tx(`control.integration.says.${key}`, {
     when: tx(`control.integration.when.${scheme.trigger}`),
@@ -65,7 +67,7 @@ function historySources(text: string): { sources: Array<{ taskId: string; ref: s
 }
 
 function fieldsOf(scheme: IntegrationSchemeV1, suggestedTarget: string | null): Fields {
-  if (scheme.delivery === "keep") return { delivery: "keep", trigger: "task", method: "merge", target: suggestedTarget ?? "", remote: "origin", history: "", artifacts: "" };
+  if (scheme.delivery === "keep" || scheme.delivery === "working-tree") return { delivery: scheme.delivery, trigger: "task", method: "merge", target: suggestedTarget ?? "", remote: "origin", history: "", artifacts: "" };
   const history = scheme.delivery === "local" ? scheme.historyExpectation : undefined;
   return {
     delivery: scheme.delivery, trigger: scheme.trigger, method: "method" in scheme ? scheme.method : "merge", target: scheme.target,
@@ -78,7 +80,8 @@ function fieldsOf(scheme: IntegrationSchemeV1, suggestedTarget: string | null): 
 function schemeOf(fields: Fields): IntegrationSchemeV1 {
   const { delivery, trigger, method, target, remote } = fields;
   switch (delivery) {
-    case "keep": return { delivery };
+    case "keep":
+    case "working-tree": return { delivery };
     case "local": {
       const parsed = historySources(fields.history);
       if (!("sources" in parsed) || parsed.sources.length === 0) return { delivery, trigger, method, target };
@@ -108,7 +111,7 @@ function SchemeForm(props: { scheme: IntegrationSchemeV1; suggestedTarget: strin
     setFields((current) => (current.target === "" ? { ...current, target: props.suggestedTarget! } : current));
   }, [props.suggestedTarget]);
   const { delivery } = fields;
-  const missingTarget = delivery !== "keep" && fields.target.trim() === "";
+  const missingTarget = delivery !== "keep" && delivery !== "working-tree" && fields.target.trim() === "";
   // Tester #339: a history source needs "when the group completes" and "merge commit" (the server checks it too).
   const parsedHistory = delivery === "local" ? historySources(fields.history) : { sources: [] };
   const historyProblem = "bad" in parsedHistory ? t("control.integration.historyForm.bad", { line: parsedHistory.bad })
@@ -121,7 +124,7 @@ function SchemeForm(props: { scheme: IntegrationSchemeV1; suggestedTarget: strin
         <Select value={delivery} onValueChange={(value) => set({ delivery: value })}
           options={DELIVERIES.map((value) => ({ value, label: tx(`control.integration.deliveries.${value}`) }))} />
       </label>
-      {delivery !== "keep" && (
+      {delivery !== "keep" && delivery !== "working-tree" && (
         <>
           <label>
             {t("control.integration.trigger")}

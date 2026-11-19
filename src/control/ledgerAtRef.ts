@@ -77,7 +77,8 @@ export async function integrationTargetRef(store: ControlStore, groupId: string,
   const integration = readGroupIntegration(group ?? readGroup(store, groupId));
   if (integration === null) return null;
   const { scheme } = integration;
-  if (scheme.delivery === "keep") return null;
+  // Working-tree delivery spec §4.1: no target ref, as for keep.
+  if (scheme.delivery === "keep" || scheme.delivery === "working-tree") return null;
   return scheme.delivery === "local" ? `refs/heads/${scheme.target}` : `refs/remotes/${scheme.remote}/${scheme.target}`;
 }
 

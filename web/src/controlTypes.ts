@@ -1088,7 +1088,8 @@ export type IntegrationSchemeV1 =
       historyExpectation?: { version: 1; targetRef: string; directSecondParent: true;
         sourceRefs: Array<{ taskId: string; ref: string }>; artifactPaths?: string[] } }
   | { delivery: "push-target"; trigger: "task" | "group"; method: "merge" | "squash"; target: string; remote: string }
-  | { delivery: "push-branch" | "github-pr"; trigger: "task" | "group"; target: string; remote: string };
+  | { delivery: "push-branch" | "github-pr"; trigger: "task" | "group"; target: string; remote: string }
+  | { delivery: "working-tree" };
 export type GroupIntegrationViewV1 = {
   scheme: IntegrationSchemeV1; schemeHash: string; frozen: boolean; state: "idle" | "blocked" | "conflict" | "resolving"; reason: string | null;
   lastIntegrated: string | null; integratedCommit: string | null; pr: { url: string; number: number; ready: boolean } | null;

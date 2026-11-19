@@ -531,7 +531,8 @@ async function deliverySettled(repo: string, body: unknown, tip: string): Promis
     return record !== null && record.tip === target.tip && record.commit === target.commit;
   }
   const scheme = integration.scheme;
-  if (scheme.delivery === "keep" || integration.pending !== null) return false;
+  // Working-tree delivery spec §4.1: no target ref; only a settled delivery counts.
+  if (scheme.delivery === "keep" || scheme.delivery === "working-tree" || integration.pending !== null) return false;
   for (const ref of [`refs/heads/${scheme.target}`, ...("remote" in scheme ? [`refs/remotes/${scheme.remote}/${scheme.target}`] : [])]) {
     const at = await refTip(repo, ref);
     if (at !== null && await isAncestor(repo, tip, at)) return true;
@@ -566,15 +567,17 @@ export async function reviewFacts(repo: string, body: unknown, tip: string, stor
   if (integration === null) { lines.push(`Delivery: none configured -- the work stays on orca/<group>.`); return lines; }
   const scheme = integration.scheme;
   if (scheme.delivery === "keep") { lines.push(`Delivery: none configured -- the work stays on orca/<group>.`); return lines; }
-  lines.push(`Delivery scheme: ${scheme.delivery}${"method" in scheme ? ` ${scheme.method}` : ""} into ${scheme.target}${"remote" in scheme ? ` on ${scheme.remote}` : ""}`);
+  // Working-tree delivery spec §4.6: written into the registered checkout, uncommitted; there is no target branch.
+  const into = scheme.delivery === "working-tree" ? "the registered working tree (uncommitted)" : scheme.target;
+  lines.push(`Delivery scheme: ${scheme.delivery}${"method" in scheme ? ` ${scheme.method}` : ""} into ${into}${"remote" in scheme ? ` on ${scheme.remote}` : ""}`);
   const delivered = integration.historyPublished !== undefined ? integration.historyPublished.groupTip === tip
     : integration.lastIntegrated === tip && integration.pending === null;
   if (integration.state === "blocked" || integration.state === "conflict") lines.push(`- not delivered: ${integration.state} (${integration.reason ?? "no reason recorded"})`);
   else if (delivered && integration.integratedCommit !== null) {
     let parents = "?";
     try { parents = String((await gitOk(repo, ["rev-list", "--parents", "-n", "1", integration.integratedCommit])).trim().split(/\s+/).length - 1); } catch { /* named as unknown */ }
-    lines.push(`- delivered as ${integration.integratedCommit} (${parents} parents) on ${scheme.target}${integration.pr === null ? "" : `; pull request #${integration.pr.number} (${integration.pr.ready ? "ready" : "draft"}) ${integration.pr.url}`}`);
-  } else if (delivered) lines.push(`- delivered: the tip ${short(tip)} is in ${scheme.target}`);
+    lines.push(`- delivered as ${integration.integratedCommit} (${parents} parents) on ${into}${integration.pr === null ? "" : `; pull request #${integration.pr.number} (${integration.pr.ready ? "ready" : "draft"}) ${integration.pr.url}`}`);
+  } else if (delivered) lines.push(scheme.delivery === "working-tree" ? `- delivered: the tip ${short(tip)} was written into the working tree, uncommitted` : `- delivered: the tip ${short(tip)} is in ${into}`);
   else if (integration.retryAfter !== null) {
     const at = new Date(integration.retryAfter);
     lines.push(`- not delivered: retrying at ${Number.isNaN(at.getTime()) ? String(integration.retryAfter) : at.toISOString()} (${integration.transientReason ?? "no message recorded"})`);

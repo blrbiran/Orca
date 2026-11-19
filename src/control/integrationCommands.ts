@@ -116,7 +116,8 @@ export function applySetGroupIntegration(
         // A PR is a branch of one remote into one target: another delivery, target or remote is another PR (fix round 1,
         // R2). A trigger change keeps it. Final review I1: it is another destination too -- what reached the old one is
         // not in the new one, so the new one starts from scratch (a squash takes its merge base from the target).
-        const sameDestination = current.scheme.delivery === scheme.delivery && current.scheme.target === scheme.target
+        const targetOf = (s: IntegrationScheme): string | null => "target" in s ? s.target : null;
+        const sameDestination = current.scheme.delivery === scheme.delivery && targetOf(current.scheme) === targetOf(scheme)
           && ("remote" in current.scheme ? current.scheme.remote : null) === ("remote" in scheme ? scheme.remote : null);
         group.integration = { ...current, scheme, schemeHash: schemeHash(scheme), frozen, state: "idle", reason: null, pending: null, conflict: null, retryAfter: null, transient: 0,
           ...(sameDestination ? {} : { lastIntegrated: null, integratedCommit: null, pr: null }) };

@@ -29,13 +29,14 @@ import { ORCA_IDENTITY } from "../scheduler/gitExec.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { ControlStore } from "./store.js";
 import type { runTask } from "../scheduler/ccloopRunner.js";
+import { integrateWorkingTree, type WorkingTreeCrashPoint, type WorkingTreeHooks } from "./workingTreeDelivery.js";
 
 /**
  * Integration spec §5-§6: once per driver round, after the runs and the requirement exports, each due group's landed
  * work is carried to where its scheme says -- a local branch, a remote branch, the group's own branch on a remote.
  * One group at a time, in group id order; every git child is bounded (integrationGit.ts).
  */
-export type IntegrationCrashPoint = "after-pending" | "after-publish" | "after-pr-create" | "after-pr-ready";
+export type IntegrationCrashPoint = "after-pending" | "after-publish" | "after-pr-create" | "after-pr-ready" | WorkingTreeCrashPoint;
 export interface IntegrationDeps {
   store: ControlStore; roots: WorkspaceRoots; repoPathOf(repoId: string): string; now(): number;
   /** The `gh` the PR step (spec §6.4, Task 4) runs. */
@@ -51,9 +52,11 @@ export interface IntegrationDeps {
    * background runs, shared with the landing reconciliations). Absent: `resolving` groups are not advanced.
    */
   resolution?: { ccloopBin: string; agentsTablePath: string; dispatchedPersonDir?: string; reconciling: Map<string, Promise<void>>; runTask: typeof runTask };
+  /** Test seams of the working-tree delivery (workingTreeDelivery.ts): a path's device, and the staged file's rename. */
+  workingTree?: Pick<WorkingTreeHooks, "devOf" | "rename">;
 }
 
-type Scheme = Exclude<IntegrationScheme, { delivery: "keep" }>;
+type Scheme = Exclude<IntegrationScheme, { delivery: "keep" | "working-tree" }>;
 type Outcome =
   /** `pr` is the `github-pr` delivery's PR record, written with the rest (§6.1 step 6). */
   | { kind: "done"; tip: string; integrated: string | null; pr?: GroupIntegration["pr"] }
@@ -211,8 +214,19 @@ async function nothingLanded(repo: string, scheme: Scheme, tip: string): Promise
 
 /** One group's integration; null when it is not due. */
 async function integrateGroup(deps: IntegrationDeps, groupId: string, integration: GroupIntegration, unreachable: Set<string>): Promise<Outcome | null> {
-  const scheme = integration.scheme as Scheme;
   const repo = deps.repoPathOf(groupRepoId(deps.store, groupId));
+  // Working-tree delivery spec §4.3 (review I4): dispatched before `caughtUp`, so neither `trigger` nor `nothingLanded`
+  // is read for it. Only a complete, accepted group is written, once per new tip (or to finish a write-ahead).
+  if (integration.scheme.delivery === "working-tree") {
+    if (!groupComplete(deps.store, groupId)) return null;
+    const workTip = await refTip(repo, workBranchRef(groupId));
+    if (workTip === null || (workTip === integration.lastIntegrated && reentry(integration) === null)) return null;
+    return integrateWorkingTree(deps.store, repo, groupId, integration, workTip, {
+      recordPending: (pending) => recordPending(deps, groupId, integration.schemeHash, pending),
+      crash: (point) => crash(deps, point), isCrash: (error) => error instanceof Crashed, ...deps.workingTree,
+    });
+  }
+  const scheme = integration.scheme as Scheme;
   const remoteKey = "remote" in scheme ? `${repo}\0${scheme.remote}` : null;
   if (remoteKey !== null && unreachable.has(remoteKey)) return null;
   const tip = await refTip(repo, workBranchRef(groupId));
@@ -596,7 +610,9 @@ function settle(deps: IntegrationDeps, groupId: string, hash: string, outcome: O
         // A finished resolution's record goes with it (fix round 1, F1): it must not outlive a retry or the next conflict.
         next = { ...current, state: "blocked", reason: outcome.reason,
           // A history CAS may already have published its whole chain; never discard its sole re-entry evidence on a block.
-          pending: current.pending?.history ? current.pending : null,
+          // Working-tree delivery spec §4.4 step 11: a working-tree write-ahead stays too -- paths an attempt already wrote
+          // to its tip must stay writable for the next one (`was` holds `pending.tip`).
+          pending: current.pending?.history || current.scheme.delivery === "working-tree" ? current.pending : null,
           retryAfter: null, transient: 0, transientReason: null, resolution: null };
         break;
       case "conflict": {
