@@ -710,7 +710,7 @@ WT-9 and the plan's first task.
   refine stays as a documented redundant guard.
 - **Accepted limits found, not fixed (Minor):** O3's window also covers a leading directory swapped for a symlink between
   the step-9 re-check and a rename (the rename would follow it); on a case-insensitive volume a tree holding two paths
-  that differ only by case at `from` can let a deletion of one remove the person's file under the other name; HFS+-only
+  that differ only by case at `from` can let a deletion of one remove the person's file under the other name (reasoned, not reproduced); HFS+-only
   ignorable code points in a `.git` component (APFS does not ignore them; checked on this machine) are not refused; a
   second `pending` overwrite after two crashes on two moved tips reads the first attempt's paths as conflicts (refused,
   never written); the sweep of a registered path that is no longer a repository but sits inside another one sweeps that
