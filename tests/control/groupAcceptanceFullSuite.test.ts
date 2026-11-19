@@ -84,9 +84,25 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
       await untilDeadline(driver, () => group(t).status === "done");
       const record = group(t).acceptance;
       expect(record.result).toBe("passed");
-      expect(record.fullSuite).toMatchObject({ exits: ["0", "0"], flaky: false, reported: 1 });
+      // Ruling: human approval, 2026-11-20 (P1) -- task runs reported this suite red, so two greens after that are a
+      // flaky suite, not a stable one. The old `flaky: false` here recorded exactly the state #383 reported.
+      expect(record.fullSuite).toMatchObject({ exits: ["0", "0"], flaky: true, reported: 1 });
       expect(s.runs()).toHaveLength(2);
       expect(fullSuiteWarning(record)).toBe(`full-suite-reported-flaky:${s.command}`);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("#383: a suite no task run reported red stays non-flaky after its single green", async () => {
+    const s = suite("true");
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
+      await t.claim(); await t.claim();
+      setSuite(t, s.command);
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).status === "done");
+      const record = group(t).acceptance;
+      // No report behind it: one green suffices, and the record carries no `reported` field.
+      expect(record.fullSuite).toEqual({ command: s.command, suggestion: null, exits: ["0"], flaky: false });
+      expect(s.runs()).toHaveLength(1);
     } finally { await t.h.dispose(); }
   });
 

@@ -41,6 +41,8 @@ import type { ControlStore } from "./store.js";
  * Full suite spec 2026-11-12 (#279): after a green union, the project's full-suite command (its integration-check command,
  * fullSuite.ts) runs once in the same tree and bound, once more if red: green on the retry passes as flaky, red twice
  * fails. With it set, one landing is checked too. With none set, nothing more runs and the record names the suggestion.
+ * Tester #383 (2026-11-20): task runs that reported the suite red make a green first run insufficient -- it runs twice
+ * anyway, and both greens are recorded flaky; the reports are evidence the suite has been red.
  */
 export * from "./groupAcceptanceRecord.js";
 
@@ -257,12 +259,15 @@ function reportedCount(store: ControlStore, groupId: string, body: Record<string
 
 /**
  * Full suite spec §3-§4: what the record says of the suite. Unset: the suggestion code detects in the repository's checkout
- * (never run; human: 「人采纳才用」). Set: each run's exit, and flaky when it passed only on the retry.
+ * (never run; human: 「人采纳才用」). Set: each run's exit, and flaky when it passed only on the retry -- or when task runs
+ * had already reported it red and both confirmation runs were green (tester #383: the reports are the evidence it has
+ * been red, so two greens do not make it stable; human ruling 2026-11-20, P1).
  */
 function fullSuiteRecord(suite: string | null, repo: string, exits: string[], outcome?: AcceptanceOutcome): FullSuiteRecord {
   const reported = outcome?.reported ?? 0;
   return {
-    command: suite, suggestion: suite === null ? suggestFullSuiteCommand(repo) : null, exits, flaky: exits.length === 2 && exits[0] !== "0" && exits[1] === "0",
+    command: suite, suggestion: suite === null ? suggestFullSuiteCommand(repo) : null, exits,
+    flaky: exits.length === 2 && exits[1] === "0" && (exits[0] !== "0" || reported > 0),
     ...(outcome?.tests === undefined || outcome.tests === null ? {} : { tests: outcome.tests }),
     ...(reported === 0 ? {} : { reported }),
     ...(outcome?.baseline === undefined ? {} : { baseline: { tip: outcome.baseline.tip, exits: outcome.baseline.exits, ...(outcome.baseline.failure?.tail ? { tail: outcome.baseline.failure.tail } : {}), ...(outcome.baseline.tests === undefined || outcome.baseline.tests === null ? {} : { tests: outcome.baseline.tests }) } }),

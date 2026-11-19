@@ -24,7 +24,8 @@ export interface GroupAcceptance {
   /**
    * Full suite spec 2026-11-12 §4 (#279): the project's full-suite command this acceptance ran after the union (null: none
    * set -- then `suggestion` is what code detected, never run), each run's exit (a red first run is run once more), and
-   * whether it passed only on the retry. Absent on records written before it, and on not-run.
+   * whether it is flaky: it passed only on the retry, or task runs had reported it red and both confirmation runs passed
+   * (#383). Absent on records written before it, and on not-run.
    */
   fullSuite?: FullSuiteRecord;
 }
@@ -43,7 +44,8 @@ export interface FullSuiteRecord {
   tests?: number | null;
   /**
    * Tester #383 (2026-11-20): how many task runs in this group had already reported this same command red before the
-   * acceptance ran. Above zero, the suite ran twice even when the first run was green, and the warning says so.
+   * acceptance ran. Above zero, the suite ran twice even when the first run was green, the record is `flaky`, and the
+   * warning says so.
    */
   reported?: number;
 }
