@@ -456,6 +456,35 @@ describe("working-tree delivery guard clauses (spec §4.4 steps 3-6, WT-9)", { t
     await blockedWith((w) => { mkdirSync(at(w, "n.txt")); }, { "n.txt": "n\n" }, "integration-working-tree-unsupported:dir:n.txt");
   });
 
+  // Spec §16 (accepted limits): a group that turns a file into a directory, or a directory into a file, is refused by
+  // name -- the person's checkout still holds the old shape, and Orca does not remove one to make room for the other.
+  it("a file turned into a directory is unsafe-path, a directory turned into a file is unsupported:dir", async () => {
+    // mutation: drop the regular-file clause of leadingUnsafe -> the mkdir under a.txt fails as write-failed, red
+    await blockedWith(() => {}, { "a.txt": null, "a.txt/b": "b\n" }, "integration-working-tree-unsafe-path:a.txt/b");
+    // mutation: judge a directory as absent -> the rename onto sub fails as write-failed, red
+    await blockedWith(() => {}, { "sub/only.txt": null, "sub": "s\n" }, "integration-working-tree-unsupported:dir:sub");
+  });
+
+  // Spec §16: git prints a path that is not valid UTF-8 as raw bytes; read as UTF-8 it is mangled (U+FFFD), and a
+  // mangled name must never be written. Refused by name instead.
+  it("a path that is not valid UTF-8 is refused unsafe-path, and nothing is written", async () => {
+    const w = await world(); try {
+      const env = { ...process.env, ...unsetInheritedGitEnv(), GIT_INDEX_FILE: join(w.repo, ".git", `wt-test-index-${process.pid}`) };
+      const run = (args: string[], input?: Buffer): string => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: w.repo, env, input, stdio: "pipe" }).toString("utf8").trim();
+      run(["read-tree", "orca/g"]);
+      const oid = run(["hash-object", "-w", "--stdin"], Buffer.from("bad\n"));
+      run(["update-index", "--index-info"], Buffer.concat([Buffer.from(`100644 ${oid}\tbad`), Buffer.from([0xff]), Buffer.from(".txt\n")]));
+      const commit = run(["commit-tree", run(["write-tree"]), "-p", "orca/g", "-m", "land"]);
+      run(["update-ref", "refs/heads/orca/g", commit]);
+      w.finish();
+      const before = snapshot(w.repo);
+      // mutation: drop the U+FFFD clause of safePath -> a file named with U+FFFD is written, red
+      await w.pass();
+      expect(w.record().reason).toBe("integration-working-tree-unsafe-path:bad\uFFFD.txt");
+      expect(snapshot(w.repo)).toEqual(before);
+    } finally { await w.dispose(); }
+  });
+
   it("each busy marker blocks busy:<op>; index.lock is a backoff", async () => {
     const markers: Array<[string, string, boolean]> = [["MERGE_HEAD", "merge", false], ["CHERRY_PICK_HEAD", "cherry-pick", false], ["REVERT_HEAD", "revert", false],
       ["rebase-merge", "rebase", true], ["rebase-apply", "rebase", true], ["sequencer", "sequencer", true], ["BISECT_LOG", "bisect", false]];

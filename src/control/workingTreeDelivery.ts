@@ -64,9 +64,13 @@ const lstatOrNull = (path: string): Stats | null => {
   try { return lstatSync(path); } catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT" || (error as NodeJS.ErrnoException).code === "ENOTDIR") return null; throw error; }
 };
 
-/** Step 5: relative, non-empty components, no `.` / `..`, no `.git` in any case; a newline cannot pass `--stdin-paths`. */
+/**
+ * Step 5: relative, non-empty components, no `.` / `..`, no `.git` in any case; a newline cannot pass `--stdin-paths`.
+ * U+FFFD (spec §16): git's raw bytes of a path that is not valid UTF-8 decode to it, and that mangled name must never be
+ * written; refused by name (a valid path holding U+FFFD itself is refused too -- accepted).
+ */
 function safePath(path: string): boolean {
-  if (path === "" || isAbsolute(path) || path.includes("\n") || path.includes("\0")) return false;
+  if (path === "" || isAbsolute(path) || path.includes("\n") || path.includes("\0") || path.includes("\uFFFD")) return false;
   return path.split("/").every((part) => part !== "" && part !== "." && part !== ".." && part.toLowerCase() !== ".git");
 }
 
