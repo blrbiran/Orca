@@ -307,8 +307,9 @@ async function multiCriteriaFlag(deps: ExecutionDriverDeps, run: DriverRun, at: 
   const changes: CriteriaChange[] = [];
   for (const [index, dir] of dirs.entries()) {
     if (dir.attemptSha == null) continue;
-    // C names each attempt's result repository by written position, for the same reason.
-    const resultRepo = index === 0 ? join(drive.sourceDir, "repo") : join(drive.sourceDir, "repos", dir.key);
+    // C names each attempt's result repository by written position, for the same reason. Change-sized runs §5.7 (P2): a v2
+    // run's attempts are pinned in each directory's own target, which is where they are read.
+    const resultRepo = drive.snapshotVersion === 2 ? dir.targetRepo : index === 0 ? join(drive.sourceDir, "repo") : join(drive.sourceDir, "repos", dir.key);
     const change = await classifyCriteriaChange(resultRepo, dir.base, dir.attemptSha, checksAt(index, dir.key));
     if (flagged(change)) changes.push(change);
   }
@@ -606,7 +607,7 @@ async function stepDMulti(deps: ExecutionDriverDeps, runId: string, run: DriverR
     const old = await revParse(dir.targetRepo, ref);
     const found = await findLanding(dir.targetRepo, dir.base, old, attempt);
     if (found !== null) { landedDirs[dir.key] = found; continue; }
-    const merged = await produceMultiMerge(deps, run, index, { key: dir.key, targetRepo: dir.targetRepo, attemptSha: attempt }, old, dir.key === primaryKey);
+    const merged = await produceMultiMerge(deps, run, index, { key: dir.key, targetRepo: dir.targetRepo, attemptSha: attempt, runRef: dir.runRef }, old, dir.key === primaryKey);
     if ("conflict" in merged) {
       const landed = Object.keys(landedDirs);
       const reason = `multi-dir-landing-conflict:${dir.key}:${merged.conflict.slice(0, 20).join(", ")}${landed.length === 0 ? "" : `; landed in: ${landed.join(", ")}`}`;
@@ -638,7 +639,7 @@ async function stepDMulti(deps: ExecutionDriverDeps, runId: string, run: DriverR
   return true;
 }
 
-type MultiDirEntry = { key: string; targetRepo: string; attemptSha: string };
+type MultiDirEntry = { key: string; targetRepo: string; attemptSha: string; runRef?: { ref: string; sha: string } | null };
 
 /** §8.1 step 2: the primary's ledger when it was not written, as a ledger-only commit on its work branch tip. */
 async function produceMultiLedger(
@@ -683,7 +684,11 @@ async function produceMultiMerge(
   await removeOwnPath(dir.targetRepo, deps.roots, landing);
   await git(dir.targetRepo, [...QUIET_GIT, "worktree", "add", "--detach", landing, old]);
   try {
-    await git(landing, [...QUIET_GIT, "fetch", "--no-tags", source, `+${attempt}:${incomingRefOf(runId)}`]);
+    // Change-sized runs §5.7 (P2): a pinned attempt is already in this directory's target, so the incoming ref is set there
+    // directly; a v1 run fetches it from its result copy as before. The primary's pin is drive.runRef, an extra's its own.
+    const pin = index === 0 ? drive.runRef : dir.runRef;
+    if (pin != null && pin.sha === attempt) await git(landing, [...QUIET_GIT, "update-ref", incomingRefOf(runId), attempt]);
+    else await git(landing, [...QUIET_GIT, "fetch", "--no-tags", source, `+${attempt}:${incomingRefOf(runId)}`]);
     try {
       await git(landing, [...QUIET_GIT, ...ORCA_IDENTITY, "merge", "--no-ff", "--no-commit", incomingRefOf(runId)]);
     } catch {

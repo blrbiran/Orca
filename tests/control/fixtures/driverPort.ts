@@ -89,6 +89,13 @@ export function fakeCcloopPort(input: {
    * Off (the default), the port has no readFeatures and every run keeps today's result copy.
    */
   attemptRef?: boolean;
+  /**
+   * Change-sized runs §5.7 (P2): what a keyed run writes into each extra directory (contract.context.additionalRepos), by
+   * key. Under the key the port records each extra as ccloop P1's recordExtras does -- a commit in a worktree of that
+   * directory's repoPath, refs/ccloop/run/attempts/1 and refs/ccloop/<runId>/attempts/1 set there, the worktree removed --
+   * and collect answers `dirs[]` with the sha. Without the key nothing changes (no `dirs`, as before).
+   */
+  extraFiles?: (workItemId: string, key: string) => Record<string, string>;
 }): FakeCcloop {
   const calls = { accept: [] as StartEnvelope[], inspect: 0, collect: 0, handoff: [] as HandoffRequest[] };
   const handoffs = new Map<string, HandoffRequest>();
@@ -137,6 +144,25 @@ export function fakeCcloopPort(input: {
       execFileSync("git", ["-C", workspace, "worktree", "remove", "--force", repo]);
       attempt = { attempt: 1, sha, base: head, tree, ref, head: stop.terminal ? sha : head, capture: stop.terminal ? "published" : "live", worktree: "removed" };
     }
+    let dirs: ExecutionReport["dirs"];
+    const extras = (work.contract as { context: { additionalRepos?: Array<{ key: string; repoPath: string }> } }).context.additionalRepos;
+    if (keyed && extras !== undefined) {
+      dirs = [];
+      for (const extra of extras) {
+        const wt = join(work.sourceDir, "run", "dirs", "attempt-1", extra.key);
+        const x = (...args: string[]) => execFileSync("git", ["-C", wt, "-c", "user.name=ccloop", "-c", "user.email=ccloop@example.invalid", ...args], { encoding: "utf8" }).trim();
+        const extraHead = execFileSync("git", ["-C", extra.repoPath, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+        mkdirSync(dirname(wt), { recursive: true });
+        execFileSync("git", ["-C", extra.repoPath, "worktree", "add", "-q", "--detach", wt, extraHead]);
+        const written = input.extraFiles?.(claim.workItemId, extra.key) ?? {};
+        for (const [path, content] of Object.entries(written)) { mkdirSync(dirname(join(wt, path)), { recursive: true }); writeFileSync(join(wt, path), content); }
+        x("add", "-A");
+        const extraSha = x("commit-tree", x("write-tree"), "-p", extraHead, "-m", `ccloop attempt ${claim.runId} ${extra.key}`);
+        x("update-ref", "refs/ccloop/run/attempts/1", extraSha); x("update-ref", `refs/ccloop/${claim.runId}/attempts/1`, extraSha);
+        execFileSync("git", ["-C", extra.repoPath, "worktree", "remove", "--force", wt]);
+        dirs.push({ key: extra.key, resultRepo: `repos/${extra.key}`, changedPaths: Object.keys(written), attemptSha: extraSha });
+      }
+    }
     const variant = input.behaviour(claim.workItemId);
     const events: UsageEvent[] = [
       { runId: claim.runId, generation: claim.generation, eventSeq: 1, bucket: "work", cumulative: variant === "stoppable-usage-unknown" || variant === "failed-usage-unknown" ? null : { tokens: input.workTokens?.(claim.workItemId) ?? 10, activeMs: 5, attempts: input.workAttempts?.(claim.workItemId) ?? 1, sessions: 1 }, source: put(`usage-${claim.runId}-1`, Buffer.from(`work usage ${claim.runId}`)) },
@@ -177,7 +203,7 @@ export function fakeCcloopPort(input: {
     const toolRules = input.toolRules?.(claim.workItemId);
     const pathPolicyMisses = stop.terminal ? input.pathPolicyMisses?.(claim.workItemId) : undefined;
     const liveCeilingStop = stop.terminal ? input.liveCeilingStop?.(claim.workItemId, envelope) : undefined;
-    return { events, candidate, ...(attempt === undefined ? {} : { attempt }), terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: keyed ? null : repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}), ...(budgetSnapshot === undefined ? {} : { budgetSnapshot }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }), ...(toolRules === undefined ? {} : { toolRules }), ...(pathPolicyMisses === undefined ? {} : { pathPolicyMisses }), ...(liveCeilingStop === undefined ? {} : { liveCeilingStop }) };
+    return { events, candidate, ...(attempt === undefined ? {} : { attempt }), ...(dirs === undefined ? {} : { dirs }), terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: keyed ? null : repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}), ...(budgetSnapshot === undefined ? {} : { budgetSnapshot }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }), ...(toolRules === undefined ? {} : { toolRules }), ...(pathPolicyMisses === undefined ? {} : { pathPolicyMisses }), ...(liveCeilingStop === undefined ? {} : { liveCeilingStop }) };
   };
 
   const port: ExecutionPort = {

@@ -448,16 +448,69 @@ function recordRunRef(deps: ExecutionDriverDeps, runId: string, pinned: { ref: s
 }
 
 /**
+ * Change-sized runs spec 2026-11-19 §5.7 (P2): an extra directory's attempt (`drive.dirs[index]`, index >= 1) and where its
+ * objects are, as attemptOfDrive answers the primary's. A keyed run takes collect's `dirs[].attemptSha` (ccloop's record in
+ * that directory's own workspace, run/attempts/<n>/commits.json), checked in that workspace; collect carries no tree or ref
+ * for an extra, so the checks are the two that need none. A legacy-envelope run commits `repos/<key>` exactly as v1 did.
+ * Extras are only pinned, never snapshotted (N6), so `head` and `source` here are never read.
+ */
+async function extraAttemptOf(deps: ExecutionDriverDeps, run: DriverRun, report: ExecutionReport | null, index: number): Promise<ArchiveRepositoryV2> {
+  const drive = run.drive!, dir = drive.dirs![index]!;
+  const own = { key: dir.key, targetRepo: dir.targetRepo, base: dir.base };
+  const none = (unavailable: string, from: string): ArchiveRepositoryV2 => ({ ...own, attempt: null, head: dir.base, source: "base", from, unavailable });
+  if (dir.runRef != null) return { ...own, attempt: dir.runRef.sha, head: dir.runRef.sha, source: "orca-commit", from: dir.targetRepo };
+  if (drive.attemptDelivery === "ref-v1") {
+    const from = dir.workspacePath, sha = report?.dirs?.find((entry) => entry.key === dir.key)?.attemptSha ?? null;
+    if (sha === null) return none("attempt-unavailable:no-record", from);
+    const failure = await checkAttempt(from, dir.base, sha);
+    return failure !== null ? none(failure, from) : { ...own, attempt: sha, head: sha, source: "ccloop-published", from };
+  }
+  const resultRepo = join(drive.sourceDir, "repos", dir.key);
+  if (!existsSync(resultRepo)) return none("attempt-unavailable:no-result-copy", resultRepo);
+  const head = await revParse(resultRepo, "HEAD");
+  const sha = await commitAttempt(resultRepo);
+  const failure = await checkAttempt(resultRepo, dir.base, sha);
+  return failure !== null ? none(failure, resultRepo) : { ...own, attempt: sha, head, source: "orca-commit", from: resultRepo };
+}
+
+/** §5.7: each extra's pin on `drive.dirs[i].runRef` (once; a later pin of the same sha is a no-op), keyed by directory. */
+function recordDirRunRefs(deps: ExecutionDriverDeps, runId: string, pins: ReadonlyArray<{ key: string | null; ref: string; sha: string }>): void {
+  if (!pins.some((pin) => pin.key !== null)) return;
+  write(deps, () => {
+    const current = readDriverRun(deps.store, runId), drive = current.drive;
+    if (drive?.dirs === undefined) return;
+    current.drive = { ...drive, dirs: drive.dirs.map((dir, index) => {
+      const pin = index === 0 ? undefined : pins.find((candidate) => candidate.key === dir.key);
+      return pin === undefined || dir.runRef != null ? dir : { ...dir, runRef: { ref: pin.ref, sha: pin.sha } };
+    }) };
+    saveDriverRun(deps.store, current);
+  });
+}
+
+/**
+ * §5.6 / §5.7 (P2): `repos/<key>` is the only copy of an extra's result until that result is pinned in its own target, so a
+ * settle that did not land may drop it only when the run is v2 and every extra is pinned. A v1 run keeps it, as P0 left it.
+ */
+export function extrasPinned(drive: DriveRecord | undefined): boolean {
+  const extras = drive?.dirs?.slice(1) ?? [];
+  return drive?.snapshotVersion === 2 && extras.length > 0 && extras.every((dir) => dir.runRef != null);
+}
+
+/**
  * Every driver archive (§5.4): a run whose A2 found a ccloop that reads snapshot v2 archives v2 -- pinned, one range bundle
  * -- and every other run archives v1 exactly as before (§5.8: runs in flight across the upgrade, and an older ccloop).
+ * A multi-directory run's extras are pinned in their own targets (§5.7) and never snapshotted (N6).
  */
 export async function archiveDriveRun(deps: ExecutionDriverDeps, runId: string, stopProof: StopProof | null, report: ExecutionReport | null): Promise<{ artifacts: ArtifactRef[]; snapshot: ArtifactRef | null; missing: string[] }> {
   const run = readDriverRun(deps.store, runId), drive = run.drive!;
   if (drive.snapshotVersion !== 2) return archiveRun(deps.store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof }, archiveAdmission(deps));
   const attempt = await attemptOfDrive(deps, run, report);
-  const archived = await archiveRunV2(deps.store, { runId, sourceDir: drive.sourceDir, stopProof, repositories: [attempt] }, archiveAdmission(deps));
+  const extras: ArchiveRepositoryV2[] = [];
+  for (let index = 1; index < (drive.dirs?.length ?? 0); index += 1) extras.push(await extraAttemptOf(deps, run, report, index));
+  const archived = await archiveRunV2(deps.store, { runId, sourceDir: drive.sourceDir, stopProof, repositories: [attempt, ...extras] }, archiveAdmission(deps));
   const primary = archived.pins.find((pin) => pin.key === null);
   if (primary !== undefined) recordRunRef(deps, runId, { ref: primary.ref, sha: primary.sha }, attempt);
+  recordDirRunRefs(deps, runId, archived.pins);
   return archived;
 }
 
@@ -673,6 +726,9 @@ async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: Fro
     if (!order.has(write.dir)) { blockRun(deps, runId, "A2", `multi-dir-writes:${write.dir}`); return true; }
   }
   const written = [...writes].sort((left, right) => order.get(left.dir)! - order.get(right.dir)!);
+  // Change-sized runs spec 2026-11-19 §5.7, §5.8 (P2): as stepA2 -- a ccloop that reads snapshot v2 gets the key on protocol
+  // 4 and the run archives v2, its extras pinned in their own targets. A multi run is never a recovery or a continuation.
+  const refV1 = run.mode === undefined && run.recoveryOf === undefined && (await portFor(deps, run).readFeatures?.())?.attemptRef === "v1";
   privateDirectory(drive.sourceDir);
   const preparedDirs: Array<{ key: string; targetRepo: string; base: string; workspacePath: string; mode: WorkspaceMode }> = [];
   // Recorded as each workspace is made: a block after one still names every extra directory a cleanup must remove (the
@@ -741,8 +797,10 @@ async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: Fro
     ...skillEnvelopeKey(prepared.kind, skills),
     ...(operatorNote === undefined ? {} : { operatorNote }),
     handoff,
+    ...(refV1 ? { attemptDelivery: "ref-v1" as const } : {}),
   }, contract, null);
   const envelopeHash = sha256Canonical(envelope);
+  const keyed = envelope.work.kind === "loop" && envelope.work.attemptDelivery === "ref-v1";
   return write(deps, () => {
     writeCanonicalRecord(store, run.groupId, envelopeHash, canonicalBytes(envelope).toString("utf8"));
     const current = readDriverRun(store, runId);
@@ -750,6 +808,7 @@ async function stepA2Multi(deps: ExecutionDriverDeps, run: DriverRun, multi: Fro
     current.drive = {
       ...current.drive, workspaceMode: primary.mode, targetRepo: primary.targetRepo, base: primary.base, envelopeHash, prepared: true, skills,
       dirs: preparedDirs.map(({ key, targetRepo, base, workspacePath }) => ({ key, targetRepo, base, workspacePath })),
+      ...(refV1 ? { snapshotVersion: 2 as const } : {}), ...(keyed ? { attemptDelivery: "ref-v1" as const } : {}),
     };
     noteCeilingInEnvelope(current, envelope);
     saveDriverRun(store, current);
@@ -871,8 +930,10 @@ async function cleanupPredecessor(deps: ExecutionDriverDeps, targetRepo: string,
  * and cleanupPredecessor retries the removal when the run is continued.
  */
 export async function dropResultCopyAfterSettle(deps: ExecutionDriverDeps, runId: string, sourceDir: string): Promise<void> {
-  if (!isTerminalRunState(readDriverRun(deps.store, runId).state)) return;
-  try { await removeResultCopies(deps.store, runId, sourceDir, { extras: false }); }
+  const run = readDriverRun(deps.store, runId);
+  if (!isTerminalRunState(run.state)) return;
+  // §5.7 (P2): repos/ goes as well once every extra of a v2 run is pinned in its own target.
+  try { await removeResultCopies(deps.store, runId, sourceDir, { extras: extrasPinned(run.drive) }); }
   catch (error) { process.stderr.write(`orca-driver: ${runId}: result copy kept: ${describeError(error)}\n`); }
 }
 
@@ -1266,6 +1327,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
   const multiDirs = multi ? drive.dirs ?? null : null;
   if (multi && multiDirs === null) { blockRun(deps, runId, "C", "multi-dir-writes-missing", { outcome }); return true; }
   const dirAttempts: string[] = [];
+  const dirPins: Array<{ ref: string; sha: string } | undefined> = [];
   const dirReconciliations: Array<{ key: string; outOfBounds: string[]; empty: boolean }> = [];
   let measured: Reconciliation;
   // Change-sized runs spec 2026-11-19 §5.3 (P2): a v2 run's attempt is ccloop's record (keyed) or Orca's commit of its result
@@ -1290,11 +1352,25 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     }
   } else {
     for (const [index, dir] of multiDirs.entries()) {
-      const resultRepo = index === 0 ? join(drive.sourceDir, "repo") : join(drive.sourceDir, "repos", dir.key);
-      const dirSha = await commitAttempt(resultRepo);
+      let dirSha: string, harvestRepo: string;
+      if (v2) {
+        // §5.7 (P2): each directory's attempt is checked and pinned in its own target before anything reads it; every reader
+        // after the pin reads that target. A refusal names the extra directory it is about.
+        const label = index === 0 ? "" : `${dir.key}:`;
+        const resolved = index === 0 ? await attemptOfDrive(deps, run, report) : await extraAttemptOf(deps, run, report, index);
+        if (resolved.attempt === null) { blockRun(deps, runId, "C", `${label}${resolved.unavailable!}`, { outcome }); return true; }
+        const pinned = await pinAttempt(dir.targetRepo, resolved.from, runId, resolved.attempt);
+        if ("refused" in pinned) { blockRun(deps, runId, "C", `${label}${pinned.refused}`, { outcome }); return true; }
+        if (index === 0) recordRunRef(deps, runId, pinned.pinned, resolved);
+        else dirPins[index] = pinned.pinned;
+        dirSha = resolved.attempt; harvestRepo = dir.targetRepo;
+      } else {
+        harvestRepo = index === 0 ? join(drive.sourceDir, "repo") : join(drive.sourceDir, "repos", dir.key);
+        dirSha = await commitAttempt(harvestRepo);
+      }
       dirAttempts.push(dirSha);
       const bound = index === 0 ? primaryHarvestBound(contract) : extraHarvestBound(contract, dir.key);
-      const result = await boundedHarvest({ runId, workdir: drive.sourceDir, outcome: "succeeded", attemptSha: dirSha }, dir.base, bound, resultRepo);
+      const result = await boundedHarvest({ runId, workdir: drive.sourceDir, outcome: "succeeded", attemptSha: dirSha }, dir.base, bound, harvestRepo);
       dirReconciliations.push({ key: dir.key, outOfBounds: result.outOfBounds, empty: result.empty });
     }
     attemptSha = dirAttempts[0]!;
@@ -1302,7 +1378,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     const offending = dirReconciliations.filter((dir) => dir.outOfBounds.length > 0).map((dir) => `${dir.key}:${dir.outOfBounds.join(",")}`);
     if (offending.length > 0) {
       // The runs that were committed stay named on the blocked run, as the primary's sha is.
-      const dirs = multiDirs.map((dir, index) => ({ ...dir, ...(dirAttempts[index] === undefined ? {} : { attemptSha: dirAttempts[index]! }) }));
+      const dirs = multiDirs.map((dir, index) => ({ ...dir, ...(dirAttempts[index] === undefined ? {} : { attemptSha: dirAttempts[index]! }), ...(dirPins[index] === undefined ? {} : { runRef: dirPins[index] }) }));
       blockOutOfBounds(`out-of-bounds:${offending.join(";")}`, { outcome, attemptSha, dirs }, multiDirs[0]!.key);
       return true;
     }
@@ -1368,7 +1444,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
   } else if (measured.empty && multiDirs !== null) {
     const dirs: NonNullable<DriveRecord["noChangeDirs"]> = [];
     for (const [index, dir] of multiDirs.entries()) {
-      const resultRepo = index === 0 ? join(drive.sourceDir, "repo") : join(drive.sourceDir, "repos", dir.key);
+      const resultRepo = v2 ? dir.targetRepo : index === 0 ? join(drive.sourceDir, "repo") : join(drive.sourceDir, "repos", dir.key);
       dirs.push({ key: dir.key, base: dir.base, attempt: dirAttempts[index]!, baseTree: await treeOf(resultRepo, dir.base), attemptTree: await treeOf(resultRepo, dirAttempts[index]!) });
     }
     if (allDirsUnchanged(dirs)) {
@@ -1386,7 +1462,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
     current.drive = {
       ...current.drive!, outcome, attemptSha, landedCommit: null, noChange,
       ...(noChangeDirs === null ? {} : { noChangeDirs }),
-      ...(multiDirs === null ? {} : { dirs: multiDirs.map((dir, index) => ({ ...dir, attemptSha: dirAttempts[index]! })) }),
+      ...(multiDirs === null ? {} : { dirs: multiDirs.map((dir, index) => ({ ...dir, attemptSha: dirAttempts[index]!, ...(dirPins[index] === undefined ? {} : { runRef: dirPins[index] }) })) }),
     };
     saveDriverRun(store, current);
     return true;
@@ -1924,10 +2000,13 @@ export async function stepCleanupFailed(deps: ExecutionDriverDeps, runId: string
   }
   await cleanupRunWorkspace(deps.resolveRepository(cleanupRepoIdOf(store, run)), deps.roots, runId, workspaceOf(drive));
   for (const dir of drive.dirs?.slice(1) ?? []) await cleanupExtraWorkspace(dir.targetRepo, deps.roots, runId, dir.key);
-  // repos/ stays: a failed multi run never landed its extras, and the v1 archive has no snapshot of them (§5.6).
+  // repos/ stays for a v1 run: a failed multi run never landed its extras, and the v1 archive has no snapshot of them
+  // (§5.6). Change-sized runs §5.7 (P2): a v2 run whose every extra is pinned in its own target drops repos/ too (read after
+  // the archive above, which pins on a path that never ran C).
   // Merge with Track D (#360): a never-accepted run ccloop left no result repository for has no archive row and nothing to
   // remove; removeResultCopies would refuse it (result-copy-unarchived) for ever, so it is asked only when a copy exists.
-  if (existsSync(join(drive.sourceDir, "repo"))) await removeResultCopies(store, runId, drive.sourceDir, { extras: false });
+  const extras = extrasPinned(readDriverRun(store, runId).drive);
+  if (existsSync(join(drive.sourceDir, "repo")) || (extras && existsSync(join(drive.sourceDir, "repos")))) await removeResultCopies(store, runId, drive.sourceDir, { extras });
   deps.crash?.("cleanup-failed-after-result-copies");
   write(deps, () => {
     const current = readDriverRun(store, runId);
