@@ -377,6 +377,35 @@ export function keptLines(groupId: string, s: KeptSummary | undefined, delivery:
     "  for later groups: orca project set-integration --delivery local --target <branch>"];
 }
 
+/**
+ * Working-tree delivery spec §4.6, §6 (#365): where a `working-tree` group's files went, or why they did not -- from the
+ * integration record alone (state, reason, lastIntegrated). Any other delivery says nothing here.
+ */
+export interface WorkingTreeView { scheme?: { delivery?: string }; state?: string; reason?: string | null; lastIntegrated?: string | null; retryAfter?: number }
+const WORKING_TREE_NEXT: Readonly<Record<string, (groupId: string) => string>> = {
+  "integration-working-tree-conflict": (g) => `commit, move or discard your copies of these paths, then Retry; or take the files yourself: git checkout orca/${g} -- <path>; or orca group set-integration ${g} --delivery keep`,
+  "integration-working-tree-busy": () => "finish or abort it, then Retry",
+  "integration-working-tree-unsupported": (g) => `take these files by hand (git checkout orca/${g} -- <path>), or use local delivery`,
+  "integration-working-tree-unsafe-path": () => "replace that component or take the files by hand",
+  "integration-working-tree-prerequisite": (g) => `deliver that group to the working tree too, take this group's files by hand, or orca group set-integration ${g} --delivery keep`,
+  "integration-working-tree-write-failed": () => "fix the cause, then Retry; files already written are kept and skipped",
+};
+export function workingTreeLines(groupId: string, s: KeptSummary | undefined, integration: WorkingTreeView | undefined): string[] {
+  if (integration?.scheme?.delivery !== "working-tree") return [];
+  const branch = `orca/${groupId}`;
+  if (integration.state === "blocked" && typeof integration.reason === "string") {
+    const code = integration.reason.split(":")[0]!;
+    const next = WORKING_TREE_NEXT[code];
+    return [`delivery: working-tree blocked: ${integration.reason}`, ...(next === undefined ? [] : [`  next: ${next(groupId)}; orca group retry-integration ${groupId}`])];
+  }
+  if (s?.state !== "done") return ["delivery: working-tree -- will be written into your working tree once the group is accepted"];
+  const tip = s.acceptance?.tip ?? null;
+  if (integration.lastIntegrated != null && (tip === null || integration.lastIntegrated === tip))
+    return [`delivery: working-tree -- written into your working tree (uncommitted, tip ${integration.lastIntegrated.slice(0, 12)}), including Orca's decision records under .decisions/`,
+      "  review: git status", `  the same files: git diff --name-only HEAD...${branch}`];
+  return [`delivery: working-tree -- not written yet; a driver round writes it into your working tree${integration.retryAfter === undefined ? "" : " (backing off)"}`];
+}
+
 export function reviewLines(groupId: string, review: ReviewView | undefined): string[] {
   if (review === undefined) return [];
   const last = review.rounds.at(-1);
@@ -553,6 +582,7 @@ export function formatWithUnestimated(body: unknown): string {
     // A keep group has no integration record (newGroupIntegration returns null for keep): a missing one is keep.
     ...(typeof groupId === "string" ? keptLines(groupId, b?.summary as KeptSummary | undefined,
       (b as { integration?: { scheme?: { delivery?: string } } } | null)?.integration?.scheme?.delivery ?? "keep") : []),
+    ...(typeof groupId === "string" ? workingTreeLines(groupId, b?.summary as KeptSummary | undefined, (b as { integration?: WorkingTreeView } | null)?.integration) : []),
     ...(typeof groupId === "string" ? reviewLines(groupId, (b?.summary as { requirementReview?: ReviewView } | undefined)?.requirementReview) : []),
     ...(typeof groupId === "string" ? landingWatchLines(groupId, b?.summary?.landingWatch) : []),
     ...allowanceLines(b?.summary?.allowances),
