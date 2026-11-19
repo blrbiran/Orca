@@ -4,7 +4,9 @@
 // model the installation's read catalog does not list is refused as requirement set-agent refuses one
 // (agent-selection-invalid, naming the listed models), and the switch is recorded as a person's.
 import { describe, expect, it } from "vitest";
+import { resolveAgentSwitch } from "../../src/control/agentSwitch.js";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
+import { applyRetryTask } from "../../src/control/retryTask.js";
 import { readWebGroup, WebControlService } from "../../src/control/webService.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { permissionRefusal } from "../../src/panel/permissions.js";
@@ -70,6 +72,19 @@ describe("task retry --model: a confirmed task's model changes on its retry (#36
       expect(w.work()).toEqual(before);
       expect(errorOf(await w.retry({ model: "gpt-5" }))).toBeUndefined();
       expect(w.work().agent.model).toBe("gpt-5");
+    } finally { await w.t.h.dispose(); }
+  });
+
+  it("the retry's own check: a selection resolved for another model than the payload names is refused", async () => {
+    const w = await world(); try {
+      const before = w.work();
+      const frozen = await resolveAgentSwitch({ store: w.t.h.store, port: w.t.h.deps.port, profileRouter: w.t.h.deps.profileRouter as never }, "g", "codex", "task", "model-a");
+      const answer = applyRetryTask({ store: w.t.h.store, switchTo: { frozen, source: "task" } }, { schema: "orca-raw-command-v1", commandId: "mismatch", actorId: "operator",
+        expectedRevision: Number(w.t.h.store.db.prepare("SELECT revision FROM groups WHERE id='g'").get()!.revision), verb: "retry-task",
+        target: { kind: "group", groupId: "g" }, payload: { taskId: "a", runId: w.runId, model: "model-b" } } as never);
+      // mutation: drop the model half of the check -> model-a frozen for a model-b request, red
+      expect(errorOf(answer)).toMatchObject({ code: "recovery-blocked", message: expect.stringContaining("agent-switch-unresolved") });
+      expect(w.work()).toEqual(before);
     } finally { await w.t.h.dispose(); }
   });
 

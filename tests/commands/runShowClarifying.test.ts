@@ -39,6 +39,16 @@ describe("run show reads a clarifying group's requirement call (#374 c)", () => 
     expect(p.requests.map((r) => r.path).filter((path) => path.startsWith("groups/"))).toEqual([]);
   });
 
+  it("a run the panel does not know: its run-not-found stands; only a missing route falls back to the group scan", async () => {
+    const p = await fakePanel({ ...routes, "GET runs/run-gone": { status: 404, body: { error: { code: "run-not-found", message: "No control run was found.", retryable: false } } } });
+    const out = await cli(["run", "show", "run-gone"], p.dir);
+    // The panel's refusal (exit 2); the scan's own run-not-found was a CLI rejection (exit 1).
+    expect(out.code).toBe(2);
+    expect(out.stderr).toContain("run-not-found");
+    // mutation: fall back on any read failure -> the groups are scanned, red
+    expect(p.requests.map((r) => r.path).filter((path) => path.startsWith("groups/"))).toEqual([]);
+  });
+
   it("--group naming another group: run-not-found, as before (#242)", async () => {
     const p = await fakePanel(routes);
     const out = await cli(["run", "show", RUN, "--group", "other"], p.dir);
