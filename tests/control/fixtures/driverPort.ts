@@ -82,6 +82,13 @@ export function fakeCcloopPort(input: {
   liveCeilingStop?: (workItemId: string, envelope: StartEnvelope) => ExecutionReport["liveCeilingStop"];
   /** Tester follow-up I (seat L): the evidence a terminal candidate names missing (ccloop's `missing`), e.g. a run stopped mid-execute. */
   candidateMissing?: (workItemId: string) => string[];
+  /**
+   * Change-sized runs spec 2026-11-19 §11.1 "fixture change, not a criterion" (P2): advertise features.attemptRef "v1", as
+   * ccloop P1 does. A run whose envelope then carries work.attemptDelivery gets ccloop P1's shape: the attempt committed in a
+   * worktree of repoPath, both attempt refs set, the worktree removed, collect's `attempt` record, and no <sourceDir>/repo.
+   * Off (the default), the port has no readFeatures and every run keeps today's result copy.
+   */
+  attemptRef?: boolean;
 }): FakeCcloop {
   const calls = { accept: [] as StartEnvelope[], inspect: 0, collect: 0, handoff: [] as HandoffRequest[] };
   const handoffs = new Map<string, HandoffRequest>();
@@ -102,15 +109,33 @@ export function fakeCcloopPort(input: {
     const { claim, work } = envelope;
     if (work.kind !== "loop") throw new Error("driverPort: loop work only");
     const workspace = (work.contract as { context: { repoPath: string } }).context.repoPath;
-    const repo = join(work.sourceDir, "repo");
+    const keyed = work.attemptDelivery === "ref-v1";
+    const repo = keyed ? join(work.sourceDir, "run", "worktrees", "attempt-1") : join(work.sourceDir, "repo");
     const head = execFileSync("git", ["-C", workspace, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-    execFileSync("git", ["clone", "-q", "--no-checkout", workspace, repo]);
-    execFileSync("git", ["-C", repo, "checkout", "-q", "--detach", head]);
+    if (keyed) {
+      mkdirSync(dirname(repo), { recursive: true });
+      execFileSync("git", ["-C", workspace, "worktree", "add", "-q", "--detach", repo, head]);
+    } else {
+      execFileSync("git", ["clone", "-q", "--no-checkout", workspace, repo]);
+      execFileSync("git", ["-C", repo, "checkout", "-q", "--detach", head]);
+    }
     for (const [path, content] of Object.entries(input.files(claim.workItemId))) {
       // Reviewed acceptance (spec 2026-11-11 §7): null deletes the path, so an attempt can carry a deletion.
       if (content === null) { rmSync(join(repo, path), { force: true }); continue; }
       mkdirSync(dirname(join(repo, path)), { recursive: true });
       writeFileSync(join(repo, path), content);
+    }
+    // ccloop P1 (attemptRecord.ts): a published attempt at a terminal, a live capture (head = its parent) at a boundary.
+    let attempt: ExecutionReport["attempt"];
+    if (keyed) {
+      const g = (...args: string[]) => execFileSync("git", ["-C", repo, "-c", "user.name=ccloop", "-c", "user.email=ccloop@example.invalid", ...args], { encoding: "utf8" }).trim();
+      g("add", "-A");
+      const tree = g("write-tree");
+      const sha = g("commit-tree", tree, "-p", head, "-m", `ccloop attempt ${claim.runId}`);
+      const ref = `refs/ccloop/${claim.runId}/attempts/1`;
+      g("update-ref", ref, sha); g("update-ref", "refs/ccloop/run/attempts/1", sha);
+      execFileSync("git", ["-C", workspace, "worktree", "remove", "--force", repo]);
+      attempt = { attempt: 1, sha, base: head, tree, ref, head: stop.terminal ? sha : head, capture: stop.terminal ? "published" : "live", worktree: "removed" };
     }
     const variant = input.behaviour(claim.workItemId);
     const events: UsageEvent[] = [
@@ -152,10 +177,11 @@ export function fakeCcloopPort(input: {
     const toolRules = input.toolRules?.(claim.workItemId);
     const pathPolicyMisses = stop.terminal ? input.pathPolicyMisses?.(claim.workItemId) : undefined;
     const liveCeilingStop = stop.terminal ? input.liveCeilingStop?.(claim.workItemId, envelope) : undefined;
-    return { events, candidate, terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}), ...(budgetSnapshot === undefined ? {} : { budgetSnapshot }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }), ...(toolRules === undefined ? {} : { toolRules }), ...(pathPolicyMisses === undefined ? {} : { pathPolicyMisses }), ...(liveCeilingStop === undefined ? {} : { liveCeilingStop }) };
+    return { events, candidate, ...(attempt === undefined ? {} : { attempt }), terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: keyed ? null : repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}), ...(budgetSnapshot === undefined ? {} : { budgetSnapshot }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }), ...(toolRules === undefined ? {} : { toolRules }), ...(pathPolicyMisses === undefined ? {} : { pathPolicyMisses }), ...(liveCeilingStop === undefined ? {} : { liveCeilingStop }) };
   };
 
   const port: ExecutionPort = {
+    ...(input.attemptRef === true ? { readFeatures: async () => ({ protocol: 1 as const, attemptRef: "v1" as const }) } : {}),
     // Agent selection spec §4.6: capabilities protocol 3 -- the selection asked about, echoed and filled.
     resolveAgent: async (partial) => ({ selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default", ...partial }, configHash: "c".repeat(64), timeoutMs: 120_000, killGraceMs: 0, capabilities: input.capabilities, singleCallExecution: "v1" }),
     listAgents: async () => ({ installations: [] }),

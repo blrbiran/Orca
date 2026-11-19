@@ -15,7 +15,7 @@ import type { AgentApplyRequest, AgentObservation, AgentPreview, AgentReceipt } 
 import type { VersionRefresh } from "../agents/versionRefresh.js";
 /** Single-call estimate spec §4.1: protocol 3's two kinds of work. */
 // Syncskill integration spec §10.6: skillPluginDir only for a run with skills (ccloop protocol 3, additive).
-export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string;codexSkillsDir?:string;ompSkillsDir?:string;priorFailures?:PriorFailure[];operatorNote?:OperatorNote;additionalRepos?:Array<{key:string;targetRepo:string;base:string}>;handoff?:{inputDir:string;outputDir:string} }
+export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string;codexSkillsDir?:string;ompSkillsDir?:string;priorFailures?:PriorFailure[];operatorNote?:OperatorNote;additionalRepos?:Array<{key:string;targetRepo:string;base:string}>;handoff?:{inputDir:string;outputDir:string};attemptDelivery?:"ref-v1" }
 export interface SingleCallWork { kind:"single-call";prompt:string;responseSchema:Record<string,unknown>;maxOutputTokens:number;sourceDir:string }
 /** Tester follow-up G spec §2.1: the live token ceiling ccloop stops the run at (ccloop live-ceiling spec, protocol 4 only). */
 export interface LiveCeilingWire { protocol:1;revision:number;tokens:number;cause:"group"|"pause-line"|"task-cap" }

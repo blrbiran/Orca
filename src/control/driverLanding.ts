@@ -419,7 +419,10 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string, context?: 
   let offPlan: OffPlanWriteBody | null = null;
   const landed = await landOnTip(deps, targetRepo, runId, run.groupId, old, async (landing) => {
     // Into the target's shared refs: the incoming ref is how the attempt stays reachable until settle.
-    await git(landing, [...QUIET_GIT, "fetch", "--no-tags", join(drive.sourceDir, "repo"), `+${drive.attemptSha}:${incomingRefOf(runId)}`]);
+    // Change-sized runs spec 2026-11-19 §5.3 (P2): a pinned attempt is already in the target, so the incoming ref is set there
+    // directly; a v1 run fetches it from its result copy as before.
+    if (drive.runRef != null && drive.runRef.sha === drive.attemptSha) await git(landing, [...QUIET_GIT, "update-ref", incomingRefOf(runId), drive.attemptSha]);
+    else await git(landing, [...QUIET_GIT, "fetch", "--no-tags", join(drive.sourceDir, "repo"), `+${drive.attemptSha}:${incomingRefOf(runId)}`]);
     // Off-plan writes spec W3: the run's own range, the attempt against its base (`git diff <base> <attemptSha>`).
     offPlan = await landingOffPlanWrite(store, run, landing, drive.base, drive.attemptSha);
     try {

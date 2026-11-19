@@ -143,6 +143,8 @@ export const driveRecordSchema = z.object({
   dirs: z.array(z.object({
     key: z.string().min(1), targetRepo: z.string().min(1), base: commitSchema, workspacePath: z.string().min(1),
     attemptSha: commitSchema.nullable().optional(),
+    // Change-sized runs spec 2026-11-19 §5.7 (P2): the extra's attempt pinned at refs/orca/runs/<runId> in its own target.
+    runRef: z.object({ ref: z.string().min(1), sha: commitSchema }).strict().nullable().optional(),
   }).strict()).min(1).optional(),
   // Multi-directory projects spec §8.1: the journal of a multi run's landing -- every directory's produced commit, written
   // in one transaction before the first compare-and-swap, so a death after one swap still names the rest. Null (or absent)
@@ -157,6 +159,16 @@ export const driveRecordSchema = z.object({
   relaunches: safeInteger.optional(),
   outcome: z.string().min(1).nullable(),
   attemptSha: commitSchema.nullable(),
+  // Change-sized runs spec 2026-11-19 §5.3, §6.2 (P2). All optional, so a record written before P2 parses as it is.
+  // snapshotVersion: 2 iff A2 found a ccloop that reads snapshot v2 (features.attemptRef "v1"); the run then archives v2,
+  //   and `attemptDelivery` says whether its envelope carried the key. A run without it archives v1, exactly as before.
+  // runRef: the attempt pinned at refs/orca/runs/<runId> in the target (step C, or the archive on a path that never ran C).
+  // attemptHead / attemptSource: snapshot v2's `head` and `source` for that attempt (§7.1).
+  snapshotVersion: z.literal(2).optional(),
+  attemptDelivery: z.literal("ref-v1").optional(),
+  runRef: z.object({ ref: z.string().min(1), sha: commitSchema }).strict().nullable().optional(),
+  attemptHead: commitSchema.optional(),
+  attemptSource: z.enum(["ccloop-published", "ccloop-live", "orca-commit", "base"]).optional(),
   /** Git ref observation pinned before a named-source landing; absent from ordinary runs. */
   historySource: historySourceObservationSchema.optional(),
   /** Group tip after a no-change run's own ledger was committed, usable by its later judge or person decision. */

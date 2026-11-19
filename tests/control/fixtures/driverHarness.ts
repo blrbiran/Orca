@@ -84,6 +84,8 @@ export interface HarnessOptions {
   candidateMissing?: (workItemId: string) => string[];
   /** Test-owned collect behavior must be installed before the router copies the port's methods. */
   wrapPort?: (port: ExecutionPort) => ExecutionPort;
+  /** Change-sized runs P2: the synthetic ccloop advertises attemptRef "v1" and records keyed attempts (driverPort.ts). */
+  attemptRef?: boolean;
 }
 
 /**
@@ -120,6 +122,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     ...(options.liveCeilingStop ? { liveCeilingStop: options.liveCeilingStop } : {}),
     ...(options.candidateMissing ? { candidateMissing: options.candidateMissing } : {}),
     ...(options.sealedOwnerProof === true ? { sealedOwnerProof: true } : {}),
+    ...(options.attemptRef === true ? { attemptRef: true } : {}),
   });
   fake.port.listAgents = options.agentKinds === undefined ? h.deps.port.listAgents : async () => options.agentKinds!;
   if (options.listModels !== undefined) fake.port.listModels = options.listModels;

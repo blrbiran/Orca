@@ -1,0 +1,109 @@
+import { existsSync, readdirSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+import { readArtifact } from "../../src/control/archive.js";
+import { sha256Canonical } from "../../src/control/canonicalJson.js";
+import { readStartEnvelope } from "../../src/control/executionDriver.js";
+import { snapshotV2Schema, verifySnapshotInRepository } from "../../src/control/snapshotV2.js";
+import { applySetWorkspaceMode } from "../../src/control/workspaceSettings.js";
+import { driverHarness, git } from "./fixtures/driverHarness.js";
+
+/**
+ * Change-sized runs spec 2026-11-19 (P2; #363 #366) through the driver, against the synthetic ccloop's two shapes: with
+ * features.attemptRef "v1" (ccloop P1) and without it (the pinned ccloop 57b6d15, which never advertises it).
+ */
+const snapshotOf = async (t: Awaited<ReturnType<typeof driverHarness>>, runId: string) => {
+  const row = t.h.store.db.prepare("SELECT body FROM outbox WHERE kind='archive' AND json_extract(body,'$.runId')=? ORDER BY rowid DESC LIMIT 1").get(runId);
+  const archived = JSON.parse(String(row!.body)) as { snapshot: { artifactId: string; hash: string }; missing: string[]; repoDir: string | null };
+  return { archived, bytes: await readArtifact(t.h.store, archived.snapshot) };
+};
+
+describe("an older ccloop (no features.attemptRef): today's run, unchanged (§5.8 row 2, §6.2)", () => {
+  // Mutation: send the key whatever the features say (refV1 = true) -> the envelope carries attemptDelivery, red; drop the
+  // snapshotVersion gate in archiveDriveRun -> a v2 snapshot, red.
+  it("sends no key, archives v1 from the result copy, and pins nothing", async () => {
+    const t = await driverHarness([{ taskId: "a", tokenBudget: 4_000_000 }], { tokenPolicy: "optional-v1" }); try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).drive?.cleanedUp === true);
+      const run = t.body(runId);
+      const envelope = readStartEnvelope(t.h.store, run);
+      expect(envelope.protocol).toBe(4);
+      expect(Object.hasOwn(envelope.work, "attemptDelivery")).toBe(false);
+      expect(sha256Canonical(envelope)).toBe(run.drive.envelopeHash);
+      expect(run.drive.snapshotVersion).toBeUndefined();
+      expect(run.drive.runRef).toBeUndefined();
+      const { archived, bytes } = await snapshotOf(t, runId);
+      expect(JSON.parse(bytes.toString()).version).toBe(1);
+      expect(archived.repoDir).not.toBeNull();
+      expect(git(t.repo, "for-each-ref", "--format=%(refname)", "refs/orca/runs/")).toBe("");
+      expect(t.body(runId).state).toBe("settled");
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+});
+
+describe("ccloop P1 (features.attemptRef v1): the attempt is a pinned ref (§5.3, §5.4, §6.2)", () => {
+  // P2-1 / P2-4 at driver level. Mutations: do not pin at C (pin only at E) -> runRef absent at `landed`, red; archive v1 ->
+  // no `version: 2`, red; keep fetching the landing from <sourceDir>/repo -> the landing fails (no copy), red.
+  it("sends the key on protocol 4, pins ccloop's attempt at C, lands it, and archives snapshot v2 with no result copy", async () => {
+    const t = await driverHarness([{ taskId: "a", tokenBudget: 4_000_000 }], { tokenPolicy: "optional-v1", attemptRef: true }); try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => ["landed", "settled"].includes(t.body(runId).state));
+      const atLanding = t.body(runId);
+      const envelope = readStartEnvelope(t.h.store, atLanding);
+      expect(envelope.work.kind === "loop" && envelope.work.attemptDelivery).toBe("ref-v1");
+      expect(atLanding.drive).toMatchObject({ snapshotVersion: 2, attemptDelivery: "ref-v1", attemptSource: "ccloop-published" });
+      expect(atLanding.drive.runRef).toEqual({ ref: `refs/orca/runs/${runId}`, sha: atLanding.drive.attemptSha });
+      expect(git(t.repo, "rev-parse", `refs/orca/runs/${runId}`)).toBe(atLanding.drive.attemptSha);
+      await t.until(driver, () => t.body(runId).drive?.cleanedUp === true);
+      const run = t.body(runId);
+      expect(run.state).toBe("settled");
+      expect(existsSync(`${run.drive.sourceDir}/repo`)).toBe(false);
+      expect(git(t.repo, "show", `${run.drive.landedCommit}:a`)).toBe("a");
+      const { archived, bytes } = await snapshotOf(t, runId);
+      expect(archived).toMatchObject({ repoDir: null, missing: [] });
+      const snapshot = snapshotV2Schema.parse(JSON.parse(bytes.toString()));
+      expect(snapshot).toMatchObject({ version: 2, base: run.drive.base, attempt: run.drive.attemptSha, head: run.drive.attemptSha, ref: `refs/orca/runs/${runId}`, source: "ccloop-published" });
+      await expect(verifySnapshotInRepository(t.h.store, archived.snapshot, () => t.repo)).resolves.toMatchObject({ attempt: run.drive.attemptSha });
+      // driverSettle.test.ts:102's intent, in its P2 form: cleanup leaves exactly the pin under refs/orca/ (no incoming ref).
+      expect(git(t.repo, "for-each-ref", "--format=%(refname) %(objectname)", "refs/orca/")).toBe(`refs/orca/runs/${runId} ${run.drive.attemptSha}`);
+      expect(readdirSync(run.drive.sourceDir)).not.toContain("repo");
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+
+  // §5.8 row 2 / P2-10: protocol 3 never carries the key (the schema refuses it there), but the ccloop reads v2, so the run
+  // archives v2 from Orca's own commit of its result copy, with head = the copy's HEAD before that commit, and the copy goes.
+  // Mutation: record `head` after commitAttempt -> head = attempt, red.
+  it("a legacy-envelope run archives v2 from Orca's commit and deletes the result copy", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { attemptRef: true }); try {
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).drive?.cleanedUp === true);
+      const run = t.body(runId);
+      const envelope = readStartEnvelope(t.h.store, run);
+      expect(envelope.protocol).toBe(3);
+      expect(Object.hasOwn(envelope.work, "attemptDelivery")).toBe(false);
+      expect(run.drive).toMatchObject({ snapshotVersion: 2, attemptSource: "orca-commit" });
+      expect(run.drive.attemptDelivery).toBeUndefined();
+      const { bytes } = await snapshotOf(t, runId);
+      const snapshot = snapshotV2Schema.parse(JSON.parse(bytes.toString()));
+      expect(snapshot).toMatchObject({ source: "orca-commit", attempt: run.drive.attemptSha, head: run.drive.base });
+      expect(git(t.repo, "rev-parse", `${run.drive.attemptSha}^`)).toBe(run.drive.base);
+      expect(existsSync(`${run.drive.sourceDir}/repo`)).toBe(false);
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+
+  // P2-1: clone mode. Mutation: pin at E after the workspace cleanup -> refs/ccloop died with the clone, the fetch fails, red.
+  it("in clone mode the pin is in the target and outlives the workspace", async () => {
+    const t = await driverHarness([{ taskId: "a", tokenBudget: 4_000_000 }], { tokenPolicy: "optional-v1", attemptRef: true }); try {
+      applySetWorkspaceMode({ store: t.h.store, knownRepository: () => true }, { schema: "orca-raw-command-v1", commandId: "mode", expectedRevision: 0, actorId: "human", verb: "set-workspace-mode", target: { kind: "repository", repoId: "repo" }, payload: { workspaceMode: "clone" } });
+      const runId = await t.claim();
+      const driver = t.driver();
+      await t.until(driver, () => t.body(runId).drive?.cleanedUp === true);
+      const run = t.body(runId);
+      expect(run.drive.workspaceMode).toBe("clone");
+      expect(existsSync(run.drive.workspacePath)).toBe(false);
+      expect(git(t.repo, "rev-parse", `refs/orca/runs/${runId}`)).toBe(run.drive.attemptSha);
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+});

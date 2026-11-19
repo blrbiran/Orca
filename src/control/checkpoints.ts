@@ -6,7 +6,7 @@ import type { ControlStore } from "./store.js";
 import type { Candidate, ArtifactRef } from "./types.js";
 import { ControlError } from "./errors.js";
 import { readArtifact } from "./archive.js";
-import { verifySnapshot } from "./snapshot.js";
+import { verifyAnySnapshot } from "./snapshotV2.js";
 import { readRun, releaseRunReserve, saveRun, hasObservedUsage } from "./budget.js";
 import { readGroup, readWork, saveGroup, saveWork } from "./queries.js";
 import { privateDirectory, syncDirectory, assertRegular } from "./paths.js";
@@ -19,16 +19,20 @@ export interface CommitDependencies {
  /** Optional atomic settlement transition; invoked only after known usage and stop proof. */
  onSettled?:(store:ControlStore,candidate:Candidate)=>void;
  admit?<T>(operation:()=>Promise<T>):Promise<T>;
+ /** Change-sized runs §7.2 (P2): the target a v2 snapshot is verified in. */
+ resolveRepository?:()=>string;
 }
 function assertIdentity(store:ControlStore,c:Candidate):void {
  const r=readRun(store,c.runId),g=readGroup(store,c.groupId),w=readWork(store,c.groupId,c.workItemId);
  if(r.groupId!==c.groupId || r.workItemId!==c.workItemId || r.taskId!==c.taskId || r.generation!==c.generation || r.graphVersion!==c.graphVersion || g.graphVersion!==c.graphVersion || r.targetVersion!==c.targetVersion || w.targetVersion!==c.targetVersion) throw new ControlError("checkpoint-identity-conflict");
  if(c.usageHighWater!==r.highWater) throw new ControlError("checkpoint-usage-high-water");
 }
-export async function verifyCandidateArtifacts(store:ControlStore,c:Candidate):Promise<void> {
+// Change-sized runs spec 2026-11-19 §7.2 (P2): a v2 snapshot is verified in its target when the caller passes a handle on it
+// (the driver's commits), and at the artifact level when it does not (recovery.ts, cleanup.ts, readCommittedCheckpoint).
+export async function verifyCandidateArtifacts(store:ControlStore,c:Candidate,resolveRepository?:()=>string):Promise<void> {
  for(const ref of c.artifacts) await readArtifact(store,ref);
  await readArtifact(store,c.handoff);
- if(c.snapshot){await readArtifact(store,c.snapshot);if(c.result==="complete") await verifySnapshot(store,c.snapshot);}
+ if(c.snapshot){await readArtifact(store,c.snapshot);if(c.result==="complete") await verifyAnySnapshot(store,c.snapshot,resolveRepository);}
  else if(c.result==="complete") throw new ControlError("snapshot-required");
  for(const row of store.db.prepare("SELECT body FROM usage_events WHERE run_id=? AND seq<=?").all(c.runId,c.usageHighWater)) {
   const event=JSON.parse(String(row.body));await readArtifact(store,event.source);
@@ -90,7 +94,7 @@ async function persistImmutableCheckpoint(store:ControlStore,c:Candidate):Promis
 }
 export async function commitCandidate(store:ControlStore,c:Candidate,deps:CommitDependencies={}):Promise<{checkpointId:string;hash:string}> {
  c=candidateSchema.parse(c);
- await verifyCandidateArtifacts(store,c);
+ await verifyCandidateArtifacts(store,c,deps.resolveRepository);
  const accepted=await acceptanceEvidence(store,c.runId);
  const commit=async()=>{
  const reference=await persistImmutableCheckpoint(store,c);await deps.afterArchive?.();

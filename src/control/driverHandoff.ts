@@ -3,7 +3,6 @@ import {persistRecoveryArtifact} from "./savedResultRecoveryPackage.js";
 import {sha256Canonical} from "./canonicalJson.js";
 import {createHash} from "node:crypto";
 import { join } from "node:path";
-import { archiveRun } from "./archive.js";
 import { hasObservedUsage, readRun, saveRun } from "./budget.js";
 import { persistCanonicalCheckpoint, verifyCandidateArtifacts } from "./checkpoints.js";
 import { hashPayload } from "./commands.js";
@@ -22,7 +21,7 @@ import { isMultiGroup, multiPrimaryRepoId } from "./multiGroup.js";
 import { findLanding } from "./driverLanding.js";
 import { landedAnywhere } from "./driveRecord.js";
 import {
-  DriverCrash, INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, blockRun, collectInto, describeError, dropResultCopyAfterSettle, laterError, driverRunIds, groupRepoId, newDrive, persistStatus, portFor, readDriverRun,
+  DriverCrash, INSPECT_UNKNOWN_LIMIT, advance, archiveAdmission, archiveDriveRun, runRepository, blockRun, collectInto, describeError, dropResultCopyAfterSettle, laterError, driverRunIds, groupRepoId, newDrive, persistStatus, portFor, readDriverRun,
   readStartEnvelope,savedRecoveryInspectionInput, saveDriverRun, savedReport, settleLostWorker, stepC, write, type DriverContext, type DriverRun, type ExecutionDriverDeps,
 } from "./executionDriver.js";
 import type { ExecutionPort, ExecutionReport, ExecutionStatus, StartEnvelope } from "./executionPort.js";
@@ -403,7 +402,7 @@ async function settleAbandonedUnderStop(deps: ExecutionDriverDeps, run: DriverRu
   const booked = readRun(store, run.runId);
   if (booked.unknown.work || booked.unknown.handoff || store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(run.runId, booked.highWater)) return null;
   const drive = run.drive;
-  await archiveRun(store, { runId: run.runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: report.candidate?.stopProof ?? null }, archiveAdmission(deps));
+  await archiveDriveRun(deps, run.runId, report.candidate?.stopProof ?? null, report);
   const cleanupError = await removeNeverStartedWorkspace(deps, run);
   return write(deps, () => {
     const current = readDriverRun(store, run.runId);
@@ -550,7 +549,7 @@ export async function settleHandoffCheckpoint(deps: ExecutionDriverDeps, runId: 
   const run = readDriverRun(store, runId);
   const raw = report.candidate;
   if (run.drive === undefined || raw === null || raw.stopProof === null) throw new ControlError("recovery-blocked", `handoff-candidate-missing:${runId}`);
-  const archive = await archiveRun(store, { runId, sourceDir: run.drive.sourceDir, repoDir: join(run.drive.sourceDir, "repo"), stopProof: raw.stopProof }, archiveAdmission(deps));
+  const archive = await archiveDriveRun(deps, runId, raw.stopProof, report);
   const record = readRun(store, runId);
   const candidate: Candidate = {
     groupId: record.groupId, workItemId: record.workItemId, taskId: record.taskId, runId, generation: record.generation,
@@ -563,7 +562,7 @@ export async function settleHandoffCheckpoint(deps: ExecutionDriverDeps, runId: 
     unresolvedRequestIds: raw.unresolvedRequestIds, stopProof: raw.stopProof, terminalOutcome: raw.terminalOutcome, handoff: raw.handoff,
   };
   candidate.checkpointId = `settle-${runId}-${hashPayload(candidate).slice(0, 16)}`;
-  await verifyCandidateArtifacts(store, candidate);
+  await verifyCandidateArtifacts(store, candidate, runRepository(deps, run));
   const persisted = await persistCanonicalCheckpoint(store, candidate);
   const settled = write(deps, () => {
     const request = readHandoffRequest(store, run.groupId, requestId).request;

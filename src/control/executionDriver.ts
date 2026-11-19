@@ -11,7 +11,6 @@ import {savedDispatchSchema,savedRecoverySchema,savedResultAdmissionSchema,recov
 import { readWork as allowanceWork, saveWork as saveAllowanceWork, readGroup as allowanceGroup, saveGroup as saveAllowanceGroup } from "./queries.js";
 import { hasOptionalTaskPolicy, validateAllowanceCheckpoint } from "./fundedAllowance.js";
 import { topUpSum } from "./workTopUp.js";
-import { verifySnapshot } from "./snapshot.js";
 import { minTokenCeiling } from "./tokenPolicy.js";
 import { boundingCeilingOf, liveCeilingOf, refreshCeilingReserves } from "./liveCeiling.js";
 import { abandonOf, abandonSettlementOf, lowerAbandonedCeiling, RUN_ABANDONED } from "./abandonRun.js";
@@ -24,6 +23,8 @@ import { existsSync } from "node:fs";
 import { z } from "zod";
 import { join } from "node:path";
 import { archiveRun, readArtifact, writeArtifact } from "./archive.js";
+import { NO_GC, checkAttempt, pinAttempt } from "./attemptPin.js";
+import { archiveRunV2, verifyAnySnapshot, type ArchiveRepositoryV2 } from "./snapshotV2.js";
 import { latestArchiveComplete, removeResultCopies } from "./cleanup.js";
 import { isTerminalRunState, readRun, saveRun } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
@@ -61,7 +62,7 @@ import { approximateUsageApplies, bookApproximateFloorInTransaction } from "./ap
 import { noteTranscriptListing } from "../agentTranscript/listing.js";
 import { singleCallHandler } from "./singleCallPurposes.js";
 import { readWorkspaceSetting, type WorkspaceMode } from "./workspaceSettings.js";
-import { cleanupExtraWorkspace, cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, extraWorkspacePathOf, makeReadOnly, removeSkillsSnapshot, revParse, skillsPathOf, sourceDirOf, workBranchRef, workspacePathOf, QUIET_GIT, type WorkspaceRoots } from "./workspace.js";
+import { cleanupExtraWorkspace, cleanupRunWorkspace, commitAttempt, ensureWorkBranch, ensureWorkspace, extraWorkspacePathOf, makeReadOnly, removeOwnPath, removeSkillsSnapshot, revParse, skillsPathOf, sourceDirOf, workBranchRef, workspacePathOf, QUIET_GIT, type WorkspaceRoots } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
 import { injectSkills, SyncskillError, type SyncskillOptions } from "../skills/syncskill.js";
 import { abortPostMergeChecks, recordEmptyResultDecisions, stepD, stepR, type PostMergeCheck } from "./driverLanding.js";
@@ -91,7 +92,7 @@ import type { ExecutionPort, ExecutionStatus, StartEnvelope } from "./executionP
 import type { ExecutionReport } from "./executionPort.js";
 import type { ExecutionProfileRouter } from "./profiles.js";
 import type { ControlStore } from "./store.js";
-import type { Candidate } from "./types.js";
+import type { ArtifactRef, Candidate, StopProof } from "./types.js";
 import type { AgentSelection } from "./agentSelection.js";
 
 /**
@@ -394,6 +395,78 @@ export function newDrive(roots: WorkspaceRoots, runId: string, workspaceMode: Wo
 
 /** A work run's workspace; only an estimate run has none (spec §6.2), and it never reaches the steps that need one. */
 /**
+ * Change-sized runs spec 2026-11-19 §5.3 (P2): where a v2 run's debug or criteria-base check runs its commands -- a
+ * detached worktree of the target at the attempt, a direct child of the workspaces root (Rule 17, spec §9).
+ */
+export const checkPathOf = (roots: WorkspaceRoots, runId: string): string => join(roots.workspacesRoot, `check-${runId}`);
+
+/** §5.3: the check worktree, made fresh at the attempt (a stale one from a crash or a restart is removed first). */
+async function prepareCheckWorktree(deps: ExecutionDriverDeps, targetRepo: string, runId: string, sha: string): Promise<string> {
+  const check = checkPathOf(deps.roots, runId);
+  await removeOwnPath(targetRepo, deps.roots, check);
+  await git(targetRepo, [...QUIET_GIT, ...NO_GC, "worktree", "add", "-q", "--detach", check, sha]);
+  return check;
+}
+
+/**
+ * §5.3 / §5.4 (P2): the attempt a v2 run archives and lands, and the repository its objects are in. A run already pinned
+ * answers its pin. A keyed run answers ccloop's record, checked in its workspace (C1); a legacy-envelope v2 run commits its
+ * result copy (C5) exactly as v1 did, its `head` being C5's HEAD before that commit (review minor 1). `attempt: null` names
+ * why in `unavailable` -- a step-C block reason, and the archive's missing evidence.
+ */
+async function attemptOfDrive(deps: ExecutionDriverDeps, run: DriverRun, report: ExecutionReport | null): Promise<ArchiveRepositoryV2> {
+  const drive = run.drive!;
+  const targetRepo = drive.targetRepo ?? deps.resolveRepository(groupRepoId(deps.store, run.groupId));
+  const base = drive.base!;
+  const none = (unavailable: string, from: string): ArchiveRepositoryV2 => ({ key: null, targetRepo, base, attempt: null, head: base, source: "base", from, unavailable });
+  if (drive.runRef != null) return { key: null, targetRepo, base, attempt: drive.runRef.sha, head: drive.attemptHead ?? drive.runRef.sha, source: drive.attemptSource ?? "orca-commit", from: targetRepo };
+  if (drive.attemptDelivery === "ref-v1") {
+    const from = workspaceOf(drive), record = report?.attempt;
+    if (record === undefined) return none("attempt-unavailable:no-record", from);
+    if (record.sha === null) return none(`attempt-unavailable:${record.reason}`, from);
+    const failure = await checkAttempt(from, base, record.sha, { tree: record.tree, ref: `refs/ccloop/${run.runId}/attempts/${record.attempt}` });
+    if (failure !== null) return none(failure, from);
+    return { key: null, targetRepo, base, attempt: record.sha, head: record.head, source: record.capture === "live" ? "ccloop-live" : "ccloop-published", from };
+  }
+  const resultRepo = join(drive.sourceDir, "repo");
+  if (!existsSync(resultRepo)) return none("attempt-unavailable:no-result-copy", resultRepo);
+  const head = await revParse(resultRepo, "HEAD");
+  const sha = await commitAttempt(resultRepo);
+  const failure = await checkAttempt(resultRepo, base, sha);
+  if (failure !== null) return none(failure, resultRepo);
+  return { key: null, targetRepo, base, attempt: sha, head, source: "orca-commit", from: resultRepo };
+}
+
+/** §5.3: the pin and what snapshot v2 needs about it, on the run's drive record (once; a later pin of the same sha is a no-op). */
+function recordRunRef(deps: ExecutionDriverDeps, runId: string, pinned: { ref: string; sha: string }, attempt: ArchiveRepositoryV2): void {
+  write(deps, () => {
+    const current = readDriverRun(deps.store, runId);
+    if (current.drive === undefined || current.drive.runRef != null) return;
+    current.drive = { ...current.drive, runRef: pinned, attemptHead: attempt.head, attemptSource: attempt.source };
+    saveDriverRun(deps.store, current);
+  });
+}
+
+/**
+ * Every driver archive (§5.4): a run whose A2 found a ccloop that reads snapshot v2 archives v2 -- pinned, one range bundle
+ * -- and every other run archives v1 exactly as before (§5.8: runs in flight across the upgrade, and an older ccloop).
+ */
+export async function archiveDriveRun(deps: ExecutionDriverDeps, runId: string, stopProof: StopProof | null, report: ExecutionReport | null): Promise<{ artifacts: ArtifactRef[]; snapshot: ArtifactRef | null; missing: string[] }> {
+  const run = readDriverRun(deps.store, runId), drive = run.drive!;
+  if (drive.snapshotVersion !== 2) return archiveRun(deps.store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof }, archiveAdmission(deps));
+  const attempt = await attemptOfDrive(deps, run, report);
+  const archived = await archiveRunV2(deps.store, { runId, sourceDir: drive.sourceDir, stopProof, repositories: [attempt] }, archiveAdmission(deps));
+  const primary = archived.pins.find((pin) => pin.key === null);
+  if (primary !== undefined) recordRunRef(deps, runId, primary, attempt);
+  return archived;
+}
+
+/** §7.2: the target a v2 snapshot is verified in; v1 snapshots never ask. */
+export function runRepository(deps: ExecutionDriverDeps, run: DriverRun): () => string {
+  return () => run.drive?.targetRepo ?? deps.resolveRepository(groupRepoId(deps.store, run.groupId));
+}
+
+/**
  * Change-sized runs spec 2026-11-19 §6.2 (P2): `ORCA_SETTLE_SLOW_MS` sets the settle wall time at or above which step E
  * writes its timing line, so a measured run (acceptance A3) can print every settle with 0. Unset is the 5 s default; a
  * value that is not a non-negative safe integer is refused by name rather than read as some other bound.
@@ -524,6 +597,14 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     blockRun(deps, runId, "A2", "dir-base-missing");
     return true;
   }
+  // Change-sized runs spec 2026-11-19 §5.8, §6.2 (P2): a ccloop that advertises features.attemptRef "v1" reads snapshot v2,
+  // so a task run archives v2 and, on protocol 4, asks for the attempt as a ref. Any other ccloop gets exactly today's run.
+  // A saved-result recovery never does (§5.2.3). A continuation of a v2 predecessor needs a ccloop that reads v2: named
+  // here, before any workspace exists, rather than failing inside ccloop.
+  const refV1 = recovery === null && run.mode === undefined && run.recoveryOf === undefined && (await portFor(deps, run).readFeatures?.())?.attemptRef === "v1";
+  if (continued !== null && !refV1 && readDriverRun(store, continued.predecessorRunId).drive?.snapshotVersion === 2) {
+    blockRun(deps, runId, "A2", "resume-predecessor-snapshot-v2-unsupported"); return true;
+  }
   const base = original?.work.kind==="loop"?original.work.base:continued !== null ? continued.base : await ensureWorkBranch(targetRepo, run.groupId, stackBaseOf(store, run.groupId));
   privateDirectory(drive.sourceDir);
   await ensureWorkspace(targetRepo, drive.workspaceMode, workspaceOf(drive), base, deps.roots);
@@ -561,13 +642,15 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     sourceDir: drive.sourceDir, targetRepo, base, ...(priorFailures !== undefined ? { priorFailures } : {}), ...skillEnvelopeKey(prepared.kind, skills),
     ...(operatorNote === undefined ? {} : { operatorNote }),
     ...(handoff === undefined ? {} : { handoff }),
+    ...(refV1 ? { attemptDelivery: "ref-v1" as const } : {}),
   }, contract, inputCheckpoint);
   const envelopeHash = sha256Canonical(envelope);
+  const keyed = envelope.work.kind === "loop" && envelope.work.attemptDelivery === "ref-v1";
   return write(deps, () => {
     writeCanonicalRecord(store, run.groupId, envelopeHash, canonicalBytes(envelope).toString("utf8"));
     const current = readDriverRun(store, runId);
     if (current.state !== "start-pending" || current.drive === undefined || current.drive.prepared) return false;
-    current.drive = { ...current.drive, targetRepo, base, envelopeHash, prepared: true, skills };
+    current.drive = { ...current.drive, targetRepo, base, envelopeHash, prepared: true, skills, ...(refV1 ? { snapshotVersion: 2 as const } : {}), ...(keyed ? { attemptDelivery: "ref-v1" as const } : {}) };
     noteCeilingInEnvelope(current, envelope);
     if(current.mode==="verify-saved-result"||current.recoveryOf!==undefined){const marker=savedDispatchSchema.parse(current.savedDispatch);if(marker.state!=="never-submitted")throw new ControlError("saved-result-source-stale");current.savedDispatch={...marker,envelopeHash};}
     saveDriverRun(store, current);
@@ -1137,7 +1220,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
   // a person's hard cap (task-cap) ends exhausted below, as today.
   if(report.liveCeilingStop!==undefined&&report.liveCeilingStop.cause!=="task-cap"&&outcome==="exhausted"&&candidate.result==="partial"&&run.mode===undefined&&run.recoveryOf===undefined&&boundingCeilingOf(run)!==null)return settleCeilingStop(deps,runId,report);
   if (outcome !== "succeeded") {
-    if(run.mode===undefined&&run.recoveryOf===undefined)try{await archiveRun(store,{runId,sourceDir:drive.sourceDir,repoDir:join(drive.sourceDir,"repo"),stopProof:candidate.stopProof},archiveAdmission(deps));}catch{write(deps,()=>{const current=readDriverRun(store,runId);current.savedSourceUnavailable="saved-result-evidence-unavailable";saveDriverRun(store,current);});}
+    if(run.mode===undefined&&run.recoveryOf===undefined)try{await archiveDriveRun(deps,runId,candidate.stopProof,report);}catch{write(deps,()=>{const current=readDriverRun(store,runId);current.savedSourceUnavailable="saved-result-evidence-unavailable";saveDriverRun(store,current);});}
     // Issue fixes spec §4.2(1): ccloop's reason is kept beside the outcome (the run view and the panel explain it); the
     // blocked reason is unchanged.
     const stopReason = report.terminal.stopReason ? { stopReason: report.terminal.stopReason } : {};
@@ -1185,10 +1268,22 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
   const dirAttempts: string[] = [];
   const dirReconciliations: Array<{ key: string; outOfBounds: string[]; empty: boolean }> = [];
   let measured: Reconciliation;
+  // Change-sized runs spec 2026-11-19 §5.3 (P2): a v2 run's attempt is ccloop's record (keyed) or Orca's commit of its result
+  // copy (legacy envelope), checked and pinned in the target before anything reads it; every reader after the pin reads the
+  // target. A v1 run reads its result copy exactly as before.
+  const v2 = drive.snapshotVersion === 2;
+  const attemptRepo = v2 ? drive.targetRepo ?? deps.resolveRepository(groupRepoId(store, run.groupId)) : join(drive.sourceDir, "repo");
   if (multiDirs === null) {
-    attemptSha = await commitAttempt(join(drive.sourceDir, "repo"));
+    if (v2) {
+      const resolved = await attemptOfDrive(deps, run, report);
+      if (resolved.attempt === null) { blockRun(deps, runId, "C", resolved.unavailable!, { outcome }); return true; }
+      const pinned = await pinAttempt(attemptRepo, resolved.from, runId, resolved.attempt);
+      if ("refused" in pinned) { blockRun(deps, runId, "C", pinned.refused, { outcome, attemptSha: resolved.attempt }); return true; }
+      recordRunRef(deps, runId, pinned.pinned, resolved);
+      attemptSha = resolved.attempt;
+    } else attemptSha = await commitAttempt(join(drive.sourceDir, "repo"));
     // Off-plan writes #346 (Task 4b ruling): a v4 contract is bounded by its denylist, a v≤3 one by its write set.
-    measured = await boundedHarvest({ runId, workdir: drive.sourceDir, outcome: "succeeded", attemptSha }, drive.base!, primaryHarvestBound(contract));
+    measured = await boundedHarvest({ runId, workdir: drive.sourceDir, outcome: "succeeded", attemptSha }, drive.base!, primaryHarvestBound(contract), v2 ? attemptRepo : undefined);
     if (measured.outOfBounds.length > 0) {
       blockOutOfBounds(`out-of-bounds:${measured.outOfBounds.join(",")}`, { outcome, attemptSha });
       return true;
@@ -1216,7 +1311,8 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
   // (it added no test, so it fails `no-tests`). Fix round 1 (R1): the check runs off the driver round. The marker that
   // lets a restart restore the workspace is persisted first; a later round applies the verdict (stepDebugCheck).
   if (readDebugMark(readGroup(store, run.groupId)) !== null) {
-    const workdir = join(drive.sourceDir, "repo");
+    // §5.3 (P2): a v2 run's commands run in a check worktree of the target at the attempt.
+    const workdir = v2 ? await prepareCheckWorktree(deps, attemptRepo, runId, attemptSha) : join(drive.sourceDir, "repo");
     // Final-review fix wave (I2): with setup, the snapshot keeps the ignored paths, so the restore removes what setup installs.
     const snapshot = await snapshotWorkspace(workdir, contract.context.setupCommands);
     const marked = write(deps, () => {
@@ -1237,9 +1333,9 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
   // A multi run's per-directory criteria check and base re-run are skipped here (spec §7.2: the base re-run is never
   // started; the landing's flag says `base-run-skipped: multi-dir`), so drive.criteriaBase stays null.
   if (!measured.empty && multiDirs === null && !isFlowChildGroup(store, run.groupId)) {
-    const workdir = join(drive.sourceDir, "repo");
-    const change = await classifyCriteriaChange(workdir, drive.base!, attemptSha, contract.verification.requiredChecks, contract.context.setupCommands);
+    const change = await classifyCriteriaChange(v2 ? attemptRepo : join(drive.sourceDir, "repo"), drive.base!, attemptSha, contract.verification.requiredChecks, contract.context.setupCommands);
     if (change.kind === "modified") {
+      const workdir = v2 ? await prepareCheckWorktree(deps, attemptRepo, runId, attemptSha) : join(drive.sourceDir, "repo");
       const snapshot = await snapshotWorkspace(workdir, contract.context.setupCommands);
       const marked = write(deps, () => {
         const current = readDriverRun(store, runId);
@@ -1264,7 +1360,7 @@ export async function stepC(deps: ExecutionDriverDeps, runId: string, context?: 
   let noChangeDirs: NonNullable<DriveRecord["noChangeDirs"]> | null = null;
   const treeOf = async (repoDir: string, rev: string) => (await git(repoDir, [...QUIET_GIT, "rev-parse", `${rev}^{tree}`])).trim();
   if (measured.empty && multiDirs === null && drive.base !== null) {
-    const resultRepo = join(drive.sourceDir, "repo");
+    const resultRepo = attemptRepo;
     const [baseTree, attemptTree] = [await treeOf(resultRepo, drive.base), await treeOf(resultRepo, attemptSha)];
     if (allDirsUnchanged([{ baseTree, attemptTree }])) {
       noChange = { base: drive.base, attempt: attemptSha, baseTree, attemptTree, contractHash: sha256Canonical(contract), requiredChecks: [...contract.verification.requiredChecks] };
@@ -1370,14 +1466,17 @@ async function stepDebugCheck(deps: ExecutionDriverDeps, run: DriverRun, context
   if (marker?.state !== "checking") return false;
   const checks = debugChecksOf(context);
   const entry = checks.get(runId);
+  const v2 = drive.snapshotVersion === 2;
+  const targetRepo = drive.targetRepo ?? deps.resolveRepository(groupRepoId(store, run.groupId));
   if (entry === undefined) {
-    const workdir = join(drive.sourceDir, "repo");
+    // §5.3 (P2): a v2 run's check worktree is removed and made again at the attempt, never restored.
+    const workdir = v2 ? await prepareCheckWorktree(deps, targetRepo, runId, marker.attemptSha) : join(drive.sourceDir, "repo");
     const restoreFailure = await restoreWorkspace(workdir, marker.attemptSha, marker);
     if (restoreFailure !== null) throw restoreFailure;
     const contract = readConfirmedTaskExecution(store, run.groupId, run.taskId!).contract;
     // The criteria re-run recomputes its files from git (the marker keeps only what the restore needs).
     const criteriaFiles = marker.check === "criteria-base"
-      ? (await classifyCriteriaChange(workdir, drive.base!, marker.attemptSha, contract.verification.requiredChecks, contract.context.setupCommands)).files : undefined;
+      ? (await classifyCriteriaChange(v2 ? targetRepo : workdir, drive.base!, marker.attemptSha, contract.verification.requiredChecks, contract.context.setupCommands)).files : undefined;
     startDebugCheck(deps, runId, context, {
       groupId: run.groupId, workdir, base: drive.base!, attemptSha: marker.attemptSha, contract, report: await savedReport(store, runId), snapshot: marker,
       ...(criteriaFiles === undefined ? {} : { criteriaFiles }),
@@ -1387,6 +1486,8 @@ async function stepDebugCheck(deps: ExecutionDriverDeps, run: DriverRun, context
   if (entry.settled === null) return false;
   checks.delete(runId);
   if ("error" in entry.settled) throw entry.settled.error;
+  // §5.3 (P2): the check worktree goes once its verdict is in; a crash before this line leaves it for the restart above.
+  if (v2) await removeOwnPath(targetRepo, deps.roots, checkPathOf(deps.roots, runId));
   const verdict = entry.settled.verdict;
   if (verdict.kind === "base-passed" || verdict.kind === "base-failed" || verdict.kind === "base-setup-failed") {
     // Spec §4.2: the verdict rides on the drive record to the landing, which decides the flag (driverLanding.ts).
@@ -1653,7 +1754,7 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string, lane?: { w
         saveDriverRun(store, current);
       });
     }
-    const archive = await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: raw.stopProof }, archiveAdmission(deps));
+    const archive = await archiveDriveRun(deps, runId, raw.stopProof, report);
     mark("archive");
     if (landed || noChange !== null) {
       // Same evidence shape `confirmLanding` writes (schedulerBridge.ts). checksPassed: ccloop's verifier
@@ -1679,7 +1780,7 @@ export async function stepE(deps: ExecutionDriverDeps, runId: string, lane?: { w
     // Spec §1.2: the no-change record is written in the settle's own transaction, once the task is done.
     const explanation = noChange === null ? null : await noChangeExplanationOf(store, runId);
     // §10.1: on the judge route the goal judge is claimed in the same transaction (or the run names why not).
-    await commitCandidate(store, candidate, { ...archiveAdmission(deps), ...(noChange !== null ? { onSettled: (tx: ControlStore, settledCandidate: Candidate) => {
+    await commitCandidate(store, candidate, { ...archiveAdmission(deps), resolveRepository: runRepository(deps, run), ...(noChange !== null ? { onSettled: (tx: ControlStore, settledCandidate: Candidate) => {
       if ((readWork(tx, settledCandidate.groupId, settledCandidate.workItemId) as { status: string }).status !== "done") return;
       recordNoChangeCompletionInTransaction(tx, { groupId: settledCandidate.groupId, taskId: settledCandidate.workItemId, runId, decidedBy: noChangeDecidedBy, explanation });
     } } : route === "judge" ? { onSettled: (tx: ControlStore, settledCandidate: Candidate) => {
@@ -1779,14 +1880,14 @@ export async function stepCleanupFailed(deps: ExecutionDriverDeps, runId: string
   if (store.db.prepare("SELECT 1 FROM outbox WHERE id=? AND kind='report'").get(`report:${runId}`) !== undefined) {
     if (!archived) {
       const report = await savedReport(store, runId);
-      await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: report.candidate?.stopProof ?? null }, archiveAdmission(deps));
+      await archiveDriveRun(deps, runId, report.candidate?.stopProof ?? null, report);
     }
   } else if (run.executionId === null) {
     // Tester #360 (plan 2026-11-18 batch D, D1): no saved report is a legal shape -- a run blocked before C wrote one, then
     // retried. ccloop never accepted this one, so no agent writes into its workspace: archived without a stop proof
     // (archiveRun records `stop-unconfirmed`), or not at all when ccloop left no result repository.
     if (!archived && existsSync(join(drive.sourceDir, "repo")))
-      await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: null }, archiveAdmission(deps));
+      await archiveDriveRun(deps, runId, null, null);
   } else {
     // Accepted by ccloop: its workspace goes only once ccloop proves the run stopped -- a stop proof of this execution and
     // generation at collect (review of D1: a terminal alone is not one; the worker may still be writing). The proof is
@@ -1796,7 +1897,8 @@ export async function stepCleanupFailed(deps: ExecutionDriverDeps, runId: string
     const checked = awaitingStopChecks(deps), now = (deps.now?.() ?? new Date()).getTime(), due = checked.get(runId);
     if (due !== undefined && now < due) return false;
     const port = portFor(deps, run);
-    const proof = (await port.collect(readStartEnvelope(store, run), run.highWater)).candidate?.stopProof ?? null;
+    const collected = await port.collect(readStartEnvelope(store, run), run.highWater);
+    const proof = collected.candidate?.stopProof ?? null;
     if (proof === null || proof.isolated !== true || proof.executionId !== run.executionId || proof.generation !== run.generation) {
       checked.set(runId, now + CLEANUP_AWAITING_STOP_RECHECK_MS);
       if (drive.cleanupError !== CLEANUP_AWAITING_STOP) {
@@ -1816,7 +1918,7 @@ export async function stepCleanupFailed(deps: ExecutionDriverDeps, runId: string
       const bytes = await port.readEvidence(proof.source);
       if (createHash("sha256").update(bytes).digest("hex") !== proof.source.hash) throw new ControlError("artifact-hash-mismatch");
       await writeArtifact(store, proof.source.artifactId, bytes, archiveAdmission(deps));
-      if (!archived) await archiveRun(store, { runId, sourceDir: drive.sourceDir, repoDir: join(drive.sourceDir, "repo"), stopProof: proof }, archiveAdmission(deps));
+      if (!archived) await archiveDriveRun(deps, runId, proof, collected);
     } catch (error) { checked.set(runId, now + CLEANUP_AWAITING_STOP_RECHECK_MS); throw error; }
     checked.delete(runId);
   }
@@ -2400,11 +2502,11 @@ async function settleTokenAllowance(deps:ExecutionDriverDeps,runId:string,report
  if(current.unknown.work||current.unknown.handoff){blockRun(deps,runId,"C","usage-unknown");return true;}
  try{await validateAllowanceCheckpoint(store,raw,readStartEnvelope(store,run));}
  catch(error){blockRun(deps,runId,"C",`allowance-evidence:${describeError(error)}`);return true;}
- const archive=await archiveRun(store,{runId,sourceDir:run.drive!.sourceDir,repoDir:join(run.drive!.sourceDir,"repo"),stopProof:raw.stopProof},archiveAdmission(deps));
+ const archive=await archiveDriveRun(deps,runId,raw.stopProof,report);
  if(archive.missing.length||archive.snapshot===null){blockRun(deps,runId,"C","allowance-snapshot-incomplete");return true;}
- await verifySnapshot(store,archive.snapshot);
+ await verifyAnySnapshot(store,archive.snapshot,runRepository(deps,run));
  const candidate:Candidate={...raw,checkpointId:`allowance-${runId}`,artifacts:[...archive.artifacts,...raw.artifacts,raw.handoff],snapshot:archive.snapshot};
- await commitCandidate(store,candidate,{...archiveAdmission(deps),onSettled:()=>{
+ await commitCandidate(store,candidate,{...archiveAdmission(deps),resolveRepository:runRepository(deps,run),onSettled:()=>{
   const settled=readDriverRun(store,runId);
   if(openRequestOf(store,settled)!==null||settled.state!=="settled")throw new ControlError("handoff-request-conflict","allowance-yields-to-handoff");
   const work=allowanceWork(store,run.groupId,run.workItemId) as ReturnType<typeof allowanceWork>&{allowancePredecessorRunId?:string;currentRunId?:string|null};
@@ -2547,16 +2649,16 @@ async function settleCeilingStopOnce(deps:ExecutionDriverDeps,runId:string,repor
      orphan.usageHighWater!==run.highWater||orphan.result!=="partial"||orphan.terminalOutcome!=="exhausted"||
      orphan.snapshot===null||hashPayload(orphan.stopProof)!==hashPayload(raw.stopProof)||hashPayload(orphan.handoff)!==hashPayload(raw.handoff))
     throw new ControlError("checkpoint-identity-conflict","uncommitted-ceiling");
-  await verifySnapshot(store,orphan.snapshot);
-  await commitCandidate(store,orphan,{...archiveAdmission(deps),onSettled});
+  await verifyAnySnapshot(store,orphan.snapshot,runRepository(deps,run));
+  await commitCandidate(store,orphan,{...archiveAdmission(deps),resolveRepository:runRepository(deps,run),onSettled});
   await dropResultCopyAfterSettle(deps,runId,run.drive!.sourceDir);
   return true;
  }
- const archive=await archiveRun(store,{runId,sourceDir:run.drive!.sourceDir,repoDir:join(run.drive!.sourceDir,"repo"),stopProof:raw.stopProof},archiveAdmission(deps));
+ const archive=await archiveDriveRun(deps,runId,raw.stopProof,report);
  if(archive.missing.length||archive.snapshot===null){blockRun(deps,runId,"C","live-ceiling-snapshot-incomplete",{outcome:"exhausted",...(report.terminal?.stopReason?{stopReason:report.terminal.stopReason}:{})});return true;}
- await verifySnapshot(store,archive.snapshot);
+ await verifyAnySnapshot(store,archive.snapshot,runRepository(deps,run));
  const candidate:Candidate={...raw,checkpointId,artifacts:[...archive.artifacts,...raw.artifacts,raw.handoff],snapshot:archive.snapshot};
- await commitCandidate(store,candidate,{...archiveAdmission(deps),onSettled});
+ await commitCandidate(store,candidate,{...archiveAdmission(deps),resolveRepository:runRepository(deps,run),onSettled});
  await dropResultCopyAfterSettle(deps,runId,run.drive!.sourceDir);
  return true;
 }

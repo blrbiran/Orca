@@ -1,15 +1,18 @@
 import { randomUUID, createHash } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { lstat, mkdir, realpath, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { z } from "zod";
 import { git, gitBytes } from "../scheduler/gitExec.js";
-import { archiveFile, readArtifact, writeArtifact, type ArchiveDependencies } from "./archive.js";
-import { NO_GC } from "./attemptPin.js";
+import { archiveFile, captureTree, readArtifact, within, writeArtifact, type ArchiveDependencies } from "./archive.js";
+import { NO_GC, pinAttempt } from "./attemptPin.js";
+import { readRun } from "./budget.js";
+import { verifySnapshot } from "./snapshot.js";
+import { TASK_RESULT_SOURCE_EXCLUSIONS } from "./taskResultProtocol.js";
 import { ControlError } from "./errors.js";
 import { privateDirectory } from "./paths.js";
 import { artifactSchema } from "./schema.js";
 import type { ControlStore } from "./store.js";
-import type { ArtifactRef } from "./types.js";
+import type { ArtifactRef, StopProof } from "./types.js";
 import { QUIET_GIT } from "./workspace.js";
 
 /**
@@ -168,4 +171,70 @@ export async function verifySnapshotInRepository(store: ControlStore, ref: Artif
     if ((await git(reader, [...QUIET_GIT, "rev-parse", `${snapshot.attempt}^{tree}`])).trim() !== snapshot.tree) throw new ControlError("snapshot-tree-mismatch");
     return snapshot;
   } finally { await rm(scratch, { recursive: true, force: true }); }
+}
+
+/** One repository a v2 archive pins (§5.4): the primary first (its snapshot is the archive's), then extras (pinned only, N6). */
+export interface ArchiveRepositoryV2 {
+  key: string | null; targetRepo: string; base: string;
+  /** The attempt, or null when the run has none (`unavailable` then says why, recorded as missing evidence). */
+  attempt: string | null; head: string; source: SnapshotSource;
+  /** Where the attempt's objects are when the target lacks them (C1, or a legacy C5): the pin fetches from here. */
+  from: string;
+  unavailable?: string;
+}
+
+/**
+ * Change-sized runs spec 2026-11-19 §5.4 (P2): step E's archive as snapshot v2. The logs are the source directory less
+ * every working tree (repo, repos, run/worktrees, run/dirs) and the task-result paths, exactly as v1 since P0; each
+ * repository's attempt is pinned (a no-op after step C); the primary's snapshot is one range bundle. A pin refused or an
+ * attempt unavailable is missing evidence, so the archive is partial by name and the base is archived in its place. The
+ * manifest and the outbox row keep v1's shapes (ccloop's refuseRecoveryCheckpoint reads `version: 1`), with `repoDir: null`.
+ */
+export async function archiveRunV2(store: ControlStore, input: { runId: string; sourceDir: string; stopProof: StopProof | null; repositories: ArchiveRepositoryV2[] }, deps: ArchiveDependencies = {}):
+  Promise<{ artifacts: ArtifactRef[]; snapshot: ArtifactRef | null; missing: string[]; pins: Array<{ key: string | null; ref: string; sha: string }> }> {
+  const run = readRun(store, input.runId);
+  privateDirectory(input.sourceDir);
+  if ((await lstat(input.sourceDir)).isSymbolicLink()) throw new ControlError("control-path-symlink");
+  const source = await realpath(input.sourceDir);
+  if (within(source, store.stateDir) || basename(source) !== run.runId) throw new ControlError("archive-source-invalid");
+  const primary = input.repositories[0];
+  if (primary === undefined) throw new ControlError("archive-source-invalid");
+  const sourceStat = await lstat(source, { bigint: true });
+  const sourceIdentity = { dev: String(sourceStat.dev), ino: String(sourceStat.ino), birthtimeNs: String(sourceStat.birthtimeNs) };
+  const missing: string[] = [];
+  if (!input.stopProof || !input.stopProof.isolated || input.stopProof.executionId !== run.executionId || input.stopProof.generation !== run.generation) missing.push("stop-unconfirmed");
+  const logs = await captureTree(store, source, "", missing, deps, ["repo", "repos", "run/worktrees", "run/dirs", ...TASK_RESULT_SOURCE_EXCLUSIONS]);
+  const pins: Array<{ key: string | null; ref: string; sha: string }> = [];
+  let snapshot: ArtifactRef | null = null;
+  for (const repository of input.repositories) {
+    const label = repository.key === null ? "" : `${repository.key}:`;
+    let attempt = repository.attempt;
+    if (attempt === null) missing.push(`${label}${repository.unavailable ?? "attempt-unavailable:unknown"}`);
+    else {
+      const pinned = await pinAttempt(repository.targetRepo, repository.from, input.runId, attempt);
+      if ("refused" in pinned) { missing.push(`attempt-unpinned:${label}${pinned.refused}`); attempt = null; }
+      else pins.push({ key: repository.key, ...pinned.pinned });
+    }
+    if (repository !== primary) continue;
+    snapshot = await captureSnapshotV2(store, { runId: input.runId, targetRepo: repository.targetRepo, base: repository.base, attempt, head: attempt === null ? repository.base : repository.head, source: repository.source }, missing, deps);
+  }
+  const manifest = { version: 1, runId: run.runId, sourceIdentity, logs, snapshot, missing };
+  const bytes = Buffer.from(JSON.stringify(manifest));
+  const archive = await writeArtifact(store, "archive-" + createHash("sha256").update(bytes).digest("hex"), bytes, deps);
+  const artifacts = [...logs.flatMap((entry) => entry.ref ? [entry.ref] : []), archive, ...(snapshot === null ? [] : [snapshot])];
+  const persist = async () => store.transaction(() => {
+    store.db.prepare("INSERT INTO outbox VALUES (?, 'archive', ?, 0) ON CONFLICT(id) DO NOTHING").run("archive:" + archive.artifactId, JSON.stringify({ runId: run.runId, sourceDir: source, sourceIdentity, repoDir: null, runsRoot: dirname(source), artifacts, snapshot, missing }));
+  });
+  await (deps.admit ? deps.admit(persist) : persist());
+  return { artifacts, snapshot, missing, pins };
+}
+
+/**
+ * §7.2 callers: every direct verification dispatches on the snapshot's version (§5.8 last row). v1 keeps verifySnapshot; v2
+ * is verified in the target when the caller has a handle on it, and at the artifact level when it has none.
+ */
+export async function verifyAnySnapshot(store: ControlStore, ref: ArtifactRef, resolveRepository?: () => string): Promise<void> {
+  if (snapshotVersionOf(await readArtifact(store, ref)) !== 2) { await verifySnapshot(store, ref); return; }
+  if (resolveRepository === undefined) await verifySnapshotArtifacts(store, ref);
+  else await verifySnapshotInRepository(store, ref, resolveRepository);
 }
