@@ -13,7 +13,7 @@ import { createWebWakeHandlers, deliverScheduledStart, nextClaimableTask } from 
 import { commandVerbSchema, rawAuthorityCommandSchema } from "../../src/control/webProtocol.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { applySettleApproximateUsage } from "../../src/control/softLoopSettlement.js";
-import { readGroupSummary } from "../../src/panel/controlViews.js";
+import { readControlRecovery, readGroupSummary } from "../../src/panel/controlViews.js";
 import { clarifyingInput } from "./fixtures/requirement.js";
 import { profileSnapshot, webFixture } from "./fixtures/web.js";
 import type { WebFixtureTask } from "./fixtures/web.js";
@@ -389,21 +389,57 @@ describe("no claim and no wake for an archived group (spec §6.3)", () => {
   const pending = (h: H) => h.store.db.prepare("SELECT id FROM scheduler_wakes WHERE group_id='g' AND kind='start' AND delivered=0").all().map((row) => String(row.id));
   const activeRuns = (h: H) => Number(h.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g' AND active=1").get()!.n);
 
-  it("leaves a pending start wake pending and claims nothing", async () => {
+  // Ruling (2026-11-20, #370): the human approved the read-side plus clear-wakes scope -- archiving marks the group's
+  // pending start-family wakes delivered (the rows stay for audit), so `recovery list` no longer reports `group-archived`
+  // for a group archived from now on, and the unarchive does not resurrect them. This replaces the old criterion that kept
+  // the queued start pending through the archive and let the unarchive's pause keep it for a later resume.
+  it("clears a pending start wake when the group is archived, keeps the row for audit, and touches no run or workspace state (#370)", async () => {
+    const { h, service } = await confirmed();
+    try {
+      await service.start(h.command("start", {}));
+      const queued = pending(h);
+      expect(queued).toHaveLength(1);
+      const runRows = h.store.db.prepare("SELECT id,body FROM runs WHERE group_id='g' ORDER BY rowid").all();
+      const workRows = h.store.db.prepare("SELECT id,body FROM work_items WHERE group_id='g' ORDER BY rowid").all();
+      const status = body(h).status;
+      service.archiveGroup(h.command("archive-group", {}));
+      // mutation: drop the wake-clearing write from applyArchiveGroup -> the row is delivered=0 again, red here
+      expect(h.store.db.prepare("SELECT id,delivered FROM scheduler_wakes WHERE id=?").get(queued[0]))
+        .toEqual({ id: queued[0], delivered: 1 });
+      expect(readControlRecovery(h.store, "e").deferredWakes).toBeUndefined();
+      // Nothing else moved: no run was claimed or closed, no work item changed, and the stored status is kept as-is
+      // (DB status convergence is out of scope for this round).
+      expect(h.store.db.prepare("SELECT id,body FROM runs WHERE group_id='g' ORDER BY rowid").all()).toEqual(runRows);
+      expect(h.store.db.prepare("SELECT id,body FROM work_items WHERE group_id='g' ORDER BY rowid").all()).toEqual(workRows);
+      expect(body(h).status).toBe(status);
+      expect(activeRuns(h)).toBe(0);
+      // The unarchive does not resurrect it: the row stays delivered, and nothing is queued to run on its own.
+      expect(service.unarchiveGroup(h.command("unarchive-group", {}))).toMatchObject({ result: { kind: "unarchived" } });
+      expect(h.store.db.prepare("SELECT delivered FROM scheduler_wakes WHERE id=?").get(queued[0])).toEqual({ delivered: 1 });
+      expect(readControlRecovery(h.store, "e").deferredWakes).toBeUndefined();
+      expect(activeRuns(h)).toBe(0);
+    } finally { await h.dispose(); }
+  });
+
+  // Ruling (2026-11-20, #370): the human approved the read-side plus clear-wakes scope, which replaces the old criterion
+  // that kept the queued start pending through the archive (the unarchive's pause held it for a later resume). The
+  // archive now marks it delivered; the unarchive still pauses a group that would run (its earlier start row and a
+  // claimable task remain), and a person's resume arms the fresh start.
+  it("clears a pending start wake at archive and claims nothing; a person's resume is what starts it", async () => {
     const { h, service } = await confirmed();
     try {
       await service.start(h.command("start", {}));
       const wakes = pending(h);
       expect(wakes).toHaveLength(1);
       service.archiveGroup(h.command("archive-group", {}));
-      expect(await deliverScheduledStart(dispatch(h), "g")).toEqual({ kind: "blocked", reason: "group-archived" });
-      expect(pending(h)).toEqual(wakes);
+      // mutation: drop the wake-clearing write from applyArchiveGroup -> pending(h) is the queued wake, red here
+      expect(pending(h)).toEqual([]);
+      expect(await deliverScheduledStart(dispatch(h), "g")).toEqual({ kind: "idle" });
       expect(activeRuns(h)).toBe(0);
-      // Ruling (2026-11-18 tester batch D review): #370 -- unarchiving never starts a group: the unarchive pauses it, its
-      // queued start stays pending, and a person's resume claims.
       expect(service.unarchiveGroup(h.command("unarchive-group", {}))).toMatchObject({ result: { kind: "unarchived", paused: true } });
-      expect(pending(h)).toEqual(wakes);
-      expect(await deliverScheduledStart(dispatch(h), "g")).toEqual({ kind: "blocked", reason: "group-stopped" });
+      // The unarchive does not resurrect it (#370, 2026-11-20): nothing is queued, and nothing runs on its own.
+      expect(pending(h)).toEqual([]);
+      expect(await deliverScheduledStart(dispatch(h), "g")).toEqual({ kind: "idle" });
       await service.resumeDispatch(h.command("resume-dispatch", {}));
       expect((await deliverScheduledStart(dispatch(h), "g")).kind).toBe("claimed");
     } finally { await h.dispose(); }
@@ -531,26 +567,32 @@ describe("an archived group costs no agent probe per pump pass (spec §6.3, E5 r
     return { router: { ...router, probe }, calls: () => calls };
   };
 
-  it("delivers a start wake of an archived group without probing the agent", async () => {
+  // Ruling (2026-11-20, #370, read-side plus clear-wakes): the archive clears the queued start, so a delivery after it
+  // finds no wake -- nothing is claimed, and the agent is still probed nothing.
+  it("archive clears the start wake, so a delivery after it claims nothing and probes the agent nothing", async () => {
     const { h, service } = await confirmed();
     try {
       await service.start(h.command("start", {}));
       service.archiveGroup(h.command("archive-group", {}));
       const counted = countingRouter(h);
-      expect(await deliverScheduledStart({ ...dispatch(h), profileRouter: counted.router }, "g")).toEqual({ kind: "blocked", reason: "group-archived" });
+      // mutation: drop the wake-clearing write -> the archived wake is found and the delivery is blocked, red here
+      expect(await deliverScheduledStart({ ...dispatch(h), profileRouter: counted.router }, "g")).toEqual({ kind: "idle" });
       expect(counted.calls()).toBe(0);
     } finally { await h.dispose(); }
   });
 
-  it("refuses the claim of a group archived while its start probe ran, and leaves the wake pending", async () => {
+  // Ruling (2026-11-20, #370, read-side plus clear-wakes): the archive lands while the probe is out and clears the wake;
+  // the claim still finds nothing to take, so no run is created and the agent is not probed twice.
+  it("claims nothing when the group is archived while its start probe ran, and the archive clears the wake", async () => {
     const { h, service } = await confirmed();
     try {
       await service.start(h.command("start", {}));
-      const wakes = pendingStart(h);
+      expect(pendingStart(h)).toHaveLength(1);
       const counted = countingRouter(h, () => service.archiveGroup(h.command("archive-group", {})));
-      expect(await deliverScheduledStart({ ...dispatch(h), profileRouter: counted.router }, "g")).toEqual({ kind: "blocked", reason: "group-archived" });
+      // mutation: drop the wake-clearing write -> the claim sees the archived wake and answers group-archived, red here
+      expect(await deliverScheduledStart({ ...dispatch(h), profileRouter: counted.router }, "g")).toEqual({ kind: "idle" });
       expect(counted.calls()).toBeGreaterThan(0);
-      expect(pendingStart(h)).toEqual(wakes);
+      expect(pendingStart(h)).toEqual([]);
       expect(Number(h.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE group_id='g' AND active=1").get()!.n)).toBe(0);
     } finally { await h.dispose(); }
   });

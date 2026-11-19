@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import { readGroupActivity } from "../../src/control/activity.js";
 import { isGroupArchived } from "../../src/control/archivedMark.js";
 import { WebControlService } from "../../src/control/webService.js";
-import { readGroupSummary } from "../../src/panel/controlViews.js";
+import { readControlRecovery, readGroupSummary } from "../../src/panel/controlViews.js";
 import { profileSnapshot, webFixture } from "./fixtures/web.js";
 
 type H = Awaited<ReturnType<typeof webFixture>>;
@@ -49,6 +49,21 @@ describe("close-group and unclose-group (tester #355)", () => {
       expect([summary.archived, summary.archiveKind]).toEqual([true, "closed"]);
       expect(kindsSince(h, seq)).toContain("closed");
       expect(isGroupArchived(h.store, "g")).toBe(true);
+    } finally { await h.dispose(); }
+  });
+
+  // Ruling (2026-11-20, #370): the human approved the read-side plus clear-wakes scope, which extends to close: closing
+  // marks a done group's pending start-family wakes delivered (the row stays for audit), so recovery list names no
+  // group-archived row for it.
+  it("closing clears a pending start wake and keeps the row for audit (#370)", async () => {
+    const { h, service } = await group({ done: true });
+    try {
+      const wakeId = "scheduler-wake:g:queued-start";
+      h.store.db.prepare("INSERT INTO scheduler_wakes(id,group_id,kind,body,delivered) VALUES (?, 'g','start','{}',0)").run(wakeId);
+      service.closeGroup(h.command("close-group", {}));
+      // mutation: drop the wake-clearing write from applyCloseGroup -> delivered is 0 and recovery names it, red here
+      expect(h.store.db.prepare("SELECT delivered FROM scheduler_wakes WHERE id=?").get(wakeId)).toEqual({ delivered: 1 });
+      expect(readControlRecovery(h.store, "e").deferredWakes).toBeUndefined();
     } finally { await h.dispose(); }
   });
 

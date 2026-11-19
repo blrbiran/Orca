@@ -35,6 +35,10 @@ describe("the recovery read names a start wake that never delivers (#171)", () =
   it("reports a global dispatch block and an archived group, and leaves a delivered wake out", async () => {
     const { store, dispose } = await storeWith([group("g-archived", JSON.stringify({ groupId: "g-archived", archived: { at: 1_760_000_000_000, actor: "person" } })), wake("w2", "g-archived", "resume"), wake("w3", "g-archived", "start"), wake("w4", "g-archived", "no-start")]);
     try {
+      // Ruling (2026-11-20, #370): the human approved the read-side plus clear-wakes scope. This row is written straight
+      // into the store, so it models an older database's row (or one written after the mark): a group archived through
+      // the command now has its start-family wakes marked delivered, and archiveGroup.test.ts pins that. The read side
+      // still names such a legacy `group-archived` row.
       // Ruling (2026-11-18 tester batch D review): #370 -- an archived group's queued start, or its no-start re-arm, does not
       // start it on unarchive (the unarchive pauses the group), so neither is listed as a start waiting on the archive (under
       // either reason); its resume wake still is.
@@ -53,6 +57,8 @@ describe("the recovery read names a start wake that never delivers (#171)", () =
 
   // #355 review (minor 6): a closed group (the mark's closed kind, on a done group) is unclosed, not unarchived, before its
   // queued resume can deliver -- the row says so.
+  // Ruling (2026-11-20, #370): like the archived row above, this one is a store-written legacy shape; closing through the
+  // command clears the group's start-family wakes (archiveGroup.ts).
   it("says a closed group's resume wake waits on its unclose and a resume", async () => {
     const { store, dispose } = await storeWith([group("g-closed", JSON.stringify({ groupId: "g-closed", status: "done", archived: { at: 1_760_000_000_000, actor: "person", kind: "closed" } })), wake("w5", "g-closed", "resume")]);
     try {

@@ -9,6 +9,9 @@
 // Ruling (2026-11-18 tester batch D review 2): "an archived group with no queued work: unarchive pauses nothing" used a
 // group confirmed to run, which the auto-start pass starts (K1); it now expects the pause, and the no-pause case is a
 // group confirmed with `hold`.
+// Ruling (2026-11-20, #370): the human approved the read-side plus clear-wakes scope. The archive now marks the group's
+// queued start-family wakes delivered (the rows stay for audit), so the unarchive never sees or resurrects them. The
+// criteria that pinned "the wake is kept through the archive" are rewritten below; a person's resume still arms the start.
 import { describe, expect, it } from "vitest";
 import { workHealthCheck } from "../../src/commands/status.js";
 import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
@@ -40,25 +43,28 @@ const archiveThenUnarchive = (t: Harness) => {
 };
 
 describe("unarchiving a group never starts it (#370)", { timeout: 120_000 }, () => {
-  it("a ready group with a queued start: paused, its wake kept, nothing claimed until a person resumes it", async () => {
+  it("a ready group with a queued start: the archive clears it; paused, nothing claimed until a person resumes it", async () => {
     const t = await driverHarness([{ taskId: "a" }]); try {
       expect(await t.service.start(t.h.command("start", {}))).toMatchObject({ result: { kind: "scheduled" } });
       const queued = pendingWakes(t);
       expect(queued.map((w) => w.kind)).toEqual(["start"]);
       t.service.archiveGroup(t.h.command("archive-group", {}));
-      // While archived, recovery list does not show it as a start waiting on the archive: the unarchive does not start it.
+      // Ruling (2026-11-20, #370): the archive marks the queued start delivered (the row stays); recovery list no longer
+      // reports it as a start waiting on the archive.
+      // mutation: drop the wake-clearing write -> pendingWakes is `queued` again, red here
+      expect(pendingWakes(t)).toEqual([]);
       expect(readControlRecovery(t.h.store, "e").deferredWakes ?? []).toEqual([]);
       const result = t.service.unarchiveGroup(t.h.command("unarchive-group", {}));
       // mutation: wouldRunOnUnarchive answers false (no pause) -> red here
       expect(result).toMatchObject({ result: { kind: "unarchived", groupId: "g", paused: true } });
       expect(stopIntent(t)).toMatchObject({ mode: "pause" });
       expect(readGroupSummary(t.h.store, "g").stopState).toBe("paused");
-      // Nothing deleted: the queued start is still there, held by the pause.
-      expect(pendingWakes(t)).toEqual(queued);
+      // Not resurrected: the unarchive leaves the cleared start delivered and queues nothing.
+      expect(pendingWakes(t)).toEqual([]);
       await t.driver().round();
       expect(activeRuns(t)).toBe(0);
-      expect(await deliverScheduledStart(t.dispatch, "g")).toEqual({ kind: "blocked", reason: "group-stopped" });
-      // A person's resume lets it run.
+      expect(await deliverScheduledStart(t.dispatch, "g")).toEqual({ kind: "idle" });
+      // A person's resume arms the start afresh.
       expect(await t.service.resumeDispatch(t.h.command("resume-dispatch", {}))).toMatchObject({ result: { kind: "scheduled" } });
       expect((await deliverScheduledStart(t.dispatch, "g")).kind).toBe("claimed");
     } finally { await t.h.dispose(); }
@@ -66,7 +72,7 @@ describe("unarchiving a group never starts it (#370)", { timeout: 120_000 }, () 
 
   // Review C1: a provider attempt proved not to have started re-arms the claim as a `no-start` wake (settleProviderAttempt),
   // which pendingStartWake claims from like a start.
-  it("a queued no-start re-arm: paused; the pump claims nothing from it until the resume", async () => {
+  it("a queued no-start re-arm: the archive clears it; paused; only the resume starts the group", async () => {
     const t = await driverHarness([{ taskId: "a" }]); try {
       const runId = await t.claim();
       const settled = await settleProviderAttempt(t.dispatch, { runId, phase: "work", firstAttemptProof: "invalid" });
@@ -74,12 +80,13 @@ describe("unarchiving a group never starts it (#370)", { timeout: 120_000 }, () 
       expect(pendingWakes(t).map((w) => w.kind)).toEqual(["no-start"]);
       expect(activeRuns(t)).toBe(0);
       expect(archiveThenUnarchive(t)).toMatchObject({ result: { kind: "unarchived", paused: true } });
+      // Ruling (2026-11-20, #370): the archive marks the no-start re-arm delivered; the unarchive does not resurrect it.
+      // mutation: drop the wake-clearing write -> the no-start wake is still pending, red here
+      expect(pendingWakes(t)).toEqual([]);
       const handlers = createWebWakeHandlers({ ...t.h.deps, service: t.service });
       const pass = await deliverSchedulerWakes(t.h.store, handlers);
-      // mutation: wouldRunOnUnarchive answers false -> the no-start wake is delivered and a run claimed, red here
       expect(pass.delivered).not.toContain(settled.wakeId);
       expect(activeRuns(t)).toBe(0);
-      expect(pendingWakes(t).map((w) => w.id)).toEqual([settled.wakeId]);
       await t.service.resumeDispatch(t.h.command("resume-dispatch", {}));
       await deliverSchedulerWakes(t.h.store, handlers);
       expect(activeRuns(t)).toBe(1);
@@ -180,7 +187,9 @@ describe("unarchiving a group never starts it (#370)", { timeout: 120_000 }, () 
   // Review 2, M-c: a queued wake is what the pump claims from, whatever the group's status or proposal says. A ready group
   // started (its start wake still queued) whose proposal is then edited is a draft with an editable proposal -- and the
   // start wake stays queued.
-  it("a queued start on a group whose proposal was edited after the start (draft, not confirmed): paused", async () => {
+  // Ruling (2026-11-20, #370): the archive now clears that queued start, so nothing is left for the pump to claim and the
+  // unarchive pauses nothing; the group stays a draft until a person's start (which an editable proposal refuses anyway).
+  it("a queued start on a group whose proposal was edited after the start (draft, not confirmed): the archive clears it, no pause", async () => {
     const t = await driverHarness([{ taskId: "a" }]); try {
       expect(await t.service.start(t.h.command("start", {}))).toMatchObject({ result: { kind: "scheduled" } });
       const edited = await t.service.editProposal(t.h.command("proposal-edit", { baseProposalVersion: readBudgetProposal(t.h.store, "g").proposalVersion,
@@ -188,12 +197,12 @@ describe("unarchiving a group never starts it (#370)", { timeout: 120_000 }, () 
       expect(edited).toMatchObject({ result: { kind: "proposal-edited" } });
       expect(readGroupSummary(t.h.store, "g").state).toBe("draft");
       expect(readBudgetProposal(t.h.store, "g").state).toBe("editable");
-      const queued = pendingWakes(t);
-      expect(queued.map((w) => w.kind)).toEqual(["start"]);
+      expect(pendingWakes(t).map((w) => w.kind)).toEqual(["start"]);
       const result = archiveThenUnarchive(t);
-      // mutation: gate the queued-wake branch on a dispatchable status, or on a confirmed proposal -> no pause, red here
-      expect(result).toMatchObject({ result: { kind: "unarchived", paused: true } });
-      expect(pendingWakes(t)).toEqual(queued);
+      // mutation: drop the wake-clearing write -> the queued start survives and the unarchive pauses, red here
+      expect((result as { result: Record<string, unknown> }).result).not.toHaveProperty("paused");
+      expect(pendingWakes(t)).toEqual([]);
+      expect(await deliverScheduledStart(t.dispatch, "g")).toEqual({ kind: "idle" });
     } finally { await t.h.dispose(); }
   });
 

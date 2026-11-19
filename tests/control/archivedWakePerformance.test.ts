@@ -155,7 +155,13 @@ describe("archived wake performance at actual entry points", () => {
     const { h, service } = await started();
     try {
       service.archiveGroup(h.command("archive-group", {}));
-      const ids = pending(h), target = countedHandlers(h, service);
+      // Ruling (2026-11-20, #370, read-side plus clear-wakes): the archive now clears the group's queued start-family
+      // wakes, so a deferred row can only be one written after the mark (or an older database's). Queue one to keep this
+      // test's subject -- the pump re-reads the group after a real unarchive command -- actually exercised.
+      // mutation: cache the archived mark across pumps -> the wake is deferred again after the unarchive, red below
+      wake(h, "legacy:start", "start");
+      const ids = pending(h);
+      const target = countedHandlers(h, service);
       expect(await deliverSchedulerWakes(h.store, target.handlers)).toEqual({ delivered: [], deferred: ids });
       expect(target.calls()).toBe(0);
       // Ruling (2026-11-18 tester batch D review): #370 -- the unarchive pauses the group (unarchiving never starts a group)
@@ -176,8 +182,10 @@ describe("archived wake performance at actual entry points", () => {
     const { h, service } = await started();
     try {
       h.store.db.prepare("DELETE FROM scheduler_wakes").run();
-      wake(h, "first-archived", "no-start"); wake(h, "update", "budget-estimate"); wake(h, "last-start", "start");
+      // Ruling (2026-11-20, #370, read-side plus clear-wakes): the archive clears queued start-family wakes, so the batch
+      // is written after the command to keep the pump's cross-await cache the subject (an older database's rows look so).
       service.archiveGroup(h.command("archive-group", {}));
+      wake(h, "first-archived", "no-start"); wake(h, "update", "budget-estimate"); wake(h, "last-start", "start");
       const target = countedHandlers(h, service);
       target.handlers["budget-estimate"] = async () => {
         await Promise.resolve();
@@ -210,16 +218,19 @@ describe("archived wake performance at actual entry points", () => {
     } finally { await h.dispose(); }
   });
 
-  it("keeps the final claim transaction archive guard when the probe awaits", async () => {
+  // Ruling (2026-11-20, #370, read-side plus clear-wakes): the archive now clears the wake while the probe is out, so the
+  // delivery finds nothing left to claim and the pump acks the (already cleared) row. No run is created either way.
+  it("claims nothing when the group is archived while the probe awaits, and the archive clears the wake", async () => {
     const { h, service } = await started();
     try {
       const ids = pending(h), target = countedHandlers(h, service, () => {
         expect(service.archiveGroup(h.command("archive-group", {}))).toMatchObject({ result: { kind: "archived" } });
       });
-      expect(await deliverSchedulerWakes(h.store, target.handlers)).toEqual({ delivered: [], deferred: ids });
+      // mutation: drop the wake-clearing write -> the final transaction sees the wake and defers it (blocked group-archived), red here
+      expect(await deliverSchedulerWakes(h.store, target.handlers)).toEqual({ delivered: ids, deferred: [] });
       expect(target.calls()).toBe(1); expect(target.probes()).toBeGreaterThan(0);
-      expect(active(h)).toBe(0); expect(pending(h)).toEqual(ids);
-      expect(await deliverScheduledStart(h.deps, "g")).toEqual({ kind: "blocked", reason: "group-archived" });
+      expect(active(h)).toBe(0); expect(pending(h)).toEqual([]);
+      expect(await deliverScheduledStart(h.deps, "g")).toEqual({ kind: "idle" });
     } finally { await h.dispose(); }
   });
 

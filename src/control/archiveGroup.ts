@@ -111,6 +111,18 @@ function interruptParkedCall(store: ControlStore, groupId: string, target: Requi
 }
 
 /**
+ * Tester #370 (human ruling 2026-11-20: the read side plus clearing pending wakes this round; DB `status` convergence is
+ * a later design): a group archived or closed takes no new work, so its queued start-family wakes are marked delivered in
+ * the same transaction -- the rows stay for audit. `recovery list` therefore reports no `group-archived` deferred wake for
+ * a group archived from now on, and the unarchive does not resurrect them (nothing is re-armed). Only the kinds the pump
+ * would claim as a start are retired; a queued estimate's wake is not one of them -- it is held, not dropped, and delivers
+ * once the group is unarchived (spec §6.3).
+ */
+function clearPendingStartWakes(store: ControlStore, groupId: string): void {
+  store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE group_id=? AND delivered=0 AND kind IN ('start','no-start','resume')").run(groupId);
+}
+
+/**
  * Spec §6.3: marks the body `archived: { at, actor }` and writes an `archived` activity row in the same transaction.
  * Tester #355: on a closed group (the ledger admits archive-group there) the same write converts it to archived, after the
  * same refusals.
@@ -127,6 +139,7 @@ export function applyArchiveGroup(deps: { store: ControlStore }, command: Archiv
       const at = deps.store.now();
       group.archived = { at, actor: context.rawCommand.actorId };
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+      clearPendingStartWakes(deps.store, groupId);
       recordActivity(deps.store, { groupId, kind: "archived", body: {} });
       return success(context, { kind: "archived", groupId, at });
     },
@@ -182,6 +195,7 @@ export function applyCloseGroup(deps: { store: ControlStore }, command: CloseGro
       const at = deps.store.now();
       group.archived = { at, actor: context.rawCommand.actorId, kind: "closed" };
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
+      clearPendingStartWakes(deps.store, groupId);
       recordActivity(deps.store, { groupId, kind: "closed", body: {} });
       return success(context, { kind: "closed", groupId, at });
     },
