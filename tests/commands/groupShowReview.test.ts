@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cli, fakePanel, useFakePanels } from "./fixtures/fakePanel.js";
+import { reviewLines } from "../../src/commands/domains/verbs.js";
 
 /** Tester follow-up G spec §3.3, §3.5: `group show` names the requirement review and, when it did not pass, its three exits. */
 useFakePanels();
@@ -103,5 +104,30 @@ describe("group show names the requirement review (tester follow-up G §3.3)", (
     const b = await fakePanel({ "GET summary": SUMMARY, "GET groups/g-alpha/brief": { status: 200, body: { schema: "orca-group-brief-v1", groupId: "g-alpha", repoId: "repo-1", state: "done", commandRevision: 5, requirementReview: review } } });
     const brief = (await cli(["group", "brief", "g-alpha"], b.dir)).stdout.split("\n");
     expect(brief.slice(brief.indexOf(expected[0]!), brief.indexOf(expected[0]!) + 2)).toEqual(expected);
+  });
+
+  // Review of #377 (M4): a relative pass is named in every branch that prints a round -- fixing and both not-passed shapes.
+  describe("the relative-pass line in the fixing and not-passed branches (#377 review M4)", () => {
+    const relative = { criterionId: "AC9", command: "npm test", tipExits: ["1", "1"], baseExits: ["1", "1"] };
+    const line = "  AC9 relative pass: `npm test` exited 1, 1 on this tip and 1, 1 at the group's base -- red before the group; not counted as not met";
+    const ac9 = { id: "AC9", verdict: "not-met", evidence: [{ path: "orca:acceptance", line: null }], missing: "npm test exits 1", fixableBy: "work" };
+    it("fixing", () => {
+      const lines = reviewLines("g", <Parameters<typeof reviewLines>[1]>{ state: "fixing", autoFixRounds: 1, rounds: [{ ...round("not-met", [
+        { id: "AC1", verdict: "not-met", evidence: [{ path: "a", line: 1 }], missing: "a", fixableBy: "work" }, ac9]), fixTaskId: "review-fix-1", relativePass: [relative] }] });
+      // mutation: drop relativePassLines from the fixing branch -> red
+      expect(lines).toEqual(["review: fixing (task review-fix-1, round 1)", line]);
+    });
+    it("not passed, not fixable by work", () => {
+      const lines = reviewLines("g", <Parameters<typeof reviewLines>[1]>{ state: "not-passed", why: "not-fixable-by-work", autoFixRounds: 0, rounds: [{ ...round("not-met", [
+        { id: "AC1", verdict: "not-met", evidence: [{ path: "plan", line: null }], missing: "plan", fixableBy: "plan" }, ac9]), leftToPerson: ["AC1"], relativePass: [relative] }] });
+      // mutation: drop relativePassLines from the not-fixable-by-work branch -> red
+      expect(lines.slice(2, 5)).toEqual(["  AC1 not-met: plan", "  AC9 not-met: npm test exits 1", line]);
+    });
+    it("not passed, any other why", () => {
+      const lines = reviewLines("g", <Parameters<typeof reviewLines>[1]>{ state: "not-passed", why: "rounds-exhausted", autoFixRounds: 2, rounds: [{ ...round("not-met", [
+        { id: "AC1", verdict: "not-met", evidence: [{ path: "a", line: 1 }], missing: "a", fixableBy: "work" }, ac9]), relativePass: [relative] }] });
+      // mutation: drop relativePassLines from the last branch -> red
+      expect(lines.slice(0, 5)).toEqual(["problem: requirement-review-not-passed:rounds-exhausted", "review: s", "  AC1 not-met: a", "  AC9 not-met: npm test exits 1", line]);
+    });
   });
 });
