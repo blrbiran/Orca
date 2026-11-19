@@ -6,6 +6,10 @@ import { createExecutionDriver, type ExecutionDriverDeps } from "../../../src/co
 import type { ExecutionPort, ExecutionReport, StartEnvelope } from "../../../src/control/executionPort.js";
 import { createExecutionProfileRouter, resolveProfile } from "../../../src/control/profiles.js";
 import { readArchivedPlan, readEstimateRecord } from "../../../src/control/queries.js";
+import { readEstimateContract } from "../../../src/control/estimator.js";
+import { NEWEST_ESTIMATE_INSTRUCTION } from "../../../src/control/estimateInstructionAge.js";
+import { writeCanonicalRecord } from "../../../src/control/snapshot.js";
+import type { ControlStore } from "../../../src/control/store.js";
 import { WebControlService } from "../../../src/control/webService.js";
 import { createWebWakeHandlers } from "../../../src/control/webDispatch.js";
 import { deliverSchedulerWakes } from "../../../src/control/dispatch.js";
@@ -93,15 +97,35 @@ export function singleCallPort(options: SingleCallOptions, planHash: () => strin
 }
 
 /**
+ * #381 (session 3ba26002): rewrites a queued estimate's recorded request and contract to an older instruction, as an
+ * estimate queued before Orca decided the instruction would have them -- before the claim, which checks the contract
+ * against the request and freezes the contract's hash into the run.
+ */
+export function recordEstimateUnderInstruction(store: ControlStore, groupId: string, estimateId: string, instructionVersion: string): void {
+  const row = store.db.prepare("SELECT body FROM estimates WHERE group_id=? AND id=?").get(groupId, estimateId)!;
+  const estimate = JSON.parse(String(row.body)) as Record<string, unknown> & { request: Record<string, unknown> };
+  const request = { ...estimate.request, instructionVersion }, requestHash = sha256Canonical(request);
+  const contract = { ...readEstimateContract(store, groupId, estimateId), requestHash, instructionVersion }, contractHash = sha256Canonical(contract);
+  writeCanonicalRecord(store, groupId, requestHash, canonicalBytes(request).toString("utf8"));
+  writeCanonicalRecord(store, groupId, contractHash, canonicalBytes(contract).toString("utf8"));
+  store.db.prepare("UPDATE estimates SET body=? WHERE group_id=? AND id=?").run(canonicalBytes({ ...estimate, request, requestHash }).toString("utf8"), groupId, estimateId);
+  store.db.prepare("UPDATE outbox SET body=? WHERE id=?").run(canonicalBytes({ groupId, estimateId, requestHash, contractHash }).toString("utf8"), `estimate-contract:${groupId}:${estimateId}`);
+}
+
+/**
  * An imported group whose estimate is claimed (a `starting` estimate run), a driver over a synthetic single-call
  * ccloop, and an estimator-only profile -- so a driver that resolves the run's port as a task profile is refused.
  */
 export async function estimateHarness(options: SingleCallOptions = {}, tasks?: readonly WebFixtureTask[], instructionVersion: "1" | "4" = "1") {
   const snapshot: ExecutionProfileSnapshotV1 = profileSnapshot();
-  snapshot.profile.estimatorPreflight!.instructionVersion = instructionVersion;
   snapshot.profile.allowedWorkKinds = ["budget-estimate"];
   snapshot.profile.workMaxOutputTokens = null;
   const h = await webFixture(snapshot, tasks);
+  // Ruling (session 3ba26002, human #381): the import's estimate is made with Orca's newest instruction whatever the
+  // profile names, so instruction "1" (this harness's default, which the criteria using it were written under) is now
+  // an estimate queued before #381 under that instruction: its recorded request and contract say "1", and the claim,
+  // the call, the settlement, repair and retry read it from there. (Was: the profile's instructionVersion chose it.)
+  if (instructionVersion !== String(NEWEST_ESTIMATE_INSTRUCTION)) recordEstimateUnderInstruction(h.store, "g", h.estimateId, instructionVersion);
   const service = new WebControlService(h.deps);
   const run = await service.claimEstimate("g", h.estimateId);
   if (run === null) throw new Error("the estimate was not claimed");

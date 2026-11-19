@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildBudgetEstimateRequest, complex1mDefaults, estimateCapabilityDegraded, estimateCapabilityDegradationReasons } from "../../src/control/estimator.js";
-import { ESTIMATE_INSTRUCTIONS } from "../../src/control/estimatePrompt.js";
+import { ESTIMATE_INSTRUCTIONS, estimateTaskIds } from "../../src/control/estimatePrompt.js";
 import { canonicalBytes } from "../../src/control/canonicalJson.js";
 import { readArchivedPlan, readBudgetProposal, readEstimateRecord } from "../../src/control/queries.js";
 import { WebControlService } from "../../src/control/webService.js";
@@ -42,7 +42,11 @@ describe("frozen estimator", () => {
       const result = buildBudgetEstimateRequest({ planHash: plan.planHash, planCanonicalJson: plan.canonicalJson, profile: h.frozen, observation, mode: "strict" });
       expect(result.state).toBe("queued");
       // Human ruling S6 (2026-09-27, session f341f05f): the input formula counts the whole prompt ccloop hands the model -- the v1 instruction, a blank line and the request bytes (single-call estimate spec §4.2) -- not the request alone.
-      const serialized = Math.ceil((Buffer.byteLength(ESTIMATE_INSTRUCTIONS["1"]!) + 2 + canonicalBytes(result.request).length) * 2 / 3);
+      // Ruling (session 3ba26002, human #381): Orca estimates with its newest instruction (4) whatever the profile names, so the
+      // formula counts instruction 4, the blank line, the request and v4's task-list tail. (Was: instruction 1, no tail.)
+      const ids = estimateTaskIds(result.request!);
+      const tail = `\n\nThis plan has ${ids.length} tasks: ${ids.map((id) => JSON.stringify(id)).join(", ")}. Answer each exactly once, as a key of "tasks".`;
+      const serialized = Math.ceil((Buffer.byteLength(ESTIMATE_INSTRUCTIONS["4"]!) + 2 + canonicalBytes(result.request).length + Buffer.byteLength(tail)) * 2 / 3);
       expect(result.inputTokens).toBe(serialized + 17);
       expect(result.requiredRequestTokens).toBe(serialized + 17 + 64000);
       expect(result.contract).toMatchObject({ requestHash: result.requestHash, framingTokenOverhead: 17, maxOutputTokens: 64000 });

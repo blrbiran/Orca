@@ -706,6 +706,11 @@ describe("plan task labels through the import (labels and progress spec §2.3, c
   // regenerated golden differs from the previous one in exactly those 12 fields (4 per scenario), 100 -> null, nothing else.
   // Ruling (human, 2026-11-15, current session: 「这次批准改写所有必要的判据」): regenerated for #311 -- the default reserve's
   // attempts and sessions each gain one per task, so the queued scenario's reserve and group limit gain 2 and 2.
+  // Ruling (session 3ba26002, human #381): regenerated -- profileHash is now the binding hash (profiles.ts
+  // profileBindingHash) and the request/contract record instruction "4" (Orca's newest; the fixture profile names "1").
+  // The regenerated golden differs in exactly: every profileHash / estimatorProfileHash (ebc61386... -> 9ecc00af...),
+  // request.instructionVersion and the contract's instructionVersion 1 -> 4, and the request and contract hashes that
+  // follow from them (rows, outbox body). Nothing else.
   it("the preflight default is unchanged: stored bytes byte-equal to their pre-change goldens", async () => {
     const goldenPath = join(import.meta.dirname, "fixtures", "importPlanStoredBytes.golden.json");
     const tables = ["groups", "work_items", "budget_proposals", "estimates", "scheduler_wakes", "execution_snapshots", "outbox"] as const;

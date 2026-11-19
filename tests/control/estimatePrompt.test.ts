@@ -21,6 +21,8 @@ const observe = (snapshot: ExecutionProfileSnapshotV1, singleCallExecution: "v1"
   return { profile, observation: { profile, observed: snapshot.profile.capabilities, probeFailureCode: null,
     resolution: singleCallExecution === "no-resolution" ? null : fixtureResolutionFor(snapshot.profile.capabilities, singleCallExecution) } };
 };
+/** v4's task-list tail for this plan's one task (estimatePrompt.ts buildEstimatePrompt), as a literal. */
+const TAIL_A = '\n\nThis plan has 1 tasks: "a". Answer each exactly once, as a key of "tasks".';
 const exactSnapshot = (): ExecutionProfileSnapshotV1 => {
   const snapshot = profileSnapshot();
   snapshot.profile.estimatorPreflight = { ...snapshot.profile.estimatorPreflight!, tokenizer: { kind: "exact", tokenizerId: "tok", tokenizerVersion: "1" } };
@@ -47,7 +49,9 @@ describe("the estimate prompt (single-call estimate spec §4.2)", () => {
     const result = buildBudgetEstimateRequest({ planHash, planCanonicalJson, profile, observation, mode: "soft" });
     expect(result.state).toBe("queued");
     const requestBytes = canonicalBytes(result.request).length;
-    const promptBytes = Buffer.byteLength(ESTIMATE_INSTRUCTIONS["1"]!) + 2 + requestBytes;
+    // Ruling (session 3ba26002, human #381): Orca estimates with its newest instruction (4) whatever the profile names, so the
+    // whole prompt is instruction 4, the blank line, the request and v4's task-list tail. (Was: instruction 1, no tail.)
+    const promptBytes = Buffer.byteLength(ESTIMATE_INSTRUCTIONS["4"]!) + 2 + requestBytes + Buffer.byteLength(TAIL_A);
     expect(result.inputTokens).toBe(Math.ceil(promptBytes * 2 / 3) + 17);
     expect(result.requiredRequestTokens).toBe(Math.ceil(promptBytes * 2 / 3) + 17 + 64_000);
     // Not the request alone: the instruction is material (more than 500 tokens of it).
@@ -61,18 +65,23 @@ describe("the estimate prompt (single-call estimate spec §4.2)", () => {
     const exactTokenCount = vi.fn((_profile: unknown, bytes: Buffer) => { counted.push(bytes); return 4_321; });
     const result = buildBudgetEstimateRequest({ planHash, planCanonicalJson, profile, observation, mode: "soft", exactTokenCount });
     expect(counted).toHaveLength(1);
-    expect(counted[0]!.toString("utf8")).toBe(`${ESTIMATE_INSTRUCTIONS["1"]}\n\n${canonicalBytes(result.request).toString("utf8")}`);
+    // Ruling (session 3ba26002, human #381): Orca estimates with its newest instruction (4) whatever the profile names, so the
+    // bytes are instruction 4's, with its task-list tail. (Was: instruction 1, no tail.)
+    expect(counted[0]!.toString("utf8")).toBe(`${ESTIMATE_INSTRUCTIONS["4"]}\n\n${canonicalBytes(result.request).toString("utf8")}${TAIL_A}`);
     expect(result.inputTokens).toBe(4_321 + 17);
   });
 
-  it("is blocked-capability for an instruction version Orca does not know", () => {
+  // Ruling (session 3ba26002, human #381): Orca estimates with its newest instruction (4) whatever the profile names, so the
+  // profile naming one Orca does not know no longer blocks the estimate: it is queued under 4.
+  // (Was: "is blocked-capability for an instruction version Orca does not know".)
+  it("queues under the newest instruction when the profile names one Orca does not know", () => {
     const snapshot = profileSnapshot();
     snapshot.profile.estimatorPreflight = { ...snapshot.profile.estimatorPreflight!, instructionVersion: "5" };
     // Ruling (session 4de777f4, 2026-10-17): "2" became a known version; v3 joined it for issue #173, v4 for the
     // measured framing floor (session 2026-11-09) -- the unknown probe is "5".
     const { profile, observation } = observe(snapshot);
     expect(buildBudgetEstimateRequest({ planHash, planCanonicalJson, profile, observation, mode: "soft" }))
-      .toMatchObject({ state: "blocked-capability", reasonCode: "estimate-blocked-capability", request: null });
+      .toMatchObject({ state: "queued", reasonCode: null, request: { instructionVersion: "4" }, contract: { instructionVersion: "4" } });
   });
 
   it("is blocked-capability unless ccloop answers singleCallExecution v1, and a claim degrades the same way", () => {

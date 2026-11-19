@@ -146,13 +146,16 @@ describe("the v2 estimate prompt and schema", () => {
     expect(estimateTaskIds(result.request!)).toEqual(["a", "m", "z"]);
   });
 
-  it("counts the v2 tail in the preflight tokens", () => {
+  // Ruling (session 3ba26002, human #381): Orca estimates with its newest instruction (4) whatever the profile names, so the
+  // tail counted is the keyed tail v2 introduced, under instruction 4. (Was: built and counted under "2".)
+  it("counts the keyed task-list tail in the preflight tokens", () => {
     const ids = Array.from({ length: 40 }, (_, i) => `task-number-${i}`).sort();
     const v2 = buildFor("2", ids);
-    const bytes = Buffer.byteLength(buildEstimatePrompt("2", canonicalBytes(v2.request).toString("utf8"), { taskIds: ids }));
+    expect(v2.request!.instructionVersion).toBe("4");
+    const bytes = Buffer.byteLength(buildEstimatePrompt("4", canonicalBytes(v2.request).toString("utf8"), { taskIds: ids }));
     expect(v2.state).toBe("queued");
     expect(v2.inputTokens).toBe(Math.ceil(bytes * 2 / 3) + 17);
-    const withoutTail = Buffer.byteLength(`${ESTIMATE_INSTRUCTIONS["2"]}\n\n${canonicalBytes(v2.request).toString("utf8")}`);
+    const withoutTail = Buffer.byteLength(`${ESTIMATE_INSTRUCTIONS["4"]}\n\n${canonicalBytes(v2.request).toString("utf8")}`);
     expect(bytes - withoutTail).toBeGreaterThan(40 * 10);
     expect(v2.inputTokens!).toBeGreaterThan(Math.ceil(withoutTail * 2 / 3) + 17);
   });

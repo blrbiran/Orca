@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
-import { buildBudgetEstimateRequest } from "../../src/control/estimator.js";
+import { buildBudgetEstimateRequest, estimateCapabilityDegradationReasons } from "../../src/control/estimator.js";
 import { estimatorCompatibility } from "../../src/control/estimatorCompatibility.js";
-import { resolveProfile } from "../../src/control/profiles.js";
+import { createExecutionProfileRouter, legacyProfileHash, resolveProfile, type FrozenProfile } from "../../src/control/profiles.js";
 import { executionProfileSnapshotSchema, type ExecutionProfileSnapshotV1 } from "../../src/control/webProtocol.js";
 import { profileSnapshot } from "./fixtures/web.js";
 import { fixtureResolutionFor } from "./fixtures/agents.js";
@@ -69,5 +69,24 @@ describe("estimator settings read at launch (#381)", () => {
     const bare = profileSnapshot() as unknown as { profile: { estimatorPreflight: Record<string, unknown> } };
     delete bare.profile.estimatorPreflight.tokenizer;
     expect(executionProfileSnapshotSchema.safeParse(bare).success).toBe(true);
+  });
+});
+
+// #381 ruling 7: the claim's check of a queued request's estimator against the probed profile (estimator.ts
+// estimateCapabilityDegradationReasons) compares through the router's aliases, so an estimate queued before the binding
+// hash -- its request froze the legacy hash -- is claimed, not refused profile-changed.
+describe("a queued request frozen under the legacy hash (#381)", () => {
+  it("passes the claim's profile check through the router's alias, and only through it", () => {
+    const before = profileSnapshot();
+    const after = profileSnapshot();
+    after.profile.estimatorPreflight!.framingTokenOverhead = 12_000;
+    const current = resolveProfile(after);
+    const legacy = legacyProfileHash(before);
+    const request = { ...build(after).request!, estimatorProfile: { profileId: "all", profileHash: legacy } };
+    const observe = (profile: FrozenProfile) => ({ profile, observed: after.profile.capabilities, probeFailureCode: null, resolution: fixtureResolutionFor(after.profile.capabilities, "v1") });
+    const aliased = createExecutionProfileRouter([current], { aliases: new Map([[legacy, current.profileHash]]) });
+    expect(estimateCapabilityDegradationReasons(request, observe(aliased.resolve("budget-estimate", "all", legacy)), "soft")).toEqual([]);
+    const bare = createExecutionProfileRouter([current]);
+    expect(() => estimateCapabilityDegradationReasons(request, observe(bare.list()[0]!), "soft")).toThrow("profile-changed");
   });
 });
