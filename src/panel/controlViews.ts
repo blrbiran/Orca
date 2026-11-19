@@ -50,6 +50,7 @@ import { recipeExpandsTo } from "../control/loopRecipeCheck.js";
 import { decodeEstimateRecord, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, readWork } from "../control/queries.js";
 import { NEWEST_ESTIMATE_INSTRUCTION, olderEstimateInstruction } from "../control/estimateInstructionAge.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
+import { sameProfileHash } from "../control/profiles.js";
 import { clarifyLimits, hasRequirementBlock, latestDraft, latestRound, readDrafts, readRequirementGroup, readRounds, refuseClarifying } from "../control/requirementRecords.js";
 import { QUOTA_PROBE_MAX_OUTPUT_TOKENS, probeVerdictSchema, quotaProbeIdentitySchema } from "../control/quotaProbeCall.js";
 import { isGroupCallPurpose, isGroupCallWorkItem, readGroupCallContract } from "../control/groupSingleCall.js";
@@ -1378,7 +1379,8 @@ function profileView(binding: z.infer<typeof executionProfileAuthoritySchema>): 
 }
 
 function sameBinding(binding: z.infer<typeof executionProfileAuthoritySchema>, expected: RunViewV1["profile"], workKind: z.infer<typeof executionProfileAuthoritySchema>["workKind"]): boolean {
-  return binding.workKind === workKind && binding.profileId === expected.profileId && binding.profileHash === expected.profileHash;
+  // #381 ruling 7: the one comparison. Both sides are frozen records written from one another, so no alias is needed here.
+  return binding.workKind === workKind && binding.profileId === expected.profileId && sameProfileHash(binding.profileHash, expected.profileHash);
 }
 
 function validAccounting(run: z.infer<typeof persistedRunSchema>): boolean {

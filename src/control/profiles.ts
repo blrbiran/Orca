@@ -17,6 +17,8 @@ export interface FrozenProfile {
   readonly snapshot: Readonly<ExecutionProfileSnapshotV1>;
   readonly profileHash: string;
   readonly port: ExecutionPort;
+  /** #381: the router's legacy-hash aliases, so a holder of the profile compares a frozen hash as the router does. */
+  readonly aliases?: ProfileHashAliases;
 }
 
 export interface ObservedProfile {
@@ -38,7 +40,52 @@ export interface ObservedProfile {
   readonly catalogMiss?: { model: string; listed: string[] };
 }
 
+/**
+ * #381 (session 3ba26002, human ruling 6): a legacy profile hash -- the whole snapshot's, which groups, runs and estimate
+ * requests froze before the binding hash below -- mapped to the binding hash of the same file, recorded at panel start
+ * (profileCarryOver.ts). Frozen bodies keep their legacy hash; resolution accepts it through this map.
+ */
+export type ProfileHashAliases = ReadonlyMap<string, string>;
+const NO_ALIASES: ProfileHashAliases = new Map();
+
+/** The hash every profile binding froze before #381: the whole snapshot. Kept only to recognise those bindings. */
+export function legacyProfileHash(snapshot: ExecutionProfileSnapshotV1): string { return sha256Canonical(snapshot); }
+
+/**
+ * #381 (session 3ba26002, human rulings 1, 4, 5): what a group, run or estimate request is bound to. The estimator
+ * preflight block, the `estimator` tokenizer artifact and the secret value hashes are left out: each call reads them at
+ * launch and freezes what it used in its own contract, so editing them does not refuse work already bound to the file.
+ * A positive list, so a field added to the profile schema is unbound until someone decides otherwise here.
+ */
+export function profileBindingHash(snapshot: ExecutionProfileSnapshotV1): string {
+  const { profile, resolved } = snapshot;
+  return sha256Canonical({
+    schema: "orca-execution-profile-binding-v1",
+    profile: {
+      profileId: profile.profileId,
+      allowedWorkKinds: profile.allowedWorkKinds,
+      contextTokenizer: profile.contextTokenizer,
+      workMaxOutputTokens: profile.workMaxOutputTokens,
+      capabilities: profile.capabilities,
+    },
+    resolved: {
+      proofDocumentContentHashes: resolved.proofDocumentContentHashes,
+      tokenizerArtifactHashes: resolved.tokenizerArtifactHashes.filter((entry) => entry.purpose !== "estimator"),
+    },
+  });
+}
+
+/**
+ * #381 ruling 7: the one profile-hash comparison. Two hashes name the same binding when they are equal once each legacy
+ * hash is replaced by the binding hash an alias records for it.
+ */
+export function sameProfileHash(left: string, right: string, aliases: ProfileHashAliases = NO_ALIASES): boolean {
+  return (aliases.get(left) ?? left) === (aliases.get(right) ?? right);
+}
+
 export interface ExecutionProfileRouter {
+  /** #381: the legacy-hash aliases this router resolves by (absent on a fake: none). */
+  readonly aliases?: ProfileHashAliases;
   resolve(workKind: WebWorkKindV1, profileId: string, expectedHash: string): FrozenProfile;
   /**
    * Agent selection spec §6.4 (C3): a probe is of one selection -- the one the caller is about to dispatch, freeze
@@ -145,7 +192,7 @@ export function resolveProfile(snapshot: ExecutionProfileSnapshotV1, port: Execu
   const parsed = executionProfileSnapshotSchema.safeParse(snapshot);
   if (!parsed.success) throw new ControlError("control-profile-invalid", parsed.error.issues[0]?.message);
   const closedSnapshot = deepFreeze(structuredClone(parsed.data));
-  return Object.freeze({ snapshot: closedSnapshot, profileHash: sha256Canonical(closedSnapshot), port });
+  return Object.freeze({ snapshot: closedSnapshot, profileHash: profileBindingHash(closedSnapshot), port });
 }
 
 function probeFailureCode(error: unknown): string {
@@ -155,28 +202,30 @@ function probeFailureCode(error: unknown): string {
 
 export function createExecutionProfileRouter(
   profiles: readonly FrozenProfile[],
-  options: { now?: () => Date } = {},
+  options: { now?: () => Date; aliases?: ProfileHashAliases } = {},
 ): ExecutionProfileRouter {
+  const aliases: ProfileHashAliases = new Map(options.aliases ?? NO_ALIASES);
   const byId = new Map<string, FrozenProfile>();
   for (const supplied of profiles) {
     const id = supplied.snapshot.profile.profileId;
     if (
       !executionProfileSnapshotSchema.safeParse(supplied.snapshot).success
-      || sha256Canonical(supplied.snapshot) !== supplied.profileHash
+      || !sameProfileHash(profileBindingHash(supplied.snapshot), supplied.profileHash)
     ) throw new ControlError("control-profile-invalid", `identity:${id}`);
     if (byId.has(id)) throw new ControlError("control-profile-invalid", `duplicate:${id}`);
     const snapshot = deepFreeze(structuredClone(supplied.snapshot));
-    byId.set(id, Object.freeze({ snapshot, profileHash: supplied.profileHash, port: ownPort(supplied.port) }));
+    byId.set(id, Object.freeze({ snapshot, profileHash: supplied.profileHash, port: ownPort(supplied.port), aliases }));
   }
   const ordered = Object.freeze([...byId.values()].sort((left, right) =>
     left.snapshot.profile.profileId.localeCompare(right.snapshot.profile.profileId)));
   const now = options.now ?? (() => new Date());
 
   return Object.freeze({
+    aliases,
     list: () => ordered,
     resolve(workKind: WebWorkKindV1, profileId: string, expectedHash: string): FrozenProfile {
       const profile = byId.get(profileId);
-      if (!profile || profile.profileHash !== expectedHash || !profile.snapshot.profile.allowedWorkKinds.includes(workKind)) {
+      if (!profile || !sameProfileHash(expectedHash, profile.profileHash, aliases) || !profile.snapshot.profile.allowedWorkKinds.includes(workKind)) {
         throw new ControlError("profile-changed");
       }
       return profile;

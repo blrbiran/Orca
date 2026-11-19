@@ -18,7 +18,7 @@ import { readEnvelope, reconcileStart, startClaim } from "./dispatch.js";
 import { getRun } from "./queries.js";
 import { dirname, join } from "node:path";
 import { createAdmissionGate, type AdmissionGate } from "./admissionGate.js";
-import type { ExecutionProfileRouter, FrozenProfile, ObservedProfile } from "./profiles.js";
+import { sameProfileHash, type ExecutionProfileRouter, type FrozenProfile, type ObservedProfile, type ProfileHashAliases } from "./profiles.js";
 import type { WebWorkKindV1 } from "./webProtocol.js";
 
 export interface ExecutionProfileSelection { workKind: WebWorkKindV1; profileId: string; profileHash: string }
@@ -28,8 +28,9 @@ export interface ServiceOptions {
   profileRouter?: ExecutionProfileRouter;
   admissionGate?: AdmissionGate;
 }
-function sameProfile(left:ExecutionProfileBinding|undefined,right:ExecutionProfileSelection|undefined):boolean {
-  return left?.workKind===right?.workKind&&left?.profileId===right?.profileId&&left?.profileHash===right?.profileHash;
+function sameProfile(left:ExecutionProfileBinding|undefined,right:ExecutionProfileSelection|undefined,aliases?:ProfileHashAliases):boolean {
+  // #381 ruling 7: the hashes through the one comparison (an absent side still matches only an absent side).
+  return left?.workKind===right?.workKind&&left?.profileId===right?.profileId&&(left===undefined||right===undefined?left===right:sameProfileHash(left.profileHash,right.profileHash,aliases));
 }
 export class ControlService {
   readonly admissionGate: AdmissionGate;
@@ -100,7 +101,7 @@ export class ControlService {
       if(group.stopped)throw new ControlError("group-stopped");
       const previous=this.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1").get(groupId,workItemId);
       if(this.store.dispatchBlocked)throw new ControlError("control-recovery-required");
-      if(previous){const run=readRun(this.store,String(previous.id));if(run.targetVersion===work.targetVersion&&run.graphVersion===group.graphVersion&&run.configHash===work.configHash){if(!sameProfile(run.executionProfile,executionProfile)||!sameProfile(run.handoffProfile,handoffProfile))throw new ControlError("profile-changed");return run;}}
+      if(previous){const run=readRun(this.store,String(previous.id));if(run.targetVersion===work.targetVersion&&run.graphVersion===group.graphVersion&&run.configHash===work.configHash){if(!sameProfile(run.executionProfile,executionProfile,this.options.profileRouter?.aliases)||!sameProfile(run.handoffProfile,handoffProfile,this.options.profileRouter?.aliases))throw new ControlError("profile-changed");return run;}}
       return claimWork(this.store,{groupId,workItemId,capabilities,executionProfile,handoffProfile,graphVersion:group.graphVersion,targetVersion:work.targetVersion,commandId:`execute-${workItemId}-${work.targetVersion}-${group.graphVersion}`,expectedRevision:group.revision,by:"control-service"});
     });
   }
@@ -116,7 +117,7 @@ export class ControlService {
     return this.write(()=>{
       const group=readGroup(this.store,groupId);if(group.stopped)throw new ControlError("group-stopped");
       const workItemId=`reconcile-${taskId}`,existing=this.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1").get(groupId,workItemId);let claim:Claim;
-      if(existing){const run=readRun(this.store,String(existing.id));claim=run;if(run.graphVersion!==group.graphVersion)throw new ControlError("reconcile-version-conflict");if(!sameProfile(run.executionProfile,executionProfile)||!sameProfile(run.handoffProfile,handoffProfile))throw new ControlError("profile-changed");}
+      if(existing){const run=readRun(this.store,String(existing.id));claim=run;if(run.graphVersion!==group.graphVersion)throw new ControlError("reconcile-version-conflict");if(!sameProfile(run.executionProfile,executionProfile,this.options.profileRouter?.aliases)||!sameProfile(run.handoffProfile,handoffProfile,this.options.profileRouter?.aliases))throw new ControlError("profile-changed");}
       else {
         const cap=this.options.reconcileGrant;if(!cap)throw new ControlError("reconcile-budget-unapproved");grantSchema.parse(cap);
         const balance=budgetBalance(group.limit,group.used,group.reserved),bounded=amountSchema.parse(cap.work);
@@ -144,7 +145,7 @@ export class ControlService {
     const parent=allWork(this.store,groupId).find(item=>item.taskId===taskId&&item.kind==="task");if(!parent)throw new ControlError("work-not-found");
     return parent.agent;
   }
-  async startProfiled(selection:ExecutionProfileSelection,input:import("./executionPort.js").StartEnvelope){if(selection.workKind!=="task")throw new ControlError("profile-changed");const {profile}=await this.profiledCapabilities(input.claim.groupId,selection,input.claim.agent);if(!sameProfile(readRun(this.store,input.claim.runId).executionProfile,selection))throw new ControlError("profile-changed");return startClaim(this.store,profile.port,input,this.admissionGate);}
+  async startProfiled(selection:ExecutionProfileSelection,input:import("./executionPort.js").StartEnvelope){if(selection.workKind!=="task")throw new ControlError("profile-changed");const {profile}=await this.profiledCapabilities(input.claim.groupId,selection,input.claim.agent);if(!sameProfile(readRun(this.store,input.claim.runId).executionProfile,selection,this.options.profileRouter?.aliases))throw new ControlError("profile-changed");return startClaim(this.store,profile.port,input,this.admissionGate);}
   startLegacy(input:import("./executionPort.js").StartEnvelope){return startClaim(this.store,this.legacyExecutionPort(),input,this.admissionGate);}
   async reconcileStartForRun(runId:string){
     const run=readRun(this.store,runId);
