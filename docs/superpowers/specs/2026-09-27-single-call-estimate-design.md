@@ -228,3 +228,19 @@ JSON Schema 常量表达不了 `requireSortedUnique`，由 `validateEstimateOutp
 5. **挂账（新增，未修）**：prompt 作为单个 argv 参数，Linux `MAX_ARG_STRLEN` 128 KiB 会让大 plan 的估算 spawn 失败（macOS 无此限）；`--tools ""` 与 `CLAUDE_CODE_MAX_OUTPUT_TOKENS` 只有静态证据，真 claude 付费跑归人；面板「应用建议」后同字段未保存的 draft 仍显示旧值。
 6. **产品问题（归人）**：一个 profile 给所有角色时，estimator 要声明窗口 ⇒ worker 同一窗口 ⇒ confirm 强制数值 handoff 阈值，无法表达「不按上下文交接」（agent 选择一轮的既有不变式）。
 
+
+
+## Correction (2026-11-19, session 3ba26002): Orca decides the estimate instruction (#381)
+
+Who/when: the Track P implementer (Claude Opus 5.5, a subagent of Orca control session `3ba26002`), 2026-11-19, on branch `fix/g-profile` from `main` `4f53a087`. The text above is kept verbatim (Rule 13).
+
+§4.2 "Orca must hold the instruction the profile names" and its bullet "profile 的 `instructionVersion` 不是 Orca 认得的版本 ⇒
+预检退回 `blocked-capability`" no longer hold. Human ruling (#381, 2): the instruction is always the newest Orca holds
+(`estimateInstructionAge.ts` `NEWEST_ESTIMATE_INSTRUCTION`, today "4") with its schema `budget-estimate-v1`; the
+profile's `instructionVersion` / `schemaVersion` stay readable but are read by nothing, and the reason
+`instruction-unknown` is no longer produced (it stays in the union and the Web labels: estimates recorded before carry
+it). Ruling 3: `maxOutputTokens`, `framingTokenOverhead` and `tokenizer` are optional in the profile; absent, Orca uses
+64000, 17 and the utf8 upper bound 2/3 (`proofRef` "proof") -- the README sample's and every acceptance script's values
+(`estimatorCompatibility.ts` `ESTIMATOR_DEFAULTS`, `estimatorSettings`). A profile with `estimatorPreflight: null` is still
+`preflight-unavailable`. Every request and contract still records the instruction it used, and an estimate already
+queued settles, repairs and retries with the version its contract recorded (unchanged code paths).

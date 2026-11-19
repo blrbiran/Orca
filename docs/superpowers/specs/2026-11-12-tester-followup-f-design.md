@@ -131,3 +131,17 @@ estimate instruction a group's estimates used (#381)`.
    gave the unsafe in-place advice; on the human's ruling for the #379-381 review it now names that safe route instead
    (CLI warning, `--json` warnings and the Web budget note), pointing to README §3 "Moving to a newer estimate
    instruction".
+
+
+## Correction (2026-11-19, session 3ba26002): the older-instruction warning is gone (#381 redesign)
+
+Who/when: the Track P implementer (Claude Opus 5.5, a subagent of Orca control session `3ba26002`), 2026-11-19, on branch `fix/g-profile` from `main` `4f53a087`. The text above is kept verbatim (Rule 13).
+
+On the human's #381 rulings of this session, Orca always estimates with its newest instruction (see the 2026-09-27
+single-call estimate spec's correction of today) and the profile's estimator preflight no longer binds groups (the
+2026-09-19 Web spec's correction of today). So §4's warning and the #381 correction's item 2 route ("a new profile under a
+new `profileId` beside the old one") are withdrawn: `group estimate` / `group confirm` (human and `--json`) and the Web
+budget editor say nothing of an older instruction, `config` no longer sends `estimatorInstructionVersion` (kept optional
+in its schema for older panels), and README §3 "Moving to a newer estimate instruction" is replaced by "What a profile
+binds, and what you may edit". Item 1 stays: the brief and the group view still carry `estimatorInstruction` when the
+group's newest estimate request used an older instruction (history).

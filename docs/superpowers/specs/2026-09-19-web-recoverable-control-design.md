@@ -1834,3 +1834,38 @@ A recoverable run's result copy `<sourceDir>/repo` is removed at its settle (all
 settle's transaction committed and its complete archive holds the copy; `cleanupPredecessor` removes one left by a
 settle before P0 or by a failed removal. A continuation resumes from the archive alone. Commit `e5d6460f`. Design:
 `2026-11-19-change-sized-runs-design.md` §5.6 (review I2, O12).
+
+
+## Correction (2026-11-19, session 3ba26002): what a profile binding hashes, and how older bindings keep resolving (#381)
+
+Who/when: the Track P implementer (Claude Opus 5.5, a subagent of Orca control session `3ba26002`), 2026-11-19, on branch `fix/g-profile` from `main` `4f53a087`. The text above is kept verbatim (Rule 13).
+
+Human rulings of this session on tester #381 (1-7), as implemented:
+
+1. **§3 `profileHash` is no longer the hash of the whole snapshot.** It is `profileBindingHash` (`src/control/profiles.ts`):
+   SHA-256 over canonical JSON of `{ schema: "orca-execution-profile-binding-v1", profile: { profileId, allowedWorkKinds,
+   contextTokenizer, workMaxOutputTokens, capabilities }, resolved: { proofDocumentContentHashes,
+   tokenizerArtifactHashes without the "estimator" entry } }`. Left out: the whole `estimatorPreflight` block, the
+   `estimator` tokenizer artifact hash and `secretValueHashes`. Each estimate or requirement call reads those at launch and
+   freezes what it used in its own request/contract (instruction, schema, tokenizer, framing overhead, output bound). The
+   sentence "any execution-affecting byte ... produces a new hash" now holds for the bound fields only.
+   `workMaxOutputTokens` stays bound: nothing freezes it per run (it is only shown in `config`).
+2. **"A stale/changed profile hash returns `profile-changed`"** (§4 import, `estimates`, start precedence, claim retry; §5
+   handoff delivery) now means a change of a bound field. Every comparison of a stored profile hash goes through one
+   function, `sameProfileHash(left, right, aliases)`.
+3. **Bindings frozen before this change.** Their legacy (whole-snapshot) hash sits inside bodies whose own hash is
+   recorded (estimate `request` -> `requestHash`, its contract -> `contractHash`, a confirmed group's execution snapshot
+   -> `snapshotHash`), so nothing is rewritten (human: alias approved, 「同意」). At each panel start
+   (`src/control/profileCarryOver.ts`, called in `controlAssembly.ts` before the router is built) every loaded profile's
+   legacy hash is recorded as an alias of its binding hash; the router and `sameProfileHash` accept either. A binding
+   whose legacy hash was recorded keeps resolving while the file's bound fields stay the same.
+4. **A changed secret** (out of the binding hash) is said once on the panel's stderr at start:
+   `orca-control: profile <id>: secret values changed since the last start: <names>`.
+5. **Writes outside the repository (Rule 17 registration).** Trigger: a panel start with at least one `--profile`.
+   Paths, all inside the control state directory (`$ORCA_CONTROL_DIR/panel` by default): rows
+   `profileHashAlias:<legacy hash>` -> binding hash and `profileSecretsSeen:<profileId>` -> the canonical
+   `secretValueHashes` (names and value hashes, never secret bytes) in the existing `meta` table of `control.sqlite`
+   (no schema change; still schema 25); before those rows are written, one consistent copy
+   `control.sqlite.bak.<epoch ms>` (a `-<n>` suffix when the name is taken), mode 0600, by `VACUUM INTO`. A start with
+   nothing new to record writes and copies nothing (idempotent). Residue on failure: a failed copy throws before any row
+   is written (the panel does not start); a copy taken before a failed transaction stays beside the database.
