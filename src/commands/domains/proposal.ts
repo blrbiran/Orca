@@ -89,11 +89,11 @@ function setBudgetNext(error: { code: string; message: string }, c: Parameters<t
 
 /**
  * Tester #368a (batch D re-review): a started group's agent selection no longer changes through its proposal; a task is
- * moved to another installation by retrying it with --agent.
+ * moved to another installation by retrying it with --agent, and to another model with --model (#368 b).
  */
 function setAgentNext(error: { code: string; message: string }, c: Parameters<typeof groupView>[0]): string[] | undefined {
   if (error.code !== "grant-amendment-unsupported") return undefined;
-  return [`orca task retry ${group(c)} ${str(c, "task") ?? "<task>"} --agent <installation>`];
+  return [`orca task retry ${group(c)} ${str(c, "task") ?? "<task>"} --agent <installation> [--model <model>]`];
 }
 
 export const PROPOSAL_ROWS: CommandDef[] = [

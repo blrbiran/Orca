@@ -26,7 +26,8 @@ describe("a run whose model the provider does not serve (#299)", { timeout: 120_
       expect((await service.systemDebugPass()).opened).toEqual([]);
       expect(t.h.store.db.prepare("SELECT id FROM commands WHERE group_id='g' AND json_extract(body_json,'$.verb')='retry-task'").all()).toEqual([]);
       // mutation M2 (firstFailure names no next for model-unavailable) -> red here.
-      expect(readGroupSummary(t.h.store, "g").card!.firstFailure).toEqual({ taskId: "a", cause: "model-unavailable", next: "orca task retry g a --agent <installation>" });
+      expect(readGroupSummary(t.h.store, "g").card!.firstFailure).toEqual({ taskId: "a", cause: "model-unavailable", next: "orca task retry g a --model <model> [--agent <installation>]" });
+      // Ruling (session 3ba26002): #368 (b) -- the retry names the model it runs with (task retry --model).
     } finally { await t.h.dispose(); }
   });
 });

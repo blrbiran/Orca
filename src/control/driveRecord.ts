@@ -336,9 +336,12 @@ export const MODEL_UNAVAILABLE_CAUSE = "model-unavailable";
  * run is told so (priorFailures.ts).
  */
 export const NARRATION_ONLY_CAUSE = "narration-only";
-/** #299: what a person does about it -- Orca never switches an agent a person or plan chose (failover ruling D2). */
+/**
+ * #299: what a person does about it -- Orca never switches an agent a person or plan chose (failover ruling D2). Tester
+ * #368 (b): the retry names the model (on the task's installation, or on another one with --agent).
+ */
 export function modelUnavailableCommand(groupId: string, taskId: string): string {
-  return `orca task retry ${groupId} ${taskId} --agent <installation>`;
+  return `orca task retry ${groupId} ${taskId} --model <model> [--agent <installation>]`;
 }
 
 /**

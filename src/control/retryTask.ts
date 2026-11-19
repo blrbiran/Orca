@@ -238,8 +238,11 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         const allocations = readBudgetProposal(store, groupId).allocations.filter(a => a.ownerKind === "task" && a.ownerId === taskId);
         // Quota failover spec §8: the payload's installation must be the one resolved before this transaction.
         // `auto` (session 3cfc2e73): the service chose, or kept, the selection (webService.ts retryTaskOnAuto).
-        if (command.payload.agent !== AUTO_AGENT && ((command.payload.agent === undefined) !== (deps.switchTo === undefined)
-          || (deps.switchTo !== undefined && deps.switchTo.frozen.agent.agent !== command.payload.agent))) throw new ControlError("recovery-blocked", "agent-switch-unresolved");
+        // Tester #368 (b): a `model` alone is a switch on the task's own installation, resolved the same way.
+        const { agent: askedAgent, model: askedModel } = command.payload;
+        if (askedAgent !== AUTO_AGENT && ((askedAgent === undefined && askedModel === undefined) !== (deps.switchTo === undefined)
+          || (deps.switchTo !== undefined && ((askedAgent !== undefined && deps.switchTo.frozen.agent.agent !== askedAgent)
+            || (askedModel !== undefined && deps.switchTo.frozen.agent.model !== askedModel))))) throw new ControlError("recovery-blocked", "agent-switch-unresolved");
         if(run.mode==="verify-saved-result"&&run.state==="settled-restartable"){
           if(deps.switchTo!==undefined)throw new ControlError("task-not-retryable","agent-switch-saved-result");
           if(!validSavedNoDispatch(store,run)||groupUsageUnknown(store,groupId))throw new ControlError("task-not-retryable","saved-result-no-dispatch-proof");

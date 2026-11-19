@@ -77,3 +77,28 @@ the code departs from §3 and D3 (details in `docs/superpowers/plans/2026-11-05-
 - D3: a reset time the error text names is trusted at most 24 hours past the failure.
 - Session 3cfc2e73 ruling: an authorized agent (not a run Orca dispatched) may switch a task's installation; its switch
   locks the task like a person's (D2) and names who made it; `orca task retry <g> <t> --agent auto` hands the choice back.
+
+## Correction (2026-11-19, session 3ba26002) — §8: a person's retry may name the model (#368 b)
+
+Who/when: the Track C implementer (Claude Opus 5.5, a subagent of Orca session `3ba26002`), 2026-11-19, branch `fix/g-cli`
+from `main` `4f53a087`. §8 above is kept verbatim (Rule 13).
+
+§8's retry on another installation resolved the installation alone, so the task took that installation's default model
+and a confirmed task's model could not be changed at all (in the field: a model the provider had withdrawn). `retry-task`
+now takes an optional `model` (CLI `orca task retry <group> <task> --model <model>`, with or without `--agent`):
+
+- With `agent`, ccloop resolves `{agent, model}`; without it, `{<the task's installation>, model}`. The answer must echo
+  both, else `control-response-invalid`.
+- A model the installation's read catalog does not list is refused before the transaction as `requirement set-agent`
+  refuses one: `agent-selection-invalid` with `<model> (listed: …)` (`selectorMissOf`; a catalog that was not or could
+  not be read refuses nothing, #124). The CLI's next step is `orca agent models <installation>`.
+- The frozen selection's model provenance is the switch's source (`task` for a person), not `descriptor`; the switch is
+  recorded as any other (`agentSwitches`, reason `person`). The installation the task is on is no longer "unchanged" when
+  a different model is named; the same installation and model are still refused `agent-unchanged`.
+- `agent: "auto"` with a `model` is refused (`agent-selection-invalid:auto-with-model`): auto lets orca-auto choose. A
+  run Orca dispatched may not name a model, as it may not name an agent (`control-dispatched-run-refused`).
+- The model-unavailable next step (group card, `run show`) and `proposal set-agent`'s refusal on a started group name
+  `--model`.
+
+`--agent auto` itself is unchanged: it still keeps the task's selection (provenance `failover`) unless its installation
+is resting; it does not re-run the operator's preferences.

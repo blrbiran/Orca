@@ -15,6 +15,7 @@ import { readWebGroup, saveWebAuthority } from "./estimateSettlement.js";
 import { executionSnapshotSchema } from "./webProtocol.js";
 import { readCanonicalRecord, writeCanonicalRecord } from "./snapshot.js";
 import { intersectCapabilities } from "./profiles.js";
+import { catalogMissText, selectorMissOf } from "./estimatorCompatibility.js";
 import type { ExecutionPort } from "./executionPort.js";
 import type { ControlStore } from "./store.js";
 
@@ -70,17 +71,23 @@ export function runAgentAgrees(work: unknown, run: unknown): boolean {
  * defaults), capabilities intersected with the confirmed worker profile's declaration.
  */
 export async function resolveAgentSwitch(
-  deps: { store: ControlStore; port: Pick<ExecutionPort, "resolveAgent">; profileRouter: { resolve(kind: "task", id: string, hash: string): { snapshot: { profile: { capabilities: Parameters<typeof intersectCapabilities>[0] } } } } },
-  groupId: string, installation: string, source: SwitchSource,
+  deps: { store: ControlStore; port: Pick<ExecutionPort, "resolveAgent" | "listModels">; profileRouter: { resolve(kind: "task", id: string, hash: string): { snapshot: { profile: { capabilities: Parameters<typeof intersectCapabilities>[0] } } } } },
+  groupId: string, installation: string, source: SwitchSource, model?: string,
 ): Promise<FrozenWorkAgent> {
   const proposal = readBudgetProposal(deps.store, groupId);
   if (proposal.state !== "confirmed" || !proposal.executionSnapshotHash) throw new ControlError("group-state-invalid");
   const snapshot = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(deps.store, proposal.executionSnapshotHash)));
   const worker = deps.profileRouter.resolve("task", snapshot.profiles.worker.profileId, snapshot.profiles.worker.profileHash).snapshot.profile.capabilities;
-  const resolution = await deps.port.resolveAgent({ agent: installation });
-  if (resolution.selection.agent !== installation) throw new ControlError("control-response-invalid", "agent-switch-resolution");
+  const resolution = await deps.port.resolveAgent(model === undefined ? { agent: installation } : { agent: installation, model });
+  if (resolution.selection.agent !== installation || (model !== undefined && resolution.selection.model !== model)) throw new ControlError("control-response-invalid", "agent-switch-resolution");
+  // Tester #368 (b): a named model the installation's read catalog does not list is refused, in requirement set-agent's
+  // words (requirementCommands.ts); a catalog that was not or could not be read refuses nothing (#124).
+  if (model !== undefined) {
+    const miss = await selectorMissOf(deps.port, resolution.selection);
+    if (miss !== null) throw new ControlError("agent-selection-invalid", catalogMissText(miss));
+  }
   return {
-    agent: resolution.selection, agentProvenance: { agent: source, model: "descriptor", contextWindow: "descriptor" },
+    agent: resolution.selection, agentProvenance: { agent: source, model: model === undefined ? "descriptor" : source, contextWindow: "descriptor" },
     configHash: resolution.configHash, timeoutMs: resolution.timeoutMs, killGraceMs: resolution.killGraceMs,
     agentCapabilities: intersectCapabilities(worker, resolution.capabilities),
   } as FrozenWorkAgent;
@@ -94,8 +101,10 @@ export async function resolveAgentSwitch(
 export function applyAgentSwitch(store: ControlStore, groupId: string, taskId: string, runId: string | null, next: FrozenWorkAgent, by: string, reason: AgentSwitchRecord["reason"]): { from: string; to: string } {
   const work = readWork(store, groupId, taskId) as unknown as Record<string, unknown>;
   const previous = frozenWorkAgent(work);
-  // `auto` may keep the installation and change only its provenance (the unlock); nothing else may switch to the same one.
-  if (reason === "auto" ? canonicalBytes(previous).equals(canonicalBytes(next)) : previous.agent.agent === next.agent.agent) throw new ControlError("task-not-retryable", "agent-unchanged");
+  // `auto` may keep the installation and change only its provenance (the unlock); nothing else may switch to the same one,
+  // except to another model named for it (tester #368 b: its model provenance is then not the descriptor's).
+  const sameSelection = previous.agent.agent === next.agent.agent && (next.agentProvenance.model === "descriptor" || previous.agent.model === next.agent.model);
+  if (reason === "auto" ? canonicalBytes(previous).equals(canonicalBytes(next)) : sameSelection) throw new ControlError("task-not-retryable", "agent-unchanged");
   const group = readWebGroup(store, groupId), proposal = readBudgetProposal(store, groupId);
   if (proposal.state !== "confirmed" || !proposal.executionSnapshotHash) throw new ControlError("group-state-invalid");
   const snapshot = executionSnapshotSchema.parse(JSON.parse(readCanonicalRecord(store, proposal.executionSnapshotHash)));

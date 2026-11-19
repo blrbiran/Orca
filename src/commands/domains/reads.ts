@@ -9,7 +9,7 @@ import { compact, field, text } from "./format.js";
 import { acceptanceLines, contextHandoffLines, emptyResultLines, keptLines, type KeptSummary, sessionCleanupLines, workerLostLines, formatWithUnestimated, fundingLines, groupInstructionLines, historyLines, noChangeLines, proposalDocument, reviewLines, softCeilingLines, unestimatedLines, withFunding, type EmptyResultRun, type EstimateHistory, type NoChangeItem } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
-import { MODEL_UNAVAILABLE_CAUSE, NARRATION_ONLY_CAUSE, recoveryRetryCommand } from "../../control/driveRecord.js";
+import { MODEL_UNAVAILABLE_CAUSE, modelUnavailableCommand, NARRATION_ONLY_CAUSE, recoveryRetryCommand } from "../../control/driveRecord.js";
 import { REPEATED_FAILURE_STOP } from "../../control/repeatedFailureStop.js";
 import { offPlanWriteText, type OffPlanWrite } from "../../control/offPlanWrites.js";
 import { goalPathLine, impliedPathAddedLine, impliedPathLine, type GoalPathOutsideTargets, type ImpliedPathAddition, type ImpliedPathOutsideTargets } from "../../control/splitImpliedPaths.js";
@@ -661,8 +661,9 @@ export const READ_ROWS: CommandDef[] = [
         // Tester follow-up J (#299): a provider 404 on the model is not retried and the model is never switched by Orca.
         ...(cause?.cause !== MODEL_UNAVAILABLE_CAUSE ? [] : [`hint: the provider does not serve model ${b.run?.agent?.model ?? "(the agent's default)"} for ${b.run?.agent?.installation ?? "this agent"}; Orca does not retry it or switch the model. Choose another agent or model: ${b.run?.taskId
           // Tester #368a: a task's run means the group started, and proposal set-agent is refused from then on; the retry's
-          // --agent resolves the installation's default model, never the operator's preferences (agentSwitch.ts).
-          ? `orca task retry ${b.groupId} ${b.run.taskId} --agent <installation>.`
+          // --agent resolves the installation's default model, never the operator's preferences (agentSwitch.ts), so the
+          // retry names the model (#368 b).
+          ? `${modelUnavailableCommand(b.groupId, b.run.taskId)}.`
           : "orca agent set-preferences (the operator's model), or orca proposal set-agent / orca requirement set-agent (this group's selection)."}`]),
         // Tester #347: the agent stopped after a short message without working; not a format problem of a finished answer.
         ...(cause?.cause !== NARRATION_ONLY_CAUSE ? [] : ["hint: the agent ended its turn after a short message without doing the task (no tool, command or file change, no answer). The next retry of this task is told so."]),

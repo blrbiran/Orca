@@ -871,7 +871,8 @@ export const recoveryRetryPayloadSchema = z.discriminatedUnion("scope", [
 export const retryTopUpWorkSchema = z.object({ tokens: safeInteger.optional(), activeMs: safeInteger.optional(), attempts: safeInteger.optional(), sessions: safeInteger.optional() }).strict();
 // Tester follow-up G §6.3 (#189): `allowanceId` names the group path allowance an Orca retry acts under (only with allowObservedPaths).
 // Off-plan writes W4 (#346): `after` orders the task after one of its frozen parallel siblings and drops that sibling's claims.
-export const retryTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema.optional(), agent: idSchema.optional(), work: retryTopUpWorkSchema.optional(), allowObservedPaths: z.literal(true).optional(), allowanceId: idSchema.optional(), after: idSchema.optional() }).strict();
+// Tester #368 (b): `model` -- the retry's model, on `agent` or the task's own installation (webService.ts retryTaskOnAgent).
+export const retryTaskPayloadSchema = z.object({ taskId: idSchema, runId: idSchema.optional(), agent: idSchema.optional(), model: z.string().min(1).max(200).optional(), work: retryTopUpWorkSchema.optional(), allowObservedPaths: z.literal(true).optional(), allowanceId: idSchema.optional(), after: idSchema.optional() }).strict();
 // Tester follow-up F §2 (#116, ledger C3): `charge-observed-floor` books ccloop's observed floor of a finite remainder, approximate.
 export const settleUnknownUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger, acknowledge: z.enum(["charge-remaining-grant", "release-unmetered", "release-known-zero", "charge-observed-floor"]) }).strict();
 export const settleApproximateUsagePayloadSchema = z.object({ taskId: idSchema, runId: idSchema, generation: positiveSafeInteger }).strict();

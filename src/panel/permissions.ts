@@ -96,10 +96,12 @@ export function permissionRefusal(p: Principal, verb: CommandVerbV1, payload: un
   // Session 3cfc2e73 ruling (「同意按你的建议走」): an authorized agent may choose a task's installation (`retry-task`'s
   // `agent`, `auto` included); a run Orca dispatched may not -- it would pick or unlock the agent of the work it is part of.
   // ERRATUM (observed-path retry): widening the next run's paths is likewise an attended agent's or person's action.
+  // Tester #368 (b): so is its model (`model`).
   if (p.kind === "agent" && p.dispatchedRun !== undefined && verb === "retry-task"
     && ((payload as { agent?: unknown } | null | undefined)?.agent !== undefined
+      || (payload as { model?: unknown } | null | undefined)?.model !== undefined
       || (payload as { allowObservedPaths?: unknown } | null | undefined)?.allowObservedPaths === true))
-    return { code: "control-dispatched-run-refused", message: `${verb} --agent or --allow-observed-paths is not done by a run Orca dispatched (${p.dispatchedRun}); a person or an attended session does it.` };
+    return { code: "control-dispatched-run-refused", message: `${verb} --agent, --model or --allow-observed-paths is not done by a run Orca dispatched (${p.dispatchedRun}); a person or an attended session does it.` };
   const humanOnly = humanOnlyRefusal(verb, payload);
   // Gaps spec §6.3, §13: an `any` verb whose SOCKET_TIER predicate calls this payload `token` (a `defer` releasing a held
   // effect): the socket agent needs a person token (any person's: the verb is not human-only), and a run Orca dispatched

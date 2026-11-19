@@ -41,7 +41,8 @@ describe("run show names a model the provider does not serve (#299)", () => {
     const lines = await show({ ...RUN, agent: { installation: "codex", model: "gpt-6-sol" }, failureCause: { cause: "model-unavailable", phase: "plan", retries: 0, detail: "404" } });
     // mutation M3 (no model-unavailable hint line) -> red here.
     const hint = lines.find((line) => line.startsWith("hint: the provider does not serve model gpt-6-sol for codex"));
-    expect(hint).toContain("orca task retry g-alpha t1 --agent <installation>");
+    // Ruling (session 3ba26002): #368 (b) -- a task's retry now names the model it runs with.
+    expect(hint).toContain("orca task retry g-alpha t1 --model <model> [--agent <installation>]");
     // Ruling (2026-11-18 tester batch D): a task's retry --agent resolves the installation's default model and never reads
     // the operator's preferences (agentSwitch.ts resolveAgentSwitch), so set-preferences does not change it (fix wave m-2).
     expect(hint).not.toContain("orca agent set-preferences");

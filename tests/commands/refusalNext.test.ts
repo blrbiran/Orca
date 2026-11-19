@@ -147,10 +147,12 @@ describe("task settle-usage's refusals name the next command (tester follow-up K
 describe("proposal set-agent's refusal on a started group names task retry --agent (tester #368a, batch D re-review)", () => {
   it("--task given: retry that task on another installation", async () => {
     expect((await nextOf(["proposal", "set-agent", "g-alpha", "--task", "t1", "--agent", "codex"], refused("proposal/agent", "grant-amendment-unsupported", "grant-amendment-unsupported:group-started"))).next)
-      .toEqual(["orca task retry g-alpha t1 --agent <installation>"]);
+      // Ruling (session 3ba26002): #368 (b) -- the retry also takes --model, so the next step names it.
+      .toEqual(["orca task retry g-alpha t1 --agent <installation> [--model <model>]"]);
   });
   it("--slot given: the task is the person's to name", async () => {
     expect((await nextOf(["proposal", "set-agent", "g-alpha", "--slot", "worker", "--agent", "codex"], refused("proposal/agent", "grant-amendment-unsupported", "grant-amendment-unsupported:task-started"))).next)
-      .toEqual(["orca task retry g-alpha <task> --agent <installation>"]);
+      // Ruling (session 3ba26002): #368 (b) -- as above.
+      .toEqual(["orca task retry g-alpha <task> --agent <installation> [--model <model>]"]);
   });
 });

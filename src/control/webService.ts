@@ -2423,7 +2423,7 @@ export class WebControlService {
   savedResultEligibility(runId:string){return readSavedResultEligibility(this.stopDeps(),runId);}
   verifySavedResult(command:VerifySavedResultCommand){return applyVerifySavedResult(this.stopDeps(),command);}
   retryTask(command: RetryTaskCommand): WebCommandResult {
-    if (command.payload.agent !== undefined) throw new ControlError("recovery-blocked", "agent-switch-needs-resolution");
+    if (command.payload.agent !== undefined || command.payload.model !== undefined) throw new ControlError("recovery-blocked", "agent-switch-needs-resolution");
     return applyRetryTask({ ...this.stopDeps(), prerequisiteDone, applyObservedPaths: applyObservedPathAmendment, ladderInProgress: confirmedLadderFor }, command) as WebCommandResult;
   }
   /**
@@ -2432,14 +2432,18 @@ export class WebControlService {
    * retries in one transaction. orca-auto's switches are marked `failover`, a person's `task`.
    */
   async retryTaskOnAgent(command: RetryTaskCommand): Promise<WebCommandResult> {
-    const installation = command.payload.agent;
-    if (installation === undefined) return this.retryTask(command);
+    const { agent: named, model } = command.payload;
+    if (named === undefined && model === undefined) return this.retryTask(command);
     const replay = preflightWebCommand<WebCommandResult>(this.store, command); if (replay) return replay.body;
-    if (installation === AUTO_AGENT) return this.retryTaskOnAuto(command);
+    const book = (error: unknown) => applyWebCommand<WebCommandResult>(this.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
+    // Tester #368 (b): `auto` lets orca-auto choose the selection; a model beside it would be silently dropped.
+    if (named === AUTO_AGENT) return model === undefined ? this.retryTaskOnAuto(command) : book(new ControlError("agent-selection-invalid", "auto-with-model"));
     const source = command.actorId === ORCHESTRATION_ACTOR ? "failover" as const : "task" as const;
     let frozen: Awaited<ReturnType<typeof resolveAgentSwitch>>;
     try {
-      frozen = await resolveAgentSwitch({ store: this.store, port: this.deps.port, profileRouter: this.deps.profileRouter as never }, groupId(command), installation, source);
+      // Tester #368 (b): a model alone stays on the task's own installation.
+      const installation = named ?? frozenWorkAgent(readWork(this.store, groupId(command), command.payload.taskId)).agent.agent;
+      frozen = await resolveAgentSwitch({ store: this.store, port: this.deps.port, profileRouter: this.deps.profileRouter as never }, groupId(command), installation, source, model);
     } catch (error) {
       return applyWebCommand<WebCommandResult>(this.store, { rawCommand: command, expand: () => { throw error; }, apply: () => { throw error; } }).body;
     }
