@@ -232,3 +232,40 @@ Review fixes (same session): the standing-feedback search also stops at a revisi
 to `consensusWithdrawn.lastDraftNo` (the latest draft when a revision withdrew the consensus; absent on older records) are
 not searched (M1); the revised draft's `requirementConflicts` are sent only together with carried feedback (M5); and both
 view notes (`feedbackAfterRedraft`, `runtimeDataPaths`) are given only on the draft awaiting review (M3).
+
+## Correction (2026-11-19, session 3ba26002, on `feat/multi-split-conflicts` from `main` at `2513a80d`): multi-directory split instruction version 6
+
+**Written by:** a subagent (Claude Opus 5.5) of Orca session 3ba26002. **What changed:** the open question above
+("multi-directory groups") and the controller ruling "the multi instruction stays at v5 -- a registered gap" are settled:
+the human agreed to multi-directory `requirementConflicts` (「同意」) once single-repository v7 had worked in a paid
+dogfood (session 543e800e). The earlier text above is kept as written; where it says multi stays at v5, read this section.
+
+**Multi instruction version 6** (`SPLIT_INSTRUCTION_MULTI_V6`, head `Orca requirement split (several directories),
+instruction version 6.`) is multi v5 with, by `.replace`, what single-repository v7 and v8 added:
+- `EARLIER_DRAFTS` becomes v8's text (the standing `feedback`, `feedbackOnDraft`, the earlier `requirementConflicts`);
+- after `REVISION_RULE`: `REQUIREMENT_CONFLICTS_RULE` plus, multi only, "A path in `why` names its directory's key first,
+  as `<key>:<path>`." (the form `requirement show` already prints a multi claim in), then `FEEDBACK_STANDS_RULE`;
+- after `IMPLIED_PATH_RULE`: `RUNTIME_DATA_RULE` with "in `targetPaths`" read "in `writes[].targetPaths`";
+- the answer template's `requirementConflicts` line, before `notes`.
+
+Multi has its own numbering: `buildSplitPrompt({ multi: true })` builds v6 by default, `instructionVersion: 5` builds v5's
+exact bytes (pinned in `tests/control/splitMultiConflicts.test.ts`: instruction sha `399c094a…`, schema `13cedf7b…`, both
+measured with `npx tsx` at `2513a80d`), and any other multi version is refused (`recovery-blocked`,
+`split-instruction-unknown:multi:<n>`). A call already started keeps the prompt and schema frozen in its envelope.
+The standing feedback and its revision boundary (Review M1) are the single path's (`standingFeedback`); nothing is
+duplicated.
+
+**Schema.** `SPLIT_JSON_SCHEMA_MULTI_V6` is the multi schema plus v7's `requirementConflicts`; `SPLIT_HANDLER.prepare` sends
+it for multi groups. `multiSplitOutputSchema` gains the same optional, never defaulted key with D5's bounds, so a multi
+answer from v5 (no key) parses as before. `evaluateMultiSplit` folds an empty or `null` `requirementConflicts` and a `null`
+`feedback` (`withoutEmptyConflicts`, the conflicts half of `withoutEmptySetup`); the `setup` half is not applied, so an
+empty multi `setup` stays a `schema:` refusal (multi spec §5.4).
+
+**Hash (differs from D4 on purpose).** A multi `draftHash` already binds the output (`requirementDraftHash`, the
+2026-11-14 erratum), so a multi draft *with* conflicts hashes them; a multi draft without them hashes as before.
+
+**Views.** `feedbackAfterRedraft`, `requirement show`'s `requirement-conflict:` lines, the Web conflicts alert, and
+`requirement accept --despite-conflicts` read `output.requirementConflicts` whatever the output's shape, so they apply to
+multi drafts unchanged. `runtimeDataPaths` entries of a multi draft gain `dir` (the directory key whose write lists the
+path; optional in the view schema, absent on single drafts, whose bytes do not change); `requirement show` and the Web
+print it as `<dir>:<path>`. `drop-path` still takes the path alone and removes it from the first write that lists it.
