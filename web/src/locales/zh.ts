@@ -1033,7 +1033,7 @@ export const zh: Translation<typeof en> = {
         "integration-conflict": "把工作合并进目标时有冲突；批准一个 agent 来解决，或手动解决后重试",
         "integration-conflict-unreproducible": "重新制造冲突时冲突没有再出现；请重试",
         "integration-worktree-dirty": "检出着的目标分支有未提交的改动（工作区交付写进去的文件也算：提交或移走它们）；整理好后重试",
-        "integration-working-tree-conflict": "工作区里这些路径既不是这个组的起点，也不是它的结果：{{detail}}。提交、移走或丢弃你的副本后重试；或者自己取文件（git checkout orca/<组> -- <路径>）；或者把这个组改成保持现状",
+        "integration-working-tree-conflict": "工作区里这些路径既不是这个组的起点，也不是它的结果：{{detail}}。提交、移走或丢弃你的副本后重试；或者自己取文件（git checkout orca/<group> -- <path>）；或者把这个组改成保持现状",
         "integration-working-tree-busy": "工作区里有一个 git 操作正在进行（{{detail}}）；完成或中止它后重试",
         "integration-working-tree-unsupported": "Orca 无法把它写进工作区（{{detail}}）；请手动取这些文件，或改用本地合并交付",
         "integration-working-tree-unsafe-path": "有一个路径无法安全写入（{{detail}}）：上层目录是链接、文件或另一个仓库，或名字不允许；换掉它或手动取文件",
