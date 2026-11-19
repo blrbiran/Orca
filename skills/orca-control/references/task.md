@@ -32,7 +32,7 @@ start again a task whose current run failed (the run read now is the one retried
 - `<group>`: a group id or a unique prefix
 - `<task>`: a task id or a unique prefix
 - `--agent <agent>`: retry on this agent installation instead (quota failover spec §8; not for a task with skills); `auto` hands the choice back to orca-auto (unlocks a task a switch pinned); refused to a run Orca dispatched
-- `--model <model>`: retry with this model, as the installation's catalog lists it (orca agent models <installation>): on --agent's installation, else the task's own; not with --agent auto; refused to a run Orca dispatched
+- `--model <model>`: retry with this model (orca agent models <installation> lists them; checked against the catalog where one is read, codex): on --agent's installation, else the task's own; not with --agent auto; refused to a run Orca dispatched
 - `--allow-observed-paths`: allow only the exact paths the last blocked run reported missing; inspect `orca run show` first
 - `--after <after>`: run the task after this sibling task (it stopped writing a file that sibling changes at the same time): waits for it to finish and stops denying its files; not with --allow-observed-paths
 - `--work <work>`: add work to the task's budget for this retry and every later run, as JSON {tokens?,activeMs?,attempts?,sessions?} (an omitted dimension adds 0); a person may always, an agent up to the orchestration agent top-up cap; refused to a run Orca dispatched; only a task under the optional token policy

@@ -21,6 +21,16 @@ describe("orca task retry --model (#368 b)", () => {
     ]);
   });
 
+  it("--agent auto with --model is refused before anything is sent, naming which flag to drop (review M2)", async () => {
+    const w = await world();
+    const out = await cli(["task", "retry", "g-alpha", "t1", "--agent", "auto", "--model", "gpt-new"], w.dir);
+    // mutation: drop the CLI check -> sent, exit 0 against this fake panel, red
+    expect(out.code).toBe(1);
+    expect(out.stderr).toContain("control-cli-argument-invalid");
+    expect(out.stderr).toContain("drop --model to hand the choice back, or drop --agent auto");
+    expect(posted(w)).toEqual([]);
+  });
+
   it("a model the catalog does not list: the next step lists the installation's models", async () => {
     const view = groupView();
     const refused = { status: 422, body: { error: { code: "agent-selection-invalid", message: "agent-selection-invalid:gpt-gone (listed: gpt-5)", commandRevision: 5, evidenceIds: [], retryable: false } } };
