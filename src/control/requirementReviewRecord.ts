@@ -37,7 +37,11 @@ export interface ReviewRound {
 }
 /** Tester #377: a criterion about the full suite, red on the reviewed tip with an exit the group's base gave too. */
 export interface RelativePass { criterionId: string; command: string; tipExits: string[]; baseExits: string[] }
-export type ReviewState = "pending" | "reviewing" | "passed" | "fixing" | "not-passed" | "accepted" | "not-run";
+/**
+ * #337 (spec 2026-11-19 §5.1, human: 「不要卡在」): `noted` -- a folder or multi-directory group's review that did not pass,
+ * after its automatic fix rounds. It keeps the `why`, is shown as a note (reviewNote), and satisfies the done gate.
+ */
+export type ReviewState = "pending" | "reviewing" | "passed" | "fixing" | "not-passed" | "accepted" | "not-run" | "noted";
 export type ReviewWhy = "multi-repo" | "dir" | "unfunded" | "invalid" | "cannot-judge" | "rounds-exhausted" | "failed" | "check-conflict" | "not-fixable-by-work";
 export interface RequirementReview {
   state: ReviewState; why?: ReviewWhy; rounds: ReviewRound[]; autoFixRounds: number;
@@ -61,7 +65,8 @@ export function reviewRequired(_store: Pick<ControlStore, "db">, _groupId: strin
   return b.flow?.role !== "child" && b.systemDebug === undefined && b.debug === undefined;
 }
 
-const SATISFIED: ReadonlySet<ReviewState> = new Set(["passed", "accepted", "not-run"]);
+// #337 §5.1, §9: `noted` ends a folder or multi-directory group's review; `not-run` stays satisfied for the records before it.
+const SATISFIED: ReadonlySet<ReviewState> = new Set(["passed", "accepted", "not-run", "noted"]);
 
 /** §3.6: the done gate -- a reviewed group is done only when its review passed, a person or agent accepted it, or it cannot run. */
 export function reviewSatisfied(store: Pick<ControlStore, "db">, groupId: string, body: unknown): boolean {
@@ -73,4 +78,9 @@ export function reviewSatisfied(store: Pick<ControlStore, "db">, groupId: string
 /** §3.5: the problem a review that did not pass shows (Problems, Board, `group show`); null otherwise. */
 export function reviewProblem(review: RequirementReview | null): string | null {
   return review?.state === "not-passed" ? `requirement-review-not-passed:${review.why ?? "?"}` : null;
+}
+
+/** #337 §5.5: the note a `noted` review shows (a Problems row that is not "needs you"); null otherwise. reviewProblem is separate. */
+export function reviewNote(review: RequirementReview | null): string | null {
+  return review?.state === "noted" ? `requirement-review-noted:${review.why ?? "?"}` : null;
 }

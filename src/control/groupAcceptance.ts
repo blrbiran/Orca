@@ -28,7 +28,8 @@ import type { ControlStore } from "./store.js";
  * by the longest `perAttemptTimeoutMs` among the tasks. The outcome is kept on the group body as `acceptance`, keyed by the
  * tip it ran on, so a restart does not run again what is recorded for the current tip, and a tip that moved (a retried task,
  * a person's fix) is checked again. Not needed when at most one task landed (its own checks ran on that tree); a
- * multi-directory or folder group is recorded `not-run` (a known gap: no single tree to check). passed, failed and waived
+ * multi-directory or folder group is recorded `not-run` (no group-wide check runs on it; since #337 its requirement review
+ * judges each work branch instead, and a review that does not pass is noted without holding the group). passed, failed and waived
  * write a `group-acceptance` activity row; not-needed and not-run write the record only (as §4's post-merge record).
  *
  * Tester #278: a work branch that does not exist (deleted after delivery, say) is a recorded state, not an error retried

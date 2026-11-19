@@ -6,7 +6,8 @@ import { binaryFacts } from "./binaryFacts.js";
 import { recordActivity } from "./activity.js";
 import { isGroupArchived } from "./archivedMark.js";
 import { chainRounds } from "./clarifyChain.js";
-import { groupRepoId, isDirGroup } from "./dirGroup.js";
+import { dirWorkspaceOf, groupRepoId, isDirGroup, readPlacement, STOP_KEPT } from "./dirGroup.js";
+import { DIR_EXCLUDES } from "./dirWorkspace.js";
 import { ControlError } from "./errors.js";
 import { readConfirmedReconcileSlot } from "./executionSnapshot.js";
 import { acceptanceCommands, clearGroupFailure, logGroupFailureOnce, recordWorkBranchMissing, workBranchKnownMissing } from "./groupAcceptance.js";
@@ -18,19 +19,21 @@ import { readArchivedContract, readArchivedPlan, readBudgetProposal } from "./qu
 import { boundedGroupGrant, claimGroupSingleCallInTransaction, completeGroupSingleCallInTransaction, interruptGroupSingleCall, readGroupCallContract } from "./groupSingleCall.js";
 import { saveRun } from "./budget.js";
 import { closeSingleCall } from "./singleCallLedger.js";
-import { isMultiGroup } from "./multiGroup.js";
+import { dirTargetRepoId, isMultiGroup, multiDirOf, type FrozenMultiDir } from "./multiGroup.js";
 import { targetShapeOk } from "./requirementOverview.js";
 import { cutUtf8 } from "./noChange.js";
 import { planLayers, planOrderTasks } from "./planOrder.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { readWork } from "./queries.js";
 import { taskContractSchema } from "../scheduler/planFile.js";
-import { readDraft, readRounds } from "./requirementRecords.js";
+import { readDraft, readRounds, taskWrites, type TaskWrite } from "./requirementRecords.js";
 import { reviewOf, reviewRequired, type CriterionVerdict, type RelativePass, type RequirementReview, type ReviewRound, type ReviewRoundResult, type ReviewWhy } from "./requirementReviewRecord.js";
 import type { SingleCallHandler, SingleCallRecordFacts, SingleCallRunRow } from "./singleCallPurposes.js";
 import { taskWorkTokens } from "./usagePause.js";
 import { QUIET_GIT, workBranchTip } from "./workspace.js";
 import { isDirFlowGroup } from "../flow/groups.js";
+import { DEFAULT_CAPS } from "../flow/vault/snapshot.js";
+import { DEFAULT_EXCLUDES } from "../flow/vault/vault.js";
 import { git, gitPrefix } from "../scheduler/gitExec.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { FrozenSlot } from "./agentSelection.js";
@@ -81,11 +84,23 @@ const outputSchema = z.object({
   checkConflict: z.object({ criterionId: z.string().min(1), requiredCheck: z.string().min(1), because: z.string().min(1) }).strict().optional(),
 }).strict();
 
+/** The three record pseudo-paths an answer may cite (#337 §4.2: matched as exact strings, never by the `orca:` prefix). */
+export const REVIEW_RECORD_PATHS: ReadonlySet<string> = new Set(["orca:acceptance", "orca:delivery", "orca:delivered-acceptance"]);
+
+/** #337 §4.2: a multi-directory group's evidence path, `<key>:<path>`, split on its first `:`; null unless the key is a member's. */
+export function dirEvidence(path: string, dirKeys: readonly string[]): { key: string; path: string } | null {
+  const at = path.indexOf(":");
+  if (at <= 0 || at === path.length - 1) return null;
+  const key = path.slice(0, at);
+  return dirKeys.includes(key) ? { key, path: path.slice(at + 1) } : null;
+}
+
 /**
  * Code, not the model: invalid when the ids are not exactly the consensus criteria (missing, extra, repeated), a `met` or
  * `not-met` names no evidence, or a `not-met` says nothing is missing. Any cannot-judge makes the round cannot-judge (§3.5).
+ * #337 §4.2: given a multi-directory group's member keys, every evidence path that is not a record must be `<key>:<path>`.
  */
-export function classifyReviewOutput(raw: unknown, criterionIds: readonly string[]): { result: "passed" | "not-met" | "cannot-judge"; criteria: CriterionVerdict[]; summary: string;
+export function classifyReviewOutput(raw: unknown, criterionIds: readonly string[], dirKeys?: readonly string[]): { result: "passed" | "not-met" | "cannot-judge"; criteria: CriterionVerdict[]; summary: string;
   checkConflict?: { criterionId: string; requiredCheck: string; because: string } } | { result: "invalid"; reason: string } {
   const parsed = outputSchema.safeParse(raw);
   if (!parsed.success) return { result: "invalid", reason: `schema:${parsed.error.issues[0]?.path.join(".") ?? ""}` };
@@ -98,6 +113,10 @@ export function classifyReviewOutput(raw: unknown, criterionIds: readonly string
   for (const c of parsed.data.criteria) {
     if (c.verdict !== "cannot-judge" && c.evidence.length === 0) return { result: "invalid", reason: `evidence-missing:${c.id}` };
     if (c.verdict === "not-met" && (c.missing === null || c.missing.trim() === "")) return { result: "invalid", reason: `missing-unsaid:${c.id}` };
+    if (dirKeys !== undefined) {
+      const stray = c.evidence.find((e) => !REVIEW_RECORD_PATHS.has(e.path) && dirEvidence(e.path, dirKeys) === null);
+      if (stray !== undefined) return { result: "invalid", reason: `evidence-dir:${stray.path}` };
+    }
   }
   const criteria = criterionIds.map((id) => parsed.data.criteria.find((c) => c.id === id)!);
   const result = criteria.some((c) => c.verdict === "cannot-judge") ? "cannot-judge" : criteria.some((c) => c.verdict === "not-met") ? "not-met" : "passed";
@@ -112,9 +131,28 @@ export interface ChangedFile { path: string; status: string; bytes: number; sha2
 /** #314: the accepted plan as data, so a criterion about the plan's shape is judgeable instead of always cannot-judge. */
 export interface ReviewPlanTask { taskId: string; title: string; dependsOn: string[]; targetPaths: string[]; successCondition: string; checks: string[] }
 export interface ReviewPlan { layers: string[][]; tasks: ReviewPlanTask[] }
+/**
+ * #337 §4.2: one member of a multi-directory group as the prompt shows it -- its changes against its own base (the diff cut
+ * at `share` bytes, its equal part of REVIEW_DIFF_MAX_BYTES), no changes, or a work branch that is gone.
+ */
+export type ReviewDirectory = { key: string; state: "unchanged" } | { key: string; state: "gone" }
+  | { key: string; state: "changed"; kind: "repository" | "folder"; base: string; tip: string; changedFiles: ChangedFile[]; diff: string; truncated: boolean; share: number };
+/** #337 §4.1: a folder group's heading, in place of a repository group's `The group's diff against its base:`. */
+export const FOLDER_DIFF_HEADING = "The folder's changes: before = the copy of the folder Orca took when the work started; after = the work Orca will place into the folder:";
+const fileLine = (f: ChangedFile): string => `- ${f.status} ${f.path} ${f.bytes} ${f.sha256}${!f.binary ? "" : f.kind === undefined ? " (binary: named only, its bytes are not shown)" : ` (binary: ${f.kind}; its other bytes are not shown)`}`;
+const FILES_HEADING = "Files the group changed (status, path, bytes, sha256; for a binary file, its type and stored pixel size (EXIF rotation is not read) when Orca could read them from its header):";
+function directoryLines(directories: readonly ReviewDirectory[]): string[] {
+  return directories.flatMap((d) => d.state === "unchanged" ? ["", `Directory ${d.key}: no changes.`]
+    : d.state === "gone" ? ["", `Directory ${d.key}: Orca's work branch is gone; not shown.`]
+    : ["", `Directory ${d.key} (${d.kind}): files changed and diff, before = ${d.base.slice(0, 12)}, after = ${d.tip.slice(0, 12)}:`, ...d.changedFiles.map(fileLine), d.diff,
+      ...(d.truncated ? [`(Directory ${d.key}: the diff was cut at ${d.share} bytes; the rest was not shown to you.)`] : [])]);
+}
 export function buildReviewPrompt(input: { idea: string; statement: string; criteria: ReadonlyArray<{ id: string; text: string }>; openBranches: readonly string[];
   changedFiles: readonly ChangedFile[]; diff: string; truncated: boolean; note?: string; acceptanceFailed?: boolean;
-  acceptanceBaseline?: { command: string; tail?: string; tipTail?: string }; plan?: ReviewPlan | null; facts?: readonly string[] }): string {
+  acceptanceBaseline?: { command: string; tail?: string; tipTail?: string }; plan?: ReviewPlan | null; facts?: readonly string[];
+  /** #337: a folder group's heading (§4.1); a multi-directory group's sections, in place of the one diff (§4.2). */
+  folder?: boolean; directories?: readonly ReviewDirectory[] }): string {
+  const multi = input.directories !== undefined;
   return [
     "You are Orca's requirement reviewer. A group of tasks implemented the requirement below; its tasks' checks passed on the result.",
     // Delivery tail D4 (#336, #337 prompt half): evidence is not only the diff.
@@ -141,20 +179,24 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
     ...(input.facts === undefined || input.facts.length === 0 ? [] : ["", "What Orca recorded beyond the diff:", ...input.facts]),
     "",
     // #337: a binary file's type and stored pixel size, read by Orca from its header, are facts the reviewer may cite by path.
-    "Files the group changed (status, path, bytes, sha256; for a binary file, its type and stored pixel size (EXIF rotation is not read) when Orca could read them from its header):",
-    ...input.changedFiles.map((f) => `- ${f.status} ${f.path} ${f.bytes} ${f.sha256}${!f.binary ? "" : f.kind === undefined ? " (binary: named only, its bytes are not shown)" : ` (binary: ${f.kind}; its other bytes are not shown)`}`),
-    "",
-    "The group's diff against its base:",
-    input.diff,
-    ...(input.truncated ? [`(The diff was cut at ${REVIEW_DIFF_MAX_BYTES} bytes; what follows was not shown to you.)`] : []),
+    ...(multi ? [`${FILES_HEADING.slice(0, -1)}, by directory; each directory's diff is against its own base:`, ...directoryLines(input.directories!)] : [
+      FILES_HEADING,
+      ...input.changedFiles.map(fileLine),
+      "",
+      input.folder === true ? FOLDER_DIFF_HEADING : "The group's diff against its base:",
+      input.diff,
+      ...(input.truncated ? [`(The diff was cut at ${REVIEW_DIFF_MAX_BYTES} bytes; what follows was not shown to you.)`] : []),
+    ]),
     "",
     // Tester #343 (spec 2026-11-17 S5): the review prompt carries no version marker (the contract's schema id
     // `orca-requirement-review-contract-v1` names the call's contract, not this text); this is the change that added fixableBy.
     "Answer with a JSON object {\"criteria\": [{\"id\", \"verdict\", \"evidence\", \"missing\", \"fixableBy\"}], \"summary\"}.",
     "- verdict met: name the evidence (file path and line; or the file's path with line null when the evidence is what is listed for it -- its size, hash, type or stored pixel size, never what its unshown content says; for a record above, {\"path\": \"orca:acceptance\" | \"orca:delivery\" | \"orca:delivered-acceptance\", \"line\": null} -- a command and its exit as recorded there). missing is null.",
+    // #337 §4.2: a multi-directory group's evidence names its directory; code checks the key (classifyReviewOutput).
+    ...(multi ? [`- In this group a file's path is always written <key>:<path> -- its directory's key, a colon, then its path in that directory (for example "${input.directories![0]?.key ?? "key"}:README.md"); a record above keeps its own name.`] : []),
     "- verdict not-met: name the evidence you looked at, in the same forms, and say in `missing` what is still needed.",
     "- verdict cannot-judge: only when neither the diff, the files listed nor Orca's records above can show it; say in `missing` which record or content would. Do not guess what a file's unshown content says.",
-    "- fixableBy, for every criterion, says who could meet it: \"work\" when changing files in the repository can meet it; \"plan\" when it is about the accepted plan itself (its tasks, their targetPaths, dependsOn or order), which no change to files alters; \"person\" when only the person can decide (their instructions contradict each other, or it depends on a fact outside the repository). Orca opens an automatic fix task only for not-met criteria that are \"work\".",
+    "- fixableBy, for every criterion, says who could meet it: \"work\" when changing files in the repository (or, for a folder group, the folder) can meet it; \"plan\" when it is about the accepted plan itself (its tasks, their targetPaths, dependsOn or order), which no change to files alters; \"person\" when only the person can decide (their instructions contradict each other, or it depends on a fact outside the repository). Orca opens an automatic fix task only for not-met criteria that are \"work\".",
     "If a not-met criterion asks for a change that contradicts an explicit human restriction and a required check, add checkConflict: {criterionId, requiredCheck, because}; \"checkConflict\": null when there is none. Name the exact check and the person's instruction; do not assume that two red test runs have the same cause. Orca will stop automatic repair for review, not waive the check.",
     "Every criterion id above must appear exactly once.",
   ].join("\n");
@@ -264,6 +306,8 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
     let body: Record<string, unknown>;
     try { body = JSON.parse(String(row.body)) as Record<string, unknown>; } catch { continue; }
     let threw = false;
+    // #337 §5.6: set once a folder or multi-directory group's round is due; a deterministic claim error then ends it.
+    let claiming: { tip: string } | null = null;
     try {
       if (body.planHash === undefined || !reviewRequired(store, groupId, body) || isGroupArchived(store, groupId)) continue;
       if (store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined) continue;
@@ -277,50 +321,131 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
       // acceptance it is meant to complement. The round carries the failure to the prompt.
       const acceptance = acceptanceOf(body);
       if (!acceptanceSatisfied(store, groupId, body) && !(acceptance !== null && acceptance.result === "failed" && acceptance.why === undefined)) continue;
-      if (isMultiGroup(store, groupId) || isDirGroup(store, groupId) || isDirFlowGroup(store, groupId)) {
+      // #337 §8: a dir flow group is still not reviewed (it carries no requirement; this keeps the old record shape).
+      if (isDirFlowGroup(store, groupId)) {
         if (review?.state === "not-run") continue;
-        deps.write(() => saveReview(store, groupId, { state: "not-run", why: isMultiGroup(store, groupId) ? "multi-repo" : "dir", rounds: [], autoFixRounds: 0 }));
+        deps.write(() => saveReview(store, groupId, { state: "not-run", why: "dir", rounds: [], autoFixRounds: 0 }));
         moved = true;
         continue;
       }
       if (!roundDue(store, groupId, review)) continue;
-      // Tester #278 rest (follow-up I): a work branch recorded missing is skipped without a git child until a new landing;
-      // one found missing here is recorded as the acceptance pass records it (one record, one stderr line).
-      if (workBranchKnownMissing(store, groupId, body)) continue;
-      const tip = await workBranchTip(deps.resolveRepository(groupRepoId(store, groupId)), groupId);
-      if (tip === null) { recordWorkBranchMissing(deps, groupId, "requirement review"); moved = true; continue; }
-      // A fix task moved the tip: wait for the acceptance pass to check the new tip before reviewing it.
-      const accepted = acceptanceOf(body);
-      if (accepted !== null && accepted.tip !== null && accepted.tip !== tip) continue;
-      if (review?.state === "fixing" && accepted?.tip !== tip) continue;
-      // Delivery tail spec D2 (human ruling 1): a satisfied tip waits for its delivery to settle, so a criterion about the
-      // delivery is judged when it can be true. A failed acceptance (#314) opens the review at once: it is never delivered.
-      if (acceptanceSatisfied(store, groupId, body) && !(await deliverySettled(deps.resolveRepository(groupRepoId(store, groupId)), body, tip))) continue;
+      // #337 §4, §5.2, §5.6 (human: 「不要卡在」): a folder or multi-directory group is reviewed on its work branches. It runs no
+      // group-wide acceptance on a tip and Orca places its work by itself, so neither wait below applies; a work branch
+      // that is gone ends the review (noted) and never rewrites the acceptance record.
+      const noted = noteGroup(store, groupId);
+      let tip: string, tips: Record<string, string> | undefined;
+      if (noted) {
+        const found = await workTips(deps, groupId, body);
+        if (found === null) { deps.write(() => endRoundFailed(store, groupId, "", `the work branch orca/${groupId} is gone`)); moved = true; continue; }
+        ({ tip, tips } = found);
+        claiming = { tip };
+      } else {
+        // Tester #278 rest (follow-up I): a work branch recorded missing is skipped without a git child until a new landing;
+        // one found missing here is recorded as the acceptance pass records it (one record, one stderr line).
+        if (workBranchKnownMissing(store, groupId, body)) continue;
+        const found = await workBranchTip(deps.resolveRepository(groupRepoId(store, groupId)), groupId);
+        if (found === null) { recordWorkBranchMissing(deps, groupId, "requirement review"); moved = true; continue; }
+        tip = found;
+        // A fix task moved the tip: wait for the acceptance pass to check the new tip before reviewing it.
+        const accepted = acceptanceOf(body);
+        if (accepted !== null && accepted.tip !== null && accepted.tip !== tip) continue;
+        if (review?.state === "fixing" && accepted?.tip !== tip) continue;
+        // Delivery tail spec D2 (human ruling 1): a satisfied tip waits for its delivery to settle, so a criterion about the
+        // delivery is judged when it can be true. A failed acceptance (#314) opens the review at once: it is never delivered.
+        if (acceptanceSatisfied(store, groupId, body) && !(await deliverySettled(deps.resolveRepository(groupRepoId(store, groupId)), body, tip))) continue;
+      }
       deps.write(() => {
         const current = reviewOf(JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body))) ?? { state: "pending" as const, rounds: [], autoFixRounds: 0 };
         const roundNo = current.rounds.length + 1, at = store.now();
         const funded = boundedGroupGrant(store, groupId, { ...REQUIREMENT_REVIEW_GRANT }, REVIEW_FLOOR_TOKENS, at);
         if ("unfunded" in funded) {
           const round: ReviewRound = { roundNo, tip, runId: null, at, result: "unfunded", criteria: [], summary: `the group cannot fund the review (${funded.unfunded})` };
-          saveReview(store, groupId, { ...current, state: "not-passed", why: "unfunded", rounds: [...current.rounds, round] });
-          recordActivity(store, { groupId, kind: "requirement-review", body: { roundNo, result: "unfunded", tip } });
+          const next = settledReview(store, groupId, { ...current, state: "not-passed", why: "unfunded", rounds: [...current.rounds, round] });
+          saveReview(store, groupId, next);
+          // #337 §5.1: the state the review was saved with (a repository group's activity is unchanged).
+          recordActivity(store, { groupId, kind: "requirement-review", body: { roundNo, result: "unfunded", tip, ...(next.state === "noted" ? { state: next.state } : {}) } });
           return;
         }
         const reviewer = reviewerOf(store, groupId);
+        // #337 §4.2 (§15 D3): a multi-directory group's tips, one per member, live on the call's identity and contract only.
+        const ofTips = tips === undefined ? {} : { tips };
         claimGroupSingleCallInTransaction(store, { groupId, workItemId: workItemOf(roundNo), purpose: "requirement-review",
-          identity: { requirementReview: { roundNo, tip } }, slot: reviewer.slot, profile: reviewer.profile, grant: funded.grant,
-          contract: { schema: "orca-requirement-review-contract-v1", roundNo, tip, maxOutputTokens: REVIEW_MAX_OUTPUT_TOKENS, ...(current.rerun === undefined ? {} : { note: current.rerun.note }) } });
+          identity: { requirementReview: { roundNo, tip, ...ofTips } }, slot: reviewer.slot, profile: reviewer.profile, grant: funded.grant,
+          contract: { schema: "orca-requirement-review-contract-v1", roundNo, tip, ...ofTips, maxOutputTokens: REVIEW_MAX_OUTPUT_TOKENS, ...(current.rerun === undefined ? {} : { note: current.rerun.note }) } });
         const { why: _why, ...open } = current;
         saveReview(store, groupId, { ...open, state: "reviewing" });
       });
       moved = true;
     } catch (error) {
-      // Tried again next round, logged once while the same failure repeats (#278); a round without it clears it.
-      threw = true;
-      logGroupFailureOnce(store, "requirement review", groupId, error);
+      // #337 §5.6: a folder or multi-directory group's claim that failed for a reason no retry changes (recovery-blocked:
+      // no profile, no criteria, no base) ends its review, noted, instead of waiting on a person. Decided by class (Rule 5).
+      let ended = false;
+      if (claiming !== null && error instanceof ControlError && error.code === "recovery-blocked") {
+        const tip = claiming.tip, summary = error.detail ?? error.code;
+        try {
+          ended = deps.write(() => {
+            const current = reviewOf(JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)));
+            if (!roundDue(store, groupId, current)) return false;
+            endRoundFailed(store, groupId, tip, summary);
+            return true;
+          });
+          if (ended) moved = true;
+        } catch (inner) { error = inner; }
+      }
+      if (!ended) {
+        // Tried again next round, logged once while the same failure repeats (#278); a round without it clears it.
+        threw = true;
+        logGroupFailureOnce(store, "requirement review", groupId, error);
+      }
     } finally { if (!threw) clearGroupFailure(store, "requirement review", groupId); }
   }
   return moved;
+}
+
+/** #337 §5.1: a folder (dir) or multi-directory group -- reviewed like any other, and a review that did not pass ends `noted`. */
+export function noteGroup(store: ControlStore, groupId: string): boolean {
+  return isDirGroup(store, groupId) || isMultiGroup(store, groupId);
+}
+
+/**
+ * #337 §5.1 (human: 「不要卡在」, ruling 2): the one mapping from a review that did not pass to `noted`, for a folder or
+ * multi-directory group (the predicate is the group's kind, never the record's why). Every site that saves `not-passed`
+ * applies it before both its saveReview and its recordActivity. A repository group's review is returned as it is.
+ */
+export function settledReview(store: ControlStore, groupId: string, review: RequirementReview): RequirementReview {
+  return review.state === "not-passed" && noteGroup(store, groupId) ? { ...review, state: "noted" } : review;
+}
+
+/** #337 §5.6: a round with no call (a work branch gone, a claim no retry changes), `failed`; the review ends as settledReview says. */
+function endRoundFailed(store: ControlStore, groupId: string, tip: string, summary: string): void {
+  const current = reviewOf(JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body))) ?? { state: "pending" as const, rounds: [], autoFixRounds: 0 };
+  const roundNo = current.rounds.length + 1;
+  const round: ReviewRound = { roundNo, tip, runId: null, at: store.now(), result: "failed", criteria: [], summary: cutUtf8(summary, 500),
+    ...(current.rerun === undefined ? {} : { note: current.rerun.note }) };
+  const { rerun: _rerun, why: _why, ...rest } = current;
+  const next = settledReview(store, groupId, { ...rest, rounds: [...current.rounds, round], state: "not-passed", why: "failed" });
+  saveReview(store, groupId, next);
+  recordActivity(store, { groupId, kind: "requirement-review", body: { roundNo, result: "failed", tip, state: next.state } });
+}
+
+/**
+ * #337 §4.1-§4.2: the tip a folder or multi-directory group's review reads. A folder group: its vault's `orca/<g>`. A
+ * multi group: each member's `orca/<g>` (a member whose branch is gone is left out of `tips`), and `tip` the primary's, or
+ * the first member's in registered order that has one. Null when no branch is left.
+ */
+async function workTips(deps: ReviewPassDeps, groupId: string, body: unknown): Promise<{ tip: string; tips?: Record<string, string> } | null> {
+  const multi = multiDirOf(body);
+  if (multi === null) {
+    const tip = await workBranchTip(deps.resolveRepository(groupRepoId(deps.store, groupId)), groupId);
+    return tip === null ? null : { tip };
+  }
+  const tips: Record<string, string> = {};
+  for (const member of multi.dirs) {
+    const tip = await workBranchTip(deps.resolveRepository(dirTargetRepoId(deps.store, groupId, member.key)), groupId);
+    if (tip !== null) tips[member.key] = tip;
+  }
+  const first = multi.dirs.find((member) => tips[member.key] !== undefined);
+  return first === undefined ? null : { tip: tips[first.key]!, tips };
 }
 
 /**
@@ -375,8 +500,9 @@ function closeUnpreparedReview(deps: ReviewPassDeps, groupId: string, review: Re
     const round: ReviewRound = { roundNo, tip, runId: run.runId, at: store.now(), result: "failed", criteria: [],
       summary: `review could not be prepared: ${cutUtf8(reason, 500)}`, ...(current.rerun === undefined ? {} : { note: current.rerun.note }) };
     const { rerun: _rerun, why: _why, ...rest } = current;
-    saveReview(store, groupId, { ...rest, rounds: [...current.rounds, round], state: "not-passed", why: "failed" });
-    recordActivity(store, { groupId, kind: "requirement-review", body: { roundNo, result: "failed", tip, state: "not-passed" } });
+    const next = settledReview(store, groupId, { ...rest, rounds: [...current.rounds, round], state: "not-passed", why: "failed" });
+    saveReview(store, groupId, next);
+    recordActivity(store, { groupId, kind: "requirement-review", body: { roundNo, result: "failed", tip, state: next.state } });
     return true;
   });
 }
@@ -427,11 +553,15 @@ export async function reviewFacts(repo: string, body: unknown, tip: string, stor
   const commandLines = (commands: ReadonlyArray<{ command: string; exit: string; ms: number }>) =>
     commands.map((c) => `  - \`${cutUtf8(c.command, 300)}\` -> exit ${c.exit} (${c.ms} ms)`);
   const accepted = acceptanceOf(body);
-  if (accepted !== null && (accepted.tip === tip || accepted.tip === null)) {
+  // #337 §4.4: a folder or multi-directory group's acceptance is not run, and the line says why in words.
+  if (accepted !== null && accepted.result === "not-run" && (accepted.why === "dir" || accepted.why === "multi-repo")) lines.push(NOT_RUN_ACCEPTANCE_LINE);
+  else if (accepted !== null && (accepted.tip === tip || accepted.tip === null)) {
     lines.push(`Acceptance on the reviewed tip ${short(tip)}: ${accepted.result}${accepted.why === undefined ? "" : ` (${accepted.why})`}`, ...commandLines(accepted.commands));
     const suite = accepted.fullSuite;
     if (suite?.command != null) lines.push(`  full suite \`${cutUtf8(suite.command, 300)}\`: exits ${suite.exits.join(", ") || "none"}${suite.baseline === undefined ? "" : `; at the group's base: exits ${suite.baseline.exits.join(", ")}`}`);
   }
+  // #337 §4.1, §4.4: Orca places a folder or multi-directory group's work itself; what this review sees of the folder.
+  if (noteGroup(store, groupId)) { lines.push(PLACED_DELIVERY_LINE, ...folderFactLines(body)); return lines; }
   const integration = readGroupIntegration(body);
   if (integration === null) { lines.push(`Delivery: none configured -- the work stays on orca/<group>.`); return lines; }
   const scheme = integration.scheme;
@@ -461,10 +591,39 @@ export async function reviewFacts(repo: string, body: unknown, tip: string, stor
   return lines;
 }
 
-const reviewIdentity = (run: SingleCallRunRow): { roundNo: number; tip: string } => {
-  const r = run.requirementReview as { roundNo?: unknown; tip?: unknown } | undefined;
+/** #337 §4.4: the acceptance line of a folder or multi-directory group (its record is `not-run`, why `dir` / `multi-repo`). */
+export const NOT_RUN_ACCEPTANCE_LINE = "Acceptance: not run -- Orca runs no group-wide check on a folder or multi-directory group; each task's own checks ran on its attempt.";
+/** #337 §4.4: the delivery line of a folder or multi-directory group. */
+export const PLACED_DELIVERY_LINE = "Delivery: Orca places the work into the person's folder or branches by itself; this review judges Orca's work branches, not the person's folder or branches.";
+const mib = (bytes: number): string => `${bytes / (1024 * 1024)} MiB`;
+/** #337 §4.1: what the folder's import leaves out, read from the import's own caps and exclude lists (never typed in). */
+export function folderExclusionLine(): string {
+  return `Orca's copy of the folder leaves out: any file over ${mib(DEFAULT_CAPS.perFileBytes)} and anything past ${mib(DEFAULT_CAPS.perSnapshotBytes)} in total; `
+    + `files the folder's .gitignore excludes; ${DEFAULT_EXCLUDES.join(", ")}; nested repositories and special files; ${DIR_EXCLUDES.map((p) => p.replace(/^\//, "")).join(", ")}. `
+    + "A criterion about such a file cannot be judged from this review.";
+}
+/**
+ * #337 §4.1-§4.2: the fact lines of each folder the group writes -- what its import leaves out and the paths placement
+ * withheld (they are in the work but not in the person's folder). A multi group's lines name the member.
+ */
+function folderFactLines(body: unknown): string[] {
+  const withheldLine = (value: unknown): string[] => {
+    const withheld = readPlacement(value)?.withheld ?? [];
+    return withheld.length === 0 ? [] : [`Placement withheld these paths from the folder (they are in the work below but not in the person's folder): ${withheld.slice(0, STOP_KEPT).map((w) => w.path).join(", ")}`];
+  };
+  const multi = multiDirOf(body);
+  if (multi === null) return dirWorkspaceOf(body) === null ? [] : [folderExclusionLine(), ...withheldLine((body as { placement?: unknown }).placement)];
+  const placements = (multi.landing as { placement?: Record<string, unknown> } | null)?.placement ?? {};
+  return multi.dirs.filter((member) => member.kind === "dir")
+    .flatMap((member) => [folderExclusionLine(), ...withheldLine(placements[member.key])].map((line) => `Directory ${member.key} (folder): ${line}`));
+}
+
+const reviewIdentity = (run: SingleCallRunRow): { roundNo: number; tip: string; tips?: Record<string, string> } => {
+  const r = run.requirementReview as { roundNo?: unknown; tip?: unknown; tips?: unknown } | undefined;
   if (typeof r?.roundNo !== "number" || typeof r.tip !== "string") throw new ControlError("recovery-blocked", "requirement-review-identity");
-  return { roundNo: r.roundNo, tip: r.tip };
+  // #337 §4.2: a multi-directory group's call names each member's tip.
+  const tips = r.tips !== null && typeof r.tips === "object" && Object.values(r.tips).every((v) => typeof v === "string") ? r.tips as Record<string, string> : undefined;
+  return { roundNo: r.roundNo, tip: r.tip, ...(tips === undefined ? {} : { tips }) };
 };
 
 const sha256 = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
@@ -519,12 +678,15 @@ export function namesCommand(text: string, command: string): boolean {
  * §3.2 bounded: the changed files (path, status, bytes and sha256 each; for #337 also what binaryFacts reads from the
  * header, which the prompt shows for a binary file) and the text diff cut at the bound.
  */
-async function groupChanges(repo: string, base: string, tip: string): Promise<{ changedFiles: ChangedFile[]; diff: string; truncated: boolean }> {
+async function groupChanges(repo: string, base: string, tip: string, excluded: readonly string[] = [], maxBytes = REVIEW_DIFF_MAX_BYTES): Promise<{ changedFiles: ChangedFile[]; diff: string; truncated: boolean }> {
   // #334: the file lists grow with the number of files (a 12-task merge group changed 2,449), not with their size; they
   // get the same room as the blobs below instead of Node's default 1 MiB.
   const listed = { maxBuffer: REVIEW_GIT_LIST_MAX_BYTES };
-  const numstat = (await git(repo, [...QUIET_GIT, "diff", "--numstat", "-z", "--no-renames", `${base}..${tip}`], listed)).split("\0").filter((s) => s.length > 0);
-  const status = new Map((await git(repo, [...QUIET_GIT, "diff", "--name-status", "--no-renames", `${base}..${tip}`], listed)).split("\n").filter((l) => l.length > 0)
+  // #337 §4.1: Orca's own files in a folder's vault (its ledger, the requirement document) are not the work: left out of
+  // the change list and the diff alike. A repository group passes none (its pathspec is absent, its commands unchanged).
+  const spec = excluded.length === 0 ? [] : ["--", ".", ...excluded.map((path) => `:(exclude,literal)${path}`)];
+  const numstat = (await git(repo, [...QUIET_GIT, "diff", "--numstat", "-z", "--no-renames", `${base}..${tip}`, ...spec], listed)).split("\0").filter((s) => s.length > 0);
+  const status = new Map((await git(repo, [...QUIET_GIT, "diff", "--name-status", "--no-renames", `${base}..${tip}`, ...spec], listed)).split("\n").filter((l) => l.length > 0)
     .map((line) => { const [s, ...p] = line.split("\t"); return [p.join("\t"), s!] as const; }));
   const changedFiles: ChangedFile[] = [];
   for (const entry of numstat) {
@@ -537,10 +699,49 @@ async function groupChanges(repo: string, base: string, tip: string): Promise<{ 
   }
   // #334: the prompt shows REVIEW_DIFF_MAX_BYTES of the diff, so only that much (and a character's worth more, to tell
   // a cut from an exact fit) is read; the whole diff was read before and a 2.4 MiB one failed every review call.
-  const read = await gitPrefix(repo, [...QUIET_GIT, "diff", "--no-color", "--no-renames", `${base}..${tip}`], REVIEW_DIFF_MAX_BYTES + 4);
+  const read = await gitPrefix(repo, [...QUIET_GIT, "diff", "--no-color", "--no-renames", `${base}..${tip}`, ...spec], maxBytes + 4);
   const text = read.stdout.toString("utf8");
-  const truncated = read.truncated || Buffer.byteLength(text, "utf8") > REVIEW_DIFF_MAX_BYTES;
-  return { changedFiles, diff: truncated ? cutUtf8(text, REVIEW_DIFF_MAX_BYTES) : text, truncated };
+  const truncated = read.truncated || Buffer.byteLength(text, "utf8") > maxBytes;
+  return { changedFiles, diff: truncated ? cutUtf8(text, maxBytes) : text, truncated };
+}
+
+/** #337 §4.1-§4.2: Orca's own paths in a folder's work: its `.decisions/` ledger and, for a folder, the requirement document. */
+function orcaOwnPaths(body: unknown, folder: boolean): string[] {
+  const document = (body as { requirement?: { export?: { path?: unknown } } } | null)?.requirement?.export?.path;
+  return [...DIR_EXCLUDES.map((p) => p.replace(/^\/|\/$/g, "")), ...(folder && typeof document === "string" && document.length > 0 ? [document] : [])];
+}
+
+/** #337 §4.2: each member's base -- the `drive.dirs[]` base on the group's first work run (rowid order) that wrote it. */
+function memberBases(store: ControlStore, groupId: string): Map<string, string> {
+  const bases = new Map<string, string>();
+  for (const row of store.db.prepare("SELECT body FROM runs WHERE group_id=? ORDER BY rowid").all(groupId)) {
+    const run = JSON.parse(String(row.body)) as { phase?: string; drive?: { dirs?: Array<{ key?: unknown; base?: unknown }> } };
+    if (run.phase !== "work" || !Array.isArray(run.drive?.dirs)) continue;
+    for (const dir of run.drive.dirs) if (typeof dir.key === "string" && typeof dir.base === "string" && !bases.has(dir.key)) bases.set(dir.key, dir.base);
+  }
+  return bases;
+}
+
+/**
+ * #337 §4.2, §7: a multi-directory group's sections in registered order. Each changed member gets an equal part of
+ * REVIEW_DIFF_MAX_BYTES, so one large directory cannot hide the others; the `.decisions/` filter applies to the primary
+ * and to every folder member, the requirement document's to every folder member.
+ */
+async function memberDirectories(resolveRepository: (repoId: string) => string, store: ControlStore, groupId: string, body: unknown, multi: FrozenMultiDir, tips: Readonly<Record<string, string>>): Promise<ReviewDirectory[]> {
+  const bases = memberBases(store, groupId);
+  const changed = multi.dirs.filter((member) => tips[member.key] !== undefined && bases.has(member.key) && bases.get(member.key) !== tips[member.key]);
+  const share = Math.floor(REVIEW_DIFF_MAX_BYTES / Math.max(1, changed.length));
+  const out: ReviewDirectory[] = [];
+  for (const [index, member] of multi.dirs.entries()) {
+    const tip = tips[member.key];
+    if (tip === undefined) { out.push({ key: member.key, state: "gone" }); continue; }
+    if (!changed.includes(member)) { out.push({ key: member.key, state: "unchanged" }); continue; }
+    const base = bases.get(member.key)!, folder = member.kind === "dir";
+    const repo = resolveRepository(dirTargetRepoId(store, groupId, member.key));
+    const changes = await groupChanges(repo, base, tip, folder || index === 0 ? orcaOwnPaths(body, folder) : [], share);
+    out.push({ key: member.key, state: "changed", kind: folder ? "folder" : "repository", base, tip, share, ...changes });
+  }
+  return out;
 }
 
 /** #334: room for the changed-file lists and one blob read (the cat-file bound this file always gave). */
@@ -569,7 +770,7 @@ export function reviewShapeFailure(failure: string | null, facts: SingleCallReco
  * the same round on the same work item -- only when this was the round's first call, the group is neither archived nor
  * stopping, and it can still fund a review. Answers whether it was claimed; when not, the round settles as before.
  */
-function askReviewAgain(store: ControlStore, runRow: SingleCallRunRow, roundNo: number, tip: string, contract: Record<string, unknown> | null): boolean {
+function askReviewAgain(store: ControlStore, runRow: SingleCallRunRow, roundNo: number, tip: string, contract: Record<string, unknown> | null, tips?: Record<string, string>): boolean {
   const { groupId, workItemId } = runRow;
   if (Number(store.db.prepare("SELECT count(*) AS n FROM runs WHERE group_id=? AND work_item_id=?").get(groupId, workItemId)!.n) !== 1) return false;
   if (isGroupArchived(store, groupId) || store.db.prepare("SELECT 1 FROM stop_intents WHERE group_id=?").get(groupId) !== undefined) return false;
@@ -577,9 +778,11 @@ function askReviewAgain(store: ControlStore, runRow: SingleCallRunRow, roundNo: 
   if ("unfunded" in funded) return false;
   const reviewer = reviewerOf(store, groupId);
   const note = typeof contract?.note === "string" ? { note: contract.note } : {};
+  // #337 §4.2: the same round on the same tips as the call it replaces.
+  const ofTips = tips === undefined ? {} : { tips };
   claimGroupSingleCallInTransaction(store, { groupId, workItemId, purpose: "requirement-review",
-    identity: { requirementReview: { roundNo, tip } }, slot: reviewer.slot, profile: reviewer.profile, grant: funded.grant,
-    contract: { schema: "orca-requirement-review-contract-v1", roundNo, tip, maxOutputTokens: REVIEW_MAX_OUTPUT_TOKENS, ...note } });
+    identity: { requirementReview: { roundNo, tip, ...ofTips } }, slot: reviewer.slot, profile: reviewer.profile, grant: funded.grant,
+    contract: { schema: "orca-requirement-review-contract-v1", roundNo, tip, ...ofTips, maxOutputTokens: REVIEW_MAX_OUTPUT_TOKENS, ...note } });
   return true;
 }
 
@@ -588,12 +791,16 @@ interface ReviewSettled { classified: ReturnType<typeof classifyReviewOutput> | 
 export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
   purpose: "requirement-review",
   async prepare(deps, run) {
-    const { tip } = reviewIdentity(run);
+    const { tip, tips } = reviewIdentity(run);
     const body = JSON.parse(String(deps.store.db.prepare("SELECT body FROM groups WHERE id=?").get(run.groupId)!.body));
     const inputs = reviewInputsOf(deps.store, run.groupId, body);
     const contract = readGroupCallContract(deps.store, run.groupId, run.workItemId);
-    const repo = deps.resolveRepository(groupRepoId(deps.store, run.groupId));
-    const changes = await groupChanges(repo, groupBaseCommit(deps.store, run.groupId), tip);
+    // #337 §4.2: a multi-directory group is one call with a section per member; §4.1: a folder group's own files are left out.
+    const multi = multiDirOf(body), folder = dirWorkspaceOf(body) !== null;
+    const repo = multi === null ? deps.resolveRepository(groupRepoId(deps.store, run.groupId)) : "";
+    const changes = multi !== null
+      ? { changedFiles: [], diff: "", truncated: false, directories: await memberDirectories(deps.resolveRepository, deps.store, run.groupId, body, multi, tips ?? {}) }
+      : { ...await groupChanges(repo, groupBaseCommit(deps.store, run.groupId), tip, folder ? orcaOwnPaths(body, true) : []), ...(folder ? { folder } : {}) };
     const facts = await reviewFacts(repo, body, tip, deps.store, run.groupId);
     const acceptance = acceptanceOf(body);
     const baseline = acceptance?.result === "passed-relative" ? acceptance.fullSuite?.baseline : undefined;
@@ -609,7 +816,8 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
   async evaluate(deps, run, rawOutput, failure = null) {
     if (failure !== null) return { classified: null, failure } satisfies ReviewSettled;
     const body = JSON.parse(String(deps.store.db.prepare("SELECT body FROM groups WHERE id=?").get(run.groupId)!.body));
-    const classified = classifyReviewOutput(rawOutput, reviewInputsOf(deps.store, run.groupId, body).criteria.map((c) => c.id));
+    const dirKeys = multiDirOf(body)?.dirs.map((member) => member.key);
+    const classified = classifyReviewOutput(rawOutput, reviewInputsOf(deps.store, run.groupId, body).criteria.map((c) => c.id), dirKeys);
     if (classified.result !== "invalid" && classified.checkConflict !== undefined) {
       const named = classified.checkConflict.requiredCheck;
       const accepted = acceptanceOf(body);
@@ -626,7 +834,7 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
     finally { release?.(); }
   },
   completeInTransaction(store, runRow, settled, commitTerminal, failure = null, facts) {
-    const { roundNo, tip } = reviewIdentity(runRow);
+    const { roundNo, tip, tips } = reviewIdentity(runRow);
     const contract = readGroupCallContract(store, runRow.groupId, runRow.workItemId);
     const grant = (contract?.grant as { work?: Amount } | undefined)?.work;
     if (grant === undefined) throw new ControlError("recovery-blocked", "requirement-review-contract");
@@ -637,7 +845,7 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
     const current = reviewOf(body) ?? { state: "reviewing" as const, rounds: [], autoFixRounds: 0 };
     // Tester #358: an answer in a broken shape says nothing about the work; the round's call is asked once more, and the
     // activity says so (review of D3).
-    if (reviewShapeFailure(failed, facts) && current.state === "reviewing" && askReviewAgain(store, runRow, roundNo, tip, contract)) {
+    if (reviewShapeFailure(failed, facts) && current.state === "reviewing" && askReviewAgain(store, runRow, roundNo, tip, contract, tips)) {
       recordActivity(store, { groupId: runRow.groupId, runId: runRow.runId, kind: "requirement-review", body: { roundNo, result: "asked-again", tip, state: current.state, failure: facts?.errorCode ?? failed } });
       return;
     }
@@ -662,6 +870,8 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
     if (result !== "passed") next = conflict === undefined ? settleNotPassed(store, runRow.groupId, next, round)
       // Tester #340: a definite not-met that conflicts with the person's restriction -- the person decides which gives way.
       : { ...next, state: "not-passed", why: "check-conflict" };
+    // #337 §5.1: before both the save and the activity, so the activity names the state saved.
+    next = settledReview(store, runRow.groupId, next);
     saveReview(store, runRow.groupId, next);
     recordActivity(store, { groupId: runRow.groupId, kind: "requirement-review", body: { roundNo, result, tip, state: next.state, ...(round.fixTaskId === undefined ? {} : { action: "fix-opened", taskId: round.fixTaskId }),
       ...(relative.length === 0 ? {} : { relativePass: relative.map((r) => r.criterionId) }) } });
@@ -809,6 +1019,91 @@ function missingTextPaths(missing: string | null): string[] {
   return out;
 }
 
+/** #337 §5.4: a path a finding names may enter a write set -- a target shape, no segment starting with `-`, not `**` alone. */
+const writablePath = (path: string): boolean => path !== "**" && !path.split("/").some((segment) => segment.startsWith("-")) && targetShapeOk(path);
+
+/**
+ * #337 §5.4b (I-4): a multi-directory group's fix write set from its not-met findings, by member key -- the `<key>:<path>`
+ * tokens each `missing` text names (a backticked span, or a bare `key:path` run, its key a member's; the path then takes
+ * missingTextPaths's rules), then the evidence's. The three record paths are dropped by exact match, so a member keyed
+ * `orca` keeps its `orca:<path>` files. A token with no known key is ignored.
+ */
+export function multiFixPaths(unmet: ReadonlyArray<{ readonly evidence: ReadonlyArray<{ readonly path: string }>; readonly missing: string | null }>, keys: readonly string[]): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  const add = (key: string, path: string): void => { const list = out.get(key) ?? []; if (!list.includes(path)) list.push(path); out.set(key, list); };
+  for (const c of unmet) {
+    if (c.missing === null) continue;
+    for (const match of c.missing.matchAll(/`([^`]*)`|([A-Za-z0-9._-]+):([A-Za-z0-9._/*-]+)/g)) {
+      const found = match[1] !== undefined ? dirEvidence(match[1].trim(), keys) : dirEvidence(`${match[2]}:${match[3]}`, keys);
+      if (found === null) continue;
+      for (const path of missingTextPaths(match[1] !== undefined ? `\`${found.path}\`` : found.path)) add(found.key, path);
+    }
+  }
+  for (const c of unmet) for (const e of c.evidence) {
+    if (REVIEW_RECORD_PATHS.has(e.path)) continue;
+    const found = dirEvidence(e.path, keys);
+    if (found !== null && writablePath(found.path)) add(found.key, found.path);
+  }
+  return out;
+}
+
+/**
+ * #337 §5.3 (C-1): a multi-directory group's fix task, from stored records only (a split needs ccloop and resolved paths).
+ * Writes per member: the paths the findings name (multiFixPaths), else every member some task wrote with the union of its
+ * stored `writes[].targetPaths`; each member's checks are the union of the tasks' `writes[].checks` for it, the base-red
+ * suite left out as fixTaskContract leaves it out. The primary is the first written member in registered order and must
+ * have checks (multi spec §6.1), else `multi-fix-checks:<key>`. The contract is fixTaskContract's (objective, goal,
+ * policies) with the primary's paths, checks, allow and deny lists, and one additionalRepos entry per other member.
+ */
+export function multiFixTask(store: ControlStore, groupId: string, round: ReviewRound, criteria: ReadonlyArray<{ id: string; text: string }>, taskId: string, sourceId: string,
+  goal?: string, paths?: readonly string[]): { contract: ReturnType<typeof fixTaskContract>; writes: TaskWrite[] } | { refused: string } {
+  const body = JSON.parse(String(store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)) as unknown;
+  const multi = multiDirOf(body)!;
+  const keys = multi.dirs.map((member) => member.key);
+  const plan = readArchivedPlan(store, groupId);
+  const appended = new Set(plan.appendedTaskIds ?? []);
+  const tasks = plan.plan.tasks.filter((task) => !appended.has(task.taskId)).map((task) => {
+    const writes = taskWrites(store, groupId, task.taskId) ?? [];
+    const contract = readArchivedContract(store, groupId, task.taskId).contract;
+    const written = [...writes].sort((l, r) => keys.indexOf(l.dir) - keys.indexOf(r.dir));
+    return { writes, contract, primary: (contract.context as { repoKey?: string }).repoKey ?? written[0]?.dir ?? keys[0]! };
+  });
+  const accepted = acceptanceOf(body);
+  const baseRed = accepted?.result === "passed-relative" && accepted.fullSuite?.baseline !== undefined ? accepted.fullSuite.command : null;
+  const unmet = round.criteria.filter((c) => c.verdict === "not-met");
+  const named = paths !== undefined && paths.length > 0 ? multiFixPaths([{ evidence: paths.map((path) => ({ path })), missing: null }], keys) : multiFixPaths(unmet, keys);
+  const byKey = new Map<string, string[]>();
+  if (named.size > 0) for (const [key, list] of named) byKey.set(key, list);
+  else for (const task of tasks) for (const w of task.writes) byKey.set(w.dir, [...new Set([...(byKey.get(w.dir) ?? []), ...w.targetPaths])]);
+  const checksOf = (key: string): string[] => [...new Set(tasks.flatMap((task) => task.writes.filter((w) => w.dir === key).flatMap((w) => w.checks)))].filter((check) => check !== baseRed);
+  const writes: TaskWrite[] = keys.filter((key) => byKey.has(key)).map((key) => ({ dir: key, targetPaths: byKey.get(key)!, checks: checksOf(key) }));
+  if (writes.length === 0) return { refused: "multi-fix-writes" };
+  const primary = writes[0]!;
+  if (primary.checks.length === 0) return { refused: `multi-fix-checks:${primary.dir}` };
+  // Any archived contract that names the member: its repoPath (A2 replaces it with the run's own workspace anyway).
+  const repoPathOf = (key: string): string => {
+    for (const task of tasks) {
+      const context = task.contract.context as { repoPath: string; additionalRepos?: Array<{ key: string; repoPath: string }> };
+      if (task.primary === key) return context.repoPath;
+      const extra = context.additionalRepos?.find((repo) => repo.key === key);
+      if (extra !== undefined) return extra.repoPath;
+    }
+    return (tasks.find((task) => task.contract.objective.taskId === sourceId)?.contract.context as { repoPath: string } | undefined)?.repoPath ?? key;
+  };
+  const base = fixTaskContract(store, groupId, round, criteria, taskId, sourceId, goal, primary.targetPaths);
+  const { repoKey: _key, additionalRepos: _extras, ...context } = base.context as typeof base.context & { repoKey?: string; additionalRepos?: unknown };
+  const extras = writes.slice(1).map((w) => ({ key: w.dir, repoPath: repoPathOf(w.dir), targetPaths: w.targetPaths, allowlistPaths: w.targetPaths, requiredChecks: w.checks }));
+  const owners = tasks.filter((task) => task.primary === primary.dir);
+  const contract = taskContractSchema.parse({
+    ...base,
+    context: { ...context, repoPath: repoPathOf(primary.dir), targetPaths: primary.targetPaths, ...(extras.length === 0 ? {} : { repoKey: primary.dir, additionalRepos: extras }) },
+    safetyPolicy: { ...base.safetyPolicy, allowlistPaths: fixTaskAllowlist(owners.map((task) => task.contract.safetyPolicy.allowlistPaths), primary.targetPaths),
+      denylistPaths: [...new Set(owners.flatMap((task) => task.contract.safetyPolicy.denylistPaths))] },
+    verification: { ...base.verification, requiredChecks: primary.checks },
+  });
+  return { contract, writes };
+}
+
 /**
  * Follow-up L (dogfood g-28d9b560): the fix task's allowlist. An empty union allows every path (ccloop pathPolicy) and
  * stays empty; a non-empty one must also admit the fix task's own write set -- a file the review named or a person gave
@@ -858,10 +1153,17 @@ export function openFixTask(store: ControlStore, groupId: string, round: ReviewR
   const work: BudgetAmount = auto ? { ...grant.work, tokens: autoFixTokenCeiling(taskWorkTokens(store, groupId, sourceId), grant.work.tokens, groupLeft) } : grant.work;
   store.db.exec("SAVEPOINT review_fix");
   try {
-    appendConfirmedTaskInTransaction(store, groupId, { taskId, contract: fixTaskContract(store, groupId, scope, criteria, taskId, sourceId, goal, paths), agentFrom: sourceId,
+    // #337 §5.3: a multi-directory group's fix names the members it writes, stored on its work item for A2.
+    let built: { contract: ReturnType<typeof fixTaskContract>; writes?: TaskWrite[] };
+    if (isMultiGroup(store, groupId)) {
+      const multi = multiFixTask(store, groupId, scope, criteria, taskId, sourceId, goal, paths);
+      if ("refused" in multi) throw new ControlError("recovery-blocked", multi.refused);
+      built = multi;
+    } else built = { contract: fixTaskContract(store, groupId, scope, criteria, taskId, sourceId, goal, paths) };
+    appendConfirmedTaskInTransaction(store, groupId, { taskId, contract: built.contract, agentFrom: sourceId,
       // Follow-up L: a person's fix takes the sibling task's work grant as it is -- in an expectation-model group it has no
       // token number (null); `?? 0` made it 0, which deriveContract refuses, so no fix task could open there.
-      work, handoff: grant.handoff, dependsOn: [] });
+      work, handoff: grant.handoff, dependsOn: [], ...(built.writes === undefined ? {} : { writes: built.writes }) });
     store.db.exec("RELEASE review_fix");
     return { taskId };
   } catch (error) {

@@ -1802,7 +1802,8 @@ export const groupSummarySchema = z
     // Tester follow-up G spec §3.3: the requirement review record (requirementReviewRecord.ts); `problem` is
     // `requirement-review-not-passed:<why>` when it did not pass. Optional so a group without one parses unchanged.
     requirementReview: z.object({
-      state: z.enum(["pending", "reviewing", "passed", "fixing", "not-passed", "accepted", "not-run"]),
+      // #337 §5.5: `noted` -- a folder or multi-directory group's review that did not pass; it does not hold the group.
+      state: z.enum(["pending", "reviewing", "passed", "fixing", "not-passed", "accepted", "not-run", "noted"]),
       why: z.enum(["multi-repo", "dir", "unfunded", "invalid", "cannot-judge", "rounds-exhausted", "failed", "check-conflict", "not-fixable-by-work"]).optional(),
       rounds: z.array(z.object({
         roundNo: positiveSafeInteger, tip: z.string(), runId: idSchema.nullable(), at: safeInteger,
@@ -1821,6 +1822,8 @@ export const groupSummarySchema = z
       accepted: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),
       rerun: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),
       problem: nonemptyString.optional(),
+      // #337 §5.5: `requirement-review-noted:<why>` for a noted review (requirementReviewRecord.ts reviewNote).
+      note: nonemptyString.optional(),
     }).strict().optional(),
     // Tester #359 (plan 2026-11-18 batch D, V1): a group-level problem -- a failed group or delivered acceptance, or a
     // requirement review that did not pass (#359 review I2) --
@@ -1904,7 +1907,7 @@ export const overviewDestinationSchema = z.discriminatedUnion("kind", [
 ]);
 export const overviewStepSchema = z.object({
   key: nonemptyString, groupId: idSchema.nullable(), repoId: idSchema.nullable(), taskId: idSchema.nullable(), runId: idSchema.nullable(),
-  kind: z.enum(["requirement-answer", "requirement-review", "requirement-attention", "budget-review", "start-review", "task-attention", "stop-review", "recovery-review", "integration-review", "acceptance-warning"]),
+  kind: z.enum(["requirement-answer", "requirement-review", "requirement-attention", "budget-review", "start-review", "task-attention", "stop-review", "recovery-review", "integration-review", "acceptance-warning", "review-note"]),
   reason: nonemptyString, ownerRequired: z.boolean(), destination: overviewDestinationSchema,
 }).strict();
 export const overviewIssueSchema = z.object({ groupId: idSchema.nullable(), repoId: idSchema.nullable(), reason: nonemptyString }).strict();

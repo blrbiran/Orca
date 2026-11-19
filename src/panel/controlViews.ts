@@ -54,7 +54,7 @@ import { sameProfileHash } from "../control/profiles.js";
 import { clarifyLimits, hasRequirementBlock, latestDraft, latestRound, readDrafts, readRequirementGroup, readRounds, refuseClarifying } from "../control/requirementRecords.js";
 import { QUOTA_PROBE_MAX_OUTPUT_TOKENS, probeVerdictSchema, quotaProbeIdentitySchema } from "../control/quotaProbeCall.js";
 import { isGroupCallPurpose, isGroupCallWorkItem, readGroupCallContract } from "../control/groupSingleCall.js";
-import { reviewOf, reviewProblem } from "../control/requirementReviewRecord.js";
+import { reviewNote, reviewOf, reviewProblem } from "../control/requirementReviewRecord.js";
 import { AGENT_QUOTA_REASON, CLARIFY_CAPS, QUOTA_CAUSE, type CallRecord } from "../control/requirementSchemas.js";
 import { renderRequirementDocument } from "../control/requirementDocument.js";
 import { activeChain, chainRounds } from "../control/clarifyChain.js";
@@ -255,7 +255,8 @@ const persistedRunSchema = z.object({
   purpose: z.enum(["clarify", "split", "quota-probe", "no-change-judge", "requirement-review"]).optional(),
   overview: z.object({ hash: hashSchema, commit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/) }).strict().nullable().optional(),
   // Tester #282: the identities of the two follow-up G group calls (requirementReview.ts, noChangeJudge.ts), as written.
-  requirementReview: z.object({ roundNo: safeInteger.positive(), tip: z.string().min(1) }).strict().optional(),
+  // #337 §4.2 (§15 D3): a multi-directory group's call also names each member's tip.
+  requirementReview: z.object({ roundNo: safeInteger.positive(), tip: z.string().min(1), tips: z.record(z.string(), z.string().min(1)).optional() }).strict().optional(),
   noChangeJudge: z.object({ taskId: idSchema, workRunId: idSchema }).strict().optional(),
   // ...and the verdict the goal judge's completion writes on its own run (noChangeJudge.ts completeInTransaction).
   judgeVerdict: z.object({ verdict: z.string().min(1), finding: z.string().nullable(), failure: z.string().nullable() }).strict().optional(),
@@ -892,7 +893,9 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     // Delivery tail spec D3: the acceptance on the delivered commit, when the current delivery has one.
     ...((record, problem) => record === null ? {} : { deliveredAcceptance: { ...record, ...(problem === null ? {} : { problem }) } })(deliveredAcceptanceOf(body), deliveredAcceptanceProblem(body)),
     // Tester follow-up G spec §3.3: the requirement review; a review that did not pass is a problem named by why.
-    ...(reviewOf(body) === null ? {} : { requirementReview: { ...reviewOf(body)!, ...(reviewProblem(reviewOf(body)) === null ? {} : { problem: reviewProblem(reviewOf(body))! }) } }),
+    ...(reviewOf(body) === null ? {} : { requirementReview: { ...reviewOf(body)!, ...(reviewProblem(reviewOf(body)) === null ? {} : { problem: reviewProblem(reviewOf(body))! }),
+      // #337 §5.5: a noted review's note; groupProblemOf does not read it, so the group has no problem for it.
+      ...(reviewNote(reviewOf(body)) === null ? {} : { note: reviewNote(reviewOf(body))! }) } }),
     // Tester #359 (#377 layer 4): the same problem as a group-level fact beside the card's firstFailure (which stays the
     // tasks' own), so the brief, the card and `orca status` see a review that did not pass on a group whose tasks are done.
     ...((problem) => problem === null ? {} : { groupProblem: problem })(groupProblemOf(groupId, body, acceptanceProblemCode)),

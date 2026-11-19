@@ -19,11 +19,16 @@ export type ReviewAcceptCommand = Extract<RawAuthorityCommandV1, { verb: "review
 export type ReviewRerunCommand = Extract<RawAuthorityCommandV1, { verb: "review-rerun" }>;
 export type ReviewFixCommand = Extract<RawAuthorityCommandV1, { verb: "review-fix" }>;
 
-function notPassed(store: ControlStore, groupId: string): RequirementReview {
+/**
+ * #337 §5.7: `review-accept` also answers a `noted` review (a folder or multi-directory group's, which does not hold the group);
+ * rerun and fix stay refused there (`requirement-review-not-open:noted`): reopening a group that may be done and delivered
+ * is a separate decision (spec Q2).
+ */
+function notPassed(store: ControlStore, groupId: string, accept = false): RequirementReview {
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   if (row === undefined) throw new ControlError("group-not-found");
   const review = reviewOf(JSON.parse(String(row.body)));
-  if (review === null || review.state !== "not-passed") throw new ControlError("requirement-review-not-open", review?.state ?? "none");
+  if (review === null || !(review.state === "not-passed" || (accept && review.state === "noted"))) throw new ControlError("requirement-review-not-open", review?.state ?? "none");
   return review;
 }
 const principalOf = (command: { commandId: string; actorId: string }): string => commandPrincipalFor(command.commandId) ?? command.actorId;
@@ -32,7 +37,7 @@ export function applyReviewAccept(deps: { store: ControlStore }, command: Review
   return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
     rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
     apply: (context) => {
-      const groupId = command.target.groupId, review = notPassed(deps.store, groupId), by = principalOf(command), at = deps.store.now();
+      const groupId = command.target.groupId, review = notPassed(deps.store, groupId, true), by = principalOf(command), at = deps.store.now();
       const { why: _why, ...rest } = review;
       saveReview(deps.store, groupId, { ...rest, state: "accepted", accepted: { by, note: command.payload.note, at } });
       recordActivity(deps.store, { groupId, kind: "requirement-review", body: { action: "accepted", by, note: command.payload.note } });

@@ -12,6 +12,7 @@ import type { z } from "zod";
 type TaskContract = z.infer<typeof taskContractSchema>;
 import { executionSnapshotSchema } from "./webProtocol.js";
 import type { ControlStore } from "./store.js";
+import type { TaskWrite } from "./requirementRecords.js";
 import type { Amount } from "./types.js";
 import { finiteCommitment, type BudgetAmount } from "./tokenPolicy.js";
 
@@ -22,7 +23,9 @@ import { finiteCommitment, type BudgetAmount } from "./tokenPolicy.js";
  * canonical record, and the confirmed snapshot gains its derived contract, allocations and frozen agent (copied from an
  * existing task), every other entry byte for byte. Its allocations come out of the group's unallocated reserve.
  */
-export interface AppendTaskInput { taskId: string; contract: TaskContract; agentFrom: string; work: BudgetAmount; handoff: Amount; dependsOn: string[] }
+export interface AppendTaskInput { taskId: string; contract: TaskContract; agentFrom: string; work: BudgetAmount; handoff: Amount; dependsOn: string[];
+  /** #337 §5.3: a multi-directory group's fix names the members it writes (multi spec §6.1), stored on its work item. */
+  writes?: TaskWrite[] }
 
 const compare = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
 const keyOf = (a: { ownerKind: string; ownerId: string; bucket: string }) => `${a.ownerKind}\0${a.ownerId}\0${a.bucket}`;
@@ -80,6 +83,7 @@ export function appendConfirmedTaskInTransaction(store: ControlStore, groupId: s
     originalContractHash, derivedContractHash: derived.derivedContractHash, agentOverride: null,
     agent: source.agent, agentProvenance: source.agentProvenance, timeoutMs: source.timeoutMs, killGraceMs: source.killGraceMs, agentCapabilities: source.agentCapabilities,
     lineageRunIds: [],
+    ...(input.writes === undefined ? {} : { writes: input.writes.map((w) => ({ dir: w.dir, targetPaths: [...w.targetPaths], checks: [...w.checks] })) }),
   };
   store.db.prepare("INSERT INTO work_items(group_id,id,target_version,body) VALUES (?,?,?,?)").run(groupId, input.taskId, 1, JSON.stringify(work));
   saveTokenPolicy(store, groupId, input.taskId, input.work.tokens, hasTokenPolicy(store, groupId) ? "optional-v1" : "finite-legacy");
