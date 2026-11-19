@@ -1187,3 +1187,14 @@ says a task's are) and its contract's `repoKey` / `additionalRepos` are built fr
 says: per member, the paths the review's findings name (`<key>:<path>`), else the tasks' stored targetPaths; each
 member's checks are the union of the tasks' `writes[].checks` for it; the primary (the first written member in
 registered order) must have checks, or the fix is refused `multi-fix-checks:<key>`.
+
+## Correction (2026-11-19, change-sized runs P2)
+
+Appended by the change-sized runs P2 implementer (Orca session `3ba26002`, branch `feat/change-sized-p2`); the text above is
+unchanged. Pointer only: `2026-11-19-change-sized-runs-design.md` §5.7 and its "Correction (2026-11-19, change-sized runs P2
+second wave …)" are what ship. Under a ccloop advertising `features.attemptRef "v1"`: §7.1, A2 asks for the attempt as a ref
+on protocol 4; §7.2 and §7.3, each directory's attempt (an extra's from collect's `dirs[].attemptSha`, or `repos/<key>` for a
+legacy envelope) is pinned at `refs/orca/runs/<runId>` in that directory's own target and read there from then on
+(`drive.dirs[i].runRef`); §11.6 and §11.8, ccloop P1 makes no `repos/<key>` under the key although collect still names it,
+and a legacy envelope's `repos/` goes at a settle that did not land once every extra is pinned. §7.4's refusals are
+unchanged. Every other run behaves as this spec says.
