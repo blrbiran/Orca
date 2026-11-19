@@ -123,3 +123,45 @@ describe("the same rule per directory in a multi split (#239)", () => {
     expect(out.ok).toBe(true);
   });
 });
+
+/**
+ * Dogfood finding (2) (session 3ba26002): the paid dogfood's draft 1 was handed back only because a check asked whether two
+ * committed test files outside the task's targetPaths exist (`test -f test/cli.test.js && test -f test/notes.test.js`).
+ * Such a segment reads nothing but the file's existence, which the base commit already gives and the task never has to
+ * change, so it does not make the file the task's to fix. Only the plain existence shapes are let through; every other use
+ * of the file (running it, reading its text, a negated test the task cannot satisfy, a redirection) is still refused.
+ */
+describe("a check that only asks whether a committed test file exists (dogfood finding 2)", () => {
+  it("does not hand back `test -f`, `test -e` or `[ -f ... ]` on a committed file outside the task's targetPaths", async () => {
+    for (const check of ["test -f test/cli-workflow.test.js", "test -e test/cli-workflow.test.js && test -f test/cli-workflow-transfer.test.js",
+      "[ -f test/cli-workflow.test.js ]", "[ -e ./test/cli-workflow.test.js ] && npm test"]) {
+      const out = await validate(split({ checks: [check] }));
+      // mutation: drop the existence-segment skip in testsOutsideScope -> check-write-scope reasons -> red
+      expect(scopeReasons(out.reasons), check).toEqual([]);
+    }
+  });
+
+  it("still hands back any other use of the same file, in the same check or alone", async () => {
+    const cases: Array<[string, string[]]> = [
+      ["test -f test/cli-workflow.test.js && node --test test/cli-workflow.test.js", ["check-write-scope:T2:test/cli-workflow.test.js"]],
+      ["test ! -e test/cli-workflow.test.js", ["check-write-scope:T2:test/cli-workflow.test.js"]],
+      ["grep -q history test/cli-workflow.test.js", ["check-write-scope:T2:test/cli-workflow.test.js"]],
+      ["test -s test/cli-workflow.test.js", ["check-write-scope:T2:test/cli-workflow.test.js"]],
+      ["test -f test/cli-workflow.test.js > test/cli-workflow-transfer.test.js", ["check-write-scope:T2:test/cli-workflow.test.js", "check-write-scope:T2:test/cli-workflow-transfer.test.js"]],
+    ];
+    for (const [check, expected] of cases) {
+      const out = await validate(split({ checks: [check] }));
+      expect(scopeReasons(out.reasons), check).toEqual(expected);
+    }
+  });
+
+  it("applies the same rule to a write's checks in a multi split", async () => {
+    const draft: MultiSplitOutput = { notes: "", tasks: [{ taskId: "t", title: "t", labels: [], goal: "G", successCondition: "S", dependsOn: [], traces: ["AC1"],
+      writes: [{ dir: "main", targetPaths: ["src/workflow-storage.js"], checks: ["test -f test/cli-workflow.test.js && npm test"] }] }] };
+    const expanded = expandMultiSplitDraft(draft, { targetRepo: repo, ccloopBin: "/bin/false", runsDir: join(root, "runs"), groupId: "r", statement: "G",
+      successConditions: ["S"], dirs: [{ key: "main", path: repo }] });
+    const out = await validateMultiSplitDraft({ output: draft, plan: expanded.plan, contracts: expanded.contracts, expandReasons: expanded.reasons,
+      paths: new Map([["main", repo]]), commits: new Map([["main", commit]]), criterionIds: ["AC1"], adrIds: [] });
+    expect(scopeReasons(out.reasons)).toEqual([]);
+  });
+});

@@ -311,14 +311,25 @@ function writableTestScope(declared: readonly string[], committedPaths: readonly
 }
 
 /**
+ * Dogfood finding (2) (session 3ba26002): a check segment that is only a plain existence test of one path --
+ * `test -e <path>`, `test -f <path>`, `[ -e <path> ]` or `[ -f <path> ]`, with nothing else in the segment. It reads no
+ * byte of the file and writes nothing; a committed file already passes it at the base, so the task never has to change
+ * that file to make it pass. Kept deliberately narrow: a negated test (`!`, which the task cannot make true for a file it
+ * may not delete), `-s` (fails on an empty committed file the task could not fill), any other operator, a redirection or
+ * a second argument does not match, and the path stays judged as before.
+ */
+const EXISTENCE_TEST = /^\s*(?:test\s+-[ef]\s+[^\s<>&|;!]+|\[\s+-[ef]\s+[^\s<>&|;!\]]+\s+\])\s*$/;
+
+/**
  * #239: the committed test files a check names that the task cannot write. Runner-agnostic: the command is split on
- * `&&`, `||`, `;`, `|` and whitespace, and a token (unquoted, `./` dropped) that is a committed file `testFile()` accepts
- * is a referenced test. A check naming no committed file (`npm test`, `make`) yields nothing. Only the task's own
+ * `&&`, `||`, `;`, `|` and whitespace (a segment that is only an existence test, EXISTENCE_TEST, is skipped), and a
+ * token (unquoted, `./` dropped) that is a committed file `testFile()` accepts is a referenced test. A check naming no committed file (`npm test`, `make`) yields nothing. Only the task's own
  * targetPaths count: a dependency writing the file does not let this task fix it (ccloop's allowlist is targetPaths).
  */
 function testsOutsideScope(checks: readonly string[], targetPaths: readonly string[], committed: ReadonlySet<string>): string[] {
   const claims = targetPaths.map((path) => normalizeClaim(path).normalized);
-  const named = checks.flatMap((check) => check.split(/&&|\|\||[;|\s]+/)).map((token) => token.replace(/^['"]+|['"]+$/g, "")).filter((token) => token.length > 0)
+  const named = checks.flatMap((check) => check.split(/&&|\|\||[;|]/)).filter((segment) => !EXISTENCE_TEST.test(segment))
+    .flatMap((segment) => segment.split(/\s+/)).map((token) => token.replace(/^['"]+|['"]+$/g, "")).filter((token) => token.length > 0)
     .map((token) => posix.normalize(token)).filter((path) => committed.has(path) && testFile(path));
   return [...new Set(named)].filter((path) => !claims.some((claim) => contains(claim, path)));
 }
