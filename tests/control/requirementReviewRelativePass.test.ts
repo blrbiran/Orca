@@ -135,4 +135,17 @@ describe("a relative pass in a review round (#377)", () => {
       expect(contract.objective.successCondition).toBe("the requirement review finds criteria AC1 met");
     } finally { await w.t.h.dispose(); }
   }, 300000);
+
+  it("a relative pass is not left to the person, whatever the reviewer said could meet it", async () => {
+    const w = await reviewWorld({ criteria: CRITERIA, answer: () => ({ outcome: "complete", output: { summary: "two",
+      criteria: [{ id: "AC1", verdict: "not-met", evidence: [{ path: "a", line: 1 }], missing: "a.txt does not say hello", fixableBy: "work" }, { ...ac2, fixableBy: "person" }] } }) });
+    try {
+      withSuite(w);
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "passed" || w.review()?.state === "not-passed" || w.review()?.state === "fixing", 120);
+      expect(w.review()).toMatchObject({ state: "fixing", rounds: [expect.objectContaining({ fixTaskId: "review-fix-1", relativePass: [expect.objectContaining({ criterionId: "AC2" })] })] });
+      // mutation: count relative passes among settleNotPassed's not-met criteria -> leftToPerson ["AC2"], red
+      expect(w.review()!.rounds[0]!.leftToPerson).toBeUndefined();
+    } finally { await w.t.h.dispose(); }
+  }, 300000);
 });
