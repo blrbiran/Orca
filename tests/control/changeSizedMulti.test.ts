@@ -14,6 +14,7 @@ import { controlRepoKey } from "../../src/panel/controlOptions.js";
 import { applySetWorkspaceMode } from "../../src/control/workspaceSettings.js";
 import { driverHarness, git, type HarnessOptions } from "./fixtures/driverHarness.js";
 import { requestState, stop } from "./fixtures/handoffHarness.js";
+import { spyOnGit } from "./fixtures/gitSpy.js";
 
 const alphaKey = controlRepoKey("alpha");
 type Driver = Awaited<ReturnType<typeof driverHarness>>;
@@ -45,10 +46,14 @@ const refsUnderOrca = (repo: string): string => git(repo, "for-each-ref", "--for
 
 describe("a keyed multi-directory run pins each extra in its own target (§5.7, P2-9)", () => {
   // Mutations: stepC does not pin extras (no dirPins) -> dirs[1].runRef absent at the landing, red; produceMultiMerge always
-  // fetches from repos/<key> -> a keyed run has no repos/, the landing fails, red; stepA2Multi never sends the key -> the
+  // fetches from repos/<key> -> the spy sees that fetch and no incoming update-ref in alpha, red (Ruling, P2 review; human
+  // approval 「同意这样大改，并且同意改所有必要的判据」: this used to claim "a keyed run has no repos/, the landing fails". It
+  // does not -- the pinned attempt is in alpha, so the fetch takes git's quickfetch path and exits 0 without connecting;
+  // fixtures/gitSpy.ts); stepA2Multi never sends the key -> the
   // envelope lacks attemptDelivery, red. Alpha runs in clone mode, so its attempt's objects exist only in its clone (C1)
   // until the pin fetches them: pinning after the workspace cleanup would find nothing to fetch.
   it("sends the key, pins the extra at C in its clone-mode target, lands it from there, and leaves only the pins", async () => {
+    const spy = spyOnGit();
     const t = await driverHarness([{ taskId: "a", tokenBudget: 4_000_000, targetPaths: ["**"], contextExtra: CONTEXT }],
       { repositories: withAlpha, tokenPolicy: "optional-v1", attemptRef: true, extraFiles: () => ({ "alpha/x.txt": "x\n" }) } satisfies HarnessOptions);
     try {
@@ -79,7 +84,12 @@ describe("a keyed multi-directory run pins each extra in its own target (§5.7, 
       // Cleanup leaves exactly the pin in each target (no incoming ref).
       expect(refsUnderOrca(alpha)).toBe(`refs/orca/runs/${runId} ${extra!.attemptSha}`);
       expect(refsUnderOrca(t.repo)).toBe(`refs/orca/runs/${runId} ${main!.attemptSha}`);
-    } finally { await t.h.dispose(); }
+      // Each directory's landing set its incoming ref in its own target, and nothing fetched from the run's source directory.
+      const calls = spy.calls();
+      expect(calls.filter((call) => call.args.includes("fetch") && call.args.some((arg) => arg.startsWith(run.drive.sourceDir)))).toEqual([]);
+      const incoming = (sha: string) => calls.filter((call) => call.args.includes("update-ref") && call.args.includes(`refs/orca/incoming/${runId}`) && call.args.includes(sha));
+      expect([incoming(main!.attemptSha).length, incoming(extra!.attemptSha).length]).toEqual([1, 1]);
+    } finally { spy.restore(); await t.h.dispose(); }
   }, 90_000);
 
   // Tester follow-up G §1.1 for a v2 multi run: the no-change proof is measured from each directory's target, where the pins

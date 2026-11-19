@@ -9,6 +9,7 @@ import { checkPathOf, readStartEnvelope } from "../../src/control/executionDrive
 import { snapshotV2Schema, verifySnapshotInRepository } from "../../src/control/snapshotV2.js";
 import { applySetWorkspaceMode } from "../../src/control/workspaceSettings.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
+import { spyOnGit } from "./fixtures/gitSpy.js";
 
 /**
  * Change-sized runs spec 2026-11-19 (P2; #363 #366) through the driver, against the synthetic ccloop's two shapes: with
@@ -46,8 +47,14 @@ describe("an older ccloop (no features.attemptRef): today's run, unchanged (§5.
 
 describe("ccloop P1 (features.attemptRef v1): the attempt is a pinned ref (§5.3, §5.4, §6.2)", () => {
   // P2-1 / P2-4 at driver level. Mutations: do not pin at C (pin only at E) -> runRef absent at `landed`, red; archive v1 ->
-  // no `version: 2`, red; keep fetching the landing from <sourceDir>/repo -> the landing fails (no copy), red.
+  // no `version: 2`, red; keep fetching the landing from <sourceDir>/repo -> the spy sees that fetch and no incoming
+  // update-ref, red.
+  // Ruling (P2 review; human approval 「同意这样大改，并且同意改所有必要的判据」): the last mutation used to read "the landing
+  // fails (no copy), red". It does not: the pinned attempt is already in the target, so `git fetch <missing path>
+  // +<oid>:<ref>` takes fetch's quickfetch path and exits 0 without connecting (measured, any git config). The landing's
+  // git calls are therefore counted directly (fixtures/gitSpy.ts).
   it("sends the key on protocol 4, pins ccloop's attempt at C, lands it, and archives snapshot v2 with no result copy", async () => {
+    const spy = spyOnGit();
     const t = await driverHarness([{ taskId: "a", tokenBudget: 4_000_000 }], { tokenPolicy: "optional-v1", attemptRef: true }); try {
       const runId = await t.claim();
       const driver = t.driver();
@@ -71,7 +78,11 @@ describe("ccloop P1 (features.attemptRef v1): the attempt is a pinned ref (§5.3
       // driverSettle.test.ts:102's intent, in its P2 form: cleanup leaves exactly the pin under refs/orca/ (no incoming ref).
       expect(git(t.repo, "for-each-ref", "--format=%(refname) %(objectname)", "refs/orca/")).toBe(`refs/orca/runs/${runId} ${run.drive.attemptSha}`);
       expect(readdirSync(run.drive.sourceDir)).not.toContain("repo");
-    } finally { await t.h.dispose(); }
+      // The landing set the incoming ref in the target and nothing fetched from the run's source directory.
+      const calls = spy.calls();
+      expect(calls.filter((call) => call.args.includes("fetch") && call.args.some((arg) => arg.startsWith(run.drive.sourceDir)))).toEqual([]);
+      expect(calls.filter((call) => call.args.includes("update-ref") && call.args.includes(`refs/orca/incoming/${runId}`) && call.args.includes(run.drive.attemptSha))).toHaveLength(1);
+    } finally { spy.restore(); await t.h.dispose(); }
   }, 60_000);
 
   // §5.8 row 2 / P2-10: protocol 3 never carries the key (the schema refuses it there), but the ccloop reads v2, so the run
