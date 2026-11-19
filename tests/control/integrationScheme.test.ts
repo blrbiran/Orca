@@ -81,6 +81,16 @@ describe("the repository's integration default (integration spec §3.1)", () => 
     } finally { await h.dispose(); }
   });
 
+  // Every other field of the body belongs to another setter (checks, criteria review, flows): setting the delivery must
+  // carry each of them over, or one person's delivery choice silently drops another's setting.
+  it("keeps the body's criteriaReview and flows when the delivery is set", async () => {
+    const h = await openTestStore(); try {
+      writeRepositorySettingsBody(h.store, "repo", { workspaceMode: "clone", revision: 1, criteriaReview: false, flows: { rerunReview: "review" } });
+      expect(errorCode(applySetIntegrationScheme({ store: h.store, knownRepository: known }, cmd(PB, 1)))).toBe("applied");
+      expect(body(h)).toEqual({ workspaceMode: "clone", revision: 2, integration: PB, criteriaReview: false, flows: { rerunReview: "review" } });
+    } finally { await h.dispose(); }
+  });
+
   it("refuses the scheme it already has, an unknown repository, and a failed check by name, writing nothing", async () => {
     const h = await openTestStore(); try {
       const deps = { store: h.store, knownRepository: known };

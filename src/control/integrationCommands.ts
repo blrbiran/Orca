@@ -57,12 +57,11 @@ export function applySetIntegrationScheme(
         refuseFailedCheck(failedCheck);
         const integration = (context.effectiveCommand.payload as { integration: IntegrationScheme }).integration;
         if (integrationChosen(deps.store, target.repoId) && canonicalBytes(readIntegrationDefault(deps.store, target.repoId).scheme).equals(canonicalBytes(integration))) throw new ControlError("no-op-command");
-        // The body's other field (the workspace mode; no row is worktree, execution driver spec §3.2) is kept.
-        // Checks spec 2026-10-22 §4.1: so are the project's check settings.
+        // The body's other fields (the workspace mode -- no row is worktree, execution driver spec §3.2 -- the check
+        // settings, the criteria reviewer, the flow settings) are kept: every one is carried over, not a named few.
         const current = readRepositorySettingsBody(deps.store, target.repoId);
         const workspaceMode = current?.workspaceMode ?? "worktree";
-        const next: RepositorySettingsBody = { workspaceMode, revision: context.nextCommandRevision, integration,
-          ...(current?.checks === undefined ? {} : { checks: current.checks }) };
+        const next: RepositorySettingsBody = { ...current, workspaceMode, revision: context.nextCommandRevision, integration };
         writeRepositorySettingsBody(deps.store, target.repoId, next);
         return { status: 200, body: {
           schema: "orca-command-success-v1", commandId: context.rawCommand.commandId, actorId: context.rawCommand.actorId,
