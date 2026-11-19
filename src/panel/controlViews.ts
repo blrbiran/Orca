@@ -1457,7 +1457,7 @@ function offPlanWritesView(record: OffPlanWriteBody | undefined): { offPlanWrite
   return record === undefined ? {} : { offPlanWrites: { paths: record.paths, count: record.count } };
 }
 
-function runViews(store: ControlStore, groupId: string, graphVersion: number, proposal: ReturnType<typeof readBudgetProposal>, snapshot: GroupReadSnapshot): RunViewV1[] {
+function runViews(store: ControlStore, groupId: string, graphVersion: number, proposal: ReturnType<typeof readBudgetProposal> | null, snapshot: GroupReadSnapshot): RunViewV1[] {
   const activity = readLatestRunActivityByGroup(store, groupId);
   // Off-plan writes spec W3 (#346): the landed runs' records, one read for the group.
   const offPlan = readOffPlanWritesByRun(store, groupId);
@@ -1519,7 +1519,8 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
         || canonicalBytes(run.agent ?? null).compare(canonicalBytes(estimate.estimatorSlot.selection)) !== 0) return blocked(`run-estimate-agent:${runId}`);
       profile = profileView(run.executionProfile);
     } else {
-      if (!proposal.profiles) return blocked(`run-profile-missing:${runId}`);
+      // Tester #374 (c): a clarifying group's entry read (readRunEntry) has no proposal; a task run there is not its own.
+      if (!proposal?.profiles) return blocked(`run-profile-missing:${runId}`);
       if (run.taskId === null || run.estimateId !== null || run.claimOrdinal === null || run.handoffProfile === null) return blocked(`run-task-identity:${runId}`);
       const workRow = snapshot.workById.get(run.workItemId);
       if (!workRow) return blocked(`run-work-missing:${runId}`);
@@ -1776,6 +1777,29 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
   const parsed = groupViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`group-view:${parsed.error.issues[0]?.path.join(".")}:${parsed.error.issues[0]?.message}`);
   return parsed.data;
+}
+
+/**
+ * Tester #374 (c): one run's entry, read by its id alone (GET runs/:runId; `orca run show`). For a split group it is the
+ * entry the group view lists, built and checked by that view; a group still clarifying has no group view (N1 DR25), so its
+ * requirement calls' entries are built by the same run view, from the group's runs alone. A run the view leaves out as
+ * unreadable (#348) is refused by name. The group view's own refusal of a clarifying group is unchanged.
+ */
+export function readRunEntry(store: ControlStore, epoch: string, runId: string): { schema: "orca-run-entry-v1"; groupId: string; run: RunViewV1 } {
+  const row = store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
+  if (!row) throw new ControlError("run-not-found");
+  const groupId = String(row.group_id);
+  const runs = groupStatusOf(store, groupId) === "clarifying"
+    ? runViews(store, groupId, Number(readRequirementGroup(store, groupId).graphVersion), null, readGroupSnapshot(store, groupId))
+    : readControlGroup(store, epoch, groupId).runs;
+  const run = runs.find((entry) => entry.runId === runId);
+  if (run === undefined) return blocked(`run-unreadable:${runId}`);
+  return { schema: "orca-run-entry-v1", groupId, run };
+}
+function groupStatusOf(store: ControlStore, groupId: string): unknown {
+  const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+  if (!row) throw new ControlError("group-not-found");
+  return (parseJson(row.body, "group-invalid") as { status?: unknown } | null)?.status;
 }
 
 /**

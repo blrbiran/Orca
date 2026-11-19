@@ -130,7 +130,9 @@ describe("composed reads (spec §14 R6; proposal, task and project views)", () =
     const p = await panel();
     const out = await cli(["run", "show", "run-1", "--group", "g-beta", "--json"], p.dir);
     expect([out.code, out.json().body.error.code, out.json().body.error.message]).toEqual([1, "run-not-found", "run run-1 is not in group g-beta"]);
-    expect(p.requests.filter((r) => r.path.startsWith("runs/")).map((r) => r.path)).toEqual([]);
+    // Ruling (session 3ba26002): #374 (c) -- run show first reads the run's own entry (`runs/run-1`; this fake panel has no
+    // such route, so the group view is read as before). What this pins is still that no activity or evidence is read.
+    expect(p.requests.filter((r) => /^runs\/[^/]+\/(activity|evidence)/.test(r.path)).map((r) => r.path)).toEqual([]);
     const human = await cli(["run", "show", "run-1", "--group", "g-beta"], p.dir);
     expect(human.code).toBe(1);
     expect(human.stderr).toContain("run-not-found: run run-1 is not in group g-beta");

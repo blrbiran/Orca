@@ -11,7 +11,7 @@ one run: its entry in the group view, the newest 10 activity rows, the evidence 
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<run>`: a run id
-- `--group <group>`: the run's group (default: found from the groups the summary lists)
+- `--group <group>`: the run's group, checked to hold the run (default: the run's own group)
 
 ## `orca run activity <run>`
 

@@ -48,7 +48,7 @@ import type { ControlStore } from "../control/store.js";
 import type { TrustedControlConfig } from "./controlConfig.js";
 import { controlErrorCatalog, sendControlError, sendMappedControlError } from "./controlErrors.js";
 import { registerTranscriptRoutes } from "../agentTranscript/routes.js";
-import { estimatorInstructionOf, readControlGroup, readControlRecovery, readControlSummary, readGroupSummary, readRequirementView, readRunActivityView, readRunEvidence, readSelectionPreview, readUnreadableRuns, taskHandoffView } from "./controlViews.js";
+import { estimatorInstructionOf, readControlGroup, readControlRecovery, readControlSummary, readGroupSummary, readRequirementView, readRunActivityView, readRunEntry, readRunEvidence, readSelectionPreview, readUnreadableRuns, taskHandoffView } from "./controlViews.js";
 import { readStoredHandoff } from "../control/taskHandoffs.js";
 import { costOutliersOf, phaseEndUsageOf } from "../control/runUsageView.js";
 import { confirmKnownRed, knownRedAtBase, type KnownRedAtBase } from "../control/knownRedAtBase.js";
@@ -768,6 +768,18 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       sendMappedControlError(res, error, run ? readErrorContext(deps.store, String(run.group_id)) : undefined);
     }
   }));
+
+  // Tester #374 (c): one run's entry by its id, for `orca run show`; a clarifying group's requirement call included, whose
+  // group view is refused (controlViews.ts readRunEntry).
+  app.get("/api/control/runs/:runId", (req, res) => {
+    const runId = String(req.params.runId);
+    try { res.json(readRunEntry(deps.store, deps.epoch, runId)); }
+    catch (error) {
+      if (error instanceof ControlError && error.code === "run-not-found") { sendControlError(res, 404, error.code, "No control run was found."); return; }
+      const run = deps.store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
+      sendMappedControlError(res, error, run ? readErrorContext(deps.store, String(run.group_id)) : undefined);
+    }
+  });
 
   // Issue-fixes spec §5.2: a run's newest 200 activity rows, under the evidence route's checks (the panel's login, and a
   // run of this store -- another project's is run-not-found).

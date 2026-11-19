@@ -119,6 +119,30 @@ async function groupOfRun(context: WriteContext, runId: string): Promise<string>
   throw new EntryRejection("run-not-found", `no group lists run ${JSON.stringify(runId)}; pass --group <group>`);
 }
 
+/** Tester #374 (c): the run `run show` located in its paths step, for its compose (one command per CLI process). */
+let shownRun: { groupId: string; run: unknown } | null = null;
+/**
+ * Tester #374 (c): a run's entry by its id (GET runs/:runId) -- a clarifying group's requirement call included, whose group
+ * view is refused -- with no scan of the groups. A named --group must hold the run (#242), checked before the activity or
+ * evidence is read. A panel without that route (an older one, route-not-found) is read as before: the group view.
+ */
+async function runEntryOf(context: WriteContext, runId: string): Promise<{ groupId: string; run: unknown }> {
+  let entry: { groupId: string; run: unknown };
+  try { entry = await context.read(`runs/${runId}`) as { groupId: string; run: unknown }; }
+  catch (error) {
+    if (readFailureCode(error) !== "route-not-found") throw error;
+    const groupId = await groupOfRun(context, runId);
+    return { groupId, run: (await context.read(`groups/${groupId}`) as GroupView).runs.find((run) => run.runId === runId) };
+  }
+  const named = context.args.flags.group;
+  if (typeof named === "string") {
+    const summary = await context.read("summary") as Summary;
+    const groupId = resolveId("group", named, summary.groups.map((g) => g.groupId));
+    if (groupId !== entry.groupId) throw new EntryRejection("run-not-found", `run ${runId} is not in group ${groupId}`);
+  }
+  return entry;
+}
+
 /**
  * Tester #284: a draft line is compact JSON cut at 160 characters, so a draft's layers and its parallel candidates
  * (controlViews.ts readRequirementView) are spelled out after the body; --json is the body as served.
@@ -589,22 +613,23 @@ export const READ_ROWS: CommandDef[] = [
         ...(entry.summaryText === null ? [] : entry.summaryText.replace(/\n$/, "").split("\n").map((line) => `  ${line}`))].join("\n")).join("\n");
     } }),
   read({ domain: "run", action: "show", summary: "one run: its entry in the group view, the newest 10 activity rows, the evidence summary",
-    positionals: [RUN], flags: [{ name: "group", type: "string", summary: "the run's group (default: found from the groups the summary lists)" }],
-    paths: async (c) => { const groupId = await groupOfRun(c, ids(c, "run")); return [`groups/${groupId}`, `runs/${ids(c, "run")}/activity`, `runs/${ids(c, "run")}/evidence`]; },
-    compose: async ([view, activity, evidence], c) => {
-      const v = view as GroupView;
+    positionals: [RUN], flags: [{ name: "group", type: "string", summary: "the run's group, checked to hold the run (default: the run's own group)" }],
+    paths: async (c) => { shownRun = await runEntryOf(c, ids(c, "run")); return [`runs/${ids(c, "run")}/activity`, `runs/${ids(c, "run")}/evidence`]; },
+    compose: async ([activity, evidence], c) => {
+      const located = shownRun!;
+      shownRun = null;
       const entries = (field(activity, "entries") as unknown[] | undefined) ?? [];
       const manifest = (field(evidence, "entries") as Array<{ evidenceId: string; kind: string; byteLength: number }> | undefined) ?? [];
       // Tester #285: the transcript's last write, when the listing gives one; a refused or older listing adds nothing.
       const lastTranscriptAt = field(await c.read(`runs/${ids(c, "run")}/transcripts`).catch(() => null), "lastTranscriptAt");
-      const run = v.runs.find((r) => r.runId === ids(c, "run"));
+      const run = located.run;
       // Tester #297 (follow-up J; human: 「codex 提示就好」): the kind of a run's installation when it has a live ceiling, so the
       // text can say a codex run's ceiling is checked only after a whole phase. An agents read that fails adds nothing.
       const installation = (run as { liveCeiling?: unknown; agent?: { installation: string } } | undefined)?.liveCeiling === undefined ? undefined : (run as { agent?: { installation: string } }).agent?.installation;
       const agentKind = installation === undefined ? undefined
         : ((field(await c.read("agents").catch(() => null), "installations") as Array<{ id: string; kind?: string }> | undefined) ?? []).find((entry) => entry.id === installation)?.kind;
       return {
-        schema: "orca-run-show-v1", groupId: v.summary.groupId, run,
+        schema: "orca-run-show-v1", groupId: located.groupId, run,
         ...(typeof lastTranscriptAt === "number" ? { lastTranscriptAt } : {}),
         ...(typeof agentKind === "string" ? { agentKind } : {}),
         activity: { entries: entries.slice(0, 10), more: entries.length > 10 },

@@ -454,3 +454,17 @@ Recorded by Orca dev session 3cfc2e73 on `feat/password-stdin`. §15.3 ("typed a
   is talking to another panel, not the person's.
 - **Criteria.** `tests/commands/passwordStdin.test.ts` (real home, symlinks, one line), `tests/commands/person.test.ts`
   "orca login --password-stdin" (3), `tests/panel/userCommand.test.ts` (2).
+
+## Correction (2026-11-19, session 3ba26002) — §14 R6 `run show` reads the run's own entry (#374 c)
+
+Who/when: the Track C implementer (Claude Opus 5.5, a subagent of Orca session `3ba26002`), 2026-11-19, branch `fix/g-cli`
+from `main` `4f53a087`. R6 above is kept verbatim (Rule 13).
+
+R6 said "no new route": `run show` read the group view's run entry. A group still clarifying has no group view (N1 DR25:
+`requirement-not-split`), so `run show` refused that group's requirement calls, and without `--group` it read every
+group's view before giving up. There is now one read route, `GET /api/control/runs/:runId` (`readRunEntry`,
+`src/panel/controlViews.ts`), answering `{schema: "orca-run-entry-v1", groupId, run}`: for a split group `run` is the
+entry the group view lists (built and checked by that view); for a clarifying group it is the requirement call's entry,
+built by the same run view from the group's runs. `run show` reads it by the run id alone; a named `--group` must still
+hold the run (#242), checked before the activity or evidence is read. A panel without the route (`route-not-found`) is
+read as before. The group view's refusal of a clarifying group is unchanged.
