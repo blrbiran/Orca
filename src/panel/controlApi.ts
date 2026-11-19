@@ -1106,7 +1106,8 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "recovery-retry": await service.recoveryRetry(command); break;
           case "settle-unknown-usage": await service.settleUnknownUsage(command); break;
           case "verify-saved-result":await service.verifySavedResult(command);break;
-          case "retry-task": if (command.payload.agent === undefined && command.payload.model === undefined) service.retryTask(command); else await service.retryTaskOnAgent(command); break;
+          // Tester #368 (b): retryTaskOnAgent sends a retry naming neither agent nor model to retryTask itself.
+          case "retry-task": await service.retryTaskOnAgent(command); break;
           case "close-run": service.closeRun(command); break;
           case "accept-attempt": await service.acceptAttempt(command); break;
           case "abandon-run": service.abandonRun(command); break;
