@@ -113,8 +113,10 @@ describe("the first-use question on Results (spec §4.2 item 1)", () => {
   it("'Keep them on the branch' stores keep for the project and sends nothing for the group", async () => {
     const { sent } = show(done({ projectDeliveryChosen: false }));
     fireEvent.click(screen.getByRole("button", { name: "Keep them on the branch" }));
-    // mutation: send set-group-integration keep too -> red
-    await waitFor(() => expect(sent).toEqual([{ kind: "project", scheme: { delivery: "keep" }, revision: 3 }]));
+    // Measured once the answer settled (the question is gone), not while a later command could still be on its way.
+    await waitFor(() => expect(question()).toBeNull());
+    // mutation: send set-group-integration too -> red
+    expect(sent).toEqual([{ kind: "project", scheme: { delivery: "keep" }, revision: 3 }]);
   });
 
   it("is in Chinese under zh", async () => {
