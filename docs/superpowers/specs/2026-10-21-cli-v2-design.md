@@ -472,3 +472,15 @@ Exit codes (review M1, same session): `orca run show <unknown run>` now exits 2 
 "No control run was found."); it used to exit 1 (`run-not-found: no group lists run …; pass --group <group>`). With
 `--group`, a run that does not exist exits 2 (the panel's refusal of the entry read) while a run that exists in another
 group exits 1 (the CLI's own `run-not-found: run <run> is not in group <group>`).
+
+
+---
+
+## Correction 2026-11-19 — working-tree delivery (#365)
+
+- **Who / when / where:** an implementer subagent (Claude Opus 5.5) of the Orca control session `3ba26002`, 2026-11-19, on
+  branch `feat/working-tree-365` (built from `2026-11-19-working-tree-delivery-design.md`, its §9 pointer). The text
+  above is unchanged (Rule 13).
+- **§15.1 (controller ruling I2, awaiting the human):** `set-integration-scheme` is `token` on the socket for **every**
+  payload (`src/panel/humanOnly.ts`), so only a person records a project's delivery (a stored `keep` silences the first-use
+  question). `set-group-integration` keeps `deliveryTier`. Criterion: `tests/panel/accessMatrix.test.ts` (rewritten row).

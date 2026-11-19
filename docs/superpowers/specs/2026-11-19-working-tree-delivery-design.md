@@ -630,3 +630,23 @@ Then `git ls-tree -z <tip> -- <paths> > S/list`, `GIT_INDEX_FILE=S/index git upd
 `shasum .git/index` before and after were identical; `git status --porcelain` in the checkout was empty. Not checked
 here: the rename step, filters (LFS / eol), the `--stdin -z` forms, and the leading-component refusals — those are WT-2,
 WT-9 and the plan's first task.
+
+## 15. Implementation notes (P1, partial) — 2026-11-19
+
+- **Who / where:** an implementer subagent (Claude Opus 5.5) of the Orca control session `3ba26002`, branch
+  `feat/working-tree-365` (commits named in its report). The sections above are unchanged.
+- **Built:** §4.1 scheme + check/preflight; §4.3 dispatch; §4.4 delivery (`src/control/workingTreeDelivery.ts`); §4.2
+  explicit `keep`, `integrationChosen`, the read's `chosen`, the socket tier, the auto-confirm exemption and hash; §7 panel-start
+  sweep (`src/panel/controlAssembly.ts` `startPump`, before `driver.start`); §5 CLI parse; en + zh reason words and the
+  Settings form option; §9 Corrections appended.
+- **Deviations (each reversible):**
+  - A path containing a newline is refused `-unsafe-path` (step 5): `git hash-object --stdin-paths` reads one path per line.
+  - `chosen` is a separate reader (`integrationChosen`), not a field of `readIntegrationDefault`, so its exact-shape
+    criteria did not need rewriting; the Web type marks `chosen` optional (absent = chosen, an older panel).
+  - A blocked working-tree record keeps its `pending` (any reason, not only `-write-failed`): it only widens `was` to an
+    entry Orca itself wrote.
+  - `-write-failed` detail: `<path>:<code>:written <n> (<first five>)`; a failing `update-index` / `checkout-index` names
+    the step as both path and code.
+  - The Rule 17 table (§7) holds as written; staging's parent `<git-dir>/orca` is also created `0700`.
+- **Not built yet:** see the report of this run (Results question and rows on the Web, the CLI §4.6 / §4.2 lines and
+  `projectDeliveryChosen`, the multi-directory refusal at accept, WT-related Web criteria).

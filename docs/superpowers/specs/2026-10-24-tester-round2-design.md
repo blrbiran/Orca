@@ -1129,3 +1129,18 @@ written above (Rule 13). Human ruling on #195, verbatim (ledger `.superpowers/sd
   §7.2 first said -- so an editable proposal's null stays null. It no longer substitutes the worker profile's declared
   `contextWindowTokens`. The flow children's binding (`src/panel/flowAssembly.ts:69`) is not changed by this correction.
 - Criteria: `tests/control/autoConfirmUnlimited.test.ts` ("keeps the proposal's null context hand-off threshold …").
+
+
+---
+
+## Correction 2026-11-19 — working-tree delivery (#365)
+
+- **Who / when / where:** an implementer subagent (Claude Opus 5.5) of the Orca control session `3ba26002`, 2026-11-19, on
+  branch `feat/working-tree-365` (built from `2026-11-19-working-tree-delivery-design.md`, its §9 pointer). The text
+  above is unchanged (Rule 13).
+- **§7.2 condition 6 and ruling H4 (controller ruling C1, awaiting the human):** a group whose record is `working-tree`
+  and canonical-byte-equal to the repository's stored default passes condition 6 (`workingTreeDefaultCopy`,
+  `src/control/autoConfirm.ts`), and the automatic confirmer sends that record's `schemeHash` as `integrationHash`
+  (`src/control/webService.ts`, `autoConfirmUnlimitedPass`). "Never `integrationHash`" no longer holds for that one case.
+  `local` / `push-*` / `github-pr` records are refused `delivery-scheme` as before. Criteria: `autoConfirmUnlimited.test.ts`
+  "C1 (#365)".

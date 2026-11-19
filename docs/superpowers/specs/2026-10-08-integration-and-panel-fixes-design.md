@@ -391,3 +391,23 @@ in `.superpowers/sdd/2026-10-08-integration-and-panel-fixes/progress.md`).
 and records the resolution as a flagged major decision. Human ruling: "同意按你的建议走" (on the controller's proposal),
 grounded in `docs/handoff/goal.md` §1.4. Integration blocks that are not code conflicts (dirty target, non-fast-forward,
 target moved) stay as specified here and are needs-you for that group only. The original text above is kept verbatim.
+
+
+---
+
+## Correction 2026-11-19 — working-tree delivery (#365)
+
+- **Who / when / where:** an implementer subagent (Claude Opus 5.5) of the Orca control session `3ba26002`, 2026-11-19, on
+  branch `feat/working-tree-365` (built from `2026-11-19-working-tree-delivery-design.md`, its §9 pointer). The text
+  above is unchanged (Rule 13).
+- **§3:** the scheme union gains `{ delivery: "working-tree" }` (strict: no trigger, method, target or remote). It writes
+  a complete, accepted group's `from..tip` into the registered checkout, uncommitted, under a per-path guard
+  (`src/control/workingTreeDelivery.ts`).
+- **§3.1, ruling R5 narrowed:** for the **repository default only**, `set-integration-scheme` with `keep` stores
+  `integration: { delivery: "keep" }`; absent now means "never chosen" (`integrationChosen`). Group copies keep R5.
+- **§6.5:** new blocked reasons `integration-working-tree-conflict`, `-busy`, `-unsupported`, `-unsafe-path`,
+  `-prerequisite`, `-write-failed` (each with a detail after the first colon), and the setter / preflight check
+  `integration-invalid:working-tree-missing`. `integration-worktree-dirty`'s words name files a working-tree delivery wrote.
+- **§8 Safety:** Orca now writes into the person's checkout -- only the paths of `from..tip`, only when each one's
+  current entry is `from`'s, a crashed attempt's `pending.tip`'s, or already the tip's; never their index, HEAD, refs,
+  stash, config or hooks (working-tree spec §4.4, §7).

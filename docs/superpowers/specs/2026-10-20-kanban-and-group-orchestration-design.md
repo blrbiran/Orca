@@ -410,3 +410,15 @@ written. Tester #355 (human ruling 2026-11-19 「同意该方案，同意允许�
 only under the column box, now labelled "Show closed and archived", and its card reads `closed`. Dropping an Archived
 card on Done sends `unclose-group` for a closed group and `unarchive-group` for an archived one (`boardDrop`); Done to
 Archived still archives. No batch actions on the Board (#92 ruling: multi-select lives in the list only).
+
+
+---
+
+## Correction 2026-11-19 — working-tree delivery (#365)
+
+- **Who / when / where:** an implementer subagent (Claude Opus 5.5) of the Orca control session `3ba26002`, 2026-11-19, on
+  branch `feat/working-tree-365` (built from `2026-11-19-working-tree-delivery-design.md`, its §9 pointer). The text
+  above is unchanged (Rule 13).
+- **§9a.1:** a `working-tree` group is not "delivered locally" (`deliversLocally` stays `local`-only): dependents stack
+  on its `orca/<g>` branch, and a dependent's own working-tree delivery waits until the prerequisite's was written (not
+  due), or blocks `integration-working-tree-prerequisite:<P>` when the prerequisite delivers any other way except `local`.

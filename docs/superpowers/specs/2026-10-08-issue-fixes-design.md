@@ -674,3 +674,15 @@ Addendum (review M6, same session): "no live operation can own an entry then" ha
 did, so an archive may still run in the dying process; a panel opening the store in that window sweeps that archive's
 staging entries, and the worst case is that the dying archive's publish fails. Published artifacts are outside staging.
 The 100,000 bound counts top-level entries of `staging` (a staged directory counts once).
+
+
+---
+
+## Correction 2026-11-19 — working-tree delivery (#365)
+
+- **Who / when / where:** an implementer subagent (Claude Opus 5.5) of the Orca control session `3ba26002`, 2026-11-19, on
+  branch `feat/working-tree-365` (built from `2026-11-19-working-tree-delivery-design.md`, its §9 pointer). The text
+  above is unchanged (Rule 13).
+- **"Correction 2026-11-19 — #355 review":** `close-delivery-pending` covers a `working-tree` record through its existing
+  details (`owedDelivery` reads any frozen non-`keep` record; no code change); its next text now also says "or not yet
+  written into your working tree" (`src/commands/errorNext.ts`).
