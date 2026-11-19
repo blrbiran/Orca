@@ -305,3 +305,10 @@ Once the H-settle's transaction has committed and the run reads terminal, `settl
 (`orca-driver: <runId>: result copy kept: ...`) and never changes the settle's answer; `cleanupPredecessor` retries the
 removal when the run is continued. The continuation reads only the archive (`exportResumeBundle`), never the copy.
 Commit `e5d6460f`. Design: `2026-11-19-change-sized-runs-design.md` §5.6 (review I2, O12).
+
+## Correction (2026-11-19, change-sized runs P2)
+
+Appended by the change-sized runs P2 implementer (Orca session `3ba26002`, branch `feat/change-sized-p2`); the text above is
+unchanged. Pointer only: `2026-11-19-change-sized-runs-design.md` (its §5.4, §5.5.3, and its "Correction (2026-11-19, change-sized
+runs P2 as built against ccloop P1)") is what ships. C2 ("archives the snapshot the way stepE does"): that snapshot is v2; a continuation of a v2 predecessor needs a ccloop that reads it, else A2 blocks `resume-predecessor-snapshot-v2-unsupported`. Applies only to a run whose A2 found a ccloop advertising
+`features.attemptRef "v1"`; every other run behaves as this spec says.

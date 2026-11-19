@@ -110,3 +110,10 @@ This proof does not qualify as a prepared-worker interrupted successor under sec
 Task 7 raises the control-store version from 11 to 12. The immutable pre-Task7 schema11 owner strips unknown recovery mode/package fields when rebuilding an unprepared legacy run, and may otherwise submit it as ordinary protocol3 plan/execute. A prepared protocol4 peer refusal alone does not protect a starting/unprepared persisted run. Schema12 must therefore be refused by old11 owners before driver/worker dispatch; the current owner accepts a one-way11→12 upgrade.
 
 The11→12 migration changes only the version marker: preserve every historical body/hash, token-policy classification, allowance, command receipt and usage-ledger value; do not re-run pre-ledger booking or reclassify optional rows. Actual schema10→11 token-policy migration remains separately proven using the immutable pre-Task7 schema11 implementation, followed by current11→12 byte/accounting preservation and an actual old11 reopen refusal. This is a persistent owner compatibility boundary, not a protocol3 wire change, a force-stop for already-running old controllers, or authorization for production migration. A later real upgrade still requires backup and retirement of the old owner before opening with the new version.
+
+## Correction (2026-11-19, change-sized runs P2)
+
+Appended by the change-sized runs P2 implementer (Orca session `3ba26002`, branch `feat/change-sized-p2`); the text above is
+unchanged. Pointer only: `2026-11-19-change-sized-runs-design.md` (its §5.5.4, and its "Correction (2026-11-19, change-sized
+runs P2 as built against ccloop P1)") is what ships. §6.7/§6.9: a v2 archive's source is `legacy-published-candidate-v2`, verified by ccloop in the recovery run's repoPath (source-only eligibility: the source's targetRepo); a ccloop without the feature answers `saved-result-source-v2-unsupported`. C9 and the exhausted/omp bundles are unchanged. Applies only to a run whose A2 found a ccloop advertising
+`features.attemptRef "v1"`; every other run behaves as this spec says.

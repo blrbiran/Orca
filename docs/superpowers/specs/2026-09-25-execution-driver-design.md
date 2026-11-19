@@ -288,3 +288,10 @@ Who/when: the change-sized runs P0 implementer (Claude Opus 5.5, a subagent of t
   E (with `repos/`, before the `cleanedUp` write), in a failed run's cleanup, at the recoverable settles (allowance,
   ceiling, H-settle) and in `cleanupPredecessor`. A partial archive keeps it. Commits `019cc263`, `c55c1e44`, `e5d6460f`.
   Design: §5.6 of the same spec.
+
+## Correction (2026-11-19, change-sized runs P2)
+
+Appended by the change-sized runs P2 implementer (Orca session `3ba26002`, branch `feat/change-sized-p2`); the text above is
+unchanged. Pointer only: `2026-11-19-change-sized-runs-design.md` (its §5.3, §5.4, and its "Correction (2026-11-19, change-sized
+runs P2 as built against ccloop P1)") is what ships. §3.3: the attempt is ccloop's recorded commit (a keyed run) or `commitAttempt` of the result copy (a legacy-envelope v2 run), checked by ancestry and pinned create-only at `refs/orca/runs/<runId>` at step C. §5.2: the landing sets `refs/orca/incoming/<runId>` with `update-ref` in the target instead of fetching from `<sourceDir>/repo`. §2.2 row E: the archive is snapshot v2 (one range bundle `base..<pin>`). Applies only to a run whose A2 found a ccloop advertising
+`features.attemptRef "v1"`; every other run behaves as this spec says.

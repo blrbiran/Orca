@@ -1027,3 +1027,67 @@ nothing calls `removeResultCopies` again after a missed or failed removal:
   settle was missed or failed;
 - a ceiling run moved to `settled-recoverable` by `repairCommittedCeilingBlock` (`stopIntent.ts`), which settles it inside
   a command transaction and never reaches `dropResultCopyAfterSettle`.
+
+## Correction (2026-11-19, change-sized runs P2 as built against ccloop P1)
+
+Appended by the P2 implementer (Orca session `3ba26002`, branch `feat/change-sized-p2`, worktree `.wt-p2`, over
+`77c2baf4`), developed against ccloop P1 at its local `main` `633534c` (`ORCA_CCLOOP_BIN=<ccloop>/dist/cli.js`); the npm
+pin was not moved (still `57b6d15`). Human approval for the criteria: 「同意这样大改，并且同意改所有必要的判据」. The text
+above is unchanged; where it and this section differ, this section is what ships.
+
+**ccloop P1 as built (binding for P2; ccloop `docs/control-protocol-v1.md`, its two Corrections under "Continuation and
+result repository", and `git log -p 214125f..633534c`).**
+- collect's top-level `attempt` is `AttemptRecordV1`: `{attempt, sha, base, tree, ref, head, capture:
+  "published"|"live", worktree: "removed"|"retained"}` or `{attempt, sha: null, reason: "not-started" |
+  "skills-cleanup-pending" | "record-failed", detail?}`, present only with the key and a candidate. Orca's strict collect
+  schema mirrors it (`src/control/attemptRecord.ts`) and refuses it beside an envelope without the key.
+- `attempt.base` is `attempt^` (the HEAD the attempt was captured on), **not** the run's start base: when the agent
+  committed inside its worktree it is the agent's commit. §5.3's checks therefore test ancestry
+  (`merge-base --is-ancestor <drive.base> <sha>`), never equality; the v2 bundle range is `drive.base..<pin>`;
+  `snapshot.head` is `attempt.head`.
+- Such a run (agent committed in its worktree) can be continued but is **not** saved-result recoverable: ccloop answers
+  `saved-result-attempt-not-on-base`. New ccloop recovery reasons: `saved-result-attempt-not-on-base`,
+  `saved-result-snapshot-too-large`, `saved-result-snapshot-partial`. Continuation fetch failures are
+  `control-resume-head-mismatch`, `control-resume-snapshot-invalid`, `control-resume-base-unavailable`.
+- Under the key, settle-lost leaves the trees it could not remove in the target repository (retained, `record-failed`,
+  older unpinned trees, an older attempt's extra worktree). Orca does not assume they are gone and removes none of them
+  (its cleanup removes only its own workspace, landing and check paths).
+- collect's `dirs[].resultRepo` still says `"repos/<key>"` under the key although no `repos/` exists; `dirs[].attemptSha`
+  is read by ccloop from `run/attempts/<n>/commits.json`. Orca keeps the `repos/<key>` check and now passes `dirs[]` to C.
+- Eligibility answers may carry `authorityKind: "legacy-published-candidate-v2"`; source-only eligibility verifies in
+  `source.work.targetRepo`. Orca's eligibility and package schemas accept the kind.
+- §11.2's two ccloop criteria (`protocol4.test.ts:9`, `savedResultEvidence.test.ts:80`, the exact `features` answers
+  gaining `attemptRef: "v1"`) were approved by the person and are done in ccloop P1 (`1793ad4`).
+
+**§5.8 row 2 and §11.1 (P2), amended: v2 only under a ccloop that reads it.** As built, a run archives snapshot v2 iff
+its A2 found `features.attemptRef === "v1"` (and it is not a saved-result recovery or a recovery run); the drive records
+`snapshotVersion: 2`, and on protocol 4 its envelope carries the key (`attemptDelivery: "ref-v1"` on the drive). Under a
+ccloop without the feature — the pinned `57b6d15` — nothing changes at all: no key, v1 archive, no pin, the result copy
+handled as P0 left it. The spec's row 2 (an older ccloop still gets v2 archives, and its continuations and recoveries of
+them are refused) would have broken every allowance, ceiling and handoff continuation under the current pin until the
+repin; reversible, decided on the Rule 1 ladder. A protocol-3 (no token policy) run under a v2-reading ccloop is the
+legacy-envelope v2 case (Orca commits its result copy, `head` = the copy's HEAD before the commit, pins, archives v2).
+Consequently none of §11.1's P2 rewrites was needed: those criteria run against the synthetic ccloop without the feature
+and still encode the v1 behaviour that ships; the v2 forms are new criteria (`changeSizedDriver.test.ts`,
+`changeSizedReaders.test.ts`, `snapshotV2.test.ts`, `attemptPin.test.ts`, `attemptRecordPort.test.ts`).
+
+**Other as-built differences.**
+- Drive record (all optional, so older bodies parse): `snapshotVersion`, `attemptDelivery`, `runRef`, `attemptHead`,
+  `attemptSource`, and `dirs[].runRef` (schema only; see below).
+- Block reasons at C: the four check names; `attempt-unavailable:<reason>` (`no-record` when collect gave none,
+  `no-result-copy` for a legacy run without its copy); `run-ref-conflict:<held sha>`; `run-ref-failed:<git's words>`.
+  In an archive the same strings are missing evidence (a refused pin is `attempt-unpinned:<reason>`), so it is partial.
+- The pin's fetch writes no `FETCH_HEAD` (`--no-write-fetch-head`, falling back to a plain fetch); accept-attempt's re-pin
+  from the bundle fetches into `FETCH_HEAD` only.
+- Results review (§5.5.2): a v2 diff the target cannot answer is `diff: null`; the reason
+  (`attempt-objects-unavailable`) is not surfaced, because the view's schema is strict and shared with the web client.
+- `saved-result-source-v2-unsupported` is answered at eligibility (before any recovery run exists), not at A2.
+- **Not built in this wave:** §5.7 (multi-directory runs get no key and stay v1; `dirs[].runRef` exists in the schema
+  only), the A2 bench (`tests/bench/changeSizedSettle.ts`) and A1/A3. See the implementer's hand-off for the list.
+
+**Rule 17 (§9), as built.** No writer beyond §9's table: `refs/orca/runs/<runId>` (+ objects in clone mode) in each
+target (`attemptPin.ts`, from step C, `archiveRunV2`, accept-attempt's re-pin); `<workspacesRoot>/check-<runId>` and its
+`.git/worktrees/check-<runId>` (removed after the verdict and on restart); `<stateDir>/staging/<uuid>.bundle` and
+`<stateDir>/staging/verify-<uuid>/` (removed in `finally`); `refs/orca/incoming/<runId>` now set by `update-ref`. Every new
+command in a person's repository carries `-c gc.auto=0 -c maintenance.auto=false` except the check `worktree add`'s
+removal (the existing `removeOwnPath`).

@@ -1888,3 +1888,10 @@ Who/when: the Track P implementer (Claude Opus 5.5, a subagent of Orca control s
    directory (0700), made 0600 there and renamed to `control.sqlite.bak.<epoch ms>`; the staging directory is removed
    whether or not the copy succeeded. Backups are never pruned. Residue on failure: none from staging; a renamed copy
    taken before a failed transaction stays beside the database.
+
+## Correction (2026-11-19, change-sized runs P2)
+
+Appended by the change-sized runs P2 implementer (Orca session `3ba26002`, branch `feat/change-sized-p2`); the text above is
+unchanged. Pointer only: `2026-11-19-change-sized-runs-design.md` (its §5.5.3, and its "Correction (2026-11-19, change-sized
+runs P2 as built against ccloop P1)") is what ships. §11.1 (continuation resumes from the dirty snapshot): from snapshot v2, ccloop fetches the range bundle into repoPath and restores HEAD and the dirty tree with `reset --mixed`; the staged/unstaged split is not kept (O9). Applies only to a run whose A2 found a ccloop advertising
+`features.attemptRef "v1"`; every other run behaves as this spec says.

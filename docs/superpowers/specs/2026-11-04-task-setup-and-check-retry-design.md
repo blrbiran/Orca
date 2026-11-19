@@ -362,3 +362,10 @@ read the delivered files or run the repository's tests. A tester's verify task w
 `git diff --name-only HEAD | grep -x src/math.js` after the work had landed, and its agent added a meaningless comment
 to pass (#136). The validator is unchanged. Criteria: `tests/control/splitPromptRule136.test.ts`; the prompt pin in
 `tests/control/multiDirOverview.test.ts` moved.
+
+## Correction (2026-11-19, change-sized runs P2)
+
+Appended by the change-sized runs P2 implementer (Orca session `3ba26002`, branch `feat/change-sized-p2`); the text above is
+unchanged. Pointer only: `2026-11-19-change-sized-runs-design.md` (its §5.3, and its "Correction (2026-11-19, change-sized
+runs P2 as built against ccloop P1)") is what ships. §4.6, §4.9: a v2 run's debug and criteria-base checks run in a check worktree `<workspacesRoot>/check-<runId>` of the target at the attempt, removed after the verdict and made again on restart. Applies only to a run whose A2 found a ccloop advertising
+`features.attemptRef "v1"`; every other run behaves as this spec says.

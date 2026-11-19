@@ -232,3 +232,10 @@ group; a task's tokens are never a ceiling unless a person turns on the separate
 the one hard line, enforced through ccloop's live ceiling. The finite-group behaviour §7 describes -- and the criteria
 that pin it -- now describe groups created before that release. The text above is unchanged (Rule 13); the as-built
 record is §12 of the follow-up G design.
+
+## Correction (2026-11-19, change-sized runs P2)
+
+Appended by the change-sized runs P2 implementer (Orca session `3ba26002`, branch `feat/change-sized-p2`); the text above is
+unchanged. Pointer only: `2026-11-19-change-sized-runs-design.md` (its §5.5.1, and its "Correction (2026-11-19, change-sized
+runs P2 as built against ccloop P1)") is what ships. §4, §7, §8: a v2 attempt is not rebuilt; it is the pinned commit (re-pinned from the bundle when its ref was deleted), and harvest, criteria and the incoming ref read the target. Applies only to a run whose A2 found a ccloop advertising
+`features.attemptRef "v1"`; every other run behaves as this spec says.

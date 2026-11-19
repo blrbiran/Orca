@@ -86,3 +86,10 @@ without a CAS. The acceptance decision names the existing commit.
 3. A `settled-recoverable` run with a partial snapshot still refuses `accept-attempt-snapshot-partial`.
 4. An `accepted`/`running` run still refuses `accept-attempt-run-not-settled`.
 5. The existing accepted-failure path (closed failure → accept → land) stays green.
+
+## Correction (2026-11-19, change-sized runs P2)
+
+Appended by the change-sized runs P2 implementer (Orca session `3ba26002`, branch `feat/change-sized-p2`); the text above is
+unchanged. Pointer only: `2026-11-19-change-sized-runs-design.md` (its §5.5.1, §7.2, and its "Correction (2026-11-19, change-sized
+runs P2 as built against ccloop P1)") is what ships. "Eligibility" (line 54): a v2 snapshot is whole when `verifySnapshotInRepository` passes in the run's target (base present, bundle base..attempt, tree). Applies only to a run whose A2 found a ccloop advertising
+`features.attemptRef "v1"`; every other run behaves as this spec says.
