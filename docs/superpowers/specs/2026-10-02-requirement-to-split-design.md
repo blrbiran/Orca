@@ -497,3 +497,13 @@ requirement-already-accepted and names the plan-library route (#379)`.
    take that route (plan import refuses it: `dir-project-plan-import-unsupported`, `multi-dir-plan-import-unsupported`), so
    for a requirement on one the `next` lines are a new `orca requirement open … --project <key>` and `orca group archive
    <g>` (#379-381 review).
+
+## Correction (tester #379 re-split; Orca session 3ba26002, 2026-11-19; the text above is kept as written)
+
+Item 2 of the correction above ("No reopen of an accepted split") still holds: an accepted split is never reopened in
+place. Its last part -- the `next` lines a refused draft edit names (the plan-library route, or for a folder or
+multi-directory project a new requirement and archiving the group) -- is superseded: the refusal's `next` is now
+`orca requirement resplit <g> --feedback "<what was wrong with the split>"` for every project kind, a new verb
+`requirement-resplit` that copies the clarified requirement into a new clarifying group (its next draft a new split
+call carrying the feedback) and archives the old group, for an accepted, unconfirmed group only. The design is spec
+`2026-11-19-resplit-as-new-group-design.md` (human ruling 「同意」 to the controller's proposal, session 3ba26002).

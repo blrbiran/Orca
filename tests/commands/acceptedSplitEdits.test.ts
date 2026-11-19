@@ -1,6 +1,6 @@
 // Tester #379: a draft edit on a group whose split was accepted is refused (requirement-already-accepted, detail
 // draft-edits-closed:<n>). The CLI says that draft edits are closed and names the supported way to change the plan before
-// confirm -- the accepted draft through the plan library into a new group, then archive this one -- as `next` commands.
+// confirm as the `next` command: since spec 2026-11-19 resplit-as-new-group, `orca requirement resplit`.
 import { describe, expect, it } from "vitest";
 import { cli, useFakePanels } from "./fixtures/fakePanel.js";
 import { world } from "./fixtures/world.js";
@@ -11,14 +11,10 @@ const refused = (route: string, message: string, code = "requirement-already-acc
   ({ [`POST groups/g-alpha/requirement/${route}`]: { status: 422, body: { error: { code, message, commandRevision: 6, evidenceIds: [], retryable: false } } } });
 // Ruling (2026-11-19 #379-381 review): M1 -- the plan-library route names the edit between export and import (the step
 // that actually changes dependsOn / targetPaths). (Was: export, then import, with no edit line.)
-const NEXT = [
-  "orca plan save --requirement g-alpha --draft 3",
-  "orca plan export <entry> --out <file>",
-  "edit <file>: tasks[].dependsOn / targetPaths",
-  "orca plan import <file> --entry <entry> --as-person",
-  "orca group import --library <entry>",
-  "orca group archive g-alpha",
-];
+// Ruling (session 3ba26002, 2026-11-19, human 「这次批准改写所有必要的判据」; spec 2026-11-19 resplit-as-new-group §6): the
+// way forward is now one command that splits the clarified requirement again as a new group and archives this one. (Was:
+// the six plan-library commands, plan save .. group archive.) This criterion now encodes that the refusal names resplit.
+const NEXT = ["orca requirement resplit g-alpha --feedback \"<what was wrong with the split>\""];
 
 describe("a draft edit refused after accept says what changes the plan instead (#379)", () => {
   it.each([
@@ -32,7 +28,7 @@ describe("a draft edit refused after accept says what changes the plan instead (
     const out = await cli(argv, w.dir);
     expect(out.code).toBe(2);
     // mutation: drop the hint from the row -> red
-    expect(out.stderr).toContain("orca: the split was accepted (draft 3), so draft edits are closed; to change the plan before confirm");
+    expect(out.stderr).toContain("orca: the split was accepted (draft 3), so draft edits are closed; to split it again before the group is confirmed, re-split it as a new group with what was wrong");
     // mutation: drop the next from the row -> red
     for (const command of NEXT) expect(out.stderr).toContain(`orca: next: ${command}`);
     const json = await cli([...argv, "--json"], w.dir);
@@ -44,14 +40,19 @@ describe("a draft edit refused after accept says what changes the plan instead (
     const out = await cli(["requirement", "drop-path", "g-alpha", "--task", "t", "--path", "p"], w.dir);
     expect(out.code).toBe(2);
     expect(out.stderr).not.toContain("draft edits are closed");
-    expect(out.stderr).not.toContain("plan save");
+    expect(out.stderr).not.toContain("requirement resplit");
   });
 });
 
 // #379-381 review (I2): a folder project's or a multi-directory project's plan cannot go through the plan library (plan
 // import refuses it: planImport.ts, dir-project-plan-import-unsupported / multi-dir-plan-import-unsupported), so for
-// those the refusal names a new requirement and archiving this group, never the plan-library commands.
-describe("the refusal's way forward depends on the requirement's project kind (#379-381 review)", () => {
+// those the refusal named a new requirement and archiving this group, never the plan-library commands.
+// Ruling (session 3ba26002, 2026-11-19, human 「这次批准改写所有必要的判据」; spec 2026-11-19 resplit-as-new-group §4): resplit
+// copies a folder's or a multi-directory group's frozen fields, so every project kind gets the same next command and the
+// CLI no longer reads the requirement's project. (Was: a folder/multi requirement named `orca requirement open … --project
+// <key>` and `orca group archive`; a repository one the plan-library route.) This criterion now encodes that no project
+// kind gets another route.
+describe("every project kind's refusal names resplit (#379)", () => {
   const requirementOn = (repoId: string) => ({ "GET groups/g-alpha/requirement": { status: 200, body: {
     schema: "orca-requirement-view-v1", summary: { groupId: "g-alpha", commandRevision: 5, requirement: { roundNo: 2, draftNo: 3 } },
     requirement: { repoId }, rounds: [], drafts: [{ draftNo: 3, state: "accepted", draftHash: "d".repeat(64) }] } } });
@@ -60,21 +61,10 @@ describe("the refusal's way forward depends on the requirement's project kind (#
     { projectKey: "notes", name: "notes", path: "/folders/notes", controlRepoId: "dir-notes", kind: "dir" },
     { projectKey: "shop", name: "shop", path: "/repos/web", controlRepoId: "multi-shop", kind: "multi", dirs: [{ projectKey: "web" }, { projectKey: "api" }] },
   ] } } };
-  it.each([["dir-notes", "notes", "folder"], ["multi-shop", "shop", "multi-directory"]])("a %s requirement: open a new requirement, archive this group", async (repoId, key, word) => {
+  it.each([["dir-notes"], ["multi-shop"], ["repo-1"]])("a %s requirement", async (repoId) => {
     const w = await world({}, { ...refused("edit", "requirement-already-accepted:draft-edits-closed:3"), ...requirementOn(repoId), ...projects });
-    const out = await cli(["requirement", "drop-path", "g-alpha", "--task", "t", "--path", "p"], w.dir);
-    expect(out.code).toBe(2);
-    // mutation: always name the plan-library route -> plan save named for a folder project, red
-    expect(out.stderr).toContain(`a ${word} project's plan cannot go through the plan library`);
-    expect(out.stderr).not.toContain("plan save");
     const json = await cli(["requirement", "drop-path", "g-alpha", "--task", "t", "--path", "p", "--json"], w.dir);
-    expect((json.json().body as { next?: string[] }).next).toEqual([`orca requirement open --idea "<the requirement, changed>" --project ${key}`, "orca group archive g-alpha"]);
-  });
-
-  it("a repository requirement keeps the plan-library route", async () => {
-    const w = await world({}, { ...refused("edit", "requirement-already-accepted:draft-edits-closed:3"), ...requirementOn("repo-1"), ...projects });
-    const json = await cli(["requirement", "drop-path", "g-alpha", "--task", "t", "--path", "p", "--json"], w.dir);
-    // mutation: treat every project as a folder -> requirement open named, red
+    expect(json.code).toBe(2);
     expect((json.json().body as { next?: string[] }).next).toEqual(NEXT);
   });
 });

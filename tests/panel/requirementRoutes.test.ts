@@ -33,6 +33,11 @@ describe("requirement routes (N1 spec §11.1)", () => {
       expect([path, refused.status, refused.body]).toMatchObject([path, 422, { error: { code: "group-state-invalid" } }]);
       expect(panel.store.db.prepare("SELECT verb FROM commands WHERE group_id='n' AND id=?").get(`${path}-n`)).toEqual({ verb });
     }
+    // Ruling (session 3ba26002, 2026-11-19, #379): 「这次批准改写所有必要的判据」 -- the resplit route reaches its verb; a
+    // clarifying group's split is not accepted, so it is refused by that rule, booked under the group.
+    const resplit = await command(panel, "/api/control/groups/n/requirement/resplit", { commandId: "resplit-n", expectedRevision: at, payload: { newGroupId: "n2", feedback: "Run them together." } });
+    expect([resplit.status, resplit.body]).toMatchObject([422, { error: { code: "requirement-not-accepted" } }]);
+    expect(panel.store.db.prepare("SELECT verb FROM commands WHERE group_id='n' AND id='resplit-n'").get()).toEqual({ verb: "requirement-resplit" });
   });
 
   // N1 spec §9.1 (Task 10): the accept route reaches its verb; a group with no draft refuses it by the draft's absence.

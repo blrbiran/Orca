@@ -5,7 +5,7 @@ import { VERB_ACCESS } from "../../src/panel/humanOnly.js";
 import {
   confirmPayloadSchema, continueTaskPayloadSchema, usagePauseDecidePayloadSchema, emptyPayloadSchema, handoffStopPayloadSchema, importPlanPayloadSchema, proposalEditPayloadSchema,
   proposalSetAgentPayloadSchema, recoveryRetryPayloadSchema, retryTaskPayloadSchema, settleUnknownUsagePayloadSchema, reestimatePayloadSchema, requirementAnswerPayloadSchema, requirementConsensusPayloadSchema,
-  requirementDraftAcceptPayloadSchema, requirementDraftEditPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementClarifyMorePayloadSchema, requirementClassifyPayloadSchema, requirementOpenPayloadSchema, requirementRevisePayloadSchema, requirementSetAgentPayloadSchema, resumeFromHandoffPayloadSchema,
+  requirementDraftAcceptPayloadSchema, requirementDraftEditPayloadSchema, requirementDraftFeedbackPayloadSchema, requirementClarifyMorePayloadSchema, requirementClassifyPayloadSchema, requirementOpenPayloadSchema, requirementRevisePayloadSchema, requirementResplitPayloadSchema, requirementSetAgentPayloadSchema, resumeFromHandoffPayloadSchema,
   addLiveNotePayloadSchema, setAgentPreferencesPayloadSchema, setLimitPayloadSchema, setTaskLabelsPayloadSchema, setTaskLoopPayloadSchema, setWorkspaceModePayloadSchema,
   setSpendCapPayloadSchema, clearSpendCapPayloadSchema, setUsageCalendarPayloadSchema, setIntegrationSchemePayloadSchema, setGroupIntegrationPayloadSchema, setCriteriaReviewPayloadSchema,
   setCheckSettingsPayloadSchema, setScheduledCheckPayloadSchema, setCheckLocksPayloadSchema, checkKindPayloadSchema, setFlowSettingsPayloadSchema, setFlowLocksPayloadSchema, flowStartPayloadSchema, flowMessagePayloadSchema, flowPlanPayloadSchema, flowRerunPayloadSchema, flowAnswerPayloadSchema, flowEffectPayloadSchema, flowPoolPayloadSchema, flowPlanStepPayloadSchema,
@@ -44,7 +44,9 @@ const schemaByVerb: Record<string, ZodTypeAny> = {
   "requirement-draft-accept": requirementDraftAcceptPayloadSchema, "requirement-clarify-more": requirementClarifyMorePayloadSchema,
   // Ruling (2026-11-14, tester follow-up K): 「这次批准改写所有必要的判据。」 — the draft-edit route (#284, #265) joins the table.
   "requirement-draft-edit": requirementDraftEditPayloadSchema,
-  "requirement-classify": requirementClassifyPayloadSchema, "requirement-revise": requirementRevisePayloadSchema, "requirement-set-agent": requirementSetAgentPayloadSchema, "set-task-labels": setTaskLabelsPayloadSchema, "set-task-loop": setTaskLoopPayloadSchema,
+  "requirement-classify": requirementClassifyPayloadSchema, "requirement-revise": requirementRevisePayloadSchema, "requirement-set-agent": requirementSetAgentPayloadSchema,
+  // Ruling (session 3ba26002, 2026-11-19, #379): 「这次批准改写所有必要的判据」 -- the resplit route (spec 2026-11-19 resplit-as-new-group) joins the table.
+  "requirement-resplit": requirementResplitPayloadSchema, "set-task-labels": setTaskLabelsPayloadSchema, "set-task-loop": setTaskLoopPayloadSchema,
   "set-spend-cap": setSpendCapPayloadSchema, "clear-spend-cap": clearSpendCapPayloadSchema, "set-usage-calendar": setUsageCalendarPayloadSchema,
   "set-integration-scheme": setIntegrationSchemePayloadSchema, "set-group-integration": setGroupIntegrationPayloadSchema,
   "resolve-folder-change": resolveFolderChangePayloadSchema, "multi-dir-landing": multiDirLandingPayloadSchema,
@@ -144,7 +146,8 @@ describe("the orca-control skill (spec §7, C18)", () => {
     // Ruling: 这次批准改写所有必要的判据 (b37f7ce9): flow engine spec §10.3 adds requirement/revise (was 7).
     // Ruling: Issue #236 (tester follow-up B, T5): requirement/set-agent is a requirement route too (was 8). Human, 2026-11-10: "Allow all three (Recommended)".
     // Ruling (2026-11-14, tester follow-up K): 「这次批准改写所有必要的判据。」 — requirement/edit (the draft hints a person applies) is a requirement route too (was 9).
-    expect(at.length).toBe(10);
+    // Ruling (session 3ba26002, 2026-11-19, #379): 「这次批准改写所有必要的判据」 -- requirement/resplit is a requirement route too (was 10).
+    expect(at.length).toBe(11);
     expect(at.at(-1)! - at[0]!).toBe(at.length - 1);
   });
 

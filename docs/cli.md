@@ -95,6 +95,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca requirement continue <group>` — grant exactly one more clarification round after the cap
 - `orca requirement revise <group> --round <round> --file <file>` — revise an answered clarification round (a new round; at most one clarify call)
 - `orca requirement feedback <group> --text <text>` — ask for a new draft of the split
+- `orca requirement resplit <group> --feedback <feedback> [--group <group>]` — split an accepted requirement again as a new group (before confirm): the clarification is copied, the new split gets the feedback, this group is archived
 - `orca requirement accept <group> [--despite-conflicts]` — accept the current draft: the group becomes a draft task group; a draft reporting requirement conflicts is refused unless --despite-conflicts
 - `orca requirement apply-parallel <group>` — drop the dependsOn edges the current draft lists as parallel candidates; the result is the next draft
 - `orca requirement add-implied-path <group> --task <task> --path <path>` — add a path the current draft lists as implied to that task's target paths; the result is the next draft

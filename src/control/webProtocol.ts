@@ -684,6 +684,8 @@ export const commandVerbSchema = z.enum([
   "requirement-classify",
   "requirement-revise",
   "requirement-set-agent",
+  // Tester #379: split an accepted, unconfirmed requirement again as a new group; the old group is archived.
+  "requirement-resplit",
   "set-spend-cap",
   "clear-spend-cap",
   "set-usage-calendar",
@@ -1193,6 +1195,10 @@ export const requirementRevisePayloadSchema = z.object({
 }).strict();
 // Issue #236: re-select a clarifying requirement's agent (requirement-open's `agent`, required here).
 export const requirementSetAgentPayloadSchema = z.object({ agent: panelPartialSelectionSchema }).strict();
+/** Tester #379 (spec 2026-11-19 resplit-as-new-group §2): the new group's id and what was wrong with the accepted split. */
+export const requirementResplitPayloadSchema = z.object({
+  newGroupId: idSchema, feedback: nonemptyString.refine((text) => Buffer.byteLength(text, "utf8") <= IDEA_MAX_BYTES, "feedback-too-large"),
+}).strict();
 
 // Flow engine spec §14.2: the flow verbs' payloads. A run, a step and a record are named by id; values are the kernel's
 // to check (a template's params, an ask's form), so they arrive as plain JSON scalars.
@@ -1447,6 +1453,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("requirement-classify"), target: groupCommandTargetSchema, payload: requirementClassifyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-revise"), target: groupCommandTargetSchema, payload: requirementRevisePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("requirement-set-agent"), target: groupCommandTargetSchema, payload: requirementSetAgentPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("requirement-resplit"), target: groupCommandTargetSchema, payload: requirementResplitPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-spend-cap"), target: spendCommandTargetSchema, payload: setSpendCapPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("clear-spend-cap"), target: spendCommandTargetSchema, payload: clearSpendCapPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("set-usage-calendar"), target: spendCommandTargetSchema, payload: setUsageCalendarPayloadSchema }).strict(),
@@ -1566,6 +1573,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-classify"), target: groupCommandTargetSchema, payload: requirementClassifyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-revise"), target: groupCommandTargetSchema, payload: requirementRevisePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("requirement-set-agent"), target: groupCommandTargetSchema, payload: requirementSetAgentPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("requirement-resplit"), target: groupCommandTargetSchema, payload: requirementResplitPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-spend-cap"), target: spendCommandTargetSchema, payload: setSpendCapPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("clear-spend-cap"), target: spendCommandTargetSchema, payload: clearSpendCapPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("set-usage-calendar"), target: spendCommandTargetSchema, payload: setUsageCalendarPayloadSchema }).strict(),
@@ -1932,6 +1940,9 @@ export const requirementViewSchema = z.object({
     consensus: z.object({ roundNo: positiveSafeInteger, at: canonicalTimestampSchema, openBranches: z.array(nonemptyString), openQuestions: z.array(nonemptyString) }).strict().nullable(),
     acceptedDraftNo: positiveSafeInteger.nullable(), document: z.object({ sha256: hashSchema, frozenAt: canonicalTimestampSchema }).strict().nullable(),
     export: requirementExportSchema,
+    // Tester #379: present only on a requirement re-split as a new group (requirementRecords.ts), each naming the other.
+    resplitOf: z.object({ groupId: idSchema, draftNo: positiveSafeInteger }).strict().optional(),
+    resplitAs: z.object({ groupId: idSchema, at: canonicalTimestampSchema }).strict().optional(),
   }).strict(),
   ledger: z.object({ limit: budgetAmountSchema, used: amountSchema, reserved: amountSchema, usageUnknown: z.boolean(), approximateRuns: safeInteger.nonnegative().optional() }).strict(),
   rounds: z.array(roundBodySchema),
@@ -2825,6 +2836,8 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("requirement-clarify-more"), roundNo: positiveSafeInteger, nextRoundNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),
   z.object({ kind: z.literal("requirement-classified"), scope: z.enum(SCOPES), clarity: z.enum(CLARITIES) }).strict(),
   z.object({ kind: z.literal("requirement-revised"), roundNo: positiveSafeInteger, revises: positiveSafeInteger, consensusWithdrawn: z.boolean(), nextRoundNo: positiveSafeInteger.nullable(), wakeId: nonemptyString.nullable() }).strict(),
+  // Tester #379: the old group archived, the new group's next draft (a split call) queued.
+  z.object({ kind: z.literal("requirement-resplit"), groupId: idSchema, newGroupId: idSchema, draftNo: positiveSafeInteger, wakeId: nonemptyString }).strict(),
   // Issue #236: the slot frozen in its place, and the blocked round or draft drafted again (null: nothing was blocked).
   z.object({ kind: z.literal("requirement-agent-set"), selection: agentSelectionSchema, configHash: hashSchema,
     restarted: z.union([z.object({ roundNo: positiveSafeInteger, wakeId: nonemptyString }).strict(), z.object({ draftNo: positiveSafeInteger, wakeId: nonemptyString }).strict()]).nullable() }).strict(),

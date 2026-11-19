@@ -1923,7 +1923,8 @@ function cardExpectation(store: ControlStore, groupId: string, planHash: string,
 }
 
 /** Clarify caps spec 2026-10-21 §3.6: the commands that start a drafting step (a round or a draft); retries are the same wait. */
-const DRAFTING_VERBS = ["requirement-open", "requirement-answer", "requirement-clarify-more", "requirement-consensus", "requirement-draft-feedback", "recovery-retry", "requirement-revise", "requirement-set-agent"];
+// Tester #379: requirement-resplit books its row on the new group too (requirementResplit.ts).
+const DRAFTING_VERBS = ["requirement-open", "requirement-answer", "requirement-clarify-more", "requirement-consensus", "requirement-draft-feedback", "recovery-retry", "requirement-revise", "requirement-set-agent", "requirement-resplit"];
 function draftingSince(store: ControlStore, groupId: string): number | null {
   const row = store.db.prepare(`SELECT at FROM activity WHERE group_id=? AND kind='command' AND json_extract(body,'$.verb') IN (${DRAFTING_VERBS.map(() => "?").join(",")}) ORDER BY seq DESC LIMIT 1`)
     .get(groupId, ...DRAFTING_VERBS);
@@ -1946,7 +1947,9 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
     schema: "orca-requirement-view-v1" as const, epoch, changeSeq: readProjectionState(store).changeSeq, summary: readGroupSummary(store, groupId),
     requirement: { requirementId: requirement.requirementId, repoId: requirement.repoId, slug: requirement.slug, contentLanguage: requirement.contentLanguage,
       createdOn: requirement.createdOn, idea: requirement.idea, consensus: requirement.consensus, acceptedDraftNo: requirement.acceptedDraftNo,
-      document: requirement.document === null ? null : { sha256: requirement.document.sha256, frozenAt: requirement.document.frozenAt }, export: requirement.export },
+      document: requirement.document === null ? null : { sha256: requirement.document.sha256, frozenAt: requirement.document.frozenAt }, export: requirement.export,
+      // Tester #379: the link both ways between a requirement and the group it was re-split as.
+      ...(requirement.resplitOf === undefined ? {} : { resplitOf: requirement.resplitOf }), ...(requirement.resplitAs === undefined ? {} : { resplitAs: requirement.resplitAs }) },
     // Spec 2026-11-03 soft-mode approximate usage: how many of the group's runs count a booked floor, not a reported figure.
     ledger: { limit: group.limit, used: group.used, reserved: group.reserved, usageUnknown: group.ledger.usageUnknown,
       approximateRuns: Number(store.db.prepare("SELECT count(*) AS n FROM runs WHERE group_id=? AND json_extract(body,'$.usageApproximate') IS NOT NULL").get(groupId)!.n) },

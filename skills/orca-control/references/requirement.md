@@ -77,6 +77,20 @@ ask for a new draft of the split
 - `<group>`: a group id or a unique prefix
 - `--text <text>` (required): what to change
 
+## `orca requirement resplit <group> --feedback <feedback> [--group <group>]`
+
+split an accepted requirement again as a new group (before confirm): the clarification is copied, the new split gets the feedback, this group is archived
+
+- What it does: sends control verb `requirement-resplit`.
+- Who may: open over the socket (a flag marked human-only still needs a person token).
+- `<group>`: a group id or a unique prefix
+- `--feedback <feedback>` (required): what was wrong with the accepted split
+- `--group <group>`: the new group's id (default: generated)
+
+```
+orca requirement resplit g-1 --feedback "the two modules do not import each other; run them in parallel"
+```
+
 ## `orca requirement accept <group> [--despite-conflicts]`
 
 accept the current draft: the group becomes a draft task group; a draft reporting requirement conflicts is refused unless --despite-conflicts

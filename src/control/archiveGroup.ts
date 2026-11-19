@@ -48,8 +48,9 @@ function groupBody(store: ControlStore, groupId: string): Record<string, unknown
  * nor does a handoff stop that has settled -- complete, or partial (a frozen run was settled unrecoverable: terminal,
  * nothing in motion, and no exit leads from it to handoff-complete).
  * The stop state is derived the way groupStopState derives it (the stored body's state can lag the requests it summarises).
+ * Tester #379: requirement-resplit (requirementResplit.ts) archives the old group with these same refusals.
  */
-function refuseArchive(store: ControlStore, groupId: string, group: Record<string, unknown>): RequirementTarget | null {
+export function refuseArchive(store: ControlStore, groupId: string, group: Record<string, unknown>): RequirementTarget | null {
   // #370 review 2: a flow child is its flow's to drive, archive included (as retry, continue, abandon and reopen refuse it).
   refuseFlowChild(store, groupId);
   for (const row of store.db.prepare("SELECT state FROM estimates WHERE group_id=?").all(groupId)) {

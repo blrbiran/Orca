@@ -128,53 +128,23 @@ async function latestDraft(c: WriteContext): Promise<RequirementView["drafts"][n
 }
 /**
  * Tester #379: a draft edit on a group whose split was accepted is refused (`requirement-already-accepted:
- * draft-edits-closed:<n>`); no state takes one again. The supported way to change the plan before confirm is the accepted
- * draft through the plan library into a new group, then archiving this one -- named as the refusal's next commands.
- * #379-381 review (I2): a folder or multi-directory project's plan cannot take that route (planImport.ts refuses its
- * import: dir-project-plan-import-unsupported, multi-dir-plan-import-unsupported), so for one the next commands are a new
- * requirement and archiving this group. The project is the one the requirement names; unknown, the plan-library route.
+ * draft-edits-closed:<n>`); no state takes one again. The way to change the split before confirm is to re-split the
+ * clarified requirement as a new group (spec 2026-11-19 resplit-as-new-group §6), for every project kind -- named as the
+ * refusal's next command. (It was the plan library route, or for a folder or multi-directory project a new requirement.)
  */
 const acceptedDraftOf = (error: { code: string; message: string }): string | null =>
   error.code === "requirement-already-accepted" ? /(^|:)draft-edits-closed:(\d+)$/.exec(error.message)?.[2] ?? null : null;
-type GroupProject = { kind: "repo" | "dir" | "multi"; projectKey: string | null };
-const projectsOfGroups = new WeakMap<WriteContext, Promise<GroupProject>>();
-function projectOfGroup(c: WriteContext): Promise<GroupProject> {
-  let found = projectsOfGroups.get(c);
-  if (found === undefined) {
-    found = (async (): Promise<GroupProject> => {
-      try {
-        const repoId = (await requirement(c) as { requirement?: { repoId?: unknown } }).requirement?.repoId;
-        const rows = (await c.read("projects") as { projects: Array<{ projectKey: string; controlRepoId: string | null; kind?: "dir" | "multi" }> }).projects;
-        const row = rows.find((candidate) => candidate.controlRepoId !== null && candidate.controlRepoId === repoId);
-        return { kind: row?.kind ?? "repo", projectKey: row?.projectKey ?? null };
-      } catch { return { kind: "repo", projectKey: null }; }
-    })();
-    projectsOfGroups.set(c, found);
-  }
-  return found;
-}
 /** #379-381 review (I1 b): an edit the re-validation undoes is refused as changing nothing (requirementDraftEdit.ts). */
 const noChangeHint = "nothing changed: once re-validated, the edited split is the draft you reviewed (a file the task's goal names as new is added back to that task); orca requirement feedback asks for a different split";
 const acceptedSplit = {
-  hint: async (error: { code: string; message: string }, c?: WriteContext): Promise<string | undefined> => {
+  hint: async (error: { code: string; message: string }): Promise<string | undefined> => {
     if (error.code === "no-op-command" && error.message === "no-op-command:draft-edit-no-change") return noChangeHint;
     const draftNo = acceptedDraftOf(error);
     if (draftNo === null) return undefined;
-    const closed = `the split was accepted (draft ${draftNo}), so draft edits are closed`;
-    const project = c === undefined ? { kind: "repo" as const } : await projectOfGroup(c);
-    if (project.kind !== "repo") {
-      return `${closed}; a ${project.kind === "dir" ? "folder" : "multi-directory"} project's plan cannot go through the plan library (plan import refuses it), so to change the plan before confirm, open a new requirement with the change and archive this group (the next lines)`;
-    }
-    return `${closed}; to change the plan before confirm, save the accepted draft to the plan library, edit its tasks there, import it as a new group and archive this one (the next lines). orca task set-loop changes one task's target paths and checks, not what it depends on`;
+    return `the split was accepted (draft ${draftNo}), so draft edits are closed; to split it again before the group is confirmed, re-split it as a new group with what was wrong (the next line): the clarification is copied and this group is archived`;
   },
-  next: async (error: { code: string; message: string }, c: WriteContext): Promise<string[] | undefined> => {
-    const draftNo = acceptedDraftOf(error);
-    if (draftNo === null) return undefined;
-    const project = await projectOfGroup(c);
-    if (project.kind !== "repo") return [`orca requirement open --idea "<the requirement, changed>" --project ${project.projectKey ?? "<project>"}`, `orca group archive ${group(c)}`];
-    return [`orca plan save --requirement ${group(c)} --draft ${draftNo}`, "orca plan export <entry> --out <file>",
-      "edit <file>: tasks[].dependsOn / targetPaths", "orca plan import <file> --entry <entry> --as-person", "orca group import --library <entry>", `orca group archive ${group(c)}`];
-  },
+  next: async (error: { code: string; message: string }, c: WriteContext): Promise<string[] | undefined> =>
+    acceptedDraftOf(error) === null ? undefined : [`orca requirement resplit ${group(c)} --feedback "<what was wrong with the split>"`],
 };
 /**
  * #379-381 review (M3): apply-parallel drops only declared edges; a pair ordered because both tasks list the same file
@@ -185,7 +155,7 @@ const applyParallelRefusals = {
   hint: async (error: { code: string; message: string }, c?: WriteContext): Promise<string | undefined> =>
     error.message === "group-state-invalid:draft-edit-no-parallel-candidates"
       ? `no declared dependsOn edge is a parallel candidate; two tasks that run one after the other because both list the same file as a target path (requirement show names them) run together after orca requirement drop-path ${c === undefined ? "<group>" : group(c)} --task <task> --path <file> on the one that only reads it`
-      : await acceptedSplit.hint(error, c),
+      : await acceptedSplit.hint(error),
 };
 const decision = (value: string, flag: string): { id: string; accept: boolean } => {
   const at = value.lastIndexOf("=");
@@ -207,6 +177,14 @@ const unarchiveFormat = (row: CommandDef): CommandDef => ({ ...row, format: (bod
   // Tester #355: an unclose pauses the same way.
   return (result?.kind === "unarchived" || result?.kind === "unclosed") && result.paused === true
     ? `${result.kind} ${String(result.groupId)}; paused so it does not run on its own -- let it run with: orca group resume ${String(result.groupId)}` : row.format(body);
+} });
+
+/** Tester #379: a re-split names the new group and that this one is archived. */
+const resplitFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) => {
+  const result = (body as { result?: { kind?: unknown; groupId?: unknown; newGroupId?: unknown; draftNo?: unknown } } | null)?.result;
+  if (result?.kind !== "requirement-resplit") return row.format(body);
+  const [old, fresh] = [String(result.groupId), String(result.newGroupId)];
+  return `re-split ${old} as ${fresh} (draft ${String(result.draftNo)} is being drafted); ${old} is archived. orca requirement show ${fresh} follows it`;
 } });
 
 const queuedFormat = (row: CommandDef): CommandDef => ({ ...row, format: (body) => {
@@ -484,6 +462,19 @@ export const WORK_ROWS: CommandDef[] = [
   verb({ domain: "requirement", action: "feedback", summary: "ask for a new draft of the split", verb: "requirement-draft-feedback", positionals: [GROUP],
     flags: [{ name: "text", type: "string", required: true, summary: "what to change" }],
     route: (c) => `groups/${group(c)}/requirement/feedback`, payload: async (c) => ({ draftNo: (await latestDraft(c)).draftNo, feedback: str(c, "text") }), ...acceptedSplit }),
+  // Tester #379 (spec 2026-11-19 resplit-as-new-group): an accepted, unconfirmed split found wrong is split again as a new
+  // group -- the clarification copied, the accepted draft sent back with the feedback, this group archived.
+  resplitFormat(verb({ domain: "requirement", action: "resplit", summary: "split an accepted requirement again as a new group (before confirm): the clarification is copied, the new split gets the feedback, this group is archived", verb: "requirement-resplit", positionals: [GROUP],
+    flags: [{ name: "feedback", type: "string", required: true, summary: "what was wrong with the accepted split" }, { name: "group", type: "string", summary: "the new group's id (default: generated)" }],
+    route: (c) => `groups/${group(c)}/requirement/resplit`, payload: (c) => ({ newGroupId: newGroupIdOnce(c), feedback: str(c, "feedback") }),
+    hint: async (error, c) => {
+      const status = error.code === "proposal-confirmed" ? /^proposal-confirmed:resplit:(.+)$/.exec(error.message)?.[1] : undefined;
+      if (status !== undefined) return `${c === undefined ? "the group" : group(c)} is confirmed (${status}), so it is not re-split: it may start at any time. To start over, archive it and open a new requirement (the next lines)`;
+      return error.code === "requirement-not-accepted" ? "the split is not accepted yet: a draft under review takes orca requirement feedback <group> --text \"...\"" : undefined;
+    },
+    next: async (error, c) => error.code === "proposal-confirmed" && error.message.startsWith("proposal-confirmed:resplit:")
+      ? [`orca group archive ${group(c)}`, "orca requirement open --idea \"<the requirement, changed>\""] : undefined,
+    examples: ["orca requirement resplit g-1 --feedback \"the two modules do not import each other; run them in parallel\""] })),
   // #351 addendum (spec D2): a draft whose split reports it does not meet the requirement as written is accepted only on
   // purpose (the Web's "Accept anyway"); the refusal is the CLI's own, the payload is the same either way.
   verb({ domain: "requirement", action: "accept", summary: "accept the current draft: the group becomes a draft task group; a draft reporting requirement conflicts is refused unless --despite-conflicts", verb: "requirement-draft-accept", positionals: [GROUP],

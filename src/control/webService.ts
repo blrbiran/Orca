@@ -70,6 +70,7 @@ import { applyIntegrateNow, type IntegrateNowCommand } from "./integrationComman
 import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, historyReconciledTarget, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyResolveFolderChange, type ResolveFolderChangeCommand } from "./folderChangeCommands.js";
 import { applyMultiDirLanding, type MultiDirLandingCommand } from "./multiLanding.js";
+import { applyRequirementResplit, type RequirementResplitCommand } from "./requirementResplit.js";
 import { applyArchiveGroup, applyCloseGroup, applyUnarchiveGroup, applyUncloseGroup, type ArchiveGroupCommand, type CloseGroupCommand, type UnarchiveGroupCommand, type UncloseGroupCommand } from "./archiveGroup.js";
 import { applyCloseRun, type CloseRunCommand } from "./terminalRunClosure.js";
 import { refuseUnnamedDebugChecks } from "./debugChecks.js";
@@ -1933,6 +1934,8 @@ export class WebControlService {
   requirementDraftFeedback(command: RequirementDraftFeedbackCommand): WebCommandResult { return applyRequirementDraftFeedback(this.deps, command); }
   /** Clarify caps spec 2026-10-21 §3.1, §3.3. */
   requirementClarifyMore(command: RequirementClarifyMoreCommand): WebCommandResult { return applyRequirementClarifyMore(this.deps, command); }
+  /** Tester #379: split an accepted, unconfirmed requirement again as a new group, archiving this one. */
+  requirementResplit(command: RequirementResplitCommand): WebCommandResult { return applyRequirementResplit(this.deps, command); }
   requirementRevise(command: RequirementReviseCommand): WebCommandResult { return applyRequirementRevise(this.deps, command); }
   requirementClassify(command: RequirementClassifyCommand): WebCommandResult { return applyRequirementClassify(this.deps, command); }
   /** Issue #236: re-select a clarifying requirement's agent and restart a call blocked on it. */

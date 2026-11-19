@@ -286,6 +286,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `requirement-already-accepted` | 422 |
 | `requirement-export-pending` | 422 |
 | `requirement-limit-too-low` | 422 |
+| `requirement-not-accepted` | 422 |
 | `requirement-not-split` | 422 |
 | `requirement-review-not-open` | 409 |
 | `resume-artifact-conflict` | 409 |

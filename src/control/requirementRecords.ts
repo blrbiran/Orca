@@ -39,6 +39,13 @@ export const requirementBlockSchema = z.object({
   // Review M1 (session 3ba26002): `lastDraftNo`, the latest draft number at the withdrawal (0: none) -- drafts up to it were
   // for the old requirement, so a later re-draft carries none of their feedback. Absent on records written before it.
   consensusWithdrawn: z.object({ at: canonicalTimestampSchema, by: z.string().min(1), revisedRound: safeInteger.positive(), lastDraftNo: safeInteger.optional() }).strict().optional(),
+  /**
+   * Tester #379 (spec 2026-11-19 resplit-as-new-group §5): a requirement re-split as a new group -- on the new group, the
+   * group and accepted draft it was copied from; on the old (archived) group, the group it was re-split as, and when.
+   * Absent on every other requirement.
+   */
+  resplitOf: z.object({ groupId: idSchema, draftNo: safeInteger.positive() }).strict().optional(),
+  resplitAs: z.object({ groupId: idSchema, at: canonicalTimestampSchema }).strict().optional(),
 }).strict();
 export type RequirementBlock = z.infer<typeof requirementBlockSchema>;
 

@@ -1021,6 +1021,8 @@ export function controlCommandRoutes(actorId: string): Array<{ path: string; ver
     { path: "/api/control/groups/:groupId/requirement/edit", verb: "requirement-draft-edit", target: fromParams },
     // Clarify caps spec 2026-10-21 §3.1, §3.3.
     { path: "/api/control/groups/:groupId/requirement/clarify-more", verb: "requirement-clarify-more", target: fromParams },
+    // Tester #379: split the accepted requirement again as a new group; the old one is archived.
+    { path: "/api/control/groups/:groupId/requirement/resplit", verb: "requirement-resplit", target: fromParams },
     { path: "/api/control/groups/:groupId/requirement/revise", verb: "requirement-revise", target: fromParams },
     { path: "/api/control/groups/:groupId/requirement/classify", verb: "requirement-classify", target: fromParams },
     { path: "/api/control/groups/:groupId/requirement/set-agent", verb: "requirement-set-agent", target: fromParams },
@@ -1167,6 +1169,7 @@ export function registerControlMutationRoutes(app: Express, store: ControlStore,
           case "requirement-draft-accept": await service.acceptRequirementDraft(command); break;
           case "requirement-draft-edit": await service.editRequirementDraft(command); break;
           case "requirement-clarify-more": service.requirementClarifyMore(command); break;
+          case "requirement-resplit": service.requirementResplit(command); break;
           case "requirement-revise": service.requirementRevise(command); break;
           case "requirement-classify": service.requirementClassify(command); break;
           case "requirement-set-agent": await service.requirementSetAgent(command); break;

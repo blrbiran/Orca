@@ -11,6 +11,8 @@ const NEXT: Readonly<Record<string, string>> = {
   // #368a: a proposal change after the start, or a funded-allowance policy after a task ran (fundedAllowance.ts).
   "grant-amendment-unsupported": "the group has started, so its proposal no longer changes",
   "requirement-not-split": "the requirement is not split into tasks yet; orca requirement show <group> shows the open round",
+  // Tester #379: requirement resplit takes an accepted split only; a draft under review takes requirement feedback.
+  "requirement-not-accepted": "the requirement's split is not accepted yet; orca requirement show <group> shows the draft, and orca requirement feedback asks for another",
   "group-state-invalid": "the group is not in a state this command accepts; orca group brief <group> shows its state",
   "no-op-command": "nothing to change: it is already as this command would set it",
   // #355 review (minor 5): an archived group also takes close (a done one converts to closed).
