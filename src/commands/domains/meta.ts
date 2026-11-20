@@ -4,10 +4,26 @@ import type { CommandDef } from "../types.js";
 export const META_ROWS: CommandDef[] = [
   {
     domain: "status", action: null, summary: "one screen: is the panel answering, what work waits on a person, and the facts around it (read-only, starts nothing)",
-    positionals: [], flags: [], access: "panel-local",
+    positionals: [], flags: [
+      { name: "disk", type: "boolean", summary: "also report disk use: the run/workspace roots, artifacts and staging, and the five largest run directories" },
+    ], access: "panel-local",
     mapsTo: { kind: "local", load: async () => (await import("../status.js")).runStatus },
     exitCodes: { 0: "every check ok (warnings allowed)", 1: "a check failed" },
-    examples: ["orca status", "orca status --json"], format: () => "",
+    examples: ["orca status", "orca status --json", "orca status --disk"], format: () => "",
+  },
+  // Issue #366: the retention/GC half. Dry run by default; only the two per-run roots are ever touched.
+  {
+    domain: "gc", action: null,
+    summary: "reclaim disk from settled runs in archived groups: <stateDir>.runs/<runId> and <stateDir>.workspaces/<runId> only; dry run by default",
+    positionals: [], flags: [
+      { name: "apply", type: "boolean", summary: "actually delete (default: print what would be removed and how much it would free)" },
+      { name: "older-than", type: "integer", summary: "keep runs touched within this many days (default 30)" },
+      { name: "keep-last", type: "integer", summary: "keep the newest N runs regardless of age" },
+      { name: "group", type: "string", summary: "limit to one group's runs" },
+    ], access: "panel-local",
+    mapsTo: { kind: "local", load: async () => (await import("../local/gc.js")).runGc },
+    exitCodes: { 0: "the plan ran (dry run, or applied)", 1: "refused here: no control store, or it cannot be read" },
+    examples: ["orca gc", "orca gc --older-than 7 --keep-last 3", "orca gc --apply --group my-group", "orca gc --json"], format: () => "",
   },
   {
     domain: "doctor", action: null, summary: "status's checks plus slower ones (agent CLIs on the service PATH, ~/.orca modes, stale sockets), with one fix line per failure (read-only)",

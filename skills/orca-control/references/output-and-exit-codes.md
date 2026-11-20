@@ -20,6 +20,7 @@ When `request` is present the outcome is uncertain (timeout, dropped connection,
 ## Commands with their own exit codes
 
 - `orca status`: 0 every check ok (warnings allowed); 1 a check failed
+- `orca gc`: 0 the plan ran (dry run, or applied); 1 refused here: no control store, or it cannot be read
 - `orca doctor`: 0 every check ok (warnings allowed); 1 a check failed
 - `orca auth login`: 2 the panel refused, the request was denied or expired, or its URL was not a loopback URL; 130 interrupted; the request was cancelled
 - `orca decision validate`: 0 every line valid; 1 a line rejected, or nothing found to validate; 2 downgraded (nothing rejected)

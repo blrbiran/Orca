@@ -270,6 +270,45 @@ export async function projectsCheck(ctx: CheckContext): Promise<StatusCheck> {
   return { level: "ok", subject: "projects", fact: `${count} project${count === 1 ? "" : "s"} in effect` };
 }
 
+/**
+ * Issue #366: the disk section is opt-in (`orca status --disk`), so the default screen is byte-for-byte what it was. It
+ * reads sizes only (no panel answer, no write), never follows a symbolic link, and bounds its recursive walk
+ * (diskUsage.ts). `--apply` removals are `orca gc`'s; status only reports.
+ */
+export async function diskCheck(ctx: CheckContext): Promise<StatusCheck> {
+  const { discoverSocketPath } = await import("../entry/discovery.js");
+  const { directorySize, formatBytes } = await import("../control/diskUsage.js");
+  let stateDir: string;
+  try { stateDir = dirname(discoverSocketPath({ stateDirFlag: ctx.stateDirFlag, env: envOf(ctx) })); }
+  catch (error) { return { level: "warn", subject: "disk", fact: `unknown: no control state directory (${message(error)})` }; }
+  const roots: Array<[string, string]> = [
+    ["runs", `${stateDir}.runs`], ["workspaces", `${stateDir}.workspaces`],
+    ["artifacts", join(stateDir, "artifacts")], ["staging", join(stateDir, "staging")],
+  ];
+  const parts: string[] = [];
+  for (const [label, path] of roots) {
+    const { bytes, truncated } = await directorySize(path);
+    parts.push(`${label} ${formatBytes(bytes)}${truncated ? " (partial: entry limit)" : ""}`);
+  }
+  return { level: "ok", subject: "disk", fact: `${parts.join(", ")} (${stateDir})` };
+}
+
+/** The five largest run directories under `<stateDir>.runs`, named after their run ids. */
+export async function diskTopCheck(ctx: CheckContext): Promise<StatusCheck> {
+  const { discoverSocketPath } = await import("../entry/discovery.js");
+  const { directorySize, formatBytes, runDirectories } = await import("../control/diskUsage.js");
+  let stateDir: string;
+  try { stateDir = dirname(discoverSocketPath({ stateDirFlag: ctx.stateDirFlag, env: envOf(ctx) })); }
+  catch (error) { return { level: "warn", subject: "disk-top", fact: `unknown: no control state directory (${message(error)})` }; }
+  const runsRoot = `${stateDir}.runs`;
+  const sized: Array<{ name: string; bytes: number }> = [];
+  for (const dir of await runDirectories(runsRoot)) sized.push({ name: dir.name, bytes: (await directorySize(dir.path)).bytes });
+  sized.sort((left, right) => right.bytes - left.bytes || left.name.localeCompare(right.name));
+  if (sized.length === 0) return { level: "ok", subject: "disk-top", fact: `${runsRoot}: no run directories` };
+  const top = sized.slice(0, 5).map((entry) => `${entry.name} ${formatBytes(entry.bytes)}`);
+  return { level: "ok", subject: "disk-top", fact: `${runsRoot}: ${sized.length} run director${sized.length === 1 ? "y" : "ies"}; largest ${top.join(", ")}` };
+}
+
 export const STATUS_CHECKS: readonly Check[] = [serviceCheck, panelSocketCheck, workHealthCheck, panelHttpCheck, schemaCheck, agentsTableCheck, ccloopPinCheck, ccmemCheck, skillCheck, projectsCheck];
 
 /** Every check in order; one that throws is a fail by name, never a crash of the whole screen. */
@@ -328,7 +367,9 @@ export function report(results: readonly StatusCheck[], args: ParsedArgs, io: Co
 }
 
 export async function runStatus(args: ParsedArgs, io: CommandIo, checks: readonly Check[] = STATUS_CHECKS): Promise<number> {
-  const results = await runChecks(checks, await contextOf(args, io));
+  // Issue #366: --disk appends its section; without it the screen is exactly the checks it was.
+  const selected = args.flags.disk === true ? [...checks, diskCheck, diskTopCheck] : checks;
+  const results = await runChecks(selected, await contextOf(args, io));
   // Fix advice is doctor's; status keeps its one-line-per-check shape.
   return report(results.map(({ fix: _fix, ...rest }) => rest), args, io, "orca-status-v1", false);
 }

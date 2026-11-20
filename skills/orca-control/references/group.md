@@ -125,13 +125,14 @@ resume after a completed handoff; --continue <task> continues that task from its
 - `--note <note>`: a note the continued run's agent reads at its next plan/execute (at most 4096 bytes)
 - `--note-scope <note-scope>`: next-attempt (default) or remaining-attempts
 
-## `orca group archive <group>`
+## `orca group archive [<group>] [--derived-of <derived-of>]`
 
-archive a group (set it aside, abandoned or not wanted): records stay, it refuses every command but unarchive and close; a closed group archived becomes archived
+archive a group (set it aside, abandoned or not wanted): records stay, it refuses every command but unarchive and close; a closed group archived becomes archived. --derived-of <parent> cleans up its criteria-review groups instead
 
 - What it does: sends control verb `archive-group`.
 - Who may: open over the socket (a flag marked human-only still needs a person token).
-- `<group>`: a group id or a unique prefix
+- `<group>` (optional): a group id or a unique prefix
+- `--derived-of <derived-of>`: archive the non-terminal criteria-review groups derived from this terminal (done, archived or closed) parent; the parent itself is untouched
 
 ## `orca group unarchive <group>`
 

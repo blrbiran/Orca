@@ -4,17 +4,38 @@
 
 The commands that are a whole domain. `orca status` first when anything looks wrong.
 
-## `orca status`
+## `orca status [--disk]`
 
 one screen: is the panel answering, what work waits on a person, and the facts around it (read-only, starts nothing)
 
 - What it does: runs locally.
 - Who may: anyone; runs here, needs no panel.
+- `--disk`: also report disk use: the run/workspace roots, artifacts and staging, and the five largest run directories
 - Exit codes: 0 every check ok (warnings allowed); 1 a check failed.
 
 ```
 orca status
 orca status --json
+orca status --disk
+```
+
+## `orca gc [--apply] [--older-than <older-than>] [--keep-last <keep-last>] [--group <group>]`
+
+reclaim disk from settled runs in archived groups: <stateDir>.runs/<runId> and <stateDir>.workspaces/<runId> only; dry run by default
+
+- What it does: runs locally.
+- Who may: anyone; runs here, needs no panel.
+- `--apply`: actually delete (default: print what would be removed and how much it would free)
+- `--older-than <n>`: keep runs touched within this many days (default 30)
+- `--keep-last <n>`: keep the newest N runs regardless of age
+- `--group <group>`: limit to one group's runs
+- Exit codes: 0 the plan ran (dry run, or applied); 1 refused here: no control store, or it cannot be read.
+
+```
+orca gc
+orca gc --older-than 7 --keep-last 3
+orca gc --apply --group my-group
+orca gc --json
 ```
 
 ## `orca doctor`

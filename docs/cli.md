@@ -11,7 +11,11 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 
 ### `orca status`
 
-- `orca status` — one screen: is the panel answering, what work waits on a person, and the facts around it (read-only, starts nothing)
+- `orca status [--disk]` — one screen: is the panel answering, what work waits on a person, and the facts around it (read-only, starts nothing)
+
+### `orca gc`
+
+- `orca gc [--apply] [--older-than <older-than>] [--keep-last <keep-last>] [--group <group>]` — reclaim disk from settled runs in archived groups: <stateDir>.runs/<runId> and <stateDir>.workspaces/<runId> only; dry run by default
 
 ### `orca doctor`
 
@@ -62,7 +66,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca group resume <group>` — dispatch again after a pause
 - `orca group stop-handoff <group> [--deadline <deadline>]` — stop: running tasks hand off and stop
 - `orca group resume-handoff <group> [--continue <continue>] [--note <note>] [--note-scope <note-scope>]` — resume after a completed handoff; --continue <task> continues that task from its checkpoint
-- `orca group archive <group>` — archive a group (set it aside, abandoned or not wanted): records stay, it refuses every command but unarchive and close; a closed group archived becomes archived
+- `orca group archive [<group>] [--derived-of <derived-of>]` — archive a group (set it aside, abandoned or not wanted): records stay, it refuses every command but unarchive and close; a closed group archived becomes archived. --derived-of <parent> cleans up its criteria-review groups instead
 - `orca group unarchive <group>` — unarchive a group (one that would run on its own is paused: orca group resume lets it run)
 - `orca group close <group>` — close a done group (finished, hide it): records stay, it refuses every command but unclose and archive; an archived done group closed becomes closed. Not close-run
 - `orca group unclose <group>` — unclose a closed group: it is done and listed again
