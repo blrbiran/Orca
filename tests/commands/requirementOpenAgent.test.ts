@@ -60,6 +60,11 @@ describe("requirement open --agent (#143)", () => {
     const out = await cli(["requirement", "open", "--idea", "x", "--group", "g-a"], w.dir);
     expect(out.code).toBe(2);
     expect(out.stderr).toContain("orca: no agent is selected: installed: codex-main, omp-main; pass --agent <installation> (see orca agent list), or set a defaultAgent with orca agent set-preferences\n");
+    // The single-perAgent branch names its installation too: both halves of the hint carry the values to type.
+    const prefs = { status: 200, body: { schema: "orca-agent-preferences-v1", operatorId: "operator-1", revision: 2, preferences: { perAgent: { "codex-main": {} } } } };
+    const both = await world({}, { "POST requirements": prefixed, "GET agents": agents, "GET operator/agent-preferences": prefs });
+    expect((await cli(["requirement", "open", "--idea", "x", "--group", "g-a"], both.dir)).stderr)
+      .toContain("orca: no agent is selected: installed: codex-main, omp-main; pass --agent codex-main (the one installation your agent preferences configure), or set a defaultAgent with orca agent set-preferences\n");
   });
 
   it("under --json stdout stays exactly one JSON line (the hint is for people)", async () => {

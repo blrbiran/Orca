@@ -489,17 +489,18 @@ export const WORK_ROWS: CommandDef[] = [
       let prefs: { defaultAgent?: unknown; perAgent?: unknown } | undefined;
       try { prefs = c === undefined ? undefined : (await c.read("operator/agent-preferences") as { preferences?: typeof prefs }).preferences; }
       catch { return generic; }
-      const perAgent = prefs?.perAgent !== null && typeof prefs?.perAgent === "object" ? Object.keys(prefs.perAgent) : [];
-      if (prefs?.defaultAgent === undefined && perAgent.length === 1) {
-        return `no agent is selected: pass --agent ${perAgent[0]} (the one installation your agent preferences configure), or set a defaultAgent with orca agent set-preferences`;
-      }
-      // Tester #401: name what is installed, so the refusal carries the value a person has to type.
+      // Tester #401: name what is installed, so the refusal carries the value a person has to type -- on both branches.
       let installed: string[] = [];
       try {
         const listed = c === undefined ? undefined : await c.read("agents") as { installations?: Array<{ id?: unknown }> };
         installed = (listed?.installations ?? []).map((installation) => installation.id).filter((id): id is string => typeof id === "string" && id.length > 0).sort();
       } catch { /* the table cannot be read: the generic sentence stands */ }
-      return installed.length === 0 ? generic : generic.replace("no agent is selected: ", `no agent is selected: installed: ${installed.join(", ")}; `);
+      const named = (body: string): string => installed.length === 0 ? body : body.replace("no agent is selected: ", `no agent is selected: installed: ${installed.join(", ")}; `);
+      const perAgent = prefs?.perAgent !== null && typeof prefs?.perAgent === "object" ? Object.keys(prefs.perAgent) : [];
+      if (prefs?.defaultAgent === undefined && perAgent.length === 1) {
+        return named(`no agent is selected: pass --agent ${perAgent[0]} (the one installation your agent preferences configure), or set a defaultAgent with orca agent set-preferences`);
+      }
+      return named(generic);
     },
     examples: ["orca requirement open --idea \"add a dark mode\"", "orca requirement open --idea \"add a dark mode\" --agent claude-main"] }),
   answeredFormat(verb({ domain: "requirement", action: "answer", summary: "answer the current round: --answer <qid> takes the recommendation, --answer <qid>=<text> answers in words; a question not named takes its recommendation and a glossary entry or ADR not named is accepted, as the Web's defaults",
