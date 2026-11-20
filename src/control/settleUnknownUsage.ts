@@ -36,8 +36,12 @@ const ceilingRemainder = (run: SettlementRun): number | null => boundingCeilingO
  * executionDriver.ts), or null when ccloop observed none. The explicit `charge-observed-floor` is admitted only with one.
  */
 export function observedFloorOf(run: SettlementRun): number | null {
-  const tokens = (run.usageLowerBound as { tokens?: unknown } | undefined)?.tokens;
-  return typeof tokens === "number" && Number.isSafeInteger(tokens) && tokens > 0 ? tokens : null;
+  const floor = (value: unknown): number | null =>
+    typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : null;
+  // A single call records ccloop's floor under its own key (singleCall.ts); the run view offers it too, so the person
+  // sees the same `charge-observed-floor` alternative a loop run does.
+  return floor((run.usageLowerBound as { tokens?: unknown } | undefined)?.tokens)
+    ?? floor((run as { singleCallUsageLowerBound?: { tokens?: unknown } }).singleCallUsageLowerBound?.tokens);
 }
 /**
  * Tester follow-up I (seat K; the controller's dogfood run, g-28d9b560): the floor `charge-observed-floor` books. ccloop's

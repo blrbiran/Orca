@@ -32,6 +32,14 @@ import type { ControlStore } from "./store.js";
 
 type SingleCallRun = RunRecord & SingleCallRunRow & { purpose?: string; drive?: DriveRecord; singleCallUsageLowerBound?: { tokens: number }; singleCallSettlement?: SingleCallSettlement };
 
+/**
+ * C-1 (human ruling 2026-11-21): a socket agent may settle a small unknown remainder, but charging a whole requirement
+ * call's grant is a person's act. One failed clarify/split call otherwise consumes 1M tokens of the group's budget with no
+ * output (the A3 dogfood run lost its whole 2M limit to two such charges). The person can still charge it, or charge the
+ * observed floor when ccloop reported one.
+ */
+export const LARGE_SETTLEMENT_TOKENS = 250_000;
+
 /** The estimate's twin of requirementCallTargetMoved: its settlement records only a running (or start-unknown) estimate. */
 function estimateMoved(store: ControlStore, groupId: string, estimateId: string): boolean {
   const row = store.db.prepare("SELECT state FROM estimates WHERE group_id=? AND id=?").get(groupId, estimateId);
@@ -81,6 +89,11 @@ export function settleSingleCallUsageInTransaction(
   const moved = !block.closed && !flow && (estimate ? estimateMoved(store, run.groupId, String(run.estimateId)) : requirementCallTargetMoved(store, run));
   // A single call's grant is work-only (verifyStoppedSingleCall), so its whole remainder is the work bucket's.
   let charged = amountSchema.parse(run.remaining.work);
+  // C-1: a requirement or estimate call's charge is bounded; anything larger is a person's decision, and the refusal names
+  // the amount. Flow calls keep their own pool and the prior settlement rule (tester follow-up E §8).
+  if (!observed && !flow && principal.startsWith("agent:") && charged.tokens > LARGE_SETTLEMENT_TOKENS) {
+    throw new ControlError("run-usage-not-settleable", `large-charge-needs-person:${charged.tokens}`);
+  }
   // A stop already gave the grant back (interruptRequirementCall / releaseCommitment): the charge books `used` only.
   if (observed) {
     // As the soft path books it (bookCallFloor): only what the floor adds to the call's booked usage, marked approximate.

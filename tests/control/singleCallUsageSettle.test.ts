@@ -4,6 +4,7 @@ import { ControlError } from "../../src/control/errors.js";
 import { readDraft, writeRound } from "../../src/control/requirementRecords.js";
 import { SETTLEABLE_USAGE_UNKNOWN_REASONS, settleableSingleCallBlock } from "../../src/control/singleCall.js";
 import { settleSingleCallUsageInTransaction } from "../../src/control/singleCallSettlement.js";
+import { observedFloorOf } from "../../src/control/settleUnknownUsage.js";
 import { singleCallHandler } from "../../src/control/singleCallPurposes.js";
 import { applyRecoveryRetry } from "../../src/control/stopIntent.js";
 import { readControlOverview } from "../../src/panel/controlOverview.js";
@@ -189,6 +190,27 @@ describe("what the settlement refuses, by name (§9 R1; Rule 9: one criterion pe
       const socket = retry(x, x.runs()[0]!.runId, "charge-remaining-grant");
       expect(await refusal(withCommandContext(socket.commandId, { client: "cli", principal: "user:owner" }, () => x.service.recoveryRetry(socket as never)))).toMatchObject({ code: "run-usage-not-settleable", message: "owner-required" });
       expect(x.runs()[0]).toMatchObject({ state: "blocked", unknown: { work: true } });
+    } finally { await x.dispose(); }
+  });
+
+  // C-1 (2026-11-21, human 「同意」): a socket agent without a person token may still settle small remainders, but charging a
+  // whole requirement-call grant (1M) is a person's act: a failed call must not silently consume the group's budget. The
+  // refusal names the amount so the agent/person can see what the charge would cost.
+  it("a socket agent's charge above the large-settlement threshold is refused by name; a person still settles it", async () => {
+    const x = await requirementHarness({ answers: [{ purpose: "clarify", ...STALLED }] });
+    try {
+      await x.until(() => x.runs()[0]?.state === "blocked");
+      const runId = x.runs()[0]!.runId;
+      // C-1: a single call's ccloop-observed floor is offered as the cheaper alternative (the earlier view only knew the
+      // loop-run `usageLowerBound`), so a person can settle at 1,234 instead of the whole 1M grant.
+      expect(observedFloorOf({ singleCallUsageLowerBound: { tokens: 1_234 } } as never)).toBe(1_234);
+      const agent = retry(x, runId, "charge-remaining-grant");
+      expect(await refusal(withCommandContext(agent.commandId, { client: "cli", principal: "agent:cli" }, () => x.service.recoveryRetry(agent as never))))
+        .toMatchObject({ code: "run-usage-not-settleable", message: `large-charge-needs-person:${GRANT.tokens}` });
+      expect(x.runs()[0]).toMatchObject({ state: "blocked", unknown: { work: true } });
+      const person = retry(x, runId, "charge-remaining-grant");
+      expect(await asOwner(person, () => x.service.recoveryRetry(person as never))).toMatchObject({ result: { resolved: true } });
+      expect(x.runs()[0]).toMatchObject({ state: "settled-restartable", singleCallSettlement: { method: "remaining-grant", principal: "user:owner", charged: GRANT } });
     } finally { await x.dispose(); }
   });
 

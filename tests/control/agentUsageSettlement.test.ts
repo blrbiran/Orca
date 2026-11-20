@@ -148,7 +148,9 @@ describe("an agent's settlement is booked to the agent (tester follow-up E §8)"
     } finally { await unproved.h.dispose(); }
   });
 
-  it("a single call's charge-and-retry from a socket agent without a token settles, booked to the agent", async () => {
+  // C-1 (human ruling 2026-11-21 「同意」): charging a whole requirement-call grant from an agent is refused; the amount is
+  // named and a person still settles it. This replaces the earlier criterion that let an agent charge the 1M grant.
+  it("a single call's charge-and-retry above the large-settlement threshold needs a person (C-1)", async () => {
     const STALLED = { outcome: "failed" as const, output: null, tokens: null, errorCode: "omp-stalled" };
     const x = await requirementHarness({ startAt: "split", answers: [{ purpose: "split", ...STALLED }, { purpose: "split", output: VALID_SPLIT }] });
     try {
@@ -161,9 +163,13 @@ describe("an agent's settlement is booked to the agent (tester follow-up E §8)"
       // mutation: drop the dispatched-run check in settlingPrincipalFor -> red
       expect((await send(DISPATCHED)).error).toMatchObject({ code: "run-usage-not-settleable" });
       expect(x.runs()[0]).toMatchObject({ state: "blocked", unknown: { work: true } });
-      // mutation: the single-call settlement keeps settlingPersonFor -> red
-      expect(await send(AGENT)).toMatchObject({ result: { resolved: true } });
-      expect(x.runs()[0]).toMatchObject({ singleCallSettlement: { principal: "agent:cli" } });
+      // mutation: drop the LARGE_SETTLEMENT_TOKENS check -> the agent settles and this assertion is red
+      expect((await send(AGENT)).error?.message).toContain("large-charge-needs-person:1000000");
+      expect(x.runs()[0]).toMatchObject({ state: "blocked", unknown: { work: true } });
+      // A person's path still settles it.
+      const person = x.command("recovery-retry", { scope: "run", runId, acknowledge: "charge-remaining-grant" }, { kind: "run", groupId: "r", runId }) as { commandId: string };
+      expect(await withCommandContext(person.commandId, { client: "web", principal: "user:owner" }, () => x.service.recoveryRetry(person as never))).toMatchObject({ result: { resolved: true } });
+      expect(x.runs()[0]).toMatchObject({ singleCallSettlement: { principal: "user:owner" } });
     } finally { await x.dispose(); }
   });
 });

@@ -427,6 +427,8 @@ async function settleUsageNext(error: { code: string; message: string }, c: Writ
   const detail = refusalDetail(error);
   if (error.code === "run-usage-pending") return [settle(str(c, "acknowledge")!)];
   if (error.code === "run-usage-not-settleable") {
+    // C-1: a charge above the agent threshold is a person's; the refusal names the amount.
+    if (detail.startsWith("large-charge-needs-person")) return [`${settle("charge-remaining-grant")} --as-person`];
     if (detail === "unlimited-remainder") return [`${settle("release-unmetered")} --as-person`];
     if (["observed-floor-unknown", "known-zero-not-proved", "finite-remainder"].includes(detail)) return [settle("charge-remaining-grant")];
     return [`orca run show ${await currentRun(c)}`];
@@ -1036,9 +1038,9 @@ export const WORK_ROWS: CommandDef[] = [
   // wants one (humanOnly.ts SOCKET_TIER), so the verb is open and its flag says which form is a person's.
   verb({ domain: "task", action: "settle-usage", summary: "settle a run's unknown usage (cannot be undone)", verb: "settle-unknown-usage", positionals: [GROUP, TASK], access: "open",
     // Tester follow-up F §2 (#116, ledger C3): charge-observed-floor books a finite remainder's run at ccloop's observed floor.
-    flags: [{ name: "acknowledge", type: "string", required: true, summary: "charge-remaining-grant|charge-observed-floor|release-known-zero|release-unmetered: an agent may send charge-remaining-grant, or release-known-zero when ccloop proved the failed run spent nothing, or charge-observed-floor (charges only the floor ccloop observed, marked approximate; a finite remainder, or a live ceiling, with a known floor -- a worker-lost run that observed usage has 0 beyond it --, else refused observed-floor-unknown: then charge-remaining-grant), without a person token; release-unmetered needs a person token (orca auth login, then --as-person); refused to a run Orca dispatched" }],
+    flags: [{ name: "acknowledge", type: "string", required: true, summary: "charge-remaining-grant|charge-observed-floor|release-known-zero|release-unmetered: an agent may send charge-remaining-grant, or release-known-zero when ccloop proved the failed run spent nothing, or charge-observed-floor (charges only the floor ccloop observed, marked approximate; a finite remainder, or a live ceiling, with a known floor -- a worker-lost run that observed usage has 0 beyond it --, else refused observed-floor-unknown: then charge-remaining-grant), without a person token; release-unmetered needs a person token (orca auth login, then --as-person); a requirement or estimate call's charge above 250,000 tokens needs a person token; refused to a run Orca dispatched" }],
     hint: (error) => error.code === "control-person-token-required"
-      ? "without a person token, send --acknowledge charge-remaining-grant (or release-known-zero when proved, or charge-observed-floor when ccloop observed a floor); release-unmetered is a person's: orca auth login, then --as-person"
+      ? "without a person token, send --acknowledge charge-remaining-grant (or release-known-zero when proved, or charge-observed-floor when ccloop observed a floor); a charge above 250,000 tokens, and release-unmetered, are a person's: orca auth login, then --as-person"
       // Tester follow-up I (G spec §16): no floor -- the unused grant or live ceiling stays held until charged.
       : error.message.endsWith(":observed-floor-unknown")
         ? "ccloop observed no usage floor for this run: settle with --acknowledge charge-remaining-grant (charges the unused grant or live ceiling), or wait; until then that part stays held"
