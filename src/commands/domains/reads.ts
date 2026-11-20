@@ -12,7 +12,7 @@ import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { MODEL_UNAVAILABLE_CAUSE, modelUnavailableCommand, NARRATION_ONLY_CAUSE, recoveryRetryCommand } from "../../control/driveRecord.js";
 import { REPEATED_FAILURE_STOP } from "../../control/repeatedFailureStop.js";
 import { offPlanWriteText, type OffPlanWrite } from "../../control/offPlanWrites.js";
-import { goalPathLine, impliedPathAddedLine, impliedPathLine, type GoalPathOutsideTargets, type ImpliedPathAddition, type ImpliedPathOutsideTargets } from "../../control/splitImpliedPaths.js";
+import { goalPathLine, impliedPathAddedLine, impliedPathLine, requirementUnitLine, type GoalPathOutsideTargets, type ImpliedPathAddition, type ImpliedPathOutsideTargets, type RequirementUnitProblem } from "../../control/splitImpliedPaths.js";
 import { phaseEndBudgetLines, runUsageLines, taskCostLine, type UsageRun } from "./usageLines.js";
 import { viewTaskCost, type TaskCost } from "../../control/taskCost.js";
 import { runUsageDetailLines, type UsageDetailLine } from "./usageDetailLines.js";
@@ -171,7 +171,7 @@ function feedbackAfterRedraftLine(draftNo: number, carry: FeedbackAfterRedraft):
 }
 
 function requirementShow(body: unknown): string {
-  const drafts = (field(body, "drafts") ?? []) as Array<{ draftNo: number; layers: string[][] | null; parallelCandidates?: Array<{ before: string; after: string }>; impliedPathsOutsideTargets?: ImpliedPathOutsideTargets[]; goalPathsOutsideTargets?: GoalPathOutsideTargets[]; runtimeDataPaths?: Array<{ taskId: string; dir?: string; path: string }>; feedbackAfterRedraft?: FeedbackAfterRedraft; impliedPathsAdded?: ImpliedPathAddition[] | null; overlapSerialized?: Array<{ a: string; b: string; paths: string[] }>; implicitEdges?: Array<{ from: string; to: string; conflicts: Array<{ a: string; b: string }> }> | null; output?: { tasks?: Array<object>; requirementConflicts?: Array<{ criterion: string; feedback?: string; why: string }> } | null }>;
+  const drafts = (field(body, "drafts") ?? []) as Array<{ draftNo: number; layers: string[][] | null; parallelCandidates?: Array<{ before: string; after: string }>; impliedPathsOutsideTargets?: ImpliedPathOutsideTargets[]; goalPathsOutsideTargets?: GoalPathOutsideTargets[]; requirementUnits?: RequirementUnitProblem[]; runtimeDataPaths?: Array<{ taskId: string; dir?: string; path: string }>; feedbackAfterRedraft?: FeedbackAfterRedraft; impliedPathsAdded?: ImpliedPathAddition[] | null; overlapSerialized?: Array<{ a: string; b: string; paths: string[] }>; implicitEdges?: Array<{ from: string; to: string; conflicts: Array<{ a: string; b: string }> }> | null; output?: { tasks?: Array<object>; requirementConflicts?: Array<{ criterion: string; feedback?: string; why: string }> } | null }>;
   const lines = drafts.flatMap((draft) => [
     ...(draft.layers === null ? [] : [`draft ${draft.draftNo} layers: ${draft.layers.map((layer) => `[${layer.join(", ")}]`).join(" -> ")}`]),
     // Tester #384: a declared edge whose pair a broad target-path overlap already orders (#268). The declaration adds no
@@ -191,6 +191,8 @@ function requirementShow(body: unknown): string {
       return `draft ${draft.draftNo} ${edge.from} and ${edge.to} run one after the other because both list ${claim} as a target path; if one of them only reads it, orca requirement drop-path <group> --task <${edge.from}|${edge.to}> --path ${path} lets them run together`;
     })),
     ...(draft.impliedPathsAdded ?? []).map((entry) => `draft ${draft.draftNo} ${impliedPathAddedLine(entry)}`),
+    // Tester #385: a unit the requirement names with no task, or with a file its own task does not list; feedback fixes both.
+    ...(draft.requirementUnits ?? []).map((entry) => `draft ${draft.draftNo} ${requirementUnitLine(entry)} (send feedback naming the task structure you want)`),
     // #351 addendum: where the split itself reports its draft does not meet the requirement as written (not checked by code).
     ...(draft.output?.requirementConflicts ?? []).map((entry) => `draft ${draft.draftNo} requirement-conflict: ${entry.criterion} -- ${entry.why}${entry.feedback === undefined ? "" : ` (feedback: "${entry.feedback}")`}`),
     // Tester #362: a data file under a dot-directory the requirement names, listed as a target path (a hint). A multi

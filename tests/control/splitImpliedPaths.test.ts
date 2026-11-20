@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildSplitPrompt } from "../../src/control/requirementSplit.js";
 import { readDraft } from "../../src/control/requirementRecords.js";
 import { readWork } from "../../src/control/queries.js";
-import { impliedPathsOutsideTargets } from "../../src/control/splitImpliedPaths.js";
+import { impliedPathsOutsideTargets, requirementUnitProblems } from "../../src/control/splitImpliedPaths.js";
 import { readRequirementView } from "../../src/panel/controlViews.js";
 import { requirementHarness } from "./fixtures/requirementHarness.js";
 import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
@@ -117,5 +117,45 @@ describe("a success condition naming a file only another task may write (#265)",
     // mutation: drop IMPLIED_PATH_RULE from either instruction -> red
     expect(buildSplitPrompt({ document: "D.", overview, earlierDrafts: [] })).toContain(rule);
     expect(buildSplitPrompt({ document: "D.", overview, earlierDrafts: [], multi: true })).toContain(rule);
+  });
+});
+
+// Tester #385: the requirement's own delivery units. The splitter read the goal as prose and merged two "independent"
+// units while dropping one unit's dependency; only a person's feedback restored the graph. Code now warns, per asked-for
+// unit, when the draft has no task that is it, or when the unit's clause names a file its own task does not list --
+// a hint that never refuses a draft (memo .superpowers/sdd/plan/brainstorm-369-385.md).
+describe("the requirement's own delivery units against the draft (#385)", () => {
+  const DOCUMENT = [
+    "Delivery follows T1 model, independent T2 matcher and actions, T3 engine, independent T4 CLI and render, T5 README examples, and T6 integration test.",
+    "T1 contains src/lock-store.js.",
+  ].join("\n");
+  const unit = (taskId: string, targetPaths: string[]) => task(taskId, targetPaths, `${taskId} done.`);
+
+  it("names a unit with no task, and a file the unit's clause gives it that its own tasks do not list", () => {
+    const merged = { tasks: [unit("T1", ["src/lock-model.js"]), unit("T2", ["src/lock-store.js", "src/cli.js"]), unit("T3", ["src/lock-engine.js"]), unit("T4", ["src/lock-render.js"]), unit("T5", ["README.md"])], notes: "" };
+    // mutation: drop the missing-unit branch -> T6 absent, red; drop the own-targets comparison -> T1 absent, red
+    expect(requirementUnitProblems(DOCUMENT, merged)).toEqual([
+      { unit: "T1", problem: "path", path: "src/lock-store.js" },
+      { unit: "T6", problem: "missing" },
+    ]);
+    const correct = { ...merged, tasks: [unit("T1", ["src/lock-model.js", "src/lock-store.js"]), unit("T2", ["src/cli.js"]), unit("T3", ["src/lock-engine.js"]), unit("T4", ["src/lock-render.js"]), unit("T5", ["README.md"]), unit("T6", ["test/lock-integration.test.js"])] };
+    expect(requirementUnitProblems(DOCUMENT, correct)).toEqual([]);
+  });
+
+  it("a unit label may be carried by its lettered tasks (T2a/T2b), and a multi-directory draft has none", () => {
+    const lettered = { tasks: [unit("T1", ["src/lock-model.js", "src/lock-store.js"]), unit("T2a", ["src/matcher.js"]), unit("T2b", ["src/actions.js"]), unit("T3", ["src/lock-engine.js"]), unit("T4", ["src/lock-render.js"]), unit("T5", ["README.md"]), unit("T6", ["test/lock-integration.test.js"])], notes: "" };
+    expect(requirementUnitProblems(DOCUMENT, lettered)).toEqual([]);
+    const multi = { primary: "m", tasks: [{ ...unit("T1", []), writes: [{ dir: "a", targetPaths: ["src/lock-model.js"] }] }], notes: "" };
+    expect(requirementUnitProblems(DOCUMENT, multi as never)).toEqual([]);
+  });
+
+  it("orca requirement show prints one line per problem", async () => {
+    const { findCommand } = await import("../../src/commands/registry.js");
+    const found = findCommand(["requirement", "show"]);
+    if (!("def" in found)) throw new Error("no requirement show row");
+    const out = found.def.format({ drafts: [{ draftNo: 1, layers: [["T1"], ["T2"]], requirementUnits: [{ unit: "T1", problem: "path", path: "src/lock-store.js" }, { unit: "T6", problem: "missing" }] }] });
+    // mutation: drop the lines from requirementShow -> red
+    expect(out).toContain("draft 1 requirement-unit-path: the requirement gives src/lock-store.js to T1, which does not list it");
+    expect(out).toContain("draft 1 requirement-unit-missing: the requirement names T6, and no task is that unit");
   });
 });

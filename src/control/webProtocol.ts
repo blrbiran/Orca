@@ -1964,6 +1964,8 @@ export const requirementViewSchema = z.object({
     // Tester #362 (session 3ba26002): optional on the same terms -- a data file under a dot-directory the requirement names.
     // Multi instruction version 6: a multi draft's entry names the directory key whose write lists the path.
     runtimeDataPaths: z.array(z.object({ taskId: nonemptyString, dir: nonemptyString.optional(), path: nonemptyString }).strict()).optional(),
+    // Tester #385: optional on the same terms -- a unit the requirement names with no task, or with a file its task lacks.
+    requirementUnits: z.array(z.object({ unit: nonemptyString, problem: z.enum(["missing", "path"]), path: nonemptyString.optional() }).strict()).optional(),
     // Dogfood finding (3): present only on a valid draft Orca re-drafted after the person's feedback that reports no
     // conflict about it (requirementSplit.ts feedbackAfterRedraft).
     feedbackAfterRedraft: z.object({ feedbackDraftNo: positiveSafeInteger, feedback: nonemptyString, redrafts: z.array(positiveSafeInteger).min(1), conflictsBefore: z.array(nonemptyString) }).strict().optional() })),

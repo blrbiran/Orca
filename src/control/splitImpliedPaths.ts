@@ -113,8 +113,38 @@ export function goalPathsOutsideTargets(output: SplitOutput | MultiSplitOutput):
   return out;
 }
 
-/** Tester #345: at most this many distinct goal paths are looked up in the base commit per draft (one git read per parent directory). */
-export const GOAL_PATH_PROBE_LIMIT = 64;
+/**
+ * Tester #385 (hint only, memo .superpowers/sdd/plan/brainstorm-369-385.md): the requirement document names delivery
+ * units (`T1`, `T2`, …). Each must have a task that is it (its id, or the lettered form `T2a`/`T2b`), and a unit whose
+ * clause names a concrete file must have that file in its own tasks' target paths -- the lock2 draft gave
+ * `src/lock-store.js` to T2 although the requirement says "T1 contains src/lock-store.js". Single-repository only (a
+ * multi draft's task ids are not the requirement's labels). Never refuses a draft.
+ */
+export interface RequirementUnitProblem { unit: string; problem: "missing" | "path"; path?: string }
+
+export function requirementUnitProblems(document: string, output: SplitOutput | MultiSplitOutput): RequirementUnitProblem[] {
+  const tasks = output.tasks as readonly Task[];
+  if (tasks.some((task) => "writes" in task)) return [];
+  const labels = [...new Set([...document.matchAll(/(?<![\w/-])T(\d{1,2})(?![\w/-])/g)].map((match) => `T${match[1]}`))];
+  if (labels.length === 0) return [];
+  const problems: RequirementUnitProblem[] = [];
+  for (const label of labels) {
+    const own = tasks.filter((task) => task.taskId === label || new RegExp(`^${label}(?![0-9])`).test(task.taskId));
+    if (own.length === 0) { problems.push({ unit: label, problem: "missing" }); continue; }
+    const clause = document.split("\n").filter((line) => new RegExp(`(?<![\\w/-])${label}(?![\\w-])`).test(line)).join("\n");
+    const named = [...new Set([...clause.matchAll(GOAL_PATH)].map((match) => match[0]))].filter(exactShape);
+    const owned = own.flatMap((task) => targetsOf(task).map(normal));
+    for (const path of named) if (!owned.some((target) => coversShape(target, path))) problems.push({ unit: label, problem: "path", path });
+  }
+  return problems;
+}
+
+/** Tester #385: the hint's one line, as `requirement show` prints it. */
+export const requirementUnitLine = (entry: RequirementUnitProblem): string => entry.problem === "missing"
+  ? `requirement-unit-missing: the requirement names ${entry.unit}, and no task is that unit`
+  : `requirement-unit-path: the requirement gives ${entry.path} to ${entry.unit}, which does not list it`;
+
+/** Tester #345: at most this many distinct goal paths are looked up in the base commit per draft (one git read per parent directory). */export const GOAL_PATH_PROBE_LIMIT = 64;
 
 /** Tester #345: the distinct paths of `entries` to look up in the base commit, the first GOAL_PATH_PROBE_LIMIT of them. */
 export const goalPathsToProbe = (entries: readonly GoalPathOutsideTargets[]): string[] =>

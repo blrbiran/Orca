@@ -87,7 +87,7 @@ import { boundingCeilingOf, liveCeilingRecordSchema } from "../control/liveCeili
 import { abandonRequestSchema, abandonSettlementSchema } from "../control/abandonRun.js";
 import { allTasksDone, prerequisiteDoneFrom, prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { overlapSerialized, parallelCandidates } from "../control/splitParallel.js";
-import { goalPathsOutsideTargets, impliedPathsOutsideTargets, runtimeDataPaths } from "../control/splitImpliedPaths.js";
+import { goalPathsOutsideTargets, impliedPathsOutsideTargets, requirementUnitProblems, runtimeDataPaths } from "../control/splitImpliedPaths.js";
 import { feedbackAfterRedraft } from "../control/requirementSplit.js";
 import { requirementDraftHash } from "../control/requirementDraftHash.js";
 import { runUsageDetail } from "../control/usageQuery.js";
@@ -1987,6 +1987,7 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
       const carry = reviewing ? feedbackAfterRedraft(drafts, shown.draftNo, requirement.consensusWithdrawn?.lastDraftNo ?? null) : null;
       return shown.output !== null && shown.layers !== null ? { ...shown, parallelCandidates: parallelCandidates(shown.output), impliedPathsOutsideTargets: impliedPathsOutsideTargets(shown.output),
         goalPathsOutsideTargets: goalPathsOutsideTargets(shown.output), overlapSerialized: overlapSerialized(shown.output),
+        requirementUnits: requirementUnitProblems(document, shown.output),
         ...(reviewing ? { runtimeDataPaths: runtimeDataPaths(shown.output!, document) } : {}),
         ...(carry === null ? {} : { feedbackAfterRedraft: carry }) } : shown;
     }), spendCapBlock: readSpendCapBlock(store, groupId),
