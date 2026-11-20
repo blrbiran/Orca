@@ -822,6 +822,15 @@ export const WORK_ROWS: CommandDef[] = [
       { name: "answer", type: "string", required: true, summary: "allow-fix (the change that repaired it is allowed), relative (judge the check against the base) or edit-requirement (you want the requirement changed); recorded and told to the group's requirement review" },
     ],
     route: (c) => `groups/${group(c)}/preexisting-failure`,
+    // Tester #402: a miss names the rows, and an ambiguous prefix says to type more; both are copyable.
+    hint: (error) => {
+      const detail = error.message.startsWith(`${error.code}:`) ? error.message.slice(error.code.length + 1) : error.message;
+      if (error.code === "preexisting-failure-command-ambiguous") return `--command matches more than one row (${detail}); pass more of the command`;
+      if (error.code === "preexisting-failure-not-reported") return detail === "" || detail === "undefined"
+        ? "the group reports no pre-existing failure to answer"
+        : `--command must name one of these rows: ${detail}`;
+      return undefined;
+    },
     payload: (c) => {
       const answer = str(c, "answer");
       if (answer !== "allow-fix" && answer !== "relative" && answer !== "edit-requirement") throw invalid("--answer wants allow-fix, relative or edit-requirement");

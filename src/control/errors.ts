@@ -269,6 +269,8 @@ export const durableCommandErrorStatuses = {
   "group-acceptance-not-failed": 409,
   // Pre-existing failures spec L2 (#341): an answer names a command the group has a row for, and a person.
   "preexisting-failure-not-reported": 409,
+  // Tester #402: the --command matched several rows; the refusal names them.
+  "preexisting-failure-command-ambiguous": 409,
   "preexisting-failure-person-required": 409,
   // Task 2 review I-1: a group with no requirement review (plan file, flow child, debug, multi-directory, dir) is not answered.
   "preexisting-failure-not-answerable": 409,

@@ -198,6 +198,42 @@ export function preexistingFailureFactLines(store: ControlStore, groupId: string
   });
 }
 
+/**
+ * Tester #402: what a person types under --command, resolved against the group's rows. Exact (backticks and spacing
+ * ignored) first; else a unique row the text prefixes at a word boundary; else a unique row whose command contains the
+ * text as a whole word run (a suite name inside a longer report); several matches are refused by name.
+ */
+export function matchPreexistingCommand<T extends { command: string }>(rows: readonly T[], given: string):
+  { kind: "one"; row: T } | { kind: "none" } | { kind: "ambiguous"; candidates: string[] } {
+  const words = (value: string): string[] => value.replace(/`/g, "").toLowerCase().split(/\s+/).filter((word) => word.length > 0);
+  const wanted = words(given);
+  if (wanted.length === 0) return { kind: "none" };
+  const tokenized = rows.map((row) => ({ row, tokens: words(row.command) }));
+  const same = (tokens: string[]): boolean => tokens.length === wanted.length && tokens.every((token, index) => token === wanted[index]);
+  const exact = tokenized.filter((entry) => same(entry.tokens));
+  if (exact.length === 1) return { kind: "one", row: exact[0]!.row };
+  const prefixes = tokenized.filter((entry) => entry.tokens.length > wanted.length && wanted.every((token, index) => entry.tokens[index] === token));
+  const contains = (tokens: string[]): boolean => {
+    for (let start = 0; start + wanted.length <= tokens.length; start += 1) {
+      if (wanted.every((token, index) => tokens[start + index] === token)) return true;
+    }
+    return false;
+  };
+  const matched = prefixes.length > 0 ? prefixes : tokenized.filter((entry) => contains(entry.tokens));
+  if (matched.length === 1) return { kind: "one", row: matched[0]!.row };
+  if (matched.length === 0) return { kind: "none" };
+  return { kind: "ambiguous", candidates: matched.map((entry) => entry.row.command) };
+}
+
+/** Tester #402: the rows the group brief names -- reported and not yet answered, with whether an answer would do anything. */
+export function preexistingFailureWaiting(store: ControlStore, groupId: string, body: unknown): Array<{ command: string; answerable: boolean; reportedBy: number }> {
+  const answerable = answerableGroup(store, groupId, body);
+  return readPreexistingFailures(store, groupId, body)
+    .filter((row) => row.answer === null)
+    .map((row) => ({ command: row.command, answerable, reportedBy: row.reportedBy.length }))
+    .sort((left, right) => compareText(left.command, right.command));
+}
+
 export type AnswerPreexistingFailureCommand = Extract<RawAuthorityCommandV1, { verb: "answer-preexisting-failure" }>;
 
 /**
@@ -213,16 +249,20 @@ export function applyAnswerPreexistingFailure(deps: { store: ControlStore }, com
       if (row === undefined) throw new ControlError("group-not-found");
       const body = JSON.parse(String(row.body)) as Record<string, unknown>;
       const { command: check, answer } = command.payload;
-      if (!readPreexistingFailures(deps.store, groupId, body).some((entry) => entry.command === check)) throw new ControlError("preexisting-failure-not-reported");
+      const rows = readPreexistingFailures(deps.store, groupId, body);
+      const match = matchPreexistingCommand(rows, check);
+      if (match.kind === "none") throw new ControlError("preexisting-failure-not-reported", rows.map((entry) => entry.command).join(" | ") || undefined);
+      if (match.kind === "ambiguous") throw new ControlError("preexisting-failure-command-ambiguous", match.candidates.join(" | "));
+      const recorded = match.row.command;
       // Task 2 review I-1: with no requirement review to tell, an answer would do nothing; the rows are information only.
       if (!answerableGroup(deps.store, groupId, body)) throw new ControlError("preexisting-failure-not-answerable");
       const by = settlingPersonFor(command.commandId);
       if (by === null) throw new ControlError("preexisting-failure-person-required");
       const stored = field(body, "preexistingFailureAnswers");
       const answers = typeof stored === "object" && stored !== null && !Array.isArray(stored) ? stored as Record<string, unknown> : {};
-      const next = { ...body, preexistingFailureAnswers: { ...answers, [check]: { answer, by, at: deps.store.now() } } };
+      const next = { ...body, preexistingFailureAnswers: { ...answers, [recorded]: { answer, by, at: deps.store.now() } } };
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(next), groupId);
-      return commandSuccess(context, { kind: "preexisting-failure-answered", groupId, command: check, answer });
+      return commandSuccess(context, { kind: "preexisting-failure-answered", groupId, command: recorded, answer });
     },
   }).body;
 }

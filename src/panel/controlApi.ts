@@ -52,6 +52,7 @@ import { deliveryQuestionView, estimatorInstructionOf, integrationView, readCont
 import { readStoredHandoff } from "../control/taskHandoffs.js";
 import { costOutliersOf, phaseEndUsageOf } from "../control/runUsageView.js";
 import { confirmKnownRed, knownRedAtBase, type KnownRedAtBase } from "../control/knownRedAtBase.js";
+import { preexistingFailureWaiting } from "../control/preexistingFailure.js";
 
 export interface ControlReadApiDeps {
   store: ControlStore;
@@ -104,6 +105,14 @@ function knownRedNote(store: ControlStore, groupId: string): KnownRedAtBase[] {
     if (!knownRedFailureLogged) { knownRedFailureLogged = true; process.stderr.write(`orca-panel: known-red-at-base: not read: ${error instanceof Error ? error.message : String(error)}\n`); }
     return [];
   }
+}
+
+/** Tester #402: the brief's waiting rows; a failed read is no note (the full view still names the group's state). */
+function preexistingFailureWaitingNote(store: ControlStore, groupId: string): Array<{ command: string; answerable: boolean; reportedBy: number }> {
+  try {
+    const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+    return row === undefined ? [] : preexistingFailureWaiting(store, groupId, JSON.parse(String(row.body)));
+  } catch { return []; }
 }
 
 /** Agent version auto-refresh spec 2026-10-20 §3.3: the agents view probes the installed CLIs at most this often. */
@@ -352,6 +361,9 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       // Pre-existing failures spec L4 (#341): each check already known red at this group's base, from the store only
       // (nothing runs); absent when none. The web confirm step reads it here too.
       const knownRed = knownRedNote(deps.store, groupId);
+      // Tester #402: a reported pre-existing failure nobody answered kept a 5/5 group silently at review; the person
+      // had no way to find the row. Absent when none waits, so other briefs keep their bytes.
+      const waiting = preexistingFailureWaitingNote(deps.store, groupId);
       // Tester #365(a): the group's delivery, so the brief can say where a kept group's files are; a keep group has no
       // integration record. An unreadable record says nothing here (the full view names it).
       // Batch D re-review: only a done group's, the one the kept lines read; a group still clarifying has no copy yet.
@@ -362,6 +374,7 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       const workingTree = workingTreeBrief(deps.store, deps.service, groupId, summary.state);
       res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }), ...(warnings.length === 0 ? {} : { warnings }),
         ...(costOutliers === null ? {} : { costOutliers }), ...(unreadableRuns.length === 0 ? {} : { unreadableRuns }), ...(knownRed.length === 0 ? {} : { knownRedAtBase: knownRed }),
+        ...(waiting.length === 0 ? {} : { preexistingFailuresWaiting: waiting }),
         ...(delivery === null ? {} : { delivery }), ...(estimatorInstruction === null ? {} : { estimatorInstruction }), ...workingTree }); }
     catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") {

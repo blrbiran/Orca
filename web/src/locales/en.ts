@@ -2738,6 +2738,7 @@ export const enErrors: Record<string, string> = {
   "run-abandon-person-required": "Abandoning an attempt is done by an owner.",
   "group-acceptance-not-failed": "This group's acceptance has not failed ({{detail}}); there is nothing to recheck or waive.",
   "preexisting-failure-not-reported": "This group has no pre-existing failure for that command; answer one of the rows its view lists.",
+  "preexisting-failure-command-ambiguous": "That command matches more than one pre-existing failure ({{detail}}); pass more of the command.",
   "preexisting-failure-person-required": "Answering a pre-existing failure is a person's act: an owner on the Web, or an agent with a person token.",
   "preexisting-failure-not-answerable": "This group has no requirement review, so an answer would reach no one; its pre-existing failures are shown for information only.",
   "group-acceptance-person-required": "Waiving a failed group acceptance is done by an owner.",

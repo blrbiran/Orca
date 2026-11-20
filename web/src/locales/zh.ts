@@ -2609,6 +2609,7 @@ export const zhErrors: Record<string, string> = {
   "run-abandon-person-required": "放弃尝试需要由所有者来做。",
   "group-acceptance-not-failed": "这个组的验收没有失败（{{detail}}），没有可重查或豁免的内容。",
   "preexisting-failure-not-reported": "这个组没有这条命令的原有失败；请回答组视图里列出的某一行。",
+  "preexisting-failure-command-ambiguous": "这条命令匹配到多个原有失败（{{detail}}）；请写更完整的命令。",
   "preexisting-failure-person-required": "回答原有失败需要由人来做：网页上的所有者，或带个人令牌的代理。",
   "preexisting-failure-not-answerable": "这个组没有需求复核，回答不会传达给任何人；它的原有失败只作告知。",
   "group-acceptance-person-required": "豁免失败的组验收需要由所有者来做。",

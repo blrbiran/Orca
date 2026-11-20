@@ -12,7 +12,7 @@
 import { describe, expect, it } from "vitest";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { expandLoopPlan, expandRecipe, PREEXISTING_FAILURE_CONSTRAINT, OFF_PLAN_TARGETS_CONSTRAINT, type LoopInputs } from "../../src/control/loopPlans.js";
-import { preexistingFailureRows, preexistingFailuresOf, readPreexistingFailures, recordPreexistingFailures, PREEXISTING_PER_RUN_MAX } from "../../src/control/preexistingFailure.js";
+import { preexistingFailureRows, preexistingFailureWaiting, preexistingFailuresOf, readPreexistingFailures, recordPreexistingFailures, PREEXISTING_PER_RUN_MAX } from "../../src/control/preexistingFailure.js";
 import { reviewFacts } from "../../src/control/requirementReview.js";
 import { write } from "../../src/control/executionDriver.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
@@ -265,6 +265,43 @@ describe("the person's three answers (acceptance 3)", () => {
     } finally { await t.h.dispose(); }
   }, 60_000);
 });
+
+// Tester #402: a person types the command they see in the brief, not the row's whole sentence. A unique prefix, or
+// the suite name inside a longer report, answers the row; an ambiguous one is refused naming both rows.
+it("a unique prefix of a long row answers it; an ambiguous one is refused by name (#402)", async () => {
+  const t = await driverHarness([{ taskId: "a" }], { decisions: () => [marker("`npm test` reports unrelated queue flakes", "chose-a"), marker("`npm run lint` fails on generated files", "chose-b")] });
+  withRequirement(t);
+  const runId = await t.claim();
+  await t.until(t.driver(), () => LANDED.includes(t.body(runId).state));
+  const send = (command: string) => { const sent = t.h.command("answer-preexisting-failure", { command, answer: "relative" }); return asOwner(sent.commandId, () => t.service.answerPreexistingFailure(sent)); };
+  try {
+    // mutation: exact match only -> not-reported, red
+    expect(send("npm test")).toMatchObject({ result: { kind: "preexisting-failure-answered", command: "`npm test` reports unrelated queue flakes" } });
+    // The answer is keyed by the row's own command, not by what the person typed.
+    expect(Object.keys(groupBody(t).preexistingFailureAnswers as object)).toEqual(["`npm test` reports unrelated queue flakes"]);
+    // mutation: take the first match instead of refusing -> answers lint's row silently, red
+    expect(send("npm")).toMatchObject({ error: { code: "preexisting-failure-command-ambiguous" } });
+    expect(send("pytest")).toMatchObject({ error: { code: "preexisting-failure-not-reported" } });
+  } finally { await t.h.dispose(); }
+}, 60_000);
+
+it("the brief's waiting list names unanswered rows, and an answered row leaves it (#402)", async () => {
+  const t = await driverHarness([{ taskId: "a" }], { decisions: () => [marker("`npm test` reports unrelated queue flakes", "chose-a"), marker("`npm run lint` fails on generated files", "chose-b")] });
+  withRequirement(t);
+  const runId = await t.claim();
+  await t.until(t.driver(), () => LANDED.includes(t.body(runId).state));
+  const waiting = () => preexistingFailureWaiting(t.h.store, "g", groupBody(t));
+  const send = (command: string) => { const sent = t.h.command("answer-preexisting-failure", { command, answer: "relative" }); return asOwner(sent.commandId, () => t.service.answerPreexistingFailure(sent)); };
+  try {
+    expect(waiting()).toEqual([
+      { command: "`npm run lint` fails on generated files", answerable: true, reportedBy: 1 },
+      { command: "`npm test` reports unrelated queue flakes", answerable: true, reportedBy: 1 },
+    ]);
+    // mutation: keep answered rows -> two rows after the answer, red
+    send("npm test");
+    expect(waiting()).toEqual([{ command: "`npm run lint` fails on generated files", answerable: true, reportedBy: 1 }]);
+  } finally { await t.h.dispose(); }
+}, 60_000);
 
 describe("fix round 1: who can answer, and an answer outlives its pruned report (Task 2 review I-1, I-2, minor 2)", () => {
   const answerAs = (t: Harness, command: string, chosen: "allow-fix" | "relative" | "edit-requirement") => {

@@ -83,6 +83,16 @@ function knownRedAtBaseLines(entries: unknown): string[] {
   });
 }
 
+/** Tester #402: an unanswered pre-existing failure, as the brief names it, with the command that answers it. */
+type PreexistingWaitingEntry = { command: string; answerable: boolean; reportedBy: number };
+function preexistingFailureWaitingLines(entries: unknown, groupId: string | undefined): string[] {
+  if (!Array.isArray(entries)) return [];
+  const naming = (command: string): string => /^`([^`]+)`/.exec(command)?.[1] ?? command;
+  return (entries as PreexistingWaitingEntry[]).map(({ command, answerable }) => answerable
+    ? `A pre-existing failure waits for your answer: ${command}; orca group preexisting-failure ${groupId ?? "<group>"} --command "${naming(command)}" --answer <allow-fix|relative|edit-requirement>`
+    : `A pre-existing failure is reported for information only (no requirement review to answer): ${command}`);
+}
+
 /** Tester #348 review: a quota probe's verdict on a whole line in `run show`; nothing for any other run. */
 type ProbeVerdictView = { verdict: string; cause: string | null; detail: string | null; errorCode: string | null };
 function probeVerdictLines(run: { purpose?: string; probeVerdict?: ProbeVerdictView } | undefined): string[] {
@@ -576,6 +586,8 @@ export const READ_ROWS: CommandDef[] = [
         ...unreadableRunLines(field(body, "unreadableRuns")),
         // Pre-existing failures spec L4 (#341): what Orca already knows was red at this group's base.
         ...knownRedAtBaseLines(field(body, "knownRedAtBase")),
+        // Tester #402: the rows that wait for an answer, with the command that answers each.
+        ...preexistingFailureWaitingLines(field(body, "preexistingFailuresWaiting"), typeof groupId === "string" ? groupId : undefined),
         // Tester #365(a): where a kept delivery's files are, from the brief's own delivery (absent: nothing said).
         // Working-tree delivery spec §4.2 item 3: the first-use question, before the kept lines.
         ...(typeof groupId === "string" ? deliveryQuestionLines(groupId, body as KeptSummary, field(body, "delivery") as string | undefined, field(body, "projectDeliveryChosen")) : []),
