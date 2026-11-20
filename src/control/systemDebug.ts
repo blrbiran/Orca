@@ -621,6 +621,15 @@ export type CriteriaReviewState = "debugging" | "justified" | "restored" | "fail
  * must be visible where the person looks (the parent), not only on the judge's own debug group. One read for groups
  * with no judge; the mark is the same one `readSystemDebugMark` validates everywhere else.
  */
+/**
+ * Tester #419: a judge whose work hit its group cap is blocked, not failed, and no pass will ever settle it -- the parent
+ * used to read `debugging` forever. The cap is named so the parent can say what raises it.
+ */
+function debugGroupCapReached(store: ControlStore, groupId: string): boolean {
+  return tasksOf(store, groupId).some((entry) => entry.work.status === "blocked"
+    && (entry.work as Work & { groupCapStop?: unknown }).groupCapStop !== undefined);
+}
+
 export function criteriaReviewsOf(store: ControlStore, groupId: string): Array<{ taskId: string; debugGroupId: string; state: CriteriaReviewState; reason: string | null }> {
   const out: Array<{ taskId: string; debugGroupId: string; state: CriteriaReviewState; reason: string | null }> = [];
   for (const row of store.db.prepare("SELECT id, body FROM groups WHERE id LIKE 'sysdebug-criteria-review-%' ORDER BY rowid").all()) {
@@ -628,10 +637,15 @@ export function criteriaReviewsOf(store: ControlStore, groupId: string): Array<{
     try { mark = readSystemDebugMark(JSON.parse(String(row.body))); } catch { continue; }
     if (mark === null || mark.source.kind !== "criteria-review" || mark.source.groupId !== groupId || mark.source.taskId === null) continue;
     const debugGroupId = String(row.id);
+    // Tester #419: a judge that can no longer conclude (its run failed, or its work is blocked at the group cap) is a
+    // terminal `failed` with the reason, not `debugging` for the rest of the group's life.
+    const unfinished = mark.settled === null
+      ? anyTaskFailed(store, debugGroupId) ? "debug-task-failed" : debugGroupCapReached(store, debugGroupId) ? "group-cap-reached" : null
+      : null;
     const state: CriteriaReviewState = mark.settled === null
-      ? anyTaskFailed(store, debugGroupId) ? "failed" : "debugging"
+      ? unfinished === null ? "debugging" : "failed"
       : mark.settled.state === "justified" || mark.settled.state === "restored" ? mark.settled.state : "failed";
-    out.push({ taskId: mark.source.taskId, debugGroupId, state, reason: mark.settled?.detail ?? null });
+    out.push({ taskId: mark.source.taskId, debugGroupId, state, reason: mark.settled?.detail ?? unfinished });
   }
   return out;
 }

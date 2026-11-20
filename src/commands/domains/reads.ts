@@ -6,7 +6,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
-import { acceptanceLines, contextHandoffLines, deliveryQuestionLines, emptyResultLines, keptLines, type KeptSummary, workingTreeLines, type WorkingTreeView, sessionCleanupLines, workerLostLines, formatWithUnestimated, fundingLines, groupInstructionLines, historyLines, noChangeLines, proposalDocument, reviewLines, softCeilingLines, unestimatedLines, withFunding, type EmptyResultRun, type EstimateHistory, type NoChangeItem } from "./verbs.js";
+import { acceptanceLines, contextHandoffLines, deliveryQuestionLines, emptyResultLines, keptLines, type KeptSummary, workingTreeLines, type WorkingTreeView, sessionCleanupLines, workerLostLines, formatWithUnestimated, fundingLines, groupInstructionLines, historyLines, noChangeLines, proposalDocument, reviewLines, softCeilingLines, unestimatedLines, withFunding, criteriaReviewLines, type EmptyResultRun, type EstimateHistory, type NoChangeItem } from "./verbs.js";
 import type { FormatFailureWork } from "../../panel/formatFailureWork.js";
 import { rejectsOutputSchema } from "../../control/structuredOutputHint.js";
 import { MODEL_UNAVAILABLE_CAUSE, modelUnavailableCommand, NARRATION_ONLY_CAUSE, recoveryRetryCommand } from "../../control/driveRecord.js";
@@ -582,6 +582,8 @@ export const READ_ROWS: CommandDef[] = [
         ...(typeof groupId === "string" ? acceptanceLines(groupId, acceptance) : []),
         // Tester #359: a review that did not pass, with what answers it, as group show prints it.
         ...(typeof groupId === "string" ? reviewLines(groupId, field(body, "requirementReview") as Parameters<typeof reviewLines>[1]) : []),
+        // Tester #419: a criteria-review judge that failed or is blocked at its cap, with the next step.
+        ...criteriaReviewLines(field(body, "criteriaReviews") as Parameters<typeof criteriaReviewLines>[0]),
         // Tester #321 part C: each task costing a multiple of the group median, or running long, in words.
         ...costs.map(taskCostLine),
         // Tester #348 review: each run the read schema cannot decode, with its task.
