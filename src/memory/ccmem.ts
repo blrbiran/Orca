@@ -3,14 +3,15 @@ import { constants } from "node:fs";
 import { constants as osConstants } from "node:os";
 import { access, stat } from "node:fs/promises";
 import { isAbsolute } from "node:path";
-import { MemoryError, type MemoryAdapter, type MemoryHealth, type MemoryRecord, type MemoryScope } from "./adapter.js";
-import { type CcmemScope, parseCcmemExport } from "./ccmemExport.js";
+import { MemoryError, type MemoryAdapter, type MemoryHealth, type MemoryPage, type MemoryRecord, type MemoryScope, type MemorySearchOptions } from "./adapter.js";
+import { type CcmemList, type CcmemScoredRecord, type CcmemScope, parseCcmemExport, parseCcmemList, parseCcmemShow } from "./ccmemExport.js";
 import { searchRecords } from "./search.js";
 
 /**
- * Memory tab spec §3. The only code in Orca that starts ccmem, and it only ever runs `export`: `list` and `show`
- * write to ccmem's database (spec §3.1). Starting ccmem opens its database and may migrate it (spec §4, accepted by
- * ruling Q2), so nothing here runs ccmem unless ORCA_CCMEM_BIN names it, and health() never runs it at all.
+ * Memory tab spec §3, read path revised by issue #418. The only code in Orca that starts ccmem, and it only ever reads:
+ * `list --json` for a page, `show --json` for one record, and `export --json` only as the fallback for an older ccmem.
+ * Starting ccmem opens its database and may migrate it (spec §4, accepted by ruling Q2), so nothing here runs ccmem
+ * unless ORCA_CCMEM_BIN names it, and health() never runs it at all.
  */
 export const CCMEM_TIMEOUT_MS = 30_000; // spec §3.3: estimated, never measured on real data (ruling Q6)
 export const CCMEM_MAX_BUFFER = 64 * 1024 * 1024;
@@ -25,6 +26,14 @@ export interface CcmemAdapterOptions {
   maxBufferBytes?: number;
 }
 
+interface FailureContext {
+  bin: string;
+  what: string;
+  maxBuffer: number;
+  timeout: number;
+  stderr: string;
+}
+
 export function createCcmemAdapter(options: CcmemAdapterOptions): MemoryAdapter {
   const timeout = options.timeoutMs ?? CCMEM_TIMEOUT_MS;
   const maxBuffer = options.maxBufferBytes ?? CCMEM_MAX_BUFFER;
@@ -37,22 +46,25 @@ export function createCcmemAdapter(options: CcmemAdapterOptions): MemoryAdapter 
     return bin;
   };
 
-  const runExport = (bin: string, scope: CcmemScope, cwd: string): Promise<string> => new Promise((resolve, reject) => {
+  const runCcmem = (bin: string, argv: string[], cwd: string, what: string): Promise<string> => new Promise((resolve, reject) => {
     let child: ReturnType<typeof execFile>;
     try {
-      child = execFile(bin, ["export", "--json", "--scope", scope], { cwd, env: options.env, encoding: "utf8", timeout, maxBuffer }, (error, stdout, stderr) => {
+      child = execFile(bin, argv, { cwd, env: options.env, encoding: "utf8", timeout, maxBuffer }, (error, stdout, stderr) => {
         if (error === null) resolve(stdout);
-        else reject(exportFailure(error, { bin, scope, maxBuffer, timeout, stderr: String(stderr) }));
+        else reject(ccmemFailure(error, { bin, what, maxBuffer, timeout, stderr: String(stderr) }));
       });
     } catch (err) {
       // Node throws, instead of calling back, for most spawn errnos (ENOTDIR for a cwd that is a file, ENOEXEC, EPERM;
       // v22.13.1). Those are ccmem failing to start; anything else (an invalid option) is not, and stays a throw.
       if ((err as NodeJS.ErrnoException).syscall !== "spawn") throw err;
-      reject(exportFailure(err as ExecFileException, { bin, scope, maxBuffer, timeout, stderr: "" }));
+      reject(ccmemFailure(err as ExecFileException, { bin, what, maxBuffer, timeout, stderr: "" }));
       return;
     }
     child.stdin?.end();
   });
+
+  const runExport = (bin: string, scope: CcmemScope, cwd: string): Promise<string> =>
+    runCcmem(bin, ["export", "--json", "--scope", scope], cwd, `ccmem export --scope ${scope}`);
 
   /** One after the other, never together (spec §3.3): the first may migrate, and two would contend for ccmem's write lock. */
   const visible = async (scope: MemoryScope): Promise<MemoryRecord[]> => {
@@ -60,6 +72,35 @@ export function createCcmemAdapter(options: CcmemAdapterOptions): MemoryAdapter 
     const global = parseCcmemExport(await runExport(bin, "global", scope.repoPath), "global");
     const project = parseCcmemExport(await runExport(bin, "project", scope.repoPath), "project");
     return [...global, ...project];
+  };
+
+  /**
+   * Issue #418: one `list --json` per request. With a query ccmem ranks by its retrieval score, so the page is a slice
+   * of the same order the agent sees; without one it is the pinned/updated order the panel always showed. An older
+   * ccmem that does not know `--json` prints text (or exits 64), and the two-export path answers instead.
+   */
+  const readPage = async (scope: MemoryScope, searchOptions: MemorySearchOptions): Promise<MemoryPage> => {
+    const bin = usableBin();
+    const query = searchOptions.query.trim();
+    const offset = searchOptions.offset ?? 0;
+    const argv = ["list", ...(query === "" ? [] : [query]), "--json", "--limit", String(searchOptions.limit), "--offset", String(offset)];
+    let listed: CcmemList;
+    try {
+      listed = parseCcmemList(await runCcmem(bin, argv, scope.repoPath, "ccmem list"));
+    } catch (err) {
+      if (isOlderCcmem(err)) return searchRecords(await visible(scope), searchOptions);
+      throw err;
+    }
+
+    const rows = query === "" ? listed.rows : [...listed.rows].sort(compareScored);
+    const records = rows.map((row) => row.record);
+    return {
+      records,
+      total: listed.total,
+      truncated: listed.total > records.length,
+      offset,
+      hasMore: offset + records.length < listed.total,
+    };
   };
 
   return {
@@ -77,22 +118,49 @@ export function createCcmemAdapter(options: CcmemAdapterOptions): MemoryAdapter 
         throw err;
       }
     },
-    search: async (scope, searchOptions) => searchRecords(await visible(scope), searchOptions),
-    get: async (scope, ref) => (await visible(scope)).find((record) => record.ref === ref) ?? null,
+    search: (scope, searchOptions) => readPage(scope, searchOptions),
+    get: async (scope, ref) => {
+      const bin = usableBin();
+      try {
+        return parseCcmemShow(await runCcmem(bin, ["show", ref, "--json"], scope.repoPath, "ccmem show"));
+      } catch (err) {
+        // ccmem's text mode exits 2 for a missing id; the JSON mode answers `memory: null` instead.
+        if (err instanceof MemoryError && err.code === "ccmem-failed:2") return null;
+        if (isOlderCcmem(err)) return (await visible(scope)).find((record) => record.ref === ref) ?? null;
+        throw err;
+      }
+    },
   };
 }
 
+/** Score first, then the fixed key the panel uses for everything else (see search.ts `compareRecords`). */
+function compareScored(a: CcmemScoredRecord, b: CcmemScoredRecord): number {
+  const fused = (b.score?.fused ?? 0) - (a.score?.fused ?? 0);
+  if (fused !== 0) return fused;
+  if (a.record.pinned !== b.record.pinned) return a.record.pinned ? -1 : 1;
+  if (a.record.updatedAt !== b.record.updatedAt) return a.record.updatedAt < b.record.updatedAt ? 1 : -1;
+  return Number(b.record.ref) - Number(a.record.ref);
+}
+
+/**
+ * An older ccmem has no `--json` for list/show: it either exits 64 (a usage error) or ignores the flag and prints its
+ * text form, which the strict JSON parser refuses. Both mean "fall back to exports", and the export parser still
+ * validates whatever the fallback returns.
+ */
+function isOlderCcmem(err: unknown): boolean {
+  return err instanceof MemoryError && (err.code === "ccmem-failed:64" || err.code === "ccmem-output-invalid");
+}
+
 /** Same shape as src/control/ccloopPort.ts's mapping. A maxBuffer overrun is recognised by its code (Node does not set `killed` for it, v22.13.1); testing it before `killed` only keeps the mapping explicit. */
-function exportFailure(error: ExecFileException, ctx: { bin: string; scope: CcmemScope; maxBuffer: number; timeout: number; stderr: string }): MemoryError {
-  const what = `ccmem export --scope ${ctx.scope}`;
+function ccmemFailure(error: ExecFileException, ctx: FailureContext): MemoryError {
   const code = (error as { code?: unknown }).code;
-  if (code === "ENOENT" || code === "EACCES") return new MemoryError("ccmem-missing", `${ctx.bin}: ${code} (${what})`);
-  if (code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") return new MemoryError("ccmem-output-too-large", `${what} wrote more than ${ctx.maxBuffer} bytes`);
-  if (error.killed === true) return new MemoryError("ccmem-timeout", `${what} did not finish within ${ctx.timeout} ms`);
+  if (code === "ENOENT" || code === "EACCES") return new MemoryError("ccmem-missing", `${ctx.bin}: ${code} (${ctx.what})`);
+  if (code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") return new MemoryError("ccmem-output-too-large", `${ctx.what} wrote more than ${ctx.maxBuffer} bytes`);
+  if (error.killed === true) return new MemoryError("ccmem-timeout", `${ctx.what} did not finish within ${ctx.timeout} ms`);
   // A string errno other than the ones above (ENOTDIR, ENOEXEC, EMFILE...) is named, not collapsed to "unknown".
   const status = typeof code === "number" ? String(code) : typeof code === "string" ? errnoName(code, error.errno) : (error.signal ?? "unknown");
   const detail = ctx.stderr === "" ? error.message : ctx.stderr.slice(0, STDERR_EXCERPT_BYTES);
-  return new MemoryError(`ccmem-failed:${status}`, `${what} exited ${status}: ${detail}`);
+  return new MemoryError(`ccmem-failed:${status}`, `${ctx.what} exited ${status}: ${detail}`);
 }
 
 /**

@@ -4,18 +4,18 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { MemoryError } from "../../src/memory/adapter.js";
 import { createCcmemAdapter } from "../../src/memory/ccmem.js";
-import { type FakeCcmem, PROJECT_KEY, fakeCcmem, memoryRepo } from "./helpers.js";
+import { type FakeCcmem, type FakeData, PROJECT_KEY, fakeCcmem, memoryRepo, memoryRow } from "./helpers.js";
 
 /**
- * Spec §3. The adapter is the only place Orca starts ccmem, so each of its promises is pinned on what the fake was
- * actually called with, not on what the adapter returns: the exact argv (a wrong --scope makes ccmem export every
- * project), the cwd (ccmem computes the project key from it), the env (only the one the panel was given, so a
- * criterion's relocation holds), and that a missing or relative ORCA_CCMEM_BIN starts nothing at all.
+ * Spec §3, revised by issue #418. The adapter is the only place Orca starts ccmem, so each of its promises is pinned
+ * on what the fake was actually called with: the exact argv (one read command, never two exports on the normal path),
+ * the cwd (ccmem computes the project key from it), the env (only the one the panel was given, so a criterion's
+ * relocation holds), and that a missing or relative ORCA_CCMEM_BIN starts nothing at all.
  */
 let cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => { for (const c of cleanups.reverse()) await c(); cleanups = []; });
-async function world(mode?: string) {
-  const fake = await fakeCcmem({ mode });
+async function world(mode?: string, data?: FakeData) {
+  const fake = await fakeCcmem({ mode, data });
   const repo = await memoryRepo();
   cleanups.push(fake.cleanup, () => rm(repo, { recursive: true, force: true }));
   return { fake, scope: { projectKey: "panel-key", repoPath: repo } };
@@ -30,10 +30,10 @@ async function refusal(p: Promise<unknown>): Promise<MemoryError> {
 }
 
 describe("the ccmem adapter's calls (spec §3.1-§3.3)", () => {
-  it("runs export --json --scope global, then --scope project, and nothing else (M1)", async () => {
+  it("runs one list --json for a page, and nothing else (M1)", async () => {
     const { fake, scope } = await world();
     const page = await adapterFor(fake).search(scope, { query: "", limit: 50 });
-    expect(fake.calls().map((c) => c.argv)).toEqual([["export", "--json", "--scope", "global"], ["export", "--json", "--scope", "project"]]);
+    expect(fake.calls().map((c) => c.argv)).toEqual([["list", "--json", "--limit", "50", "--offset", "0"]]);
     expect(page.records.map((r) => r.ref).sort()).toEqual(["1", "2", "3", "4"]);
     expect(page.records.some((r) => r.content.includes("another project"))).toBe(false);
   });
@@ -41,7 +41,7 @@ describe("the ccmem adapter's calls (spec §3.1-§3.3)", () => {
   it("starts ccmem in the repository, so ccmem computes the project key itself (M2)", async () => {
     const { fake, scope } = await world();
     await adapterFor(fake).search(scope, { query: "", limit: 50 });
-    expect(fake.calls().map((c) => c.cwd)).toEqual([scope.repoPath, scope.repoPath]);
+    expect(fake.calls().map((c) => c.cwd)).toEqual([scope.repoPath]);
   });
 
   it("hands ccmem the env it was given, not this process's (M3)", async () => {
@@ -49,14 +49,53 @@ describe("the ccmem adapter's calls (spec §3.1-§3.3)", () => {
     expect(process.env.CCMEM_DATA_ROOT).not.toBe(fake.env.CCMEM_DATA_ROOT); // relocateCcmem.ts set a different one
     process.env.ORCA_T4_SENTINEL = "leak"; // nothing of this process's env may be added either
     try { await adapterFor(fake).search(scope, { query: "", limit: 50 }); } finally { delete process.env.ORCA_T4_SENTINEL; }
-    expect(fake.calls()).toHaveLength(2);
+    expect(fake.calls()).toHaveLength(1);
     for (const call of fake.calls()) expect(call.env).toEqual({ CCMEM_DATA_ROOT: fake.env.CCMEM_DATA_ROOT, HOME: fake.env.HOME, ORCA_T4_SENTINEL: null });
   });
 
   it("keeps ccmem's own project key on project rows", async () => {
     const { fake, scope } = await world();
     const page = await adapterFor(fake).search(scope, { query: "project three", limit: 50 });
+    expect(fake.calls().map((c) => c.argv)).toEqual([["list", "project three", "--json", "--limit", "50", "--offset", "0"]]);
     expect(page.records).toMatchObject([{ ref: "3", scope: "project", projectKey: PROJECT_KEY }]);
+  });
+
+  it("spawns exactly one ccmem for a query and returns score-ordered rows", async () => {
+    const data: FakeData = {
+      global: [memoryRow({ id: 1, content: "alpha" }), memoryRow({ id: 2, content: "alpha alpha" })],
+      project: [],
+      all: [],
+    };
+    const { fake, scope } = await world(undefined, data);
+    const page = await adapterFor(fake).search(scope, { query: "alpha", limit: 50 });
+    expect(fake.calls().map((c) => c.argv)).toEqual([["list", "alpha", "--json", "--limit", "50", "--offset", "0"]]);
+    // The fake scores by occurrence: the two-hit row fuses higher and comes first.
+    expect(page.records.map((r) => r.ref)).toEqual(["2", "1"]);
+  });
+
+  it("falls back to the two exports when an older ccmem rejects --json", async () => {
+    const { fake, scope } = await world("usage");
+    const page = await adapterFor(fake).search(scope, { query: "", limit: 50 });
+    expect(fake.calls().map((c) => c.argv)).toEqual([
+      ["list", "--json", "--limit", "50", "--offset", "0"],
+      ["export", "--json", "--scope", "global"],
+      ["export", "--json", "--scope", "project"],
+    ]);
+    expect(page.records.map((r) => r.ref).sort()).toEqual(["1", "2", "3", "4"]);
+  });
+
+  it("falls back to the two exports when an older ccmem prints text instead of JSON", async () => {
+    const { fake, scope } = await world("garbage");
+    expect((await refusal(adapterFor(fake).search(scope, { query: "", limit: 50 }))).code).toBe("ccmem-output-invalid");
+    // The fallback itself failed here, so the error still names the export — and the list call came first.
+    expect(fake.calls()[0]!.argv).toEqual(["list", "--json", "--limit", "50", "--offset", "0"]);
+  });
+
+  it("refuses a page containing another project's rows (the read-query equivalent of wrong --scope)", async () => {
+    const { fake, scope } = await world("list-wrong-scope");
+    expect((await refusal(adapterFor(fake).search(scope, { query: "", limit: 50 }))).code).toBe("ccmem-output-invalid");
+    // The list parser saw it first; the fallback exports refused the same rows.
+    expect(fake.calls()[0]!.argv).toEqual(["list", "--json", "--limit", "50", "--offset", "0"]);
   });
 });
 
@@ -71,11 +110,11 @@ describe("get (spec §2.2)", () => {
 });
 
 describe("failures (spec §3.3)", () => {
-  it("names the exit code, the scope and ccmem's stderr (M5)", async () => {
+  it("names the exit code, the command and ccmem's stderr (M5)", async () => {
     const { fake, scope } = await world("exit:3");
     const err = await refusal(adapterFor(fake).search(scope, { query: "", limit: 50 }));
     expect(err.code).toBe("ccmem-failed:3");
-    expect(err.message).toContain("--scope global");
+    expect(err.message).toContain("ccmem list");
     expect(err.message).toContain("failing on purpose");
     expect(fake.calls()).toHaveLength(1); // the first failure ends the request: no half result
   });
@@ -92,7 +131,7 @@ describe("failures (spec §3.3)", () => {
     await writeFile(file, "");
     const err = await refusal(adapterFor(fake).search({ ...scope, repoPath: file }, { query: "", limit: 50 }));
     expect(err.code).toBe("ccmem-failed:ENOTDIR");
-    expect(err.message).toContain("--scope global");
+    expect(err.message).toContain("ccmem list");
     expect(err.message).toContain("spawn ENOTDIR"); // Node's own message, since ccmem wrote no stderr
     expect(fake.calls()).toEqual([]);
   });
