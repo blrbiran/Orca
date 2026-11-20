@@ -277,7 +277,8 @@ export function contextHandoffLines(threshold: number | null): string[] {
 }
 /** Human text of a group view or a proposal document, with the unestimated-default lines (D3). */
 interface AcceptanceView { tip: string | null; result: string; why?: string; commands: Array<{ command: string; exit: string; ms: number }>; tail?: string; waived?: { by: string; note: string };
-  warning?: string; passedWithoutFullSuite?: true; fullSuite?: { command?: string | null; suggestion: string | null; baseline?: { tip: string; exits: string[] } } }
+  warning?: string; passedWithoutFullSuite?: true; fullSuite?: { command?: string | null; suggestion: string | null; baseline?: { tip: string; exits: string[]; tests?: number | null }; tests?: number | null };
+  evidence?: { shortfall?: { tests: number; baselineTests: number }; trackedFiles?: number | null; testFiles?: number | null; cwd?: string | null } }
 
 /**
  * Tester follow-up K, item 2 (human ruling ①: Orca runs no suite a person did not set): the words for an acceptance with
@@ -310,6 +311,8 @@ export function acceptanceLines(groupId: string, a: AcceptanceView | undefined):
   const last = a.commands.at(-1);
   return [
     `problem: group-acceptance-failed:${last?.command ?? "?"} (exited ${last?.exit ?? "?"} on orca/${groupId}${a.tip === null ? "" : ` at ${a.tip.slice(0, 12)}`})`,
+    // Tester #387: what the suite said it ran on each side, when it said anything.
+    ...(a.evidence?.shortfall === undefined ? [] : [`  the tip's suite ran ${a.evidence.shortfall.tests} tests; the base ran ${a.evidence.shortfall.baselineTests}`]),
     ...(a.tail ?? "").split("\n").filter((line) => line !== "").map((line) => `  ${line}`),
     // Tester #359 review (M2): the commands are the summary's groupProblem.next (groupProblemAnswers.ts).
     ...((next) => [`next: ${next[0]}  (a flaky check: run it again on this tip)`, `  or: ${next[1]}  (a person accepts this tip anyway)`])(acceptanceAnswers(groupId)),

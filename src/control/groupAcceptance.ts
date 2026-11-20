@@ -12,7 +12,7 @@ import { unionSetup } from "./setupUnion.js";
 import { isDirFlowGroup } from "../flow/groups.js";
 import { git } from "../scheduler/gitExec.js";
 import type { AdmissionGate } from "./admissionGate.js";
-import { acceptanceOf, groupBaseCommit, landedRunCount, landedTaskCount, maxLandingsWithoutAcceptance, type FullSuiteRecord, type GroupAcceptance } from "./groupAcceptanceRecord.js";
+import { acceptanceOf, groupBaseCommit, landedRunCount, landedTaskCount, maxLandingsWithoutAcceptance, type AcceptanceEvidence, type FullSuiteRecord, type GroupAcceptance } from "./groupAcceptanceRecord.js";
 import { fullSuiteCommand, suggestFullSuiteCommand } from "./fullSuite.js";
 import { readPreexistingFailures } from "./preexistingFailure.js";
 import type { ControlStore } from "./store.js";
@@ -68,6 +68,8 @@ export interface AcceptanceOutcome extends PostMergeOutcome {
   reported?: number;
   /** Tester #387 (2026-11-20): what the suite's last run said it ran (`# tests N`), null when it said nothing. */
   tests?: number | null;
+  /** Tester #387: where the suite ran and what the tip tree held there (the base's counts are filled once it runs). */
+  evidence?: AcceptanceEvidence;
   /** Spec 2026-11-16: the suite's runs at the group's base, when the tip was red. */
   baseline?: { tip: string; exits: string[]; failure: CheckFailure | null; tests?: number | null };
 }
@@ -213,9 +215,13 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
     // pre-dated the group, and the acceptance passes relative to it; green there: this group broke it.
     // Review of #377 (C1): relative only when the suite itself was the red command on the tip (it ran there).
     const baselineRed = baseline !== undefined && baseline.failure !== null && suiteExits.length > 0;
-    const result = failure === null ? "passed" : baselineRed ? "passed-relative" : "failed";
+    // Tester #387: a tip run that saw fewer than half the tests the base saw is not a pass relative to the base; the
+    // shortfall is the evidence that the tip's checkout was partial.
+    const shortfall = shortfallOf({ tests: outcome.tests, baseline });
+    const result = failure === null ? "passed" : baselineRed && shortfall === null ? "passed-relative" : "failed";
     const record: GroupAcceptance = { tip, result, commands, at: store.now(),
       ...(failure === null || failure.tail === "" ? {} : { tail: failure.tail }),
+      ...(outcome.evidence === undefined ? {} : { evidence: outcome.evidence }),
       fullSuite: fullSuiteRecord(inFlight.suite, repo, suiteExits, outcome) };
     deps.write(() => {
       saveAcceptance(store, groupId, record);
@@ -284,8 +290,17 @@ export async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, gro
   // The commands are the group's tasks'; they run as the group's acceptance, with the panel's empty person directory.
   const as = { runId: `group-acceptance-${groupId}`, ...(deps.dispatchedPersonDir === undefined ? {} : { personDir: deps.dispatchedPersonDir }) };
   const outcome: AcceptanceOutcome = { ...await runOnScratchTip(deps, repo, path, (name) => isGroupAcceptancePathOf(name, groupId), tip, async (tree) => {
+    // Tester #387: where this ran and what the tree held there. A checkout that materialised only part of the tip is the
+    // suspected cause of a green that ran 79 tests; these counts make that decidable after the fact.
+    const evidence: AcceptanceEvidence = { cwd: tree, head: null, trackedFiles: null, testFiles: null, tests: null };
+    try {
+      const listed = (await git(tree, ["ls-files"])).split("\n").filter((line) => line.length > 0);
+      evidence.head = (await git(tree, ["rev-parse", "HEAD"])).trim();
+      evidence.trackedFiles = listed.length;
+      evidence.testFiles = listed.filter(isTestPath).length;
+    } catch { /* the counts stay unknown; the exits are still the evidence */ }
     const union = await runCheckSequence(tree, setup, checks, timeoutMs, as, signal);
-    if (union.failure !== null || suite === null) return { ...union, suiteExits: [] };
+    if (union.failure !== null || suite === null) return { ...union, suiteExits: [], evidence };
     // Full suite spec §4: after a green union, the project's suite in the same tree and bound; a red run is run once more.
     // Tester #383 (2026-11-20): when task runs already reported this suite red, a green first run is confirmed by a
     // second one -- one green cannot tell a stable suite from a flaky one that happened to pass.
@@ -300,8 +315,9 @@ export async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, gro
       failure = answer.exit === "0" ? null : { command: suite, exit: answer.exit, tail: answer.tail };
       if (failure === null && !(reported > 0 && run === 0)) break;
     }
-    return { failure, commands, suiteExits, tests };
+    return { failure, commands, suiteExits, tests, evidence };
   }), ...(reported === 0 ? {} : { reported }) };
+  if (outcome.evidence !== undefined) outcome.evidence.tests = outcome.tests ?? null;
   // Review of #377 (C1): a task check red in the union stops before the suite runs (no suiteExits); that failure is the
   // group's own and the base is not compared -- the base's suite says nothing about a task check.
   if (outcome.failure === null || suite === null || baselineTip === null || outcome.suiteExits.length === 0) return outcome;
@@ -328,8 +344,19 @@ export async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, gro
   }
   // Green at the base: this group introduced the failure, so the failed tip's own commands stay the evidence.
   if (baseline.failure === null) return outcome;
+  if (outcome.evidence !== undefined) {
+    try {
+      const listed = (await git(repo, ["ls-tree", "-r", "--name-only", baselineTip])).split("\n").filter((line) => line.length > 0);
+      outcome.evidence.baselineTrackedFiles = listed.length;
+      outcome.evidence.baselineTestFiles = listed.filter(isTestPath).length;
+    } catch { /* the counts stay unknown */ }
+    outcome.evidence.baselineTests = baseline.tests ?? null;
+    const shortfall = shortfallOf({ tests: outcome.tests, baseline: { tests: baseline.tests } });
+    if (shortfall !== null) outcome.evidence.shortfall = shortfall;
+  }
   return {
     failure: outcome.failure, commands: [...outcome.commands, ...baseline.commands], suiteExits: outcome.suiteExits, tests: outcome.tests,
+    ...(outcome.evidence === undefined ? {} : { evidence: outcome.evidence }),
     baseline: { tip: baselineTip, exits: baseline.exits, failure: baseline.failure, tests: baseline.tests },
   };
 }
@@ -341,6 +368,22 @@ export async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, gro
 export function testsRan(tail: string): number | null {
   const found = /^# tests (\d+)$/m.exec(tail);
   return found === null ? null : Number(found[1]);
+}
+
+/** Tester #387: the file shapes a test runner discovers (node:test's own `test/` walk plus the usual suffixes). */
+function isTestPath(path: string): boolean {
+  return /(^|\/)(test|tests|__tests__)\//.test(path) || /\.(test|spec)\.[^/]+$/.test(path);
+}
+
+/**
+ * Tester #387: did the tip's run see fewer than half the tests the base's run saw? Only when both runs named a count; an
+ * output that names none proves nothing either way. The threshold is deliberately coarse (a partial checkout, not a
+ * slightly changed suite) so a legitimate test removal does not fail the group.
+ */
+export function shortfallOf(outcome: { tests?: number | null; baseline?: { tests?: number | null } }): { tests: number; baselineTests: number } | null {
+  const tests = outcome.tests ?? null, baselineTests = outcome.baseline?.tests ?? null;
+  if (tests === null || baselineTests === null || baselineTests <= 0) return null;
+  return tests * 2 < baselineTests ? { tests, baselineTests } : null;
 }
 
 /**

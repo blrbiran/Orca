@@ -28,6 +28,19 @@ export interface GroupAcceptance {
    * (#383). Absent on records written before it, and on not-run.
    */
   fullSuite?: FullSuiteRecord;
+  /**
+   * Tester #387 (2026-11-20): where the suite ran and what the tree held there, so a partial checkout (the policy group's
+   * 79-test green where the tip had 552) is decidable after the fact instead of inferred from a duration. `shortfall`
+   * means the tip run saw fewer than half the tests the base run saw; the acceptance is then failed, not passed relative.
+   */
+  evidence?: AcceptanceEvidence;
+}
+export interface AcceptanceEvidence {
+  cwd: string | null; head: string | null;
+  trackedFiles: number | null; testFiles: number | null;
+  tests: number | null;
+  baselineTrackedFiles?: number | null; baselineTestFiles?: number | null; baselineTests?: number | null;
+  shortfall?: { tests: number; baselineTests: number };
 }
 export interface FullSuiteRecord {
   command: string | null; suggestion: string | null; exits: string[]; flaky: boolean;

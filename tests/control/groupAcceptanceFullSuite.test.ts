@@ -173,6 +173,26 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
     } finally { await t.h.dispose(); }
   });
 
+  it("#387: a tip suite that ran far fewer tests than the base is failed, not passed relative, and the record says why", async () => {
+    const s = suiteAtBase(`if [ -f a ]; then echo '# tests 79'; echo '# fail 1'; else echo '# tests 552'; echo '# fail 1'; fi; exit 1`);
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
+      await t.claim(); await t.claim();
+      setSuite(t, s.command);
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).acceptance !== undefined);
+      const record = group(t).acceptance;
+      // mutation: classify on baselineRed alone -> passed-relative, red
+      expect(record.result).toBe("failed");
+      expect(record.fullSuite).toMatchObject({ tests: 79, baseline: { tests: 552 } });
+      // The record carries where the suite ran and what it saw, so the next incident is decidable without a tester.
+      expect(record.evidence).toMatchObject({ tests: 79, baselineTests: 552, shortfall: { tests: 79, baselineTests: 552 } });
+      expect(record.evidence.cwd).toContain("group-acceptance");
+      expect(record.evidence.trackedFiles).toBeGreaterThan(0);
+      // The problem names the last command the record holds (the base's, after the comparison); its prefix is the code.
+      expect(acceptanceProblem(record)).toContain("group-acceptance-failed:");
+    } finally { await t.h.dispose(); }
+  });
+
   it("red twice at the tip and at the base: passed relative to the base, and the group is done (spec 2026-11-16)", async () => {
     const s = suiteAtBase("false");
     const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
