@@ -799,6 +799,9 @@ export const commandTargetSchema = z.discriminatedUnion("kind", [
 ]);
 
 export const emptyPayloadSchema = z.object({}).strict();
+// Issue #419 (lifecycle): `derived: true` makes archive-group a one-shot cleanup of the target parent's derived
+// criteria-review judges; the parent itself is left untouched. Absent for a normal archive.
+export const archiveGroupPayloadSchema = z.object({ derived: z.literal(true).optional() }).strict();
 // Scheduled flows and groups spec §5.5, §9.1 (plan B4): a registered plan (`planId`) or a pinned library version
 // (`libraryEntry`), exactly one; `tokenLimit` (the group limit's tokens; null = unlimited) and `integration` (the group's
 // scheme; null = keep) only with `libraryEntry`. Absent fields add no bytes, so a planId import hashes as before.
@@ -1429,7 +1432,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   // Multi-directory projects spec §9.7: the person's answer to a stopped multi landing.
   z.object({ ...rawCommandFields, verb: z.literal("multi-dir-landing"), target: groupCommandTargetSchema, payload: multiDirLandingPayloadSchema }).strict(),
   // Issue-fixes spec §6.3: archive and unarchive, group target, empty payload.
-  z.object({ ...rawCommandFields, verb: z.literal("archive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("archive-group"), target: groupCommandTargetSchema, payload: archiveGroupPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   // Tester #355: close and unclose, group target, empty payload.
   z.object({ ...rawCommandFields, verb: z.literal("close-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
@@ -1549,7 +1552,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("resolve-folder-change"), target: groupCommandTargetSchema, payload: resolveFolderChangePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("multi-dir-landing"), target: groupCommandTargetSchema, payload: multiDirLandingPayloadSchema }).strict(),
   // Issue-fixes spec §6.3: archive and unarchive, group target, empty payload.
-  z.object({ ...effectiveCommandFields, verb: z.literal("archive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("archive-group"), target: groupCommandTargetSchema, payload: archiveGroupPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("unarchive-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   // Tester #355: close and unclose, group target, empty payload.
   z.object({ ...effectiveCommandFields, verb: z.literal("close-group"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
@@ -2778,8 +2781,10 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("folder-change-resolved"), groupId: idSchema, action: folderChangeActionSchema }).strict(),
   // Multi-directory projects spec §9.7: the answer was recorded; the next round does the git and folder work.
   z.object({ kind: z.literal("multi-dir-landing-set"), groupId: idSchema, action: multiDirLandingActionSchema }).strict(),
-  // Issue-fixes spec §6.3: `at` is the archive mark's time (ms since the epoch).
-  z.object({ kind: z.literal("archived"), groupId: idSchema, at: safeInteger }).strict(),
+  // Issue-fixes spec §6.3: `at` is the archive mark's time (ms since the epoch). Issue #419 (lifecycle): `derived` is
+  // present only for the `--derived-of` cleanup, naming what it converged (the parent itself was not archived).
+  z.object({ kind: z.literal("archived"), groupId: idSchema, at: safeInteger,
+    derived: z.object({ parentTerminal: z.boolean(), archived: z.array(idSchema), paused: z.array(idSchema) }).strict().optional() }).strict(),
   // Terminal run closure #169: the accounting is closed; `alreadyClosed` is the idempotent replay.
   z.object({ kind: z.literal("run-closed"), runId: idSchema, taskId: idSchema, alreadyClosed: z.boolean() }).strict(),
   // Reviewed acceptance (spec 2026-11-11 §7): the intent is recorded; the driver merges, checks and lands (or refuses) off-round.

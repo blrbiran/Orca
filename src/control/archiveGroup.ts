@@ -1,6 +1,7 @@
 import { recordActivity } from "./activity.js";
 import { terminalKindOf } from "./archivedMark.js";
 import { applyWebCommand, type WebCommandContext } from "./commandLedger.js";
+import { convergeDerivedCriteriaReviewGroups, parentGroupTerminal } from "./criteriaReviewLifecycle.js";
 import { rearmContinuingContinuations } from "./continuation.js";
 import { ArchiveRunActiveError, ControlError, type ActiveRunRef } from "./errors.js";
 import { recoveryRetryCommand, resumableBlockedRun } from "./driveRecord.js";
@@ -135,6 +136,13 @@ export function applyArchiveGroup(deps: { store: ControlStore }, command: Archiv
     expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
     apply: (context) => {
       const groupId = command.target.groupId;
+      // Issue #419 (lifecycle): `--derived-of` is a one-shot cleanup of this parent's criteria-review judges; the parent
+      // itself is not archived and none of its refusals apply. `parentTerminal` says nothing could be converged.
+      if (command.payload.derived === true) {
+        const converged = convergeDerivedCriteriaReviewGroups(deps.store, groupId, { actor: context.rawCommand.actorId });
+        return success(context, { kind: "archived", groupId, at: deps.store.now(),
+          derived: { parentTerminal: parentGroupTerminal(deps.store, groupId), archived: converged.archived, paused: converged.paused } });
+      }
       const group = groupBody(deps.store, groupId);
       const parked = refuseArchive(deps.store, groupId, group);
       if (parked !== null) interruptParkedCall(deps.store, groupId, parked);
@@ -143,6 +151,9 @@ export function applyArchiveGroup(deps: { store: ControlStore }, command: Archiv
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
       clearPendingDispatchWakes(deps.store, groupId);
       recordActivity(deps.store, { groupId, kind: "archived", body: {} });
+      // Issue #419 (lifecycle): the archive is a terminal state, so the criteria-review judges it derived converge now --
+      // the same pass the driver runs for a done group, without waiting for the driver's next kick.
+      convergeDerivedCriteriaReviewGroups(deps.store, groupId, { actor: context.rawCommand.actorId });
       return success(context, { kind: "archived", groupId, at });
     },
   }).body;
@@ -199,6 +210,8 @@ export function applyCloseGroup(deps: { store: ControlStore }, command: CloseGro
       deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify(group), groupId);
       clearPendingDispatchWakes(deps.store, groupId);
       recordActivity(deps.store, { groupId, kind: "closed", body: {} });
+      // Issue #419 (lifecycle): close is the other terminal mark; its derived criteria-review judges converge as on archive.
+      convergeDerivedCriteriaReviewGroups(deps.store, groupId, { actor: context.rawCommand.actorId });
       return success(context, { kind: "closed", groupId, at });
     },
   }).body;

@@ -51,7 +51,7 @@ import { recordUsage } from "./usage.js";
 import { exportPendingRequirements } from "./requirementExport.js";
 import { runTask } from "../scheduler/ccloopRunner.js";
 import { placeDirGroups, type DirPlacementCrashPoint } from "./dirPlacement.js";
-import { admissionOf, readOrchestrationSettings, runningGroupIds } from "./orchestration.js";
+import { admissionOf, ORCHESTRATION_ACTOR, readOrchestrationSettings, runningGroupIds } from "./orchestration.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
 import { integratePendingGroups, type IntegrationCrashPoint, type IntegrationDeps } from "./integrationPass.js";
 import { landMultiDirGroups, type MultiLandingCrashPoint, type MultiPrecheck } from "./multiLanding.js";
@@ -2472,6 +2472,14 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
     catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     try { const { markGroupsDone } = await import("./groupDone.js"); if (write(deps, () => markGroupsDone(deps.store)).length > 0) progressed = true; }
     catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
+    // Issue #419 (lifecycle): a parent that is done, archived or closed can no longer be changed by its criteria-review
+    // judges, so they converge here -- archived, or paused for an accepted run to settle first. Loaded on first use, as
+    // groupDone is: systemDebug.ts reaches back into this module, so a static import would reorder the cycle.
+    try {
+      const { convergeDerivedCriteriaReviewGroups } = await import("./criteriaReviewLifecycle.js");
+      const converged = write(deps, () => convergeDerivedCriteriaReviewGroups(deps.store, undefined, { actor: ORCHESTRATION_ACTOR }));
+      if (converged.archived.length + converged.paused.length > 0) progressed = true;
+    } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
     return progressed;
   };
 

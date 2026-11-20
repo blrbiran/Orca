@@ -2,7 +2,7 @@ import { z } from "zod";
 import { taskContractSchema, type SchedulerControlPlanSource } from "../scheduler/planFile.js";
 import type { PartialSelection } from "./agentSelection.js";
 import { flowRoleSql } from "../flow/groups.js";
-import { isGroupArchived } from "./archivedMark.js";
+import { isGroupArchived, terminalKindOf } from "./archivedMark.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { DEBUG_DEFAULT_EXECUTION_POLICY, DEBUG_DEFAULT_MAX_FILES_TOUCHED, DEBUG_REJECT_ON, DEBUG_TASK_ID, DEBUG_VERIFIER_TYPE, debugPlanId } from "./debugPlan.js";
@@ -630,22 +630,39 @@ function debugGroupCapReached(store: ControlStore, groupId: string): boolean {
     && (entry.work as Work & { groupCapStop?: unknown }).groupCapStop !== undefined);
 }
 
+/**
+ * Issue #419 (lifecycle): why a converged judge is terminal. The convergence pass writes the reason beside the strict
+ * archive mark; a judge a person archived (or a done judge with no verdict) has no note, so the mark itself names it.
+ */
+function derivedTerminalReason(body: Record<string, unknown>): string {
+  const note = body.derivedArchive as { reason?: unknown } | undefined;
+  if (typeof note?.reason === "string" && note.reason.length > 0) return note.reason;
+  const kind = terminalKindOf(body);
+  return kind === "closed" ? "derived-closed" : kind === "archived" ? "derived-archived" : "derived-done";
+}
+
 export function criteriaReviewsOf(store: ControlStore, groupId: string): Array<{ taskId: string; debugGroupId: string; state: CriteriaReviewState; reason: string | null }> {
   const out: Array<{ taskId: string; debugGroupId: string; state: CriteriaReviewState; reason: string | null }> = [];
   for (const row of store.db.prepare("SELECT id, body FROM groups WHERE id LIKE 'sysdebug-criteria-review-%' ORDER BY rowid").all()) {
+    let body: Record<string, unknown>;
     let mark: SystemDebugMark | null;
-    try { mark = readSystemDebugMark(JSON.parse(String(row.body))); } catch { continue; }
+    try { body = JSON.parse(String(row.body)) as Record<string, unknown>; mark = readSystemDebugMark(body); } catch { continue; }
     if (mark === null || mark.source.kind !== "criteria-review" || mark.source.groupId !== groupId || mark.source.taskId === null) continue;
     const debugGroupId = String(row.id);
+    // Issue #419 (lifecycle): a judge the convergence pass archived (parent terminal), or one already done, can no longer
+    // conclude -- terminal `failed` with the reason, never `debugging` for the rest of the group's life. A verdict the
+    // judge did record (justified/restored) is kept.
+    const terminal = terminalKindOf(body) !== null || body.status === "done";
     // Tester #419: a judge that can no longer conclude (its run failed, or its work is blocked at the group cap) is a
     // terminal `failed` with the reason, not `debugging` for the rest of the group's life.
     const unfinished = mark.settled === null
       ? anyTaskFailed(store, debugGroupId) ? "debug-task-failed" : debugGroupCapReached(store, debugGroupId) ? "group-cap-reached" : null
       : null;
     const state: CriteriaReviewState = mark.settled === null
-      ? unfinished === null ? "debugging" : "failed"
+      ? terminal ? "failed" : unfinished === null ? "debugging" : "failed"
       : mark.settled.state === "justified" || mark.settled.state === "restored" ? mark.settled.state : "failed";
-    out.push({ taskId: mark.source.taskId, debugGroupId, state, reason: mark.settled?.detail ?? unfinished });
+    const converged = terminal && mark.settled === null ? derivedTerminalReason(body) : null;
+    out.push({ taskId: mark.source.taskId, debugGroupId, state, reason: mark.settled?.detail ?? converged ?? unfinished });
   }
   return out;
 }

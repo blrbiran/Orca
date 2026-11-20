@@ -11,7 +11,7 @@ import {
 } from "./verbs.js";
 import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
 import { SYSTEM_LABELS } from "../../control/labels.js";
-import { text } from "./format.js";
+import { field, text } from "./format.js";
 
 /**
  * Tester #206: a stale saved-result source leaves a person one way to land the attempt: `task accept-attempt`. Named only
@@ -181,6 +181,39 @@ const decision = (value: string, flag: string): { id: string; accept: boolean } 
 
 const empty = (domain: string, action: string, summary: string, verbName: Parameters<typeof verb>[0]["verb"], path: string): CommandDef =>
   verb({ domain, action, summary, verb: verbName, positionals: [GROUP], route: (c) => `groups/${group(c)}/${path}`, payload: () => ({}) });
+
+/**
+ * Issue #419 (lifecycle): the cleanup entry `orca group archive --derived-of <parent>` archives the non-terminal
+ * criteria-review groups derived from a terminal parent; the parent itself is untouched. The parent is the positional
+ * (`group archive <parent>`) or the flag, never both -- the flag spelling leaves the positional empty.
+ */
+async function archiveTarget(c: WriteContext): Promise<string> {
+  const positional = c.ids.group, derivedOf = str(c, "derived-of");
+  if (derivedOf === undefined) {
+    if (positional === undefined) throw invalid("name the group to archive, or give --derived-of <parentGroupId> to archive its criteria-review groups");
+    return positional;
+  }
+  if (positional !== undefined) throw invalid("give the parent with --derived-of, not also as a positional group");
+  const summary = await c.read("summary") as { groups: Array<{ groupId: string }> };
+  return resolveId("group", derivedOf, summary.groups.map((entry) => entry.groupId));
+}
+
+/** Issue #419: the cleanup's receipt -- what it archived and what it paused (an active run settles first). */
+const archiveFormat = (body: unknown): string => {
+  const result = field(body, "result") as { kind?: unknown; groupId?: unknown; derived?: { parentTerminal?: unknown; archived?: unknown; paused?: unknown } } | undefined;
+  if (result?.kind !== "archived" || result.derived === undefined) return text(body);
+  const derived = result.derived;
+  const archived = Array.isArray(derived.archived) ? derived.archived.map(String) : [];
+  const paused = Array.isArray(derived.paused) ? derived.paused.map(String) : [];
+  const parent = String(result.groupId);
+  if (derived.parentTerminal !== true) return `${parent}: not terminal (only a done, archived or closed parent converges); nothing changed`;
+  if (archived.length === 0 && paused.length === 0) return `${parent}: no non-terminal criteria-review group to archive`;
+  const lines = [`${parent}: archived ${archived.length} criteria-review group(s)${paused.length === 0 ? "" : `; paused ${paused.length} whose run is still active`}`];
+  for (const id of archived) lines.push(`  archived ${id}`);
+  for (const id of paused) lines.push(`  paused ${id}: no new work is claimed; a later pass archives it once its accepted run settles`);
+  return lines.join("\n");
+};
+const withArchiveFormat = (row: CommandDef): CommandDef => ({ ...row, format: archiveFormat });
 
 /**
  * Review-exit spec 2026-11-05 §3.4 (D4): a start (or a never-started group's resume) answered `queued-for-slot` says so in
@@ -738,7 +771,11 @@ export const WORK_ROWS: CommandDef[] = [
       }
       return { selections };
     } }),
-  empty("group", "archive", "archive a group (set it aside, abandoned or not wanted): records stay, it refuses every command but unarchive and close; a closed group archived becomes archived", "archive-group", "archive"),
+  withArchiveFormat(verb({ domain: "group", action: "archive", summary: "archive a group (set it aside, abandoned or not wanted): records stay, it refuses every command but unarchive and close; a closed group archived becomes archived. --derived-of <parent> cleans up its criteria-review groups instead", verb: "archive-group",
+    positionals: [{ ...GROUP, required: false }],
+    flags: [{ name: "derived-of", type: "string", summary: "archive the non-terminal criteria-review groups derived from this terminal (done, archived or closed) parent; the parent itself is untouched" }],
+    route: async (c) => `groups/${await archiveTarget(c)}/archive`, scopeId: (c) => archiveTarget(c),
+    payload: (c) => (str(c, "derived-of") === undefined ? {} : { derived: true }) })),
   unarchiveFormat(empty("group", "unarchive", "unarchive a group (one that would run on its own is paused: orca group resume lets it run)", "unarchive-group", "unarchive")),
   // Tester #355: close is the done group's terminal mark -- not close-run, which closes one failed run's accounting.
   empty("group", "close", "close a done group (finished, hide it): records stay, it refuses every command but unclose and archive; an archived done group closed becomes closed. Not close-run", "close-group", "close"),
