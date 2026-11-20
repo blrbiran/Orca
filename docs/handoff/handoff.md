@@ -75,6 +75,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **台账收窄（不改码）**：#419 本机 `sysdebug-criteria-review-*` 已 0 个，生命周期代码已在；#366 本机 runs 7.5M／workspaces 0B，`orca gc` 与 `status --disk` 可用，no-checkout workspace 按设计延后；#328 接受 `working-tree` 为受支持路径；#387 `evidence-387-package-json.md` 已证 `package.json` 两侧字节相同，acceptance evidence 已落。**#375**：omp 升到 19.0.1 后 `--help` 仍无 `--no-mcp`（只有 per-server `enabled:false` 与 `--config` 覆盖），维持部分解决。
 - **门（现测）**：root typecheck 0；**quick 门首轮 exit 1**，唯一红是 `flowCallSettleRoute.test.ts`（C-1 误伤了 flow 调用）——已把门槛收窄到需求/估算调用，`npm test -- --rerun-failed` 34/34 绿（重跑，不是门）；ccmem 1018/1018。**wide 门**（面板停掉、`TMPDIR=/tmp`、负载 74–183）：root **949 文件：918 过、30 跳过、1 红**，用例 **7545 过、117 跳过**；唯一红是 `tests/commands/drift.test.ts`（生成文档未跟上本轮 help 文案），`npm run gen:cli-docs` 后该文件 **4/4 绿**（重跑，不是门），并已提交生成物。**root／web build RC 0**。
 - **面板**：`npm run build`＋`npm run build --workspace web` 后 `orca panel start`，pid 71631；`orca status` 全 ok（schema 25、ccloop a19f8d8 installed/built、5 groups）。**ccmem daemon** 在 wide 期间停掉、随后重启为 pid 72748；`semantic status`：`provider=ollama model=bge-m3 dim=1024 reachable=true`，backfill 仍在跑（**未等到 pending=0**）。
+- **推送**：Orca／ccmem／ccloop 的 main 均已推（`/usr/bin/git ls-remote` 现测本地＝远端；ccloop 只含本轮 handoff 提交）。`.gitignore` 里 cafe 加的 `.cafe` 一行不是本轮的，未提交。
 - **诚实边界**：C-1 没有重放 A3 的 SIGKILL 现场；#369 没有真实的「上游下架模型」样本；#385 只提示、不做语义校验；#418 默认开启未在重启前的面板上观察；#413 的 backfill 尚未完成；#375 的 `--config` 覆盖未实测。
 
 ### 3.最新（2026-11-20 深夜，会话 `cc03e171`）—— syncskill #421/#422、ccmem #413/#418、Orca #418/#419/#366；quick 绿，wide 见下
