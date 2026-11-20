@@ -40,6 +40,9 @@ function healEmptyShutdownIntents(store:ControlStore):void {
 export async function recoverControl(store:ControlStore,port:ExecutionPort,wakes?:{handlers:WakeHandlers},options:{driverOwnsWebRuns?:boolean}={}):Promise<{blockedRunIds:string[];replayedProjectionIds:string[];pendingWakeIds:string[]}> {
  const release=store.beginOperation();
  try {
+ const latchBefore=store.dispatchBlocked;
+ const blockerGroups=():Set<string>=>new Set(store.db.prepare("SELECT group_id FROM recovery_blockers WHERE group_id IS NOT NULL").all().map((row)=>String(row.group_id)));
+ const groupsBefore=blockerGroups();
  store.assertOwner();store.dispatchBlocked=true;
  const service=new ControlService(store,port),blocked=new Set<string>();
  for(const row of store.db.prepare("SELECT id,body FROM outbox WHERE kind='landing' AND delivered=0").all()) {
@@ -78,6 +81,18 @@ export async function recoverControl(store:ControlStore,port:ExecutionPort,wakes
   try{await cleanupCommittedRun(store,input.runId,input.sourceDir);}catch{blocked.add(input.runId);}
  }
  store.dispatchBlocked=blocked.size>0;
+ // Tester #393 residual: the latch and the global `dispatch-blocked` row it drives are overview state, but nothing moved
+ // the projection cursor, so an incremental poll kept answering the tiny empty shape. Move the cursor for the groups the
+ // latch now names (and for the groups it stopped naming) whenever this recovery changed either set.
+ const groupsAfter=blockerGroups();
+ for(const runId of blocked) {
+  const row=store.db.prepare("SELECT group_id FROM runs WHERE id=?").get(runId);
+  if(row!==undefined)groupsAfter.add(String(row.group_id));
+ }
+ if(store.dispatchBlocked!==latchBefore||[...groupsAfter].some((groupId)=>!groupsBefore.has(groupId))) {
+  const moved=[...new Set([...groupsBefore,...groupsAfter])];
+  if(moved.length>0)recordProjectionChange(store,moved);
+ }
  // Healed before any wake is delivered, so a pending start wake never meets a stale shutdown intent.
  healEmptyShutdownIntents(store);
  // Pending wakes are the durable record of an intent the crashed scheduler never

@@ -15,6 +15,19 @@ describe("crash recovery with real SIGKILL",()=>{
  },30000);
 });
 
+// Tester #393 residual: a recovery that blocks dispatch changes what the overview reports (the global
+// `dispatch-blocked` row), but it never moved the projection cursor, so an incremental poll answered the tiny empty
+// shape and the row stayed invisible until some unrelated group moved.
+it("a recovery that sets the dispatch latch moves the projection cursor (#393)",async()=>{
+ const sample=await crashCase("after-claim");try{
+  const {readProjectionChanges,readProjectionState}=await import("../../src/control/projectionJournal.js");
+  const before=readProjectionState(sample.store).changeSeq;
+  const result=await sample.recover();
+  expect(result.blockedRunIds).toContain(sample.info.runId);
+  expect(readProjectionChanges(sample.store,before).groups.map((group)=>group.groupId)).toContain("g1");
+ }finally{await sample.dispose();}
+},30000);
+
 it("advances a partial checkpoint when later isolation evidence arrives",async()=>{
  const sample=await crashCase("after-accept");try{
   const {recoverControl}=await import("../../src/control/recovery.js");
