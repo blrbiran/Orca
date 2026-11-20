@@ -266,6 +266,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `plan-library-project-mismatch` | 422 |
 | `plan-library-target-mismatch` | 422 |
 | `plan-version-conflict` | 409 |
+| `preexisting-failure-command-ambiguous` | 409 |
 | `preexisting-failure-not-answerable` | 409 |
 | `preexisting-failure-not-reported` | 409 |
 | `preexisting-failure-person-required` | 409 |

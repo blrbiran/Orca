@@ -1801,6 +1801,13 @@ export const groupSummarySchema = z
         baseline: z.object({ tip: commitShaSchema, exits: z.array(nonemptyString).max(2), tail: z.string().max(2048).optional(), tests: safeInteger.nullable().optional() }).strict().optional(),
         tests: safeInteger.nullable().optional(), reported: safeInteger.optional() }).strict().optional(),
       warning: nonemptyString.optional(),
+      // Tester #387: where the suite ran and what the tree held there (tip and, once it runs, base counts); absent on older rows.
+      evidence: z.object({
+        cwd: nonemptyString.nullable(), head: nonemptyString.nullable(),
+        trackedFiles: safeInteger.nullable(), testFiles: safeInteger.nullable(), tests: safeInteger.nullable(),
+        baselineTrackedFiles: safeInteger.nullable().optional(), baselineTestFiles: safeInteger.nullable().optional(), baselineTests: safeInteger.nullable().optional(),
+        shortfall: z.object({ tests: safeInteger, baselineTests: safeInteger }).strict().optional(),
+      }).strict().optional(),
       // Tester follow-up K, item 2: present (true) only on a `passed` acceptance that ran no full suite (none adopted).
       passedWithoutFullSuite: z.literal(true).optional(),
     }).strict().optional(),
