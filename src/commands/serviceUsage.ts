@@ -23,6 +23,9 @@ export const PANEL_USAGE = `  orca panel run --by <who> [--port <n>] [--bind <ad
                                  --ccmem-corrections also writes each closed correction to the
                                  repository's ccmem project memory (retrieval only) and archives it
                                  when withdrawn; it needs ORCA_CCMEM_BIN and the control plane.
+                                 #418: that export is on by default when ORCA_CCMEM_BIN is
+                                 absolute and the control plane is on; --no-ccmem-corrections
+                                 turns it off.
                                  \`orca panel <args>\` is the same command (kept as an alias).
   orca panel install [--dry-run] <orca panel run args>
                                  record the args and the named ORCA_* variables in ~/.orca/panel/service.json

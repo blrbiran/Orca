@@ -70,7 +70,8 @@ export interface PanelOptions {
   memory?: CcmemAdapterOptions;
   /**
    * Corrections-to-ccmem spec 2026-10-21 As-built: `--ccmem-corrections` writes closed corrections to ccmem
-   * (src/memory/correctionExport.ts). Present only when the flag was given; it needs ORCA_CCMEM_BIN and the control plane.
+   * (src/memory/correctionExport.ts). On by default when ORCA_CCMEM_BIN is absolute and the control plane is on; absence
+   * means either the person passed `--no-ccmem-corrections`, or ccmem/control was not configured.
    */
   ccmemCorrections?: true;
   /** Project registry spec §4: present in file mode only. */
@@ -177,11 +178,18 @@ export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOpt
   if (rejection !== null) throw new PanelRejection(rejection, controlRejectionMessage(rejection));
 
   // Corrections-to-ccmem As-built: refused by name rather than ignored -- a flag that silently does nothing is a write the
-  // person believes happens (Rule 12).
-  const ccmemCorrections = args.includes("--ccmem-corrections");
-  if (ccmemCorrections) {
-    const bin = env.ORCA_CCMEM_BIN ?? "";
-    if (bin === "" || !isAbsolute(bin)) throw new PanelRejection("ccmem-corrections-need-ccmem", "--ccmem-corrections writes corrections through ccmem: set ORCA_CCMEM_BIN to the absolute path of ccmem");
+  // person believes happens (Rule 12). #418 / Q1 ruling: the export is on by default when ORCA_CCMEM_BIN is an absolute
+  // path and the control plane is on; --no-ccmem-corrections turns it off, and an explicit --ccmem-corrections keeps the
+  // old refusal when either prerequisite is missing. Both flags together are refused rather than resolved silently.
+  const explicitCorrections = args.includes("--ccmem-corrections");
+  const optOutCorrections = args.includes("--no-ccmem-corrections");
+  if (explicitCorrections && optOutCorrections) {
+    throw new PanelRejection("ccmem-corrections-conflict", "use either --ccmem-corrections or --no-ccmem-corrections, not both");
+  }
+  const ccmemBin = env.ORCA_CCMEM_BIN ?? "";
+  const ccmemCorrections = !optOutCorrections && control.enabled && (explicitCorrections || (ccmemBin !== "" && isAbsolute(ccmemBin)));
+  if (explicitCorrections) {
+    if (ccmemBin === "" || !isAbsolute(ccmemBin)) throw new PanelRejection("ccmem-corrections-need-ccmem", "--ccmem-corrections writes corrections through ccmem: set ORCA_CCMEM_BIN to the absolute path of ccmem");
     if (!control.enabled) throw new PanelRejection("ccmem-corrections-need-control", "--ccmem-corrections reads corrections' closed state from the control plane; it cannot run with --no-control");
   }
 

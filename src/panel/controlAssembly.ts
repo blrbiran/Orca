@@ -153,7 +153,7 @@ export interface ControlAssemblyInput {
    * `/api/corrections` records with (cross-plan resolution 1). Absent, reject-pending-decision is refused by name.
    */
   corrections?: { dir: string; by: string; panel?: PanelCorrections };
-  /** Corrections-to-ccmem spec 2026-10-21 As-built: present only with `--ccmem-corrections` (and `corrections`). */
+  /** Corrections-to-ccmem spec 2026-10-21 As-built: present when ccmem is configured (and the person did not opt out). */
   ccmemCorrections?: { ccmemBin: string; env: NodeJS.ProcessEnv };
 }
 

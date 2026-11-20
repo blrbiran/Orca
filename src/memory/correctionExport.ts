@@ -14,8 +14,9 @@ import { readLedgerAtRef } from "../control/ledgerAtRef.js";
  * that was written is archived through `withdraw`. ccmem keys both by `orca:correction:<id>` (ccmem spec
  * 2026-10-21-orca-correction-import-design.md), so a re-send never duplicates. What Orca sent is recorded per correction
  * in `<correctionsDir>/ccmem-exports.json` (Rule 17: under ORCA_CORRECTIONS_DIR, 0600 when created), with the content's
- * hash, so a changed text is sent again and an unchanged one is not. Off unless the panel runs with
- * `--ccmem-corrections`; never blocks anything: every failure is recorded and retried later.
+ * hash, so a changed text is sent again and an unchanged one is not. On by default when ORCA_CCMEM_BIN is an absolute
+ * path and the panel's control plane is on (#418/Q1); `--no-ccmem-corrections` turns it off. Never blocks anything: every
+ * failure is recorded and retried later.
  */
 export const EXPORTS_FILE = "ccmem-exports.json";
 export const EXPORTS_SCHEMA = "orca-ccmem-exports-v1";
@@ -155,8 +156,18 @@ export async function exportCorrectionsPass(deps: CorrectionExporterDeps): Promi
   const file = await readExports(deps.correctionsDir);
   for (const item of await deps.listCorrections()) {
     const id = item.correction.id;
-    // Flow engine spec §13.1 [BC-B7]: a `dir:` project has no remote identity ccmem could key it by; skipped by name.
-    if (isDirProjectKey(item.correction.projectKey)) continue;
+    // Flow engine spec §13.1 [BC-B7]: a `dir:` project has no remote identity ccmem could key it by. #418: refuse it by
+    // name and record the refusal, so the person sees why the correction never reached memory (the old branch skipped it
+    // silently, which read exactly like a successful export).
+    if (isDirProjectKey(item.correction.projectKey)) {
+      const at = now();
+      const detail = `dir-project-memory-unsupported: ${item.correction.projectKey} has no remote identity for ccmem`;
+      file.rows[id] = { state: "refused", sha256: sha256(item.correction.projectKey), detail, at };
+      result.refused.push(id);
+      deps.log?.(`orca-ccmem: correction ${id} refused: ${detail}\n`);
+      await writeExports(deps.correctionsDir, file);
+      continue;
+    }
     const row = file.rows[id];
     const repo = item.repoId === null ? null : deps.repositoryPath(item.repoId);
     if (repo === null || !isAbsolute(repo)) continue;

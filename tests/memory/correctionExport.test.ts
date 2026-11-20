@@ -211,13 +211,31 @@ describe("one ccmem call", () => {
   });
 });
 
+describe("one export pass (#418 dir projects)", () => {
+  it("a dir: project is refused by name instead of silently skipped", async () => {
+    const w = await passWorld(() => [item(correction({ projectKey: "dir:p-1" }))]);
+    expect(await w.pass()).toEqual({ upserted: [], withdrawn: [], refused: ["c1"], failed: [] });
+    expect(w.calls).toHaveLength(0);
+    expect((await readExports(w.dir)).rows.c1).toMatchObject({ state: "refused", detail: expect.stringContaining("dir-project-memory-unsupported") });
+  });
+});
+
 describe("--ccmem-corrections", () => {
   const base = ["--by", "owner", "--repo", "k=/tmp/x", "--no-control"];
-  it("is off unless asked for, and refused by name without ccmem or without the control plane", () => {
+  // #418 / Q1 ruling: the export is on by default when ccmem is available (an absolute ORCA_CCMEM_BIN) and the panel has
+  // the control plane; --no-ccmem-corrections turns it off, and an explicit --ccmem-corrections still refuses by name
+  // without ccmem or without control. Both flags together are refused rather than silently resolved.
+  it("is on by default when ccmem is available, off with --no-ccmem-corrections, and refused by name when asked for without ccmem", () => {
+    const online = ["--by", "owner", "--repo", "k=/tmp/x"];
+    expect(parsePanelArgs(online, { ORCA_CCMEM_BIN: "/abs/ccmem" }).ccmemCorrections).toBe(true);
+    expect(parsePanelArgs([...online, "--no-ccmem-corrections"], { ORCA_CCMEM_BIN: "/abs/ccmem" }).ccmemCorrections).toBeUndefined();
+    expect(parsePanelArgs(online, {}).ccmemCorrections).toBeUndefined();
+    expect(parsePanelArgs([...online, "--no-ccmem-corrections"], {}).ccmemCorrections).toBeUndefined();
     expect(parsePanelArgs(base, { ORCA_CCMEM_BIN: "/abs/ccmem" }).ccmemCorrections).toBeUndefined();
     expect(() => parsePanelArgs([...base, "--ccmem-corrections"], {})).toThrow(expect.objectContaining({ code: "ccmem-corrections-need-ccmem" }));
     expect(() => parsePanelArgs([...base, "--ccmem-corrections"], { ORCA_CCMEM_BIN: "relative/ccmem" })).toThrow(expect.objectContaining({ code: "ccmem-corrections-need-ccmem" }));
     expect(() => parsePanelArgs([...base, "--ccmem-corrections"], { ORCA_CCMEM_BIN: "/abs/ccmem" })).toThrow(expect.objectContaining({ code: "ccmem-corrections-need-control" }));
+    expect(() => parsePanelArgs([...base, "--ccmem-corrections", "--no-ccmem-corrections"], { ORCA_CCMEM_BIN: "/abs/ccmem" })).toThrow(expect.objectContaining({ code: "ccmem-corrections-conflict" }));
   });
 });
 
