@@ -195,14 +195,25 @@ export async function ccloopPinCheck(ctx: CheckContext): Promise<StatusCheck> {
   return { level: "ok", subject: "ccloop", fact: `${pinned.slice(0, 7)} pinned, installed and built${override}` };
 }
 
-/** ORCA_CCMEM_BIN: unset is a warning (memory off); set, it must be an absolute executable file. */
+/**
+ * ORCA_CCMEM_BIN: unset is a warning (memory off); set, it must be an absolute executable file.
+ * Tester #417 (human ruling 2026-11-20): the binary powers the panel's memory page and correction export only. The agents
+ * Orca launches run isolated (codex phases carry `features.hooks=false` in a private CODEX_HOME; omp phases pass
+ * `--no-extensions` and ccmem's extension skips print mode), so a run never loads memory. Saying `ok` here made people
+ * believe the agents had memory; the line now names what the binary is for, and that runs do not use it.
+ */
 export async function ccmemCheck(ctx: CheckContext): Promise<StatusCheck> {
   const bin = envOf(ctx).ORCA_CCMEM_BIN;
   if (bin === undefined || bin.length === 0) return { level: "warn", subject: "ccmem", fact: "ORCA_CCMEM_BIN is not set; memory features are off" };
   if (!isAbsolute(bin)) return { level: "fail", subject: "ccmem", fact: `ORCA_CCMEM_BIN=${bin} is not an absolute path`, fix: "set ORCA_CCMEM_BIN to the ccmem binary's absolute path" };
   try { accessSync(bin, constants.X_OK); }
   catch (error) { return { level: "fail", subject: "ccmem", fact: `ORCA_CCMEM_BIN=${bin}: ${message(error)}`, fix: "build ccmem, or point ORCA_CCMEM_BIN at its binary" }; }
-  return { level: "ok", subject: "ccmem", fact: `${bin} is executable` };
+  return {
+    level: "warn",
+    subject: "ccmem",
+    fact: `${bin} is executable; it serves the panel's memory page and correction export, not the agents Orca launches (their hooks and extensions are off by design)`,
+    fix: "nothing to set up for runs; see docs/memory.md for what memory does and does not reach",
+  };
 }
 
 /** Where agents load the orca-control skill from (Claude Code, the shared agents dir, Codex). */

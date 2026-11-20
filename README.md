@@ -620,6 +620,11 @@ kind, scope and repository. Open one to read what was chosen, why, and what was 
 A read-only view of ccmem: global and project memory for a chosen repository, with search. Needs `ORCA_CCMEM_BIN`.
 Nothing is read until you open the section.
 
+**The agents Orca launches do not use ccmem.** Codex phases run with hooks disabled in a private `CODEX_HOME`, and omp
+phases run with `--no-extensions`; ccmem's extension also skips print mode. Memory reaches the panel and the correction
+export (`--ccmem-corrections`), not a task's prompt. This is a product choice (isolation), not a setup step: `orca status`
+reports the ccmem line as a warning saying the same thing.
+
 ### Metrics
 
 The correction rate, the repair rate and review coverage across your repositories, with notes on how to read them

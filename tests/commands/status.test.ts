@@ -206,6 +206,19 @@ describe("orca status reads the installed service's environment (D4)", () => {
     expect(service.out()).not.toContain(callerTable);
   });
 
+  // Tester #417: an executable ccmem used to read `ok ccmem: … is executable`, which people read as "the agents have
+  // memory". Orca's launches are isolated (codex hooks off, omp --no-extensions), so the line says what the binary is for.
+  it("an executable ccmem warns that runs do not load it, instead of reading ok", async () => {
+    const { home, env } = sandbox();
+    const bin = join(home, "ccmem");
+    writeFileSync(bin, "#!/bin/sh\n", { mode: 0o755 });
+    const io = capture({ ...env, ORCA_CCMEM_BIN: bin });
+    expect(await runStatus(args(), io.io, [ccmemCheck])).toBe(0);
+    expect(io.out()).toMatch(/^warn ccmem: .* is executable; it serves the panel's memory page and correction export, not the agents Orca launches/m);
+    // mutation: return level ok for an executable bin -> the line starts with `ok ccmem` -> red
+    expect(io.out()).not.toContain("ok ccmem");
+  });
+
   // Review 7753e97d finding 8: an installed service whose config cannot be read used to fall back to this shell in
   // silence, so every line below described an environment the panel may not have.
   it("says so when service.json exists but cannot be read, and only then", async () => {
