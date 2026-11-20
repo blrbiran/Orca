@@ -81,6 +81,9 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **#417/#418 设计定稿**（`54ce6568`）：§9 回答 Q1–Q4——纠正默认导出、`retrieval_only` 只对 `orca-correction` 进 bundle、面板与 run evidence 共用一份 id、`dir:` 项目明确拒绝（`dir-project-memory-unsupported`）。`work.memory` 仍未实现。
 - **门（现测）**：面板已停；quick `TMPDIR=/tmp npm test` **169 文件／1567 过、3 skipped、RC0**（load 76–97）；**wide 在后台跑，结果见本节末**。typecheck 0、root build 0；ccmem 1014/1014、syncskill 838/838。**面板未重建**（wide 后用当前 main build＋web build＋`orca panel restart`）。
 - **诚实边界**：syncskill 的远端 argv 仍只在 fake runtime 验过；#417 的 bundle、`--all-derived`、#366 的 workspace 强制清理、#419 的 driver hook 直接判据、#413 的真实 Ollama 链路都未做/未验；#416 的 codex P0 仍需测试者在自己的 Codex `/hooks` 批准一次。
+- **wide（现测，load 68–97）**：920 文件，**876 过、30 skipped、6 条测试红、9 个 suite 红**。9 个 suite 全是 `relocateUserData` 的 Rule 17 守卫：本会话在 gate 跑着时建了 `~/.orca/control/panel/control.sqlite.bak.1795188802`（备份本身 integrity ok），快照多了一条备份文件；不是代码。6 条测试红是 5 s／22 s／30 s 超时（`security` ×2、`driftLock`、`driverReconcileDecisions`、`schedulerBridge`、`chainsApi`）。**14 个红文件逐个重跑全绿**（`schedulerBridge` 9/9、`chainsApi` 11/11、`security`／`driftLock` 通过；其余 10 个一批 283 过／5 红重跑后绿）——**重跑，不是门**。
+- **面板与 #419/#366 现场**：`panel restart` pid 33567，`orca status` 全 ok（ccloop `a19f8d8` installed/built）。`status --disk`：runs 7.5M、workspaces 0B、artifacts 3.5M、staging 0B。`gc --json` dry-run：planned 0、38 个 `group-not-archived` 跳过（当前 5 个组都未归档，属预期）。控制库中 `sysdebug-criteria-review-*` 已 **0 个**（历史的 19 个已不在）。
+- **推送**：Orca／ccloop／ccmem／syncskill 本地 main＝远端（`/usr/bin/git ls-remote` 现测；Orca 远端已有本会话 5 笔代码/文档提交）。
 
 ### 3.最新（2026-11-20，会话 `48bc4690`）—— 测试者第五批：syncskill 九条、ccmem #414/#415/#420、Orca #419/#401/#417；三仓门绿
 
