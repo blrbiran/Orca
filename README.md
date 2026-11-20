@@ -624,7 +624,8 @@ Nothing is read until you open the section.
 `CODEX_HOME`; omp phases run with `--no-extensions`; ccmem's extension also skips print mode. Claude phases load
 `--setting-sources project,local`, which excludes the person's user-level hooks and plugins (where ccmem is installed) —
 but a target repository's own project/local settings still load, as they should, so a repository that installs ccmem
-itself would still see it. Memory reaches the panel and the correction export (`--ccmem-corrections`) either way. This is
+itself would still see it. Memory reaches the panel and the correction export (on by default when `ORCA_CCMEM_BIN` is
+an absolute path and the control plane is on; `--no-ccmem-corrections` turns it off) either way. This is
 a product choice (isolation), not a setup step: `orca status` reports the ccmem line as a warning saying the same thing.
 
 ### Metrics
