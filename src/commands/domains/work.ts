@@ -480,16 +480,26 @@ export const WORK_ROWS: CommandDef[] = [
       ...(str(c, "agent") === undefined ? {} : { agent: { agent: str(c, "agent") } }),
     }),
     hint: async (error, c) => {
-      if (error.code !== "agent-selection-rejected" || !error.message.startsWith("estimator:agent-unselected")) return undefined;
+      // Tester #401: the panel stores a refusal's detail with its code prefixed (`agent-selection-rejected:estimator:…`),
+      // so match the detail with or without that prefix; matching only the bare detail made this hint unreachable.
+      const detail = error.message.startsWith(`${error.code}:`) ? error.message.slice(error.code.length + 1) : error.message;
+      if (error.code !== "agent-selection-rejected" || !detail.startsWith("estimator:agent-unselected")) return undefined;
       const generic = "no agent is selected: pass --agent <installation> (see orca agent list), or set a defaultAgent with orca agent set-preferences";
       // Tester follow-up E §7 (#246): with no defaultAgent and exactly one perAgent entry, name that installation.
       let prefs: { defaultAgent?: unknown; perAgent?: unknown } | undefined;
       try { prefs = c === undefined ? undefined : (await c.read("operator/agent-preferences") as { preferences?: typeof prefs }).preferences; }
       catch { return generic; }
       const perAgent = prefs?.perAgent !== null && typeof prefs?.perAgent === "object" ? Object.keys(prefs.perAgent) : [];
-      return prefs?.defaultAgent === undefined && perAgent.length === 1
-        ? `no agent is selected: pass --agent ${perAgent[0]} (the one installation your agent preferences configure), or set a defaultAgent with orca agent set-preferences`
-        : generic;
+      if (prefs?.defaultAgent === undefined && perAgent.length === 1) {
+        return `no agent is selected: pass --agent ${perAgent[0]} (the one installation your agent preferences configure), or set a defaultAgent with orca agent set-preferences`;
+      }
+      // Tester #401: name what is installed, so the refusal carries the value a person has to type.
+      let installed: string[] = [];
+      try {
+        const listed = c === undefined ? undefined : await c.read("agents") as { installations?: Array<{ id?: unknown }> };
+        installed = (listed?.installations ?? []).map((installation) => installation.id).filter((id): id is string => typeof id === "string" && id.length > 0).sort();
+      } catch { /* the table cannot be read: the generic sentence stands */ }
+      return installed.length === 0 ? generic : generic.replace("no agent is selected: ", `no agent is selected: installed: ${installed.join(", ")}; `);
     },
     examples: ["orca requirement open --idea \"add a dark mode\"", "orca requirement open --idea \"add a dark mode\" --agent claude-main"] }),
   answeredFormat(verb({ domain: "requirement", action: "answer", summary: "answer the current round: --answer <qid> takes the recommendation, --answer <qid>=<text> answers in words; a question not named takes its recommendation and a glossary entry or ADR not named is accepted, as the Web's defaults",

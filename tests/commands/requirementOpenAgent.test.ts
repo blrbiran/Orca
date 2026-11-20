@@ -50,6 +50,18 @@ describe("requirement open --agent (#143)", () => {
     expect(json.requests.filter((r) => r.path === "operator/agent-preferences")).toEqual([]);
   });
 
+  // Tester #401: the panel's refusal message is `agent-selection-rejected:estimator:agent-unselected` (the code is
+  // prefixed into the stored detail). The hint matched only the bare detail, so it never printed. With the hint live
+  // again, the installations the panel lists are named too, so the person can copy a --agent value.
+  it("the hint survives the panel's code-prefixed detail and names the installed candidates (#401)", async () => {
+    const prefixed = { status: 422, body: { error: { code: "agent-selection-rejected", message: "agent-selection-rejected:estimator:agent-unselected", retryable: false } } };
+    const agents = { status: 200, body: { schema: "orca-agents-view-v1", installations: [{ id: "codex-main" }, { id: "omp-main" }] } };
+    const w = await world({}, { "POST requirements": prefixed, "GET agents": agents });
+    const out = await cli(["requirement", "open", "--idea", "x", "--group", "g-a"], w.dir);
+    expect(out.code).toBe(2);
+    expect(out.stderr).toContain("orca: no agent is selected: installed: codex-main, omp-main; pass --agent <installation> (see orca agent list), or set a defaultAgent with orca agent set-preferences\n");
+  });
+
   it("under --json stdout stays exactly one JSON line (the hint is for people)", async () => {
     const w = await world({}, { "POST requirements": unselected });
     const out = await cli(["requirement", "open", "--idea", "x", "--group", "g-a", "--json"], w.dir);
