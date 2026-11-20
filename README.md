@@ -620,10 +620,12 @@ kind, scope and repository. Open one to read what was chosen, why, and what was 
 A read-only view of ccmem: global and project memory for a chosen repository, with search. Needs `ORCA_CCMEM_BIN`.
 Nothing is read until you open the section.
 
-**The agents Orca launches do not use ccmem.** Codex phases run with hooks disabled in a private `CODEX_HOME`, and omp
-phases run with `--no-extensions`; ccmem's extension also skips print mode. Memory reaches the panel and the correction
-export (`--ccmem-corrections`), not a task's prompt. This is a product choice (isolation), not a setup step: `orca status`
-reports the ccmem line as a warning saying the same thing.
+**Orca does not wire ccmem into the agents it launches.** Codex phases run with hooks disabled in a private
+`CODEX_HOME`; omp phases run with `--no-extensions`; ccmem's extension also skips print mode. Claude phases load
+`--setting-sources project,local`, which excludes the person's user-level hooks and plugins (where ccmem is installed) —
+but a target repository's own project/local settings still load, as they should, so a repository that installs ccmem
+itself would still see it. Memory reaches the panel and the correction export (`--ccmem-corrections`) either way. This is
+a product choice (isolation), not a setup step: `orca status` reports the ccmem line as a warning saying the same thing.
 
 ### Metrics
 

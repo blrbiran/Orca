@@ -211,8 +211,8 @@ export async function ccmemCheck(ctx: CheckContext): Promise<StatusCheck> {
   return {
     level: "warn",
     subject: "ccmem",
-    fact: `${bin} is executable; it serves the panel's memory page and correction export, not the agents Orca launches (their hooks and extensions are off by design)`,
-    fix: "nothing to set up for runs; see docs/memory.md for what memory does and does not reach",
+    fact: `${bin} is executable; it serves the panel's memory page and correction export, not the agents Orca launches (codex and omp phases exclude it; a target repository's own project/local settings still load in a claude phase)`,
+    fix: "nothing to set up for runs; see the README's Memory section for what memory does and does not reach",
   };
 }
 
