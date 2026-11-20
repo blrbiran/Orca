@@ -1976,6 +1976,8 @@ export const requirementViewSchema = z.object({
     runtimeDataPaths: z.array(z.object({ taskId: nonemptyString, dir: nonemptyString.optional(), path: nonemptyString }).strict()).optional(),
     // Tester #385: optional on the same terms -- a unit the requirement names with no task, or with a file its task lacks.
     requirementUnits: z.array(z.object({ unit: nonemptyString, problem: z.enum(["missing", "path"]), path: nonemptyString.optional() }).strict()).optional(),
+    // Tester #385 (second shape): the requirement asks for a full suite no task's checks run -- a hint only.
+    requirementDelivery: z.array(z.object({ problem: z.literal("missing-full-suite"), command: nonemptyString }).strict()).optional(),
     // Dogfood finding (3): present only on a valid draft Orca re-drafted after the person's feedback that reports no
     // conflict about it (requirementSplit.ts feedbackAfterRedraft).
     feedbackAfterRedraft: z.object({ feedbackDraftNo: positiveSafeInteger, feedback: nonemptyString, redrafts: z.array(positiveSafeInteger).min(1), conflictsBefore: z.array(nonemptyString) }).strict().optional() })),
@@ -3138,6 +3140,8 @@ export const agentModelsViewSchema = z
           contextWindowTokens: positiveSafeInteger.nullable(),
           maxOutputTokens: positiveSafeInteger.nullable(),
           singleCallExecution: z.enum(["v1", "v1-soft"]).nullable(),
+          // #369: the latest run failure that says the model could not be served; absent for a model with none.
+          lastFailure: z.object({ cause: nonemptyString, at: nonemptyString.nullable(), detail: nonemptyString.nullable() }).strict().optional(),
         })
         .strict(),
     ),

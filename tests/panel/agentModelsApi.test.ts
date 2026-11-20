@@ -45,6 +45,25 @@ describe("the model list route (spec 2026-10-15 §5)", () => {
     expect(seen).toEqual([["codex", false], ["codex", true], ["codex", false]]);
   });
 
+  // #369: the catalog knows nothing about a model that was removed upstream; the run history does. The route annotates the
+  // model with its latest health-relevant failure (model-unavailable / provider-error / quota) and leaves the others alone.
+  it("annotates a model with its latest health-relevant run failure", async () => {
+    const panel = await boot("epoch-models-health", { listModels: async (installation) => ({ installation, kind: "codex", source: "cache", observedAt: "2026-10-15T00:00:00.000Z",
+      models: [{ model: "gpt-6-sol", contextWindowTokens: 272000, maxOutputTokens: null, singleCallExecution: "v1-soft" },
+        { model: "gpt-6-luna", contextWindowTokens: 272000, maxOutputTokens: null, singleCallExecution: "v1-soft" }] }) });
+    const at = "2026-11-20T07:43:31.000Z";
+    // A run row is all the health reader needs; the group/work-item it names are not part of this fixture.
+    panel.store.db.exec("PRAGMA foreign_keys=OFF");
+    try {
+      panel.store.db.prepare("INSERT INTO runs (id, group_id, work_item_id, generation, active, body) VALUES (?,?,?,?,0,?)").run(
+        "run-h1", "g-health", "w", 1, JSON.stringify({ agent: { agent: "codex", model: "gpt-6-sol" }, endedAt: at,
+          drive: { failureCause: { cause: "model-unavailable", phase: "execute", retries: 0, detail: "404 model retired" } } }));
+    } finally { panel.store.db.exec("PRAGMA foreign_keys=ON"); }
+    const body = (await json(await get(panel, "/api/control/agents/codex/models"))) as { models: Array<Record<string, unknown>> };
+    expect(body.models.find((m) => m.model === "gpt-6-sol")?.lastFailure).toEqual({ cause: "model-unavailable", at, detail: "404 model retired" });
+    expect(body.models.find((m) => m.model === "gpt-6-luna")).not.toHaveProperty("lastFailure");
+  });
+
   it("names ccloop's failure (424 ccloop-failed) and a missing installation (RF5)", async () => {
     const panel = await boot("epoch-models-fail", { listModels: async (installation) => {
       if (installation === "gone") throw new ControlError("agent-installation-missing", "gone");

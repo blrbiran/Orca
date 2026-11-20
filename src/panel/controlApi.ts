@@ -53,6 +53,7 @@ import { readStoredHandoff } from "../control/taskHandoffs.js";
 import { costOutliersOf, phaseEndUsageOf } from "../control/runUsageView.js";
 import { confirmKnownRed, knownRedAtBase, type KnownRedAtBase } from "../control/knownRedAtBase.js";
 import { preexistingFailureWaiting } from "../control/preexistingFailure.js";
+import { modelFailureHistory } from "../control/modelHealth.js";
 
 export interface ControlReadApiDeps {
   store: ControlStore;
@@ -705,7 +706,14 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
         }
         if (refresh && !owner(res)) return;
         if (port.listModels === undefined) { sendMappedControlError(res, new ControlError("control-protocol-unavailable")); return; }
-        try { res.json(agentModelsViewSchema.parse({ schema: "orca-agent-models-v1", ...(await port.listModels(installation, refresh)) })); }
+        try {
+          const view = await port.listModels(installation, refresh);
+          // #369: the catalog says what can be listed; the run history says what last failed. Merge by model, keeping the
+          // catalog's own bytes for every model without a health-relevant failure.
+          const history = modelFailureHistory(deps.store, installation);
+          const models = view.models.map((model) => history.has(model.model) ? { ...model, lastFailure: history.get(model.model)! } : model);
+          res.json(agentModelsViewSchema.parse({ schema: "orca-agent-models-v1", ...view, models }));
+        }
         catch (error) { sendMappedControlError(res, error); }
       };
       // Agent version auto-refresh spec 2026-10-20 §3.3: records the versions the installed CLIs answer now. It spawns them

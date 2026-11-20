@@ -88,6 +88,7 @@ import { abandonRequestSchema, abandonSettlementSchema } from "../control/abando
 import { allTasksDone, prerequisiteDoneFrom, prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { overlapSerialized, parallelCandidates } from "../control/splitParallel.js";
 import { goalPathsOutsideTargets, impliedPathsOutsideTargets, requirementUnitProblems, runtimeDataPaths } from "../control/splitImpliedPaths.js";
+import { deliveryProblems } from "../control/requirementDelivery.js";
 import { feedbackAfterRedraft } from "../control/requirementSplit.js";
 import { requirementDraftHash } from "../control/requirementDraftHash.js";
 import { runUsageDetail } from "../control/usageQuery.js";
@@ -1988,6 +1989,8 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
       return shown.output !== null && shown.layers !== null ? { ...shown, parallelCandidates: parallelCandidates(shown.output), impliedPathsOutsideTargets: impliedPathsOutsideTargets(shown.output),
         goalPathsOutsideTargets: goalPathsOutsideTargets(shown.output), overlapSerialized: overlapSerialized(shown.output),
         requirementUnits: requirementUnitProblems(document, shown.output),
+        // Tester #385 (second shape): the requirement asked for a full suite no task runs -- a hint only.
+        requirementDelivery: deliveryProblems(document, shown.output),
         ...(reviewing ? { runtimeDataPaths: runtimeDataPaths(shown.output!, document) } : {}),
         ...(carry === null ? {} : { feedbackAfterRedraft: carry }) } : shown;
     }), spendCapBlock: readSpendCapBlock(store, groupId),
