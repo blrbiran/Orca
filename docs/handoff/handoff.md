@@ -64,6 +64,24 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
+### 3.最新（2026-11-20 深夜，会话 `cc03e171`）—— syncskill #421/#422、ccmem #413/#418、Orca #418/#419/#366；quick 绿，wide 见下
+
+- **人的话**：开头 `allow-push`（闸门已识别）；「尽量将这些要做的task都完整做完」「暂时不要考虑context大小」「这次批准改写所有必要的判据」「允许必要的付费真跑」；#417/#419 按建议执行；卡住的事继续做不必等人的部分，最后报审并写三仓 handoff。**本会话没有真付费 provider 调用**。
+- **syncskill #421/#422**（3 笔，`npm test` 77 文件／838 条全过，`npm run build` 0）：
+  - `quoteRemotePath` 现在也转义 `$`（`~/`→`$HOME/` 仍是有意映射），并以它为 rsync source/destination、`md5sum`、receiver/skills/config 的每一条路径加引号；`remote add --remote-repo "/srv/My Skills"` 的 rsync 目标保持 `host:"/srv/My Skills/skills/x/"` 单段。
+  - `deployReceiver` 在 bootstrap 前 `mkdir -p` `remote_repo` 与 `remote_repo/skills`；bootstrap 接受根目录参数（不再写死 `$HOME/.syncskill`），`SYNCSKILL_ROOT` 可显式覆盖；建目录失败报 `E_REMOTE_ROOT`，ssh 不可达报 `E_REMOTE_TRANSPORT`。
+  - **复审抓到的关键缺陷**：`sync_receiver.mjs` 原来仍从 `homedir()` 算 `~/.syncskill`，所以非默认根会「成功」但 apply/manifest 读错树。现在 receiver 用**自己所在目录**（transport 总把它部署在 `<root>/sync_receiver.mjs`），并有「带空格根」的判据。另：rsync fallback 的 skill 名先过 `[A-Za-z0-9_-]+` 再传远端（否则 `a;id` 可在远端执行），并加引号。
+  - 两条 5 s 边缘的 CLI 安装判据给到 20 s（上一轮同类漏掉的两条）。
+- **ccmem #413 ollama provider**（`3c8eac8`＋`35bd82c`，全量 1014/1014）：`embedding.provider:"ollama"`，`ollama_base_url`（默认 `http://localhost:11434`）、`ollama_model`（无默认，必须给）、`ollama_dim`（只是猜测；首次 `/api/embed` 后以响应维数为准，配置值不会在后续 applyConfig 复活）。`admin semantic on --provider ollama` 可用，`semantic status` 报 reachable/health，未装模型点名 `ollama pull <model>`，失败回滚 `active_provider`，latency probe 标签按 provider 取 model/dim。**本机 Ollama 当前 0 个模型（`bge-m3` 不在）**，真实配置仍是 `provider=openai`，未切换；要验收先 `ollama pull bge-m3`。
+- **ccmem #418 读路径**（`a489916`）：`list [query] --json [--limit --offset --scope]` 与 `show <id> --json`，export 行形状＋`score`，不跑 tier15 写维护；文本输出不变。Orca 面板每次 list/search/get 只起一个 ccmem 进程，按 fused 排序；旧 ccmem 回退两次 export。
+- **#416 度量**（magpie 请求存档快照，`788a450`）：claude 的 ccmem 中位 **~1.2k tok / 0.4–0.6% prompt**；2367 对相邻请求 `ccmem@diff=YES` **0 次**；会话内槽位复用 32.3%。旧 opus 7.8% 是量具 bug（`## ccmem context` 无闭合 reminder，吞了用户正文），已修；渲染去掉模型可见的 `score`（`301e37f`）。**不做** ref+按需取回与摘要优先；去重门未做（试过 stable/retrieved 去重，因既有判据把唯一 pinned 命中当 retrieved 块而回退）。
+- **Orca #418 读路径**（`c78b5e6e`）：`src/memory/ccmem.ts` 走单次 `list/show --json`，`ccmemExport.ts` 加 version 1 严格 schema；`tests/memory` 104 条（2 skipped）。
+- **Orca #419 生命周期**（`58713386`）：父组 done/archived/closed 后，driver 每轮与 archive/close 同一事务收敛派生 criteria-review 组——归档（不删除）、有 accepted 在跑 run 的暂停不杀、claimed 未开始的放行、pending verdict 交给 `systemDebugPass`、无 verdict 的终态读 `failed`（reason `parent-terminal`），不再 `debugging`。一次性入口 `orca group archive --derived-of <parent>`（父组本身不动）。**`--all-derived` 未做**；历史组由下次 panel start/驱动轮自动收敛。
+- **Orca #366 GC**（`14384d53`）：`orca gc` 默认 dry-run，`--apply/--older-than/--keep-last/--group/--json`；只碰 `<stateDir>.runs|.workspaces` 下的 `run-...` 直接子目录；组须 archived/closed、run 终态、drive 已完成、年龄/keep-last 满足；workspace 用 `git worktree remove`（不带 force），脏的跳过并具名。`orca status --disk` 加两个根＋artifacts/staging 与 5 个最大 run 目录，默认输出不变。**限制**：no-checkout workspace 会被 git 判 dirty，workspace 回收大多仍靠 driver 自己的 `--force` 清理；`panel.runs` 是可靠目标。
+- **#417/#418 设计定稿**（`54ce6568`）：§9 回答 Q1–Q4——纠正默认导出、`retrieval_only` 只对 `orca-correction` 进 bundle、面板与 run evidence 共用一份 id、`dir:` 项目明确拒绝（`dir-project-memory-unsupported`）。`work.memory` 仍未实现。
+- **门（现测）**：面板已停；quick `TMPDIR=/tmp npm test` **169 文件／1567 过、3 skipped、RC0**（load 76–97）；**wide 在后台跑，结果见本节末**。typecheck 0、root build 0；ccmem 1014/1014、syncskill 838/838。**面板未重建**（wide 后用当前 main build＋web build＋`orca panel restart`）。
+- **诚实边界**：syncskill 的远端 argv 仍只在 fake runtime 验过；#417 的 bundle、`--all-derived`、#366 的 workspace 强制清理、#419 的 driver hook 直接判据、#413 的真实 Ollama 链路都未做/未验；#416 的 codex P0 仍需测试者在自己的 Codex `/hooks` 批准一次。
+
 ### 3.最新（2026-11-20，会话 `48bc4690`）—— 测试者第五批：syncskill 九条、ccmem #414/#415/#420、Orca #419/#401/#417；三仓门绿
 
 - **人的话**：整条消息 `allow-push`；「尽量将这些要做的task都完整做完」「暂时不要考虑context大小」「这次批准改写所有必要的判据」「允许必要的付费真跑」；repin 后可推 ccloop、完成后可推三仓；卡住的事继续做不必等人的部分，最后总结并写 handoff。**A3 的模型名**：claude 用 `group/smart[1m]`，codex 用 `group/smart`。§八 三条待人（ccmem daemon 重启、8 条可逆决定、判据改写）人已答「同意/这一轮可以做」。
@@ -495,9 +513,11 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
-### 4.0 接手顺序（会话 `48bc4690` 2026-11-20 滚动；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
+### 4.0 接手顺序（会话 `cc03e171` 2026-11-20 深夜滚动；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
 
-0. **先核远端与运行面**：四仓（Orca／ccloop／ccmem／syncskill）`/usr/bin/git ls-remote origin refs/heads/main` 对本地 main（会话 `48bc4690` 收尾时 Orca／ccloop／ccmem 本地＝远端；**syncskill 本地领先 7 笔，人只授权了三仓**）；`node dist/cli.js status`。面板仍是 `c8fc876f` 那轮的构建（schema 25，ccloop 钉 `a19f8d8`）——**本会话改了 Orca 代码但没重装面板**；重装照旧：无活动 run → 备份 `control.sqlite` → `npm run build` 与 `npm run build --workspace web` → `orca panel restart` → `orca status`。**别在门跑着时重启面板**（会撞 Rule 17 守卫）。门：每批 `npm run test:wide`；`ORCA_CCLOOP_BIN` 指**与 Orca 钉一致**的 ccloop 构建；`TMPDIR=/tmp`。
+0. **本会话收尾（按序）**：面板已停 → wide 结果确认后 `npm run build`＋`npm run build --workspace web`＋`orca panel restart` → `orca status`；推 Orca main（ccmem／ccloop 已推）；历史 criteria-review 派生组由 panel start/驱动轮自动收敛，也可 `orca group archive --derived-of <parent>` 逐个清。
+1. **下一轮候选**：实现 `work.memory`（设计稿 Q1–Q4 已裁，§9；ccloop 加可选信封键＋Orca 产 bundle）；#413 真实 Ollama 链路（先 `ollama pull bge-m3`，再切配置＋重启 daemon）；#363 settle lane 分片＋进度；#366 的 no-checkout workspace 回收（当前跳过）；#419 `--all-derived`；#416 codex P0（需测试者 `/hooks` 批准）。
+2. **沿用的结论**：C-1 未改码；#387 仍要测试者 `package.json` diff；#385 v9 未做；#395 设计；#370 设计；A3 付费真跑未跑。
 1. ~~推送~~ **会话 `48bc4690` 已完成**：Orca（第五批）、ccmem（#414/#415/#420 + handoff）、syncskill（九条 + handoff）都推了，由人的 `allow-push` 授权。
 2. **下一轮的活**：
    - **重装面板**到含 #419/#401/#417 的 main（本轮只跑了 quick 门，没跑 wide；重装前建议先跑一次 `npm run test:wide`，面板停着跑）。
@@ -697,7 +717,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 1. ~~push~~ **已推（会话 `57896c64`，2026-11-20）**：Orca、ccloop、ccmem 本地 main＝远端（`ls-remote` 现核）；syncskill 的 #398 本地提交未推（授权只到三仓）。测试者台账 `orca_archived_files/issue-20261023.md` 本会话未动；对本会话已修项已过期：#382 #383 #384 #386 #387(证据) #388 #389 #390 #391 #392 #393 #394 #396 #397 #398 #399。**会话 `9299e610`（2026-11-20 第三批）已修**：#400（working-tree `core.symlinks`）、#389（operator set-limit 旁安装）、#390（选择框位置/文案）、#393（前端增量游标；服务端全局 `dispatchBlocked` 缺口登记）、#370（归档清 wake＋unarchive 重新 arm continuation）、#383（reported＋两绿记 flaky）、#369 残余（`provider-error` 豁免、stalled 文案）；ccmem #396 代码已生效（daemon 已重启，日志未轮转）、syncskill #398 已重 build 并实测 0.18–0.28s。**三仓推送已完成**（`/usr/bin/git ls-remote` 现核本地＝远端）。台账状态表仍待测试者更新。
    - **会话 `c8fc876f`（2026-11-20 第四批）新增已修**：#401（hint 读 code 前缀＋点名候选）、#402（brief 列未答行＋`--command` 可写 suite 名）、#387（验收证据＋tip 测试数不足一半判 failed）、#393（服务端 cursor）、#385（requirement 单元提示，v9 暂缓）；ccloop #369（静默 run 1 s ceiling tick，已推＋repin）、ccmem #396（日志轮转已执行＋vec_backfill 退避，daemon 待重启）。#370 只出设计（状态模型）。**请测试者更新**：#369 可收窄为「模型目录健康未接入」；#370 转设计；#395 转设计；#401/#402 转为已修待现场复核。
-   - **会话 `48bc4690`（2026-11-20 第五批）新增**：syncskill **#403–#411 九条全部已修**（见 §3.最新）；ccmem **#414 #415 #420** 已修，**daemon 已重启**（退避生效），#413 未做（openai 兼容层可绕过）、#416 只留前提；Orca **#419**（judge 卡 cap 读终态＋brief/show 一行）、**#401 剩余分支**、**#417**（按人裁明确不支持：status 常驻 warn＋README 写清；spec 待裁 Q1–Q4）。**Orca／ccloop／ccmem 已推；syncskill 未推（不在授权名单，本地领先 7 笔）**。**请测试者更新**：#403–#411、#414、#415、#419、#420 转为已修待现场复核；#413 保留（是否做原生 ollama provider 归人裁）；#416 保留为未决（其 P0 度量需要测试者按 ccmem 的安装流程在自己的 Codex `/hooks` 里批准一次）；#417 转为「明确不支持（设计稿另开）」；#418 转设计。**#419 的历史 19 个派生组需测试者/人在本机执行 `orca group archive` 清理**。
+   - **会话 `cc03e171`（2026-11-20 深夜）新增**：syncskill **#421 #422**、ccmem **#413 #418 #416 度量**、Orca **#418 #419 #366** 上本地 main；ccmem／ccloop 已推，Orca 待 wide 后推；面板 wide 后重装。**请测试者更新**：#421/#422 已修待现场复核；#413 已实现原生 ollama provider（本机无模型，未切配置）；#415 仍只修 P1；#418 读路径已实现、写回/纠正默认仍按设计；#419 生命周期已修（历史组 panel start 自动收敛）；#366 `orca gc`＋`status --disk` 已实现（workspace 的 no-checkout 情况仍跳过）。**待人**：#417 `work.memory` bundle 实现、#413 真实 Ollama 链路、#363 settle lane 分片、#419 `--all-derived`、#416 codex P0。
 
 2. **看真面板**（人此前「先默认通过，之后有问题我会再找你」——不催）：G 轮新 UI——Settings → Agents 首次使用检测与安装、`--repo` 面板的「怎么换多项目」、模型不在目录时禁用提交、「按零结算并关闭」、accept-attempt 表单的 diff 统计与检查、组详情只渲染当前区域、依赖图层内排序与「N 条隐含依赖已隐藏」、无改动标记与「撤销并重跑／按无改动接受」、需求复核面板与三个出口、Problems 里的落地回归行、本组放行按钮与放行列表——都只在 jsdom 测过；F、E、D 轮的同样没在真浏览器看过（F 轮：低频功能收进 More／「⋯」、需求表单「选项」、Board 无主按钮等）。
 2d. ~~审 H 轮与 G 轮控制器与各席的可逆决定~~ 人已审（I 轮开轮「未评论的部分同意」，原话在 I 轮台账）；I 轮的可逆决定人 2026-11-13「同意」（J 轮台账）；J 轮的人 2026-11-14「同意」（K 轮台账）。K 轮是否仍待审须以对应台账的 `Ruling:` 行现核；旧 §4.0 第 2 条指针已失效。
