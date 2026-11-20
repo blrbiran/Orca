@@ -171,3 +171,27 @@ before this revision. Changes made in response:
   the `max_per_prompt` cap are listed as required changes; `dir:` keys are shown to be unreachable through today's
   interface (Q4 rewritten).
 - **§6** every criterion now names the mutation that makes it red; the `dir:` criterion depends on Q4.
+
+## 9. Decision round (2026-11-20, human approved the bundle direction)
+
+The human approved the long-term direction in this document ("#417 => 同意你的建议"): runs get memory through an
+Orca-produced, bounded bundle; harness hooks and extensions stay closed. The four open questions are settled as
+follows. This section is a decision, not an implementation; §3–§6 remain the design of record.
+
+- **Q1 — corrections on by default: yes.** The service writes closed corrections to ccmem unless it is started with an
+  explicit opt-out. The current opt-in flag is the reason `orca correct` silently reached nothing in the common
+  configuration. The write path keeps its existing failure recording and retry.
+- **Q2 — `retrieval_only` in the bundle: yes for `orca-correction`, no for the rest.** A correction means "do not do
+  that again"; keeping it out of the run's bundle defeats the correction. Other `retrieval_only` rows (external
+  imports) stay retrieval-only. The bundle records the tag it included, and the selection rule is deterministic.
+- **Q3 — one memory list, accepting one read per run: yes.** The bundle is frozen at `stepA2`; its `sha256` and `ids`
+  are recorded in `drive.memory` and collected. The panel shows those ids, so the run evidence and the Memory page agree.
+  The panel's page/search uses the supported `ccmem list --json` query (one process, not two exports).
+- **Q4 — `dir:` projects: refuse by name for now.** `dir:<id>` and ccmem's cwd-derived `path:<sha256>` are not the same
+  key, and a wrong key would mix one directory's memories into another's run. Both the correction write and the read
+  path answer a named refusal (`dir-project-memory-unsupported`) that says the project has no repository key. Adding
+  the two wire changes (a project-key input on `orca-correction`, `--project-key` on `export --scope project`) is the
+  follow-up once the key mapping is specified.
+
+Boundary kept from §5: a ccmem failure never fails a run; the bundle is capped by Orca (drop + `drive.memory.error`),
+never by an envelope refusal; verify never receives it; single-call runs stay out of scope.
