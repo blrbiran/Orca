@@ -33,3 +33,6 @@ dist/
 .playwright-cli/
 web/.vitest/
 .vitest/
+
+# cafe agent identity (local, per-machine)
+.cafe
