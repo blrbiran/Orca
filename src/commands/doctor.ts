@@ -1,8 +1,8 @@
 import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { connect } from "node:net";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { contextOf, report, runChecks, STATUS_CHECKS, type Check, type CheckContext, type StatusCheck } from "./status.js";
+import { contextOf, envOf, report, runChecks, STATUS_CHECKS, type Check, type CheckContext, type StatusCheck } from "./status.js";
 import type { CommandIo, ParsedArgs } from "./types.js";
 
 /**
@@ -104,7 +104,43 @@ export async function ccloopBinCheck(ctx: CheckContext): Promise<StatusCheck> {
   }
 }
 
-export const DOCTOR_CHECKS: readonly Check[] = [...STATUS_CHECKS, agentPathCheck, orcaModesCheck, staleSocketsCheck, ccloopBinCheck];
+/**
+ * Tester #375: an omp phase that waits for an unreachable MCP server records the warning on its transcript entry, and
+ * Orca stores the listing on the run. This reads those stored listings -- no network probe, no profile parsing, no write
+ * -- and names the newest warning, so "why was this phase slow" does not require finding a per-call stderr.log by hand.
+ */
+export async function agentWarningsCheck(ctx: CheckContext): Promise<StatusCheck> {
+  const { discoverSocketPath } = await import("../entry/discovery.js");
+  let stateDir: string;
+  try { stateDir = dirname(discoverSocketPath({ stateDirFlag: ctx.stateDirFlag, env: envOf(ctx) })); }
+  catch { return { level: "ok", subject: "agent-warnings", fact: "no control state directory found; nothing stored to read" }; }
+  const file = join(stateDir, "control.sqlite");
+  if (!existsSync(file)) return { level: "ok", subject: "agent-warnings", fact: `no control store at ${file} yet` };
+  const { DatabaseSync } = await import("node:sqlite");
+  const db = new DatabaseSync(file, { readOnly: true });
+  try {
+    let rows: Array<{ id: unknown; body: unknown }>;
+    try { rows = db.prepare("SELECT id, body FROM runs WHERE body LIKE '%\"warnings\"%' ORDER BY rowid DESC LIMIT 50").all() as typeof rows; }
+    catch { return { level: "ok", subject: "agent-warnings", fact: `no readable runs in ${file}` }; }
+    const found: Array<{ runId: string; warning: string }> = [];
+    for (const row of rows) {
+      try {
+        const body = JSON.parse(String(row.body)) as { transcripts?: { entries?: Array<{ warnings?: unknown }> } };
+        for (const entry of body.transcripts?.entries ?? []) {
+          if (!Array.isArray(entry.warnings)) continue;
+          for (const warning of entry.warnings) if (typeof warning === "string" && warning.length > 0) found.push({ runId: String(row.id), warning });
+        }
+      } catch { /* an unreadable run body is named by the run views, not here */ }
+    }
+    if (found.length === 0) return { level: "ok", subject: "agent-warnings", fact: `no stored agent phase reported a launch warning (${file})` };
+    const latest = found[0]!;
+    return { level: "warn", subject: "agent-warnings",
+      fact: `${found.length} stored launch warning${found.length === 1 ? "" : "s"}; newest in ${latest.runId}: ${latest.warning}`,
+      fix: "check the agent profile's MCP servers and disable the unreachable one (omp: its profile/config); a phase waits for it even when the task does not use MCP" };
+  } finally { db.close(); }
+}
+
+export const DOCTOR_CHECKS: readonly Check[] = [...STATUS_CHECKS, agentPathCheck, orcaModesCheck, staleSocketsCheck, ccloopBinCheck, agentWarningsCheck];
 
 export async function runDoctor(args: ParsedArgs, io: CommandIo, checks: readonly Check[] = DOCTOR_CHECKS): Promise<number> {
   return report(await runChecks(checks, await contextOf(args, io)), args, io, "orca-doctor-v1", true);

@@ -328,7 +328,7 @@ function transcriptPath(context: WriteContext): string {
   return `runs/${run}/transcripts/${match[1]}/${match[2]}/${match[3]}?${query.join("&")}`;
 }
 
-interface TranscriptCallRow { attempt: number; phase: string; seq: number; runtime: string | null; recorded: boolean; bytes: number | null; final: boolean }
+interface TranscriptCallRow { attempt: number; phase: string; seq: number; runtime: string | null; recorded: boolean; bytes: number | null; final: boolean; warnings?: string[] }
 interface TranscriptEvent { at: number; kind: string; meta?: Record<string, string>; num?: Record<string, number>; flag?: Record<string, boolean>; fields?: Record<string, { text: string; more: boolean }> }
 
 /** Issue #184: one evidence entry's content, under the identity the panel answered with (text or base64). */
@@ -345,7 +345,10 @@ function transcriptText(body: unknown): string {
   if (b.schema === "orca-run-transcripts-v1") {
     if (b.available === false) return `transcripts unavailable: ${b.reason ?? "unknown"}`;
     const calls = b.calls ?? [];
-    return calls.length === 0 ? "no transcript calls" : calls.map((c) => `${c.attempt}/${c.phase}/${c.seq}  ${c.runtime ?? "?"}  ${c.recorded ? `${c.bytes ?? "?"} B` : "not recorded"}${c.final ? "  final" : "  live"}`).join("\n");
+    return calls.length === 0 ? "no transcript calls" : calls.map((c) => [
+      `${c.attempt}/${c.phase}/${c.seq}  ${c.runtime ?? "?"}  ${c.recorded ? `${c.bytes ?? "?"} B` : "not recorded"}${c.final ? "  final" : "  live"}`,
+      ...(c.warnings ?? []).map((line) => `  warning: ${line}`),
+    ].join("\n")).join("\n");
   }
   const events = b.events ?? [];
   const lines = events.map((e) => {

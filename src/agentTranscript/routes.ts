@@ -76,7 +76,7 @@ export function registerTranscriptRoutes(app: Express, deps: TranscriptRouteDeps
         for (const entry of inRunOrder(listing?.entries ?? [])) {
           const at = await writtenAt(listing!, entry);
           if (at !== null && (lastTranscriptAt === null || at > lastTranscriptAt)) lastTranscriptAt = at;
-          calls.push({ attempt: entry.attempt, phase: entry.phase, seq: entry.seq, runtime: runtimeOf(entry), recorded: entry.path !== null, bytes: await liveBytes(listing!, entry), final: entry.final, truncatedAt: entry.truncatedAt, ...(entry.startedAt === undefined ? {} : { startedAt: entry.startedAt }) });
+          calls.push({ attempt: entry.attempt, phase: entry.phase, seq: entry.seq, runtime: runtimeOf(entry), recorded: entry.path !== null, bytes: await liveBytes(listing!, entry), final: entry.final, truncatedAt: entry.truncatedAt, ...(entry.startedAt === undefined ? {} : { startedAt: entry.startedAt }), ...(entry.warnings === undefined ? {} : { warnings: entry.warnings }) });
         }
         res.json({ schema: "orca-run-transcripts-v1", runId, available: true, calls, ...(lastTranscriptAt === null ? {} : { lastTranscriptAt }) });
       } catch (error) { sendError(res, error); }

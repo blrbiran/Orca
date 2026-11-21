@@ -66,4 +66,22 @@ describe("orca run transcript", () => {
     // The marker rides on the request, so the panel (not the CLI) is the one that refuses.
     expect(p.requests[0]!.headers["x-orca-dispatched-run"]).toBe("run-9");
   });
+
+  // Tester #375: an omp phase's MCP readiness warning used to live only in the per-call stderr.log. ccloop now records it
+  // on the transcript entry; the listing a person reads has to show it.
+  it("prints the per-call launch warnings the listing carries", async () => {
+    const warning = 'Warning: MCP server "rea" not ready after 2000ms; its tools are unavailable for this run.';
+    const p = await fakePanel({ "GET runs/run-1/transcripts": { status: 200, body: { ...LISTING, calls: [{ ...LISTING.calls[0], warnings: [warning] }, LISTING.calls[1]] } } });
+    const human = await cli(["run", "transcript", "run-1"], p.dir);
+    expect(human.code, human.stderr).toBe(0);
+    expect(human.stdout).toContain(warning);
+    // The warning belongs between the plan call's row and the execute call's; it is its own indented line.
+    const lines = human.stdout.split("\n");
+    const plan = lines.findIndex((line) => line.startsWith("1/plan/1"));
+    const warned = lines.findIndex((line) => line.includes("rea"));
+    const execute = lines.findIndex((line) => line.startsWith("2/execute/1"));
+    expect(plan).toBeGreaterThanOrEqual(0);
+    expect(warned).toBe(plan + 1);
+    expect(warned).toBeLessThan(execute);
+  });
 });

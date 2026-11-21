@@ -487,6 +487,7 @@ export function RunTranscript(props: { runId: string; active: boolean; autoOpen?
                     </button>{" "}
                     <span>{call.final ? t("transcript.final") : t("transcript.live")}</span>
                     {call.truncatedAt !== null && <> · <span>{t("transcript.truncatedAt", { bytes: call.truncatedAt })}</span></>}
+                    {(call.warnings ?? []).map((warning) => <p key={warning} className="detail-note" data-tone="warn">{warning}</p>)}
                     {sameCall(openCall, call) && <CallView runId={props.runId} call={call} active={props.active} />}
                   </li>
                 ))}

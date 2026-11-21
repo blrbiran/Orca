@@ -105,7 +105,7 @@ describe("orca status (spec §8)", () => {
     // Doctor: the same, then the slower ones.
     expect(DOCTOR_CHECKS.slice(0, STATUS_CHECKS.length)).toEqual(STATUS_CHECKS);
     // Issue 92: plus the ccloop bin the panel would start with (rewritten under 0e13a9b7's ruling to add it).
-    expect(DOCTOR_CHECKS.slice(STATUS_CHECKS.length).map((check) => check.name)).toEqual(["agentPathCheck", "orcaModesCheck", "staleSocketsCheck", "ccloopBinCheck"]);
+    expect(DOCTOR_CHECKS.slice(STATUS_CHECKS.length).map((check) => check.name)).toEqual(["agentPathCheck", "orcaModesCheck", "staleSocketsCheck", "ccloopBinCheck", "agentWarningsCheck"]);
   });
 
   // Issue #182: the service was all ok while five blocked runs waited. Work that needs a person warns, and status still

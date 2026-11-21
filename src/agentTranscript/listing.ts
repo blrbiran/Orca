@@ -38,7 +38,7 @@ export function noteTranscriptListing(store: ControlStore, runId: string, source
 }
 
 /** One listing row as the browser gets it (§12.3): no `path`; the runtime and whether a transcript was recorded. */
-export interface ListingRow { attempt: number; phase: string; seq: number; runtime: Runtime | null; recorded: boolean; bytes: number; final: boolean; truncatedAt: number | null; startedAt?: string }
+export interface ListingRow { attempt: number; phase: string; seq: number; runtime: Runtime | null; recorded: boolean; bytes: number; final: boolean; truncatedAt: number | null; startedAt?: string; warnings?: string[] }
 
 /**
  * Tester #252 (spec 2026-11-11-tester-followup-e §6): the order a run's calls are served in, so `orca run transcript` and

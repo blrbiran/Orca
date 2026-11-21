@@ -21,7 +21,7 @@ const OLD = { protocol: 1, tokenPolicy: "optional-v1", savedResultRecovery: "v1"
 const cleanups: Array<() => Promise<void> | void> = [];
 afterEach(async () => { while (cleanups.length > 0) await cleanups.pop()!(); });
 
-async function panelWith(features: Record<string, unknown>) {
+async function panelWith(features: Record<string, unknown>, warnings?: string[]) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "orca-lt-schema-")));
   const binary = join(root, "fake-ccloop");
   await copyFile(resolve("tests/control/fixtures/fake-ccloop-control.mjs"), binary); await chmod(binary, 0o700);
@@ -32,7 +32,7 @@ async function panelWith(features: Record<string, unknown>) {
   cleanups.push(() => h.dispose());
   const runId = claimWork(h.store, seedBudgetCase(h.store).t1Claim).runId;
   const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!.body));
-  body.transcripts = { sourceDir: root, entries: [{ attempt: 1, phase: "plan", seq: 1, path: "codex/1/plan/call-a/transcript.jsonl", bytes: 7, final: true, truncatedAt: null }] };
+  body.transcripts = { sourceDir: root, entries: [{ attempt: 1, phase: "plan", seq: 1, path: "codex/1/plan/call-a/transcript.jsonl", bytes: 7, final: true, truncatedAt: null, ...(warnings === undefined ? {} : { warnings }) }] };
   h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify(body), runId);
   const app = express();
   app.use((_req, res, next) => { res.locals.orcaPrincipal = { kind: "user", userId: "u", name: "U", roles: ["owner"] }; next(); });
@@ -49,6 +49,15 @@ describe("T7: the read API keys on ccloop's transcripts feature, through the rea
     const p = await panelWith(NEW);
     const answer = await p.get(`/api/control/runs/${p.runId}/transcripts`);
     expect(answer).toEqual({ status: 200, body: { schema: "orca-run-transcripts-v1", runId: p.runId, available: true, calls: [{ attempt: 1, phase: "plan", seq: 1, runtime: "codex", recorded: true, bytes: 7, final: true, truncatedAt: null }] } });
+  });
+
+  // Tester #375: ccloop records the MCP readiness warnings an omp call printed on its transcript entry. The listing is
+  // where a person looks, so it must carry them, not drop them between ccloop and the CLI/Web.
+  it("forwards the per-call launch warnings ccloop recorded", async () => {
+    const warning = 'Warning: MCP server "rea" not ready after 2000ms; its tools are unavailable for this run.';
+    const p = await panelWith(NEW, [warning]);
+    const answer = await p.get(`/api/control/runs/${p.runId}/transcripts`);
+    expect(answer.body.calls[0].warnings).toEqual([warning]);
   });
 
   it("an older ccloop: the listing says why, and no window is served", async () => {
