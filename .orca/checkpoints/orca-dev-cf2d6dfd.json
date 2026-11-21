@@ -1,0 +1,65 @@
+{
+  "v": 1,
+  "runId": "orca-dev-cf2d6dfd",
+  "runtime": "claude-code",
+  "sessionRef": "cf2d6dfd-12e9-444a-a276-6cb4f9c26c81",
+  "writtenAt": "2026-11-21T05:21:10.019Z",
+  "head": "0b2a527ac9f6f668d1f3fb8b26c743ebb041bc59",
+  "level": {
+    "kind": "reading",
+    "level": 455702,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 2
+  },
+  "next": [
+    "Nothing left for this batch: Orca, ccloop and ccmem main were pushed; the panel was restarted on the new build.",
+    "Next session: implement work.memory (bundle), then the #418 run-outcome outbox spec; #386 checkpoint; #385 v9; #416 Codex A/B; #415 P2 is not scheduled."
+  ],
+  "open": [
+    "syncskill f856228 is local only (this session's push authorization named only Orca/ccloop/ccmem).",
+    "Wide gate: 1 red tests/control/groupAcceptance.test.ts (driver deadline); solo 3x 4/4 green -> load flake.",
+    "omp 19.0.1 has no --no-mcp; #375 is visibility-only now."
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "syncskill push, if the person wants #424/#425 deployed."
+    },
+    {
+      "kind": "named-authorization",
+      "what": "Codex /hooks trust for ccmem (#416 P0) must be done by the person."
+    }
+  ],
+  "measurements": [
+    {
+      "command": "cd /Users/biran/code/skills/orca/Orca && npm run typecheck",
+      "exitCode": 0,
+      "commit": "0b2a527ac9f6f668d1f3fb8b26c743ebb041bc59",
+      "observedAt": "2026-11-21T05:18:42.030Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-cf2d6dfd-yKcxrt/1.txt"
+    },
+    {
+      "command": "cd /Users/biran/code/skills/orca/Orca && npm test",
+      "exitCode": 0,
+      "commit": "0b2a527ac9f6f668d1f3fb8b26c743ebb041bc59",
+      "observedAt": "2026-11-21T05:19:27.009Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-cf2d6dfd-yKcxrt/2.txt"
+    },
+    {
+      "command": "cd /Users/biran/code/skills/orca/Orca && npx vitest run tests/control/groupAcceptance.test.ts",
+      "exitCode": 0,
+      "commit": "0b2a527ac9f6f668d1f3fb8b26c743ebb041bc59",
+      "observedAt": "2026-11-21T05:19:55.979Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-cf2d6dfd-yKcxrt/3.txt"
+    },
+    {
+      "command": "cd /Users/biran/code/skills/orca/syncskill && npm test",
+      "exitCode": 0,
+      "commit": "0b2a527ac9f6f668d1f3fb8b26c743ebb041bc59",
+      "observedAt": "2026-11-21T05:21:09.927Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-cf2d6dfd-yKcxrt/4.txt"
+    }
+  ]
+}
