@@ -24,9 +24,36 @@ function integer(args: ParsedArgs, name: string, fallback: number): number {
   return typeof value === "number" ? value : fallback;
 }
 
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+/** Tester #366 follow-up: what the backlog is waiting on, and the one action that clears each reason. */
+function nextLines(result: GcResult): string[] {
+  const byReason = new Map(result.skippedByReason.map((entry) => [entry.reason, entry] as const));
+  const lines: string[] = [];
+  const notArchived = byReason.get("group-not-archived");
+  if (notArchived !== undefined) {
+    lines.push(`  next: ${plural(notArchived.count, "run", "runs")} in ${plural(notArchived.groups, "group", "groups")} ${notArchived.count === 1 ? "is" : "are"} not archived; archive a group first: orca group archive <groupId>`);
+  }
+  const uncleaned = byReason.get("not-cleaned-up");
+  if (uncleaned !== undefined) {
+    lines.push(`  next: pass --include-uncleaned to plan the ${plural(uncleaned.count, "run", "runs")} whose driver never finished cleaning`);
+  }
+  const dirty = byReason.get("worktree-dirty");
+  if (dirty !== undefined) {
+    lines.push(`  next: ${dirty.count === 1 ? "1 worktree is" : `${dirty.count} worktrees are`} dirty; gc never deletes uncommitted work`);
+  }
+  return lines;
+}
+
 export function formatGc(result: GcResult): string {
   const lines: string[] = [];
   lines.push(result.dryRun ? "orca gc: dry run (nothing removed; pass --apply to delete)" : "orca gc: applied");
+  if (result.skippedByReason.length > 0) {
+    lines.push(`  skipped by reason: ${result.skippedByReason.map((entry) => `${entry.reason} ${entry.count}`).join(", ")}`);
+    lines.push(...nextLines(result));
+  }
   for (const item of result.dryRun ? result.planned : result.removed) {
     lines.push(`  ${result.dryRun ? "would remove" : "removed"} ${item.kind} ${item.path} (${formatBytes(item.bytes)}${item.worktree ? ", git worktree" : ""}${item.uncleaned === true ? ", driver cleanup incomplete" : ""})`);
   }

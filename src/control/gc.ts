@@ -56,12 +56,19 @@ export interface GcOptions {
 }
 
 export interface GcItem { runId: string; kind: "runs" | "workspaces"; path: string; bytes: number; worktree: boolean; uncleaned?: boolean }
-export interface GcSkip { runId: string; path: string | null; reason: string; detail?: string }
+export interface GcSkip { runId: string; groupId?: string; path: string | null; reason: string; detail?: string }
+/** One line of the skip summary: how many runs a guard held back, and across how many groups. */
+export interface GcSkipReason { reason: string; count: number; groups: number }
 export interface GcResult {
   dryRun: boolean;
   planned: GcItem[];
   removed: GcItem[];
   skipped: GcSkip[];
+  /**
+   * Tester #366 follow-up: the same `skipped` rows grouped by reason, so the CLI can say what is holding the backlog
+   * back and which action clears it. Derived here (not in the formatter) so `--json` carries it too.
+   */
+  skippedByReason: GcSkipReason[];
   /** Bytes freed by `removed` (with --apply), or that the plan would free (dry run). */
   bytes: number;
 }
@@ -235,11 +242,17 @@ export async function gcControl(options: GcOptions): Promise<GcResult> {
 
   const planned: Plan[] = [];
   const skipped: GcSkip[] = [];
+  const groupOfRun = new Map<string, string>();
+  for (const candidate of candidates) if (candidate.run.groupId !== "") groupOfRun.set(candidate.runId, candidate.run.groupId);
+  const groupIdOf = (runId: string): { groupId?: string } => {
+    const groupId = groupOfRun.get(runId);
+    return groupId === undefined ? {} : { groupId };
+  };
   for (const candidate of candidates) {
-    if (candidate.skip !== undefined) { skipped.push({ runId: candidate.runId, path: null, ...candidate.skip }); continue; }
-    if (kept.has(candidate.runId)) { skipped.push({ runId: candidate.runId, path: null, reason: "keep-last" }); continue; }
+    if (candidate.skip !== undefined) { skipped.push({ runId: candidate.runId, path: null, ...groupIdOf(candidate.runId), ...candidate.skip }); continue; }
+    if (kept.has(candidate.runId)) { skipped.push({ runId: candidate.runId, path: null, ...groupIdOf(candidate.runId), reason: "keep-last" }); continue; }
     if (candidate.touchedAt >= cutoff) {
-      skipped.push({ runId: candidate.runId, path: null, reason: "too-recent", detail: new Date(candidate.touchedAt).toISOString() });
+      skipped.push({ runId: candidate.runId, path: null, ...groupIdOf(candidate.runId), reason: "too-recent", detail: new Date(candidate.touchedAt).toISOString() });
       continue;
     }
     const uncleaned = options.includeUncleaned === true && candidate.run.body.drive !== undefined
@@ -284,14 +297,28 @@ export async function gcControl(options: GcOptions): Promise<GcResult> {
         }
         removed.push(plan.item);
       } catch (error) {
-        if (plan.worktreeRepo !== null) skipped.push({ runId: plan.item.runId, path: plan.item.path, ...worktreeRefusal(error) });
-        else skipped.push({ runId: plan.item.runId, path: plan.item.path, reason: "remove-failed", detail: (error as Error).message });
+        if (plan.worktreeRepo !== null) skipped.push({ runId: plan.item.runId, path: plan.item.path, ...groupIdOf(plan.item.runId), ...worktreeRefusal(error) });
+        else skipped.push({ runId: plan.item.runId, path: plan.item.path, ...groupIdOf(plan.item.runId), reason: "remove-failed", detail: (error as Error).message });
       }
     }
   }
 
   const bytes = (apply ? removed : planned.map((plan) => plan.item)).reduce((sum, item) => sum + item.bytes, 0);
-  return { dryRun: !apply, planned: planned.map((plan) => plan.item), removed, skipped, bytes };
+  return { dryRun: !apply, planned: planned.map((plan) => plan.item), removed, skipped, skippedByReason: summarizeSkips(skipped), bytes };
+}
+
+/** `skipped` grouped by reason, most frequent first (ties by reason) — the text output's summary and `--json`'s field. */
+function summarizeSkips(skipped: readonly GcSkip[]): GcSkipReason[] {
+  const reasons = new Map<string, { count: number; groups: Set<string> }>();
+  for (const skip of skipped) {
+    const entry = reasons.get(skip.reason) ?? { count: 0, groups: new Set<string>() };
+    entry.count += 1;
+    if (skip.groupId !== undefined && skip.groupId !== "") entry.groups.add(skip.groupId);
+    reasons.set(skip.reason, entry);
+  }
+  return [...reasons.entries()]
+    .map(([reason, entry]) => ({ reason, count: entry.count, groups: entry.groups.size }))
+    .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason));
 }
 
 /** When the run last moved: its `endedAt` (stamped on entering a terminal state), else the directory's own mtime. */

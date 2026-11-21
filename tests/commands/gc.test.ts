@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { openTestStore } from "../control/fixtures/store.js";
 import { gcControl } from "../../src/control/gc.js";
-import { runGc } from "../../src/commands/local/gc.js";
+import { formatGc, runGc } from "../../src/commands/local/gc.js";
 import { runStatus } from "../../src/commands/status.js";
 import type { CommandIo, ParsedArgs } from "../../src/commands/types.js";
 
@@ -75,6 +75,33 @@ async function repoWithCommit(root: string): Promise<string> {
 const reasonOf = (result: Awaited<ReturnType<typeof gcControl>>, runId: string) => result.skipped.find((entry) => entry.runId === runId)?.reason;
 
 describe("orca gc (#366)", () => {
+  it("summarizes why runs were skipped and names the next action for each reason", async () => {
+    const { h, stateDir, runsRoot } = await caseDir();
+    try {
+      seedGroup(h, "g-open", false);
+      seedGroup(h, "g-open-2", false);
+      seedGroup(h, "g-archived");
+      seedRun(h, "g-open", "run-open-1", { endedAt: OLD });
+      seedRun(h, "g-open", "run-open-2", { endedAt: OLD });
+      seedRun(h, "g-open-2", "run-open-3", { endedAt: OLD });
+      seedRun(h, "g-archived", "run-uncleaned", { endedAt: OLD, drive: { cleanedUp: false } });
+      for (const id of ["run-open-1", "run-open-2", "run-open-3", "run-uncleaned"]) await makeRunDir(join(runsRoot, id), 128, OLD);
+
+      const result = await gcControl({ stateDir, now: NOW });
+      // mutation (count runs per reason but not distinct groups) -> `groups` would equal the run count, red.
+      expect(result.skippedByReason).toEqual([
+        { reason: "group-not-archived", count: 3, groups: 2 },
+        { reason: "not-cleaned-up", count: 1, groups: 1 },
+      ]);
+      const text = formatGc(result);
+      // mutation (drop the summary line) -> red.
+      expect(text).toContain("skipped by reason: group-not-archived 3, not-cleaned-up 1");
+      // mutation (omit the per-reason next lines) -> both assertions red.
+      expect(text).toContain("next: 3 runs in 2 groups are not archived; archive a group first: orca group archive <groupId>");
+      expect(text).toContain("next: pass --include-uncleaned to plan the 1 run whose driver never finished cleaning");
+    } finally { await h.dispose(); }
+  });
+
   it("is a dry run: it reports the plans and removes nothing", async () => {
     const { h, stateDir, runsRoot, workspacesRoot } = await caseDir();
     try {
