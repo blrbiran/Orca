@@ -74,6 +74,8 @@ export interface PanelOptions {
    * means either the person passed `--no-ccmem-corrections`, or ccmem/control was not configured.
    */
   ccmemCorrections?: true;
+  /** Run-outcome writeback spec 2026-11-21 §3.2: on by default under the same prerequisites; `--no-ccmem-outcomes` turns it off. */
+  ccmemOutcomes?: true;
   /** Project registry spec §4: present in file mode only. */
   projectsFile?: { file: string; boot: ProjectsFileRead };
   /** Accounts spec §3.3: `--session-days`, 1..30, default 15. Optional for literal options; `parsePanelArgs` always sets it. */
@@ -192,6 +194,18 @@ export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOpt
     if (ccmemBin === "" || !isAbsolute(ccmemBin)) throw new PanelRejection("ccmem-corrections-need-ccmem", "--ccmem-corrections writes corrections through ccmem: set ORCA_CCMEM_BIN to the absolute path of ccmem");
     if (!control.enabled) throw new PanelRejection("ccmem-corrections-need-control", "--ccmem-corrections reads corrections' closed state from the control plane; it cannot run with --no-control");
   }
+  // Run-outcome writeback spec 2026-11-21 §3.2: same default/opt-out shape as corrections. A flag that cannot work is
+  // refused by name, and both together are a conflict rather than a silent pick.
+  const explicitOutcomes = args.includes("--ccmem-outcomes");
+  const optOutOutcomes = args.includes("--no-ccmem-outcomes");
+  if (explicitOutcomes && optOutOutcomes) {
+    throw new PanelRejection("ccmem-outcomes-conflict", "use either --ccmem-outcomes or --no-ccmem-outcomes, not both");
+  }
+  const ccmemOutcomes = !optOutOutcomes && control.enabled && (explicitOutcomes || (ccmemBin !== "" && isAbsolute(ccmemBin)));
+  if (explicitOutcomes) {
+    if (ccmemBin === "" || !isAbsolute(ccmemBin)) throw new PanelRejection("ccmem-outcomes-need-ccmem", "--ccmem-outcomes writes run outcomes through ccmem: set ORCA_CCMEM_BIN to the absolute path of ccmem");
+    if (!control.enabled) throw new PanelRejection("ccmem-outcomes-need-control", "--ccmem-outcomes reads run outcomes from the control plane; it cannot run with --no-control");
+  }
 
   return {
     by,
@@ -209,6 +223,7 @@ export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOpt
     // means not configured; there is no PATH lookup, so a criterion reaches a real ccmem only by naming it.
     memory: { ccmemBin: env.ORCA_CCMEM_BIN !== undefined && env.ORCA_CCMEM_BIN !== "" ? env.ORCA_CCMEM_BIN : null, env },
     ...(ccmemCorrections ? { ccmemCorrections: true as const } : {}),
+    ...(ccmemOutcomes ? { ccmemOutcomes: true as const } : {}),
     ...(projectsFile === undefined ? {} : { projectsFile }),
     sessionDays,
     // Read at parse time from the env this panel was given, like correctionsDir (Rule 17).
@@ -288,7 +303,8 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
       ...(mode.executionPortReason === undefined ? {} : { executionPortReason: mode.executionPortReason }), corrections: { dir: opts.correctionsDir, by: opts.by, panel: panelCorrections(opts, reviews) },
       ...(opts.ccmemCorrections === true && opts.memory?.ccmemBin != null ? { ccmemCorrections: { ccmemBin: opts.memory.ccmemBin, env: opts.memory.env } } : {}),
       // Memory in runs spec 2026-11-20 §4.1: A2 produces the run's bundle from this ccmem, whenever it is configured.
-      ...(opts.memory?.ccmemBin != null ? { memory: { ccmemBin: opts.memory.ccmemBin, env: opts.memory.env } } : {}) }); }
+      ...(opts.memory?.ccmemBin != null ? { memory: { ccmemBin: opts.memory.ccmemBin, env: opts.memory.env } } : {}),
+      ...(opts.ccmemOutcomes === true && opts.memory?.ccmemBin != null ? { memoryOutcomes: true } : {}) }); }
     catch (error) { auth.close(); throw error; }
   }
   // Multi-directory projects spec §4.2: a multi id's control repoId comes from the assembly's multi map, never from

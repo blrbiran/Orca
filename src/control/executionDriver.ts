@@ -3,6 +3,7 @@ import { stackBaseOf } from "./groupEdges.js";
 import { flowChildSkills, isFlowChildGroup } from "../flow/groups.js";
 import { groupRepoId, isDirGroup } from "./dirGroup.js";
 import { produceMemoryBundle } from "../memory/bundle.js";
+import { drainMemoryOutcomes } from "../memory/outcomeOutbox.js";
 import type { MultiDirProjectOf } from "./multiGroup.js";
 import { dirTargetRepoId, isMultiGroup, multiDirOf, multiPrimaryRepoId, type FrozenMultiDir } from "./multiGroup.js";
 import { withSkillDirs } from "../flow/template/vars.js";
@@ -149,6 +150,8 @@ export interface ExecutionDriverDeps {
   agentsTablePath: string;
   /** Memory in runs spec 2026-11-20: ccmem's binary and env for the A2 bundle; absent = no memory configured. */
   memory?: { ccmemBin: string; env: NodeJS.ProcessEnv };
+  /** Run-outcome writeback spec 2026-11-21 §3.2: drain the memory outbox from the pass. Off unless the panel enables it. */
+  memoryOutcomes?: boolean;
   /** CLI v2 spec §15.3: the ORCA_PERSON_DIR of a reconciliation or resolution `ccloop run` (runTask's option), and of the debug and criteria checks (review I1). */
   dispatchedPersonDir?: string;
   /** N1 spec §6: the ast-grep binary the overview's structure part runs; null = unavailable. */
@@ -2510,6 +2513,13 @@ export function createExecutionDriver(options: ExecutionDriverDeps): ExecutionDr
       const converged = write(deps, () => convergeDerivedCriteriaReviewGroups(deps.store, undefined, { actor: ORCHESTRATION_ACTOR }));
       if (converged.archived.length + converged.paused.length > 0) progressed = true;
     } catch (error) { if (error instanceof ControlError && error.code === "panel-draining") return progressed; throw error; }
+    // Run-outcome writeback spec 2026-11-21 §3.2: the drain scans the store, not DRIVEN, so a blocked-at-C failure is
+    // queued too. A ccmem failure is a notice on the outbox row, never a failed pass or run.
+    if (deps.memoryOutcomes === true && deps.memory !== undefined) {
+      try {
+        if (await drainMemoryOutcomes(deps, deps.memory, (deps.now?.() ?? new Date()).getTime()) > 0) progressed = true;
+      } catch (error) { process.stderr.write(`orca-driver: memory outcomes: ${logError(error)}\n`); }
+    }
     return progressed;
   };
 

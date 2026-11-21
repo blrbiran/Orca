@@ -202,6 +202,15 @@ export const driveRecordSchema = z.object({
     z.object({ error: z.string().min(1).max(200) }).strict(),
   ]).optional(),
   memoryReport: z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/), ids: z.array(safeInteger.positive()).min(1).max(64), tokens: safeInteger.positive() }).strict().optional(),
+  // Run-outcome writeback spec 2026-11-21 §3.1: the outbox row. `payload` is frozen on first sight so a retry resends
+  // the same bytes; `state` moves pending → sent/refused/failed/skipped (unsupported is a per-binary probe answer).
+  memoryFeedback: z.object({
+    state: z.enum(["pending", "sent", "refused", "failed", "unsupported", "skipped"]),
+    payload: z.object({ version: z.literal(1), runId: idSchema, taskId: idSchema.nullable(), attempt: safeInteger.positive().nullable(), outcome: z.string().min(1), abandoned: z.boolean(), memoryIds: z.array(safeInteger.positive()).min(1).max(64), observedAt: safeInteger }).strict().optional(),
+    detail: z.string().min(1).max(300).optional(),
+    at: safeInteger,
+    attempts: safeInteger,
+  }).strict().optional(),
   // Off-plan writes W4 (#346, Task 5 fix round 1): the parallel sibling's claim the run was stopped on, classified once
   // when the block was recorded (parallelClaims.ts parallelClaimOf), so a later change to the task's frozen siblings does
   // not rewrite why this run stopped. Absent when the stop is on no sibling's claim and in every older drive record.

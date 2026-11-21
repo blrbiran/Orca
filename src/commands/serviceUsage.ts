@@ -26,6 +26,11 @@ export const PANEL_USAGE = `  orca panel run --by <who> [--port <n>] [--bind <ad
                                  #418: that export is on by default when ORCA_CCMEM_BIN is
                                  absolute and the control plane is on; --no-ccmem-corrections
                                  turns it off.
+                                 #417: an absolute ORCA_CCMEM_BIN also lets a run carry a bounded
+                                 ccmem bundle into plan and execute (work.memory). #418: the run's
+                                 terminal outcome is written back to ccmem by default under the
+                                 same prerequisites; --no-ccmem-outcomes turns it off, and
+                                 --ccmem-outcomes keeps the old refusal when either is missing.
                                  \`orca panel <args>\` is the same command (kept as an alias).
   orca panel install [--dry-run] <orca panel run args>
                                  record the args and the named ORCA_* variables in ~/.orca/panel/service.json
