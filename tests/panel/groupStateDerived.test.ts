@@ -48,6 +48,34 @@ describe("a group's shown state follows its work (#361 #376)", { timeout: 60_000
     } finally { await t.h.dispose(); }
   });
 
+  // Tester #419/#370: an archived group's stored status is not what it is now. The summary's shown state has to say
+  // `archived` too, or `group list --json --fields state` reports it as ready/running while the text says archived.
+  it("an archived group's shown state is archived and its stored state stays beside it", async () => {
+    const t = await driverHarness(ids(2)); try {
+      const row = t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!;
+      const body = JSON.parse(String(row.body)) as Record<string, unknown>;
+      t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...body, archived: { at: Date.now(), actor: "tester" } }));
+      const summary = readGroupSummary(t.h.store, "g");
+      expect(groupSummarySchema.safeParse(summary).success).toBe(true);
+      expect(summary.archived).toBe(true);
+      // mutation: keep state: body.status for an archived group -> "ready", red here
+      expect(summary.state).toBe("archived");
+      expect(summary.storedState).toBe("ready");
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a closed group's shown state is closed", async () => {
+    const t = await driverHarness(ids(2)); try {
+      const row = t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!;
+      const body = JSON.parse(String(row.body)) as Record<string, unknown>;
+      t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...body, archived: { at: Date.now(), actor: "tester", kind: "closed" } }));
+      const summary = readGroupSummary(t.h.store, "g");
+      expect(groupSummarySchema.safeParse(summary).success).toBe(true);
+      expect(summary.state).toBe("closed");
+      expect(summary.storedState).toBe("ready");
+    } finally { await t.h.dispose(); }
+  });
+
   it("a task whose run landed and waits for its settle counts as settling, not running; done is unchanged", async () => {
     const t = await driverHarness(ids(2)); try {
       const runId = await t.claim();

@@ -46,7 +46,7 @@ const chainBanner = {
   anomaly: "Chain stopped on an anomaly",
 } as const satisfies Record<ChainStopCategory, string>;
 
-const groupState = { clarifying: "clarifying", draft: "draft", ready: "ready", running: "running", review: "review", done: "done", blocked: "blocked" } as const satisfies Record<GroupSummaryV1["state"], string>;
+const groupState = { clarifying: "clarifying", draft: "draft", ready: "ready", running: "running", review: "review", done: "done", blocked: "blocked", archived: "archived", closed: "closed" } as const satisfies Record<GroupSummaryV1["state"], string>;
 // N1 spec §11.2: a requirement's rounds, drafts and export.
 const requirementScope = { small: "small", medium: "medium", large: "large" } as const;
 const requirementClarity = { clear: "clear", fair: "fair", vague: "vague" } as const;

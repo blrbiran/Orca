@@ -192,6 +192,6 @@ export async function readGroupResults(store: ControlStore, groupId: string, con
         coverage[key]++;
     }
     return groupResultsSchema.parse({
-        schema: 'orca-group-results-v1', epoch: context.epoch, changeSeq: group.changeSeq, groupId, goal: plan.goal, successConditions: plan.successConditions, status: group.summary.state, review: { runs: group.runs.filter(r => r.taskId === null && r.phase === 'work') }, delivery: group.integration ?? null, tasks, coverage
+        schema: 'orca-group-results-v1', epoch: context.epoch, changeSeq: group.changeSeq, groupId, goal: plan.goal, successConditions: plan.successConditions, status: group.summary.storedState ?? group.summary.state, review: { runs: group.runs.filter(r => r.taskId === null && r.phase === 'work') }, delivery: group.integration ?? null, tasks, coverage
     });
 }

@@ -2465,7 +2465,7 @@ export const zh: Translation<typeof en> = {
     decisionVerdict: { ok: "正常", downgraded: "已降级" },
     correctionKind: { wrong: "错了", not_my_taste: "不合我意", stale: "过时" },
     chainStopCategory: { done: "已完成", blocked: "等人处理", limit: "触达上限", anomaly: "异常" },
-    groupState: { clarifying: "需求讨论中", draft: "草稿", ready: "就绪", running: "运行中", review: "待评审", done: "已完成", blocked: "已阻塞" },
+    groupState: { clarifying: "需求讨论中", draft: "草稿", ready: "就绪", running: "运行中", review: "待评审", done: "已完成", blocked: "已阻塞", archived: "已归档", closed: "已关闭" },
     roundState: { drafting: "起草中", "awaiting-answers": "待回答", answered: "已回答", interrupted: "已中断", failed: "失败" },
     requirementScope: { small: "小", medium: "中", large: "大" },
     requirementClarity: { clear: "清楚", fair: "一般", vague: "模糊" },

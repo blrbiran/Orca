@@ -79,7 +79,8 @@ export type GroupSummaryV1 = {
   groupId: string;
   /** Project filtering spec §4: the group's repository, from its plan or its requirement. */
   repoId: string;
-  state: "clarifying" | "draft" | "ready" | "running" | "review" | "done" | "blocked";
+  /** Tester #419/#370: an archived (or closed) group's shown state is the terminal mark; `storedState` keeps the status. */
+  state: "clarifying" | "draft" | "ready" | "running" | "review" | "done" | "blocked" | "archived" | "closed";
   /**
    * Tester #359: the group's own problem (a failed group or delivered acceptance, a review that did not pass), beside
    * card.firstFailure, which stays the tasks' own; `next` lists the commands that answer it, the first one first.
@@ -1572,7 +1573,7 @@ export type FlowMessageV1 = {
 export type FlowJournalV1 = { schema: "orca-flow-journal-v1"; flowRunId: string; messages: FlowMessageV1[] };
 
 /** Live transcript spec §12.3: one call of a run's transcripts listing (src/agentTranscript/listing.ts). No path, ever. */
-export interface TranscriptCallV1 { attempt: number; phase: string; seq: number; runtime: "claude" | "codex" | "omp" | null; recorded: boolean; bytes: number; final: boolean; truncatedAt: number | null; startedAt?: string }
+export interface TranscriptCallV1 { attempt: number; phase: string; seq: number; runtime: "claude" | "codex" | "omp" | null; recorded: boolean; bytes: number; final: boolean; truncatedAt: number | null; startedAt?: string; warnings?: string[] }
 /** GET /api/control/runs/:runId/transcripts. `available: false` -- the ccloop records no transcripts (`reason`). */
 export interface RunTranscriptsV1 { schema: "orca-run-transcripts-v1"; runId: string; available: boolean; reason?: string; calls: TranscriptCallV1[];
   /** Tester #285: the newest write to the run's transcripts in its run directory (epoch ms); absent with none there. */

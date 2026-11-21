@@ -368,11 +368,13 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       // Tester #365(a): the group's delivery, so the brief can say where a kept group's files are; a keep group has no
       // integration record. An unreadable record says nothing here (the full view names it).
       // Batch D re-review: only a done group's, the one the kept lines read; a group still clarifying has no copy yet.
-      const delivery = summary.state === "done" ? deliveryOf(deps.store, groupId) : null;
-      const estimatorInstruction = estimatorInstructionOf(deps.store, groupId, summary.state);
+      // #419: `state` is the shown word now (an archived done group says archived), so this reads the stored status.
+      const storedState = summary.storedState ?? summary.state;
+      const delivery = storedState === "done" ? deliveryOf(deps.store, groupId) : null;
+      const estimatorInstruction = estimatorInstructionOf(deps.store, groupId, storedState);
       // Working-tree delivery spec §4.2, §4.6: the first-use question's key, and a working-tree group's record (where its
       // files went, or why not, or which prerequisite it waits for) -- each absent otherwise, so other briefs keep their bytes.
-      const workingTree = workingTreeBrief(deps.store, deps.service, groupId, summary.state);
+      const workingTree = workingTreeBrief(deps.store, deps.service, groupId, storedState);
       res.json({ schema: "orca-group-brief-v1", ...summary, ...(phaseEndUsage === null ? {} : { phaseEndUsage }), ...(warnings.length === 0 ? {} : { warnings }),
         ...(costOutliers === null ? {} : { costOutliers }), ...(unreadableRuns.length === 0 ? {} : { unreadableRuns }), ...(knownRed.length === 0 ? {} : { knownRedAtBase: knownRed }),
         ...(waiting.length === 0 ? {} : { preexistingFailuresWaiting: waiting }),

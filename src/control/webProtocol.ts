@@ -1692,7 +1692,9 @@ export const groupSummarySchema = z
   .object({
     groupId: idSchema,
     repoId: idSchema,
-    state: z.enum(["clarifying", "draft", "ready", "running", "review", "done", "blocked"]),
+    // Tester #419/#370: an archived (or closed) group's shown state is the terminal mark, with `storedState` beside it
+    // (the status the guards read). The stored status itself never leaves the seven values below.
+    state: z.enum(["clarifying", "draft", "ready", "running", "review", "done", "blocked", "archived", "closed"]),
     // Tester #361 (plan 2026-11-18 batch D, V2): `state` is the shown word -- `running` while a stored `ready`/`review` group
     // has work under way; `storedState` is the stored status, present only when it differs from `state`.
     storedState: z.enum(["clarifying", "draft", "ready", "running", "review", "done", "blocked"]).optional(),

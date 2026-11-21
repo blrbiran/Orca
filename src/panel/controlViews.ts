@@ -849,8 +849,12 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   // shows `running` then, and the stored word beside it. Only the shown word: every guard reads the stored status.
   // #361 review (I4): only a task under way (running or settling) makes it `running` -- a queued start with nothing claimed
   // yet keeps the stored word (`executionPending` already says a start is queued).
-  const shownState = (body.status === "ready" || body.status === "review") && ((counts?.running ?? 0) > 0 || (counts?.settling ?? 0) > 0)
-    ? "running" : body.status;
+  // Tester #419/#370: an archived (or closed) group's stored status is not what it is now, and `state` is the shown
+  // word everywhere else too (the text row and the Web card read the mark first). Say the terminal word here, keep the
+  // stored status beside it in `storedState`; every guard still reads the stored status itself.
+  const terminal = terminalKindOf(body as Record<string, unknown>);
+  const shownState = terminal ?? ((body.status === "ready" || body.status === "review") && ((counts?.running ?? 0) > 0 || (counts?.settling ?? 0) > 0)
+    ? "running" : body.status);
   const summary = {
     groupId,
     repoId,
@@ -1785,8 +1789,9 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     activity: readGroupActivity(store, groupId, 50),
     // Integration spec §4: only for a non-keep scheme, so a keep group's view is what it was.
     ...integrationView(store, groupId, body),
-    // Working-tree delivery spec §4.2: only where the first-use question is asked.
-    ...deliveryQuestionView(store, groupId, body, summary.state),
+    // Working-tree delivery spec §4.2: only where the first-use question is asked. #419: the stored status, not the
+    // shown terminal word, decides these reads (an archived done group still has a delivery story).
+    ...deliveryQuestionView(store, groupId, body, summary.storedState ?? summary.state),
     // Tester round 2 spec §7.3: one indexed read of the current version's automatic-confirm row.
     autoConfirm: autoConfirmView(store, body as unknown as Record<string, unknown>, proposal.proposalVersion),
     // Tester follow-up G Parts 4.7, 5: each key only when non-empty, so every other group's view is unchanged.
@@ -1803,7 +1808,7 @@ export function readControlGroup(store: ControlStore, epoch: string, groupId: st
     // Pre-existing failures spec L2 (#341): absent when none, so every other group's view is what it was.
     ...((rows) => rows.length === 0 ? {} : { preexistingFailures: rows })(preexistingFailuresView(store, groupId, body, readSnapshot)),
     // Tester #381: the older estimate instruction the group's estimates used, as the brief carries it; absent otherwise.
-    ...((fact) => fact === null ? {} : { estimatorInstruction: fact })(estimatorInstructionOf(store, groupId, summary.state)),
+    ...((fact) => fact === null ? {} : { estimatorInstruction: fact })(estimatorInstructionOf(store, groupId, summary.storedState ?? summary.state)),
   };
   // Tester #348 review: counted from the stored rows, so a run left out of `runs` as unreadable still counts; a readable
   // run's marker was already checked above (runViews refuses an invalid settlement). A body that is not JSON cannot say.
