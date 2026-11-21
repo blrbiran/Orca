@@ -195,3 +195,10 @@ follows. This section is a decision, not an implementation; §3–§6 remain the
 
 Boundary kept from §5: a ccmem failure never fails a run; the bundle is capped by Orca (drop + `drive.memory.error`),
 never by an envelope refusal; verify never receives it; single-call runs stay out of scope.
+
+## Correction (2026-11-21)
+
+§3 shows `"ids": ["m1042", "m1057"]`. ccmem's memory ids are positive integers (the `m` is display decoration), and
+Orca's own export reader validates `id` as a positive integer. Corrected: `"ids": [1042, 1057]`, positive integers, in
+the same order as the text's rows. The original text above stays for the record; the outcome writeback spec
+(`2026-11-21-run-outcome-writeback-design.md` §7) depends on this shape.
