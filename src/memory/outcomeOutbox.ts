@@ -29,16 +29,18 @@ export type RunCcmem = (args: string[], input: string | null, cwd: string) => Pr
 const CCMEM_TIMEOUT_MS = 30_000;
 const CCMEM_MAX_BUFFER = 1024 * 1024;
 
-const defaultRunCcmem: RunCcmem = (args, input, cwd) => new Promise((resolve, reject) => {
-  const child = execFile(process.env.ORCA_CCMEM_BIN ?? "ccmem", args, {
-    cwd, env: process.env, encoding: "utf8", timeout: CCMEM_TIMEOUT_MS, maxBuffer: CCMEM_MAX_BUFFER,
-  }, (error, stdout, stderr) => {
-    if (error === null) { resolve({ code: 0, stdout, stderr }); return; }
-    const code = typeof (error as { code?: unknown }).code === "number" ? (error as { code: number }).code : 1;
-    resolve({ code, stdout, stderr: String(stderr) });
+function execCcmem(bin: string, env: NodeJS.ProcessEnv, args: string[], input: string | null, cwd: string): Promise<{ code: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const child = execFile(bin, args, {
+      cwd, env, encoding: "utf8", timeout: CCMEM_TIMEOUT_MS, maxBuffer: CCMEM_MAX_BUFFER,
+    }, (error, stdout, stderr) => {
+      if (error === null) { resolve({ code: 0, stdout, stderr }); return; }
+      const code = typeof (error as { code?: unknown }).code === "number" ? (error as { code: number }).code : 1;
+      resolve({ code, stdout, stderr: String(stderr) });
+    });
+    child.stdin?.end(input ?? "");
   });
-  child.stdin?.end(input ?? "");
-});
+}
 
 /** The queueable outcome of one run, or null when it is not terminal (or blocked with a recorded outcome) / has no echo. */
 export function outcomePayloadOf(run: DriverRun, now: number): MemoryFeedbackPayload | null {
@@ -113,10 +115,10 @@ export async function drainMemoryOutcomes(
   options: { runCcmem?: RunCcmem; limit?: number; probe?: (bin: string) => Promise<boolean> } = {},
 ): Promise<number> {
   queueMemoryOutcomes(deps, now);
-  const runCcmem = options.runCcmem ?? defaultRunCcmem;
+  const runCcmem = options.runCcmem ?? ((args: string[], input: string | null, cwd: string) => execCcmem(memory.ccmemBin, memory.env, args, input, cwd));
   const rows = rowsWithDrive(deps.store).filter(sendable).slice(0, options.limit ?? 8);
   if (rows.length === 0) return 0;
-  const supported = await (options.probe ?? probeOutcomeVerb)(memory.ccmemBin);
+  const supported = await (options.probe ?? ((bin: string) => probeOutcomeVerb(bin, memory.env)))(memory.ccmemBin);
   let moved = 0;
   for (const run of rows) {
     const feedback = run.drive!.memoryFeedback!;
@@ -162,12 +164,12 @@ export async function drainMemoryOutcomes(
 /** `ccmem orca-outcome --help` answers 0 and names the verb; cached by binary path + mtime (an in-place upgrade re-probes). */
 let probeCache: { identity: string; supported: boolean } | null = null;
 
-export async function probeOutcomeVerb(bin: string): Promise<boolean> {
+export async function probeOutcomeVerb(bin: string, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
   const { statSync } = await import("node:fs");
   let identity = bin;
   try { const stat = statSync(bin); identity = `${bin}:${stat.mtimeMs}:${stat.size}`; } catch { /* a missing binary is not supported */ }
   if (probeCache?.identity === identity) return probeCache.supported;
-  const answer = await defaultRunCcmem(["--help"], null, process.cwd());
+  const answer = await execCcmem(bin, env, ["--help"], null, process.cwd());
   const supported = answer.code === 0 && /orca-outcome/.test(`${answer.stdout}\n${answer.stderr}`);
   probeCache = { identity, supported };
   return supported;
