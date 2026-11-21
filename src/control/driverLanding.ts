@@ -39,6 +39,7 @@ import { recordActivity } from "./activity.js";
 import { landingOffPlanWrite, recordOffPlanWrite, type OffPlanWriteBody } from "./offPlanWrites.js";
 import { observeHistorySource, recordHistoryBinding } from "./historySource.js";
 import { landingSubject, landingTrailers, taskGoalOf } from "./landingMessage.js";
+import { alternateGitDirOf } from "./worktreeGitGuard.js";
 import type { PostMergeCheckRecord, ReconcileRecord } from "./driveRecord.js";
 import type { ControlStore } from "./store.js";
 import type { PlanFile, PlanTask } from "../scheduler/planFile.js";
@@ -378,6 +379,10 @@ export async function stepD(deps: ExecutionDriverDeps, runId: string, context?: 
   let targetRepo: string;
   try { targetRepo = deps.resolveRepository(groupRepoId(store, run.groupId)); }
   catch { blockRun(deps, runId, "D", "repository-path"); return true; }
+  // #328: an attempt that invented its own git directory (the worktree's shared one is read-only) must not land
+  // as if it merged; refuse it by name before the landing worktree is opened.
+  const alternate = await alternateGitDirOf(targetRepo, drive);
+  if (alternate !== null) { blockRun(deps, runId, "D", `workspace-git-readonly:${alternate.slice(0, 400)}`); return true; }
   const old = await revParse(targetRepo, workBranchRef(run.groupId));
   if (run.taskId !== null) {
     const source = await observeHistorySource(store, targetRepo, run.groupId, run.taskId, runId, drive.historySource);
