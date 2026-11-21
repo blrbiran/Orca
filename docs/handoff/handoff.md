@@ -70,7 +70,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **#426**（syncskill）：`promoteSkill` 失败时删掉自己消费不了的 staging；`pushSkillDirectory` 在 rsync 非 fallback 失败与 promote 失败时 best-effort 调 receiver 的 `remove-staging`（清理失败不掩盖原错误）；新增 `prune-staging` 动词与 `syncskill prune [server|--all] --apply --older-than <hours>`（默认 24 h dry-run，只认 `.<skill>.staging-*`，不碰 live 目录，输出 path/age/bytes）。判据 `tests/integration/transport.test.ts` 新增／改写 7 条；7 条定向变异在 `git clone --local` 副本各打红自己的判据并还原。
 - **#427**（syncskill）：`write-manifest` 与 `apply` 的最终写改 `writeJsonAtomic`（同目录 temp + `rename`；写前把**可解析的**旧 manifest 存 `manifest.json.bak`，损坏的当前文件不覆盖好备份）；读取给具名 `manifest-invalid: <path> … restore <path>.bak …`，`readManifest`／`probeAccess` 共用。
 - **门（现测）**：syncskill `npm test` **77 文件／852 条全过**（本批前 843）、`npm run build` RC 0。两个提交在本地 main（`fb47bb7` 修复、`62e78b0` 计划文档），未推。
-- **诚实边界**：`prune` 只处理 `.staging-*`；`.backup-*`（`swapSkillDirectory` 两次 rename 之间崩溃可能遗留）未纳入，登记。失败注入只用 fake runtime／临时目录，未在真 ssh/rsync 远端跑。
+- **诚实边界**：`prune` 只处理 `.staging-*`；`.backup-*`（`swapSkillDirectory` 两次 rename 之间崩溃可能遗留）未纳入，登记。失败注入只用 fake runtime／临时目录，未在真 ssh/rsync 远端跑。rsync 的 fallback 分支（ENOENT/EACCES）按台账判据不清理（ENOENT 时 rsync 通常没写出文件；EACCES 中途失败的残留不在本条判据内）。
 
 ### 3.上一轮（2026-11-21，会话 `cf2d6dfd` 之后）—— 台账 A 组（#366/#328/#386）＋ `work.memory` bundle 与 #418 回写；三仓已推
 
