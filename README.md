@@ -620,13 +620,15 @@ kind, scope and repository. Open one to read what was chosen, why, and what was 
 A read-only view of ccmem: global and project memory for a chosen repository, with search. Needs `ORCA_CCMEM_BIN`.
 Nothing is read until you open the section.
 
-**Orca does not wire ccmem into the agents it launches.** Codex phases run with hooks disabled in a private
-`CODEX_HOME`; omp phases run with `--no-extensions`; ccmem's extension also skips print mode. Claude phases load
-`--setting-sources project,local`, which excludes the person's user-level hooks and plugins (where ccmem is installed) —
-but a target repository's own project/local settings still load, as they should, so a repository that installs ccmem
-itself would still see it. Memory reaches the panel and the correction export (on by default when `ORCA_CCMEM_BIN` is
-an absolute path and the control plane is on; `--no-ccmem-corrections` turns it off) either way. This is
-a product choice (isolation), not a setup step: `orca status` reports the ccmem line as a warning saying the same thing.
+**Orca hands each run a bounded memory bundle of its own.** At dispatch it asks ccmem for the project's and the global
+memory, keeps a deterministic slice (pinned, then trust, then most recent; `orca-correction` rows included), and freezes
+it into `work.memory` — plan and execute receive it, verify does not, and a run whose ccmem is broken or whose bundle is
+over 8 KiB simply goes without (recorded on the run, never a failed run). The agents' own ccmem hooks stay out: Codex
+phases run with hooks disabled in a private `CODEX_HOME`; omp phases run with `--no-extensions`; Claude phases load
+`--setting-sources project,local`, which excludes the person's user-level hooks and plugins — but a target repository's
+own project/local settings still load, as they should. The panel's read-only Memory section, the correction export (on by
+default when `ORCA_CCMEM_BIN` is an absolute path and the control plane is on; `--no-ccmem-corrections` turns it off) and
+the run-outcome writeback (`--no-ccmem-outcomes` turns it off) use the same binary.
 
 ### Metrics
 

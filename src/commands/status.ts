@@ -209,9 +209,9 @@ export async function ccmemCheck(ctx: CheckContext): Promise<StatusCheck> {
   try { accessSync(bin, constants.X_OK); }
   catch (error) { return { level: "fail", subject: "ccmem", fact: `ORCA_CCMEM_BIN=${bin}: ${message(error)}`, fix: "build ccmem, or point ORCA_CCMEM_BIN at its binary" }; }
   return {
-    level: "warn",
+    level: "ok",
     subject: "ccmem",
-    fact: `${bin} is executable; it serves the panel's memory page and correction export, not the agents Orca launches (codex and omp phases exclude it; a target repository's own project/local settings still load in a claude phase)`,
+    fact: `${bin} is executable; it serves the panel's memory page, correction export, and each run's bounded memory bundle (work.memory) with outcome writeback — not the agents' own ccmem hooks (codex and omp phases exclude them; a target repository's own project/local settings still load in a claude phase)`,
     fix: "nothing to set up for runs; see the README's Memory section for what memory does and does not reach",
   };
 }

@@ -64,7 +64,24 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
-### 3.最新（2026-11-21，会话 `cf2d6dfd`）—— #419/#370、#328、#375、#366、#418 spec；syncskill #424/#425
+### 3.最新（2026-11-21，会话 `cf2d6dfd` 之后）—— 台账 A 组（#366/#328/#386）＋ `work.memory` bundle 与 #418 回写；三仓已推
+
+- **人的话**：开头 `allow-push`；「尽量将这些要做的task都完整做完」「暂时不要考虑context大小」「并行的任务尽量派 subagent」「这次批准改写所有必要的判据」「允许必要的付费真跑」；repin 后可推 ccloop、完成后可推三仓；卡住的事先按建议做，最后报审并写三仓 handoff＋10 行以内的 exec summary。**本轮无付费 provider 调用**。
+- **A 组（Orca 仓内，各先写判据见红）**：
+  - **#366**：`orca gc` 结果新增 `skippedByReason`（按次数降序、带 distinct group 数），文本在明细前打印 `skipped by reason: …` 与逐原因 next（归档组／`--include-uncleaned`／dirty worktree 手工处理）；skip 行带 `groupId`。判据 `tests/commands/gc.test.ts` 15/15。GC 语义未改：仍不强制删 dirty/no-checkout workspace。
+  - **#328**：新 `src/control/worktreeGitGuard.ts`；step D 打开落地 worktree 前读 `base..attempt` 的实际提交路径，遇 `.git-<…>` 组件（放行 `.gitignore`／`.gitattributes`／`.gitmodules`／`.github`／`.git-blame-ignore-revs`／`.gitlab-ci.yml`）即以 `workspace-git-readonly:<path>` block，不落 tip。判据 `tests/control/worktreeGitGuard.test.ts` 4/4；相邻 driver 文件 75/75。**边界**：未提交或被 `.gitignore` 藏起来的自建 git dir 在工作树清理后不可见，登记。
+  - **#386**：按建议判「不修」——mid-call 停时 execute 的工作本身不可复用，checkpoint 只省 plan token；现有 `task continue → group set-limit` 与 `task retry` 已是出口。仅记结论，不改码。
+- **ccmem 跨仓（详见 ccmem handoff）**：#415 D／#416 可见性（`admin diagnose` 的 Runtime 与 Codex hooks 已装/已批准行）；#418 消费端 `ccmem orca-outcome upsert|list`＋迁移 018。全量 **1028/1028**。
+- **B 主线（#417／#418 实现）**：
+  - ccloop 新增可选 `work.memory`（协议 3＋4、sha256 自校验、8192 B、只进 plan／execute、与 `mode` 互斥、collect 条件回显、`features.memory:"v1"`）。
+  - Orca `src/memory/bundle.ts`：A2 从 ccmem project＋global export 确定性挑选（pinned／trust／updated_at；只保留 `orca-correction` 的 retrieval_only），渲染 `## ccmem context`，8 KiB／1200 estimated token 上限；超限丢弃并记 `drive.memory.error="too-large"`，ccmem 失败记 `ccmem-failed:<code>`，dir 项目记 `dir-project-memory-unsupported`。**只在 ccloop 宣告 `features.memory:"v1"` 时发送**，`mode`／saved-result 不带。collect echo 存 `drive.memoryReport`，sha 不符即 `memory-report-mismatch`。
+  - Orca `src/memory/outcomeOutbox.ts`：driver pass 末尾 drain；终态或带 outcome 的 blocked run、且 collect 已回显 memory 才入队；payload 首次冻结；`(project key, run id)` 幂等；0→sent、64→refused（逐 run）、其它→failed（attempts<2 再试）；无 verb 的 ccmem 是 `unsupported` 探针；dir 项目 `skipped`。失败只动 outbox 行，不动 run。默认开（绝对 `ORCA_CCMEM_BIN`＋control），`--no-ccmem-outcomes` 关，`--ccmem-outcomes` 保留具名拒绝。
+  - 已 repin ccloop 到含 `work.memory` 的提交（`chore(deps): repin ccloop …`）。
+- **门（现测）**：Orca typecheck 0、build 0；ccmem 全量 1028/1028；ccloop typecheck 0、build 0，聚焦 99 条绿；**quick 门 270 文件／1703 条：1692 过、9 跳过、2 红**——都在 `tests/panel/security.test.ts` 的「真进程 5 s 内自行退出」（load 55–66）；**该文件单跑 11/11 绿**（重跑，不是门）⇒ 判负载。**wide 门**（`TMPDIR=/tmp npm run test:wide -- --base 5f72e9c4 --force`，面板已停，load 42–60）：root **958 文件：928 过、30 skipped、0 红**，用例 **7640 过、117 skipped、0 红**；web 未被选中（无 web 改动），单独 `npm run check --workspace web` **291 文件／2414 条全过**。**没有树哈希戳**（跑时工作树带着 handoff 改动）。
+- **诚实边界**：bundle 与 outbox 只用 fake ccmem／注入 runner 验过，没有真 ccmem＋真面板的付费长跑；ccloop 的 `work.memory` 未跑全量门；#328 只覆盖已提交路径；ccmem 真库未迁移（备份 `global.db.bak.1795271000180`，schema 17，下次开库升 18）。
+- **待人**：无阻塞项。测试者侧 #416 需在他们的 Codex `/hooks` 批准一次；#386 建议关闭；#415 P2 仍不排期；#385 v9 仍需付费评测。
+
+### 3.上一轮（2026-11-21，会话 `cf2d6dfd`）—— #419/#370、#328、#375、#366、#418 spec；syncskill #424/#425
 
 - **人的话**：开头 `allow-push`；「尽量将这些要做的task都完整做完」「这个session暂时不要考虑context大小」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」；需要时允许 repin ccloop 并 push ccloop；Orca repin 后允许 push Orca；完成后允许 push Orca／ccloop／ccmem。**本轮无付费 provider 调用**；**ccloop 零代码改动、未 repin**。
 - **#419/#370（窄修复）**：`groupSummary.state` 对带 archived/closed mark 的组读作 `archived`／`closed`，`storedState` 留原状态；`controlApi` 的 delivery/estimator、`taskResults.status` 改用 stored 状态；schema／web types／locales 加两值；判据 `groupStateDerived` 两条＋i18n 计数 231→233。**DB status 与 guard 未动**；全量状态模型仍是 #370 设计项。
@@ -546,9 +563,9 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ### 4.0 接手顺序（会话 `cf2d6dfd` 2026-11-21 滚动；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
 
 0. **本会话收尾（按序）**：wide 结果确认后 `npm run build`＋`npm run build --workspace web`（已做）＋`orca panel restart` → `orca status`；推 Orca／ccmem／ccloop main；syncskill 的 `f856228` 只留本地（本轮 push 授权只点名 Orca／ccloop／ccmem）。
-1. **下一轮候选**：实现 `work.memory`（设计稿 Q1–Q4 已裁，§9；ccloop 加可选信封键＋Orca 产 bundle），随后实现 #418 的 run-outcome outbox（spec `2026-11-21-run-outcome-writeback-design.md`，phase 1 只记录）；#386 checkpoint（要 ccloop 生产者）；#385 v9（要付费评测）；#416 codex A/B（hooks 已装，缺真跑）；#363 settle lane 分片；#370 全量状态模型（本轮只落了 shown-state 窄修复）。**#415 P2 external-content 人裁不排期**。
+1. **下一轮候选**：`work.memory` bundle 与 #418 outbox 已在 main（本轮）；余下 #385 v9（要付费评测）、#416 codex A/B（需测试者在自己的 Codex `/hooks` 批准一次）、#363 settle lane 分片、#370 全量状态模型、#386（本轮建议按「不修」关闭，待测试者更新台账）；#415 P2 external-content 人裁不排期。
 2. **本轮已完成**：#419/#370（archived/closed 的 `groupSummary.state` 读作终态词）、#328（worktree + 共享 ref 交付的 confirm 提示）、#375（ccloop MCP warnings 在 `run transcript`/Web 可见＋`orca doctor` 检查；`--no-mcp` 在 omp 19.0.1 不存在）、#366（`orca gc --include-uncleaned`）、#418（run/task 回写 spec＋独立 review 更正）、syncskill #424/#425（`-e` quoting＋push staging/promote）。
-3. **沿用的结论**：#225/#297 不得许诺硬封顶；#224/#266/#196 要同仓精确样本；#320 时间只来自 `ccloop.line-observed`；负载高时 `driverReconcileN`、`driverSettleLane`、`schedulerBridge`、`criteriaBaseRun`、`multiDirDue`、`security`、`allowanceHeldSettlement`、`executionDriverE2E` R-F、`groupAcceptanceBranchMissing` 常抖，与未改动 main 对照判定。ccloop 的 `dist` 若是增量构建可能陈旧（改完 ccloop 先 `/bin/rm -rf dist && npm run build`）。
+3. **沿用的结论**：#225/#297 不得许诺硬封顶；#224/#266/#196 要同仓精确样本；#320 时间只来自 `ccloop.line-observed`；负载高时 `driverReconcileN`、`driverSettleLane`、`schedulerBridge`、`criteriaBaseRun`、`multiDirDue`、`security`、`allowanceHeldSettlement`、`executionDriverE2E` R-F、`groupAcceptanceBranchMissing` 常抖，与未改动 main 对照判定。**`test:affected` 按与 `origin/main` 的 diff 选文件：一批改动已经推上去后再跑 wide，会选 0 个文件并报「green」——要门本批就用 `npm run test:wide -- --base <会话起点> --force`，并把选中的文件数照抄进报告。** ccloop 的 `dist` 若是增量构建可能陈旧（改完 ccloop 先 `/bin/rm -rf dist && npm run build`）。
 
 ### 4.1 人保留的操作与授权边界
 
