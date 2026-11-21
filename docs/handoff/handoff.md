@@ -64,6 +64,19 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
+### 3.最新（2026-11-21，会话 `cf2d6dfd`）—— #419/#370、#328、#375、#366、#418 spec；syncskill #424/#425
+
+- **人的话**：开头 `allow-push`；「尽量将这些要做的task都完整做完」「这个session暂时不要考虑context大小」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」；需要时允许 repin ccloop 并 push ccloop；Orca repin 后允许 push Orca；完成后允许 push Orca／ccloop／ccmem。**本轮无付费 provider 调用**；**ccloop 零代码改动、未 repin**。
+- **#419/#370（窄修复）**：`groupSummary.state` 对带 archived/closed mark 的组读作 `archived`／`closed`，`storedState` 留原状态；`controlApi` 的 delivery/estimator、`taskResults.status` 改用 stored 状态；schema／web types／locales 加两值；判据 `groupStateDerived` 两条＋i18n 计数 231→233。**DB status 与 guard 未动**；全量状态模型仍是 #370 设计项。
+- **#328**：`group confirm` 在 `workspaceMode=worktree` 且 delivery 非 keep/working-tree 时打一行提示（clone 或 working-tree），并进 `warnings`；不拒绝。判据 `workspaceDeliveryHint` 4 条。
+- **#375**：`TranscriptCallV1`／listing 带 `warnings`；`orca run transcript` 在对应 call 下打印 `warning: …`；Web 在 call 行下显示；`orca doctor` 新增 `agentWarningsCheck`（只读 control.sqlite 的 runs，报最新 stored warning）。**omp 19.0.1 二进制无 `--no-mcp`**（`--no-skills`/`--no-extensions` 各 4 处、`--no-mcp` 0 处；`omp --bogus --version` 也 exit 0，故测试者的 `--version` 证据无效）。判据：route／CLI／web／doctor 各一条；`status.test` 的 DOCTOR_CHECKS 名单加一项。
+- **#366**：`orca gc --include-uncleaned`（须配 `--apply`；仍要求 archived/closed＋terminal＋超龄＋无 pending publish/acceptance；每项标 `uncleaned`）；默认行为不变。判据 `gc.test` 14/14。
+- **#418**：只写 spec `docs/superpowers/specs/2026-11-21-run-outcome-writeback-design.md`；独立 architect review 已折入（blocked-at-C 是主路径、exit 64 逐 run、unsupported 单独探测、projectKey 由 cwd、ids 正整数、collect echo 证明已派发、payload 冻结）；bundle spec 追加 Correction。
+- **syncskill #424/#425**（本仓外，本地 commit `f856228`，**未 push**）：`-e` 逐个 ssh word 做 shell quoting；push 先 rsync 到隐藏 staging 再 receiver `promote-skill` 原子 rename；`import-skill` 也改 staging+swap。`npm test` 843/843、`npm run build` 0。
+- **门（现测）**：root typecheck 0；quick 门首轮 289 条 288 过，唯一红 `web/tests/i18nPseudo`（enum 计数），改后 31/31 绿（**重跑，不是门**）；**wide**（`TMPDIR=/tmp npm run test:wide`，面板未停，load 高）：root **947 文件：916 过、30 skipped、1 红**，用例 **7537 过、116 skipped、1 红**；唯一红 `tests/control/groupAcceptance.test.ts`「a failed acceptance keeps the group out of done…」= driver deadline，**单跑 3 次 4/4 绿**（重跑，不是门）⇒ 判负载；web **273/273**。root/web build 0。**quick 门首轮 web 只跑 28 文件。**
+- **收尾**：`orca panel restart`→`orca status`；push 三仓 main；syncskill 留本地。
+- **诚实边界**：#419 没做 DB 终态收敛；#328 只提示；#375 没有 `--no-mcp`，doctor 只读已存 warning、不做连通性探测；#366 的 opt-in 未在真实 2.9G backlog 上跑；#418 未实现；syncskill 未真机 push/pull。
+
 ### 3.最新（2026-11-21，会话 `0677fe2a`）—— C-1、#418、#369、#385；ccmem #413/#395/#415；台账收窄
 
 - **人的话**：开头 `allow-push`；「尽量将这些要做的task都完整做完」「这个session暂时不要考虑context大小」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」；需要时允许 repin ccloop 并 push ccloop 到 origin main，repin 后允许 push Orca，完成后允许 push Orca／ccloop／ccmem；卡住必须等人的继续做不必等人的部分，最后报审并写三仓 handoff。**本轮无付费 provider 调用**。
@@ -530,11 +543,11 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
-### 4.0 接手顺序（会话 `0677fe2a` 2026-11-21 滚动；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
+### 4.0 接手顺序（会话 `cf2d6dfd` 2026-11-21 滚动；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
 
-0. **本会话收尾（按序）**：wide 结果确认后 `npm run build`＋`npm run build --workspace web`＋`orca panel restart` → `orca status`；推 Orca／ccmem／ccloop main。
-1. **下一轮候选**：实现 `work.memory`（设计稿 Q1–Q4 已裁，§9；ccloop 加可选信封键＋Orca 产 bundle）；#363 settle lane 分片＋进度；#370 archived 终态（设计）；#386 checkpoint（要 ccloop 生产者）；#375 `--no-mcp`（omp 19.0.1 仍无）；#416 codex A/B（hooks 已装，缺真跑）；#415 P2 external-content 迁移；#413 backfill 完成确认。
-2. **本轮已完成**：C-1（大额单调用结算要 person）、#418（纠正默认开＋dir 具名拒绝）、#369（`agent models` 健康）、#385（缺整体验证的提示）；ccmem #395（Stop 单次解析）、#415 P3（每日 FTS optimize）、#413（切真实 Ollama，backfill 运行中）。台账收窄：#419／#366／#328／#387。
+0. **本会话收尾（按序）**：wide 结果确认后 `npm run build`＋`npm run build --workspace web`（已做）＋`orca panel restart` → `orca status`；推 Orca／ccmem／ccloop main；syncskill 的 `f856228` 只留本地（本轮 push 授权只点名 Orca／ccloop／ccmem）。
+1. **下一轮候选**：实现 `work.memory`（设计稿 Q1–Q4 已裁，§9；ccloop 加可选信封键＋Orca 产 bundle），随后实现 #418 的 run-outcome outbox（spec `2026-11-21-run-outcome-writeback-design.md`，phase 1 只记录）；#386 checkpoint（要 ccloop 生产者）；#385 v9（要付费评测）；#416 codex A/B（hooks 已装，缺真跑）；#363 settle lane 分片；#370 全量状态模型（本轮只落了 shown-state 窄修复）。**#415 P2 external-content 人裁不排期**。
+2. **本轮已完成**：#419/#370（archived/closed 的 `groupSummary.state` 读作终态词）、#328（worktree + 共享 ref 交付的 confirm 提示）、#375（ccloop MCP warnings 在 `run transcript`/Web 可见＋`orca doctor` 检查；`--no-mcp` 在 omp 19.0.1 不存在）、#366（`orca gc --include-uncleaned`）、#418（run/task 回写 spec＋独立 review 更正）、syncskill #424/#425（`-e` quoting＋push staging/promote）。
 3. **沿用的结论**：#225/#297 不得许诺硬封顶；#224/#266/#196 要同仓精确样本；#320 时间只来自 `ccloop.line-observed`；负载高时 `driverReconcileN`、`driverSettleLane`、`schedulerBridge`、`criteriaBaseRun`、`multiDirDue`、`security`、`allowanceHeldSettlement`、`executionDriverE2E` R-F、`groupAcceptanceBranchMissing` 常抖，与未改动 main 对照判定。ccloop 的 `dist` 若是增量构建可能陈旧（改完 ccloop 先 `/bin/rm -rf dist && npm run build`）。
 
 ### 4.1 人保留的操作与授权边界
