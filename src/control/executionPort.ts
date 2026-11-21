@@ -4,7 +4,7 @@ import type { TokenPolicy } from "./tokenPolicy.js";
 import type { ToolRulesReport } from "./toolRules.js";
 import type { Candidate, Claim, StopProof, UsageEvent, ArtifactRef, HandoffRequest, HandoffAck } from "./types.js";
 import type { TaskResultCollectionV1 } from './taskResultProtocol.js';
-import type { OperatorNote, PriorFailure, RunProgress, TranscriptEntry } from "./schema.js";
+import type { OperatorNote, PriorFailure, RunProgress, TranscriptEntry, MemoryBundle } from "./schema.js";
 import type { InputCheckpointV1 } from "./resumeBundle.js";
 import { ControlError } from "./errors.js";
 import type { LastFailure, RunFailureCause } from "./driveRecord.js";
@@ -15,7 +15,7 @@ import type { AgentApplyRequest, AgentObservation, AgentPreview, AgentReceipt } 
 import type { VersionRefresh } from "../agents/versionRefresh.js";
 /** Single-call estimate spec §4.1: protocol 3's two kinds of work. */
 // Syncskill integration spec §10.6: skillPluginDir only for a run with skills (ccloop protocol 3, additive).
-export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string;codexSkillsDir?:string;ompSkillsDir?:string;priorFailures?:PriorFailure[];operatorNote?:OperatorNote;additionalRepos?:Array<{key:string;targetRepo:string;base:string}>;handoff?:{inputDir:string;outputDir:string};attemptDelivery?:"ref-v1" }
+export interface LoopWork { kind:"loop";contract:unknown;targetRepo:string;base:string;sourceDir:string;skillPluginDir?:string;codexSkillsDir?:string;ompSkillsDir?:string;priorFailures?:PriorFailure[];operatorNote?:OperatorNote;additionalRepos?:Array<{key:string;targetRepo:string;base:string}>;handoff?:{inputDir:string;outputDir:string};attemptDelivery?:"ref-v1";memory?:MemoryBundle }
 export interface SingleCallWork { kind:"single-call";prompt:string;responseSchema:Record<string,unknown>;maxOutputTokens:number;sourceDir:string }
 /** Tester follow-up G spec §2.1: the live token ceiling ccloop stops the run at (ccloop live-ceiling spec, protocol 4 only). */
 export interface LiveCeilingWire { protocol:1;revision:number;tokens:number;cause:"group"|"pause-line"|"task-cap" }
@@ -63,12 +63,14 @@ export interface ExecutionReport {
  attempt?:AttemptRecordV1;
  /** Multi-directory projects spec §7.2: one entry per extra directory as collect answered it (attemptSha from ccloop's commits.json). */
  dirs?:Array<{key:string;resultRepo:string;changedPaths:string[];attemptSha:string|null}>;
+ /** Memory in runs spec 2026-11-20 §3: ccloop's echo of the bundle it actually dispatched (the dispatch proof). */
+ memory?:{sha256:string;ids:number[];tokens:number};
 }
 /** Agent selection spec §4.6: `control capabilities` with `agent: null` -- the installation table as ccloop reads it. */
 export interface AgentsView { installations: Array<{ id: string; kind: string; defaults: { model: string; contextWindow: ContextWindow }; contextOptions: ContextWindow[]; version: string }> }
 /** Spec 2026-10-15 §5 (part C): `control models` -- one installation's models, as ccloop's catalog cache or probe answers them. */
 export interface AgentModelsView { installation: string; kind: string; source: "cache" | "probe" | "none"; observedAt: string | null; models: Array<{ model: string; contextWindowTokens: number | null; maxOutputTokens: number | null; singleCallExecution: "v1" | "v1-soft" | null; lastFailure?: { cause: string; at: string | null; detail: string | null } }> }
-export interface ControlFeatures { protocol:1;tokenPolicy?:"optional-v1";savedResultRecovery?:"v1";agentInstallationUpdate?:"v1";transcripts?:"v1";attemptRef?:"v1" }
+export interface ControlFeatures { protocol:1;tokenPolicy?:"optional-v1";savedResultRecovery?:"v1";agentInstallationUpdate?:"v1";transcripts?:"v1";attemptRef?:"v1";memory?:"v1" }
 export interface ExecutionPort {
   readFeatures?():Promise<ControlFeatures>;
   observeAgentInstallations?():Promise<AgentObservation>;

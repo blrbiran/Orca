@@ -286,7 +286,9 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
   if (opts.control.enabled) {
     try { control = await assembleControlRuntime({ control: opts.control, repos: opts.repos, epoch, env, multiDirProjects,
       ...(mode.executionPortReason === undefined ? {} : { executionPortReason: mode.executionPortReason }), corrections: { dir: opts.correctionsDir, by: opts.by, panel: panelCorrections(opts, reviews) },
-      ...(opts.ccmemCorrections === true && opts.memory?.ccmemBin != null ? { ccmemCorrections: { ccmemBin: opts.memory.ccmemBin, env: opts.memory.env } } : {}) }); }
+      ...(opts.ccmemCorrections === true && opts.memory?.ccmemBin != null ? { ccmemCorrections: { ccmemBin: opts.memory.ccmemBin, env: opts.memory.env } } : {}),
+      // Memory in runs spec 2026-11-20 §4.1: A2 produces the run's bundle from this ccmem, whenever it is configured.
+      ...(opts.memory?.ccmemBin != null ? { memory: { ccmemBin: opts.memory.ccmemBin, env: opts.memory.env } } : {}) }); }
     catch (error) { auth.close(); throw error; }
   }
   // Multi-directory projects spec §4.2: a multi id's control repoId comes from the assembly's multi map, never from

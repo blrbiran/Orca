@@ -5,7 +5,7 @@ import { z } from "zod";
 import { ControlError } from "./errors.js";
 import type { StartEnvelope } from "./executionPort.js";
 import { dispatchEnvelopeSchema, type DispatchEnvelopeV1 } from "./webProtocol.js";
-import { agentSelectionSchema, grantSchema, idSchema, safeInteger, startEnvelopeSchema, type OperatorNote, type PriorFailure } from "./schema.js";
+import { agentSelectionSchema, grantSchema, idSchema, safeInteger, startEnvelopeSchema, type MemoryBundle, type OperatorNote, type PriorFailure } from "./schema.js";
 import type { InputCheckpointV1 } from "./resumeBundle.js";
 
 /**
@@ -59,6 +59,8 @@ export interface StartEnvelopeWork {
   operatorNote?: OperatorNote;
   /** Tester follow-up G §10.2: the run's handoff directories (taskHandoffs.ts); absent for a recovery (no key). */
   handoff?: HandoffDirs;
+  /** Memory in runs spec 2026-11-20 §3: the bundle ccloop puts into plan and execute; absent when ccmem gave nothing. */
+  memory?: MemoryBundle;
 }
 
 /** Tester follow-up G §10.2 (ccloop C1): absolute, canonical, outside the source directory and every repository. */
@@ -141,6 +143,7 @@ export function toStartEnvelope(
       ...(work.additionalRepos !== undefined ? { additionalRepos: work.additionalRepos } : {}),
       ...(work.operatorNote !== undefined ? { operatorNote: work.operatorNote } : {}),
       ...(work.handoff !== undefined ? { handoff: work.handoff } : {}),
+      ...(work.memory !== undefined ? { memory: work.memory } : {}),
       ...(work.attemptDelivery !== undefined && !record && policy ? { attemptDelivery: work.attemptDelivery } : {}),
     },
   };

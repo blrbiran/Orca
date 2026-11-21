@@ -2,6 +2,7 @@ import {hasValidUsageSettlement,settlementArtifact as settlementArtifactBytes,si
 import { stackBaseOf } from "./groupEdges.js";
 import { flowChildSkills, isFlowChildGroup } from "../flow/groups.js";
 import { groupRepoId, isDirGroup } from "./dirGroup.js";
+import { produceMemoryBundle } from "../memory/bundle.js";
 import type { MultiDirProjectOf } from "./multiGroup.js";
 import { dirTargetRepoId, isMultiGroup, multiDirOf, multiPrimaryRepoId, type FrozenMultiDir } from "./multiGroup.js";
 import { withSkillDirs } from "../flow/template/vars.js";
@@ -146,6 +147,8 @@ export interface ExecutionDriverDeps {
   /** spec §5.3(6): the binary and agents table a reconciliation `ccloop run` is spawned with (agent selection spec §4.9). */
   ccloopBin: string;
   agentsTablePath: string;
+  /** Memory in runs spec 2026-11-20: ccmem's binary and env for the A2 bundle; absent = no memory configured. */
+  memory?: { ccmemBin: string; env: NodeJS.ProcessEnv };
   /** CLI v2 spec §15.3: the ORCA_PERSON_DIR of a reconciliation or resolution `ccloop run` (runTask's option), and of the debug and criteria checks (review I1). */
   dispatchedPersonDir?: string;
   /** N1 spec §6: the ast-grep binary the overview's structure part runs; null = unavailable. */
@@ -688,10 +691,25 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
   // retry's included); a recovery takes none.
   if (handoff !== undefined) writeRunLiveNotes(store, run.groupId, run.taskId, drive.sourceDir);
   if(recovery)write(deps,()=>{assertCurrentSavedRecovery(store,readDriverRun(store,runId),(deps.now?.()??new Date()).getTime());const admission=savedResultAdmissionSchema.parse(JSON.parse(settlementArtifactBytes(store,recovery.admission).toString()));publishRecoveryFence(drive.sourceDir,admission,packageRecord!.packageHash,packageRecord!.admissionHash);});
+  // Memory in runs spec 2026-11-20 §4.1: produced once here, so a retry inside the run is byte-identical. A saved-result
+  // recovery builds no prompt and carries none; a dir project has no key ccmem can match (Q4). A ccmem failure is a
+  // recorded reason, never a failed run.
+  let memoryOutcome: { bundle: import("./schema.js").MemoryBundle | null; error?: string } = { bundle: null };
+  // Lockstep (spec §3): a ccloop that does not advertise features.memory would refuse the key, so Orca sends nothing
+  // until it does. A run with no ccmem configured never asks.
+  if (deps.memory !== undefined && (await portFor(deps, run).readFeatures?.())?.memory === "v1" && recovery === null && run.mode === undefined) {
+    memoryOutcome = isDirGroup(store, run.groupId)
+      ? { bundle: null, error: "dir-project-memory-unsupported" }
+      : await produceMemoryBundle({ ccmemBin: deps.memory.ccmemBin, env: deps.memory.env, cwd: targetRepo });
+  }
+  const memoryRecord = memoryOutcome.bundle !== null
+    ? { sha256: memoryOutcome.bundle.sha256, ids: memoryOutcome.bundle.ids, tokens: memoryOutcome.bundle.tokens }
+    : memoryOutcome.error === undefined ? undefined : { error: memoryOutcome.error };
   const envelope = toStartEnvelope(readWorkClaimEnvelope(store, run.groupId, runId), {...run,...(packageRecord?{savedResultRecovery:packageRecord}:{})}, {
     sourceDir: drive.sourceDir, targetRepo, base, ...(priorFailures !== undefined ? { priorFailures } : {}), ...skillEnvelopeKey(prepared.kind, skills),
     ...(operatorNote === undefined ? {} : { operatorNote }),
     ...(handoff === undefined ? {} : { handoff }),
+    ...(memoryOutcome.bundle === null ? {} : { memory: memoryOutcome.bundle }),
     ...(refV1 ? { attemptDelivery: "ref-v1" as const } : {}),
   }, contract, inputCheckpoint);
   const envelopeHash = sha256Canonical(envelope);
@@ -700,7 +718,7 @@ export async function stepA2(deps: ExecutionDriverDeps, runId: string): Promise<
     writeCanonicalRecord(store, run.groupId, envelopeHash, canonicalBytes(envelope).toString("utf8"));
     const current = readDriverRun(store, runId);
     if (current.state !== "start-pending" || current.drive === undefined || current.drive.prepared) return false;
-    current.drive = { ...current.drive, targetRepo, base, envelopeHash, prepared: true, skills, ...(refV1 ? { snapshotVersion: 2 as const } : {}), ...(keyed ? { attemptDelivery: "ref-v1" as const } : {}) };
+    current.drive = { ...current.drive, targetRepo, base, envelopeHash, prepared: true, skills, ...(refV1 ? { snapshotVersion: 2 as const } : {}), ...(keyed ? { attemptDelivery: "ref-v1" as const } : {}), ...(memoryRecord === undefined ? {} : { memory: memoryRecord }) };
     noteCeilingInEnvelope(current, envelope);
     if(current.mode==="verify-saved-result"||current.recoveryOf!==undefined){const marker=savedDispatchSchema.parse(current.savedDispatch);if(marker.state!=="never-submitted")throw new ControlError("saved-result-source-stale");current.savedDispatch={...marker,envelopeHash};}
     saveDriverRun(store, current);
@@ -1168,6 +1186,18 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
   }
   // Live transcript spec §10.4.1 / §12.3: keep the last transcripts listing of every run collected (agentTranscript/listing.ts).
   if (report.transcripts !== undefined) write(deps, () => noteTranscriptListing(store, runId, readStartEnvelope(store, run).work.sourceDir, report.transcripts));
+  // Memory in runs spec 2026-11-20 §3: ccloop's echo is the dispatch proof (the later outcome writeback queues on it).
+  // It must name the bundle the envelope carried; a different sha256 is the two sides disagreeing about what the run
+  // was sent, which is never a collect Orca can book.
+  const memoryReport = report.memory;
+  if (memoryReport !== undefined) {
+    const frozen = run.drive?.memory;
+    if (frozen !== undefined && "sha256" in frozen
+      && (frozen.sha256 !== memoryReport.sha256 || frozen.tokens !== memoryReport.tokens || frozen.ids.join(",") !== memoryReport.ids.join(","))) {
+      throw new ControlError("report-identity-conflict", "memory-report-mismatch");
+    }
+    write(deps, () => { const current = readDriverRun(store, runId); current.drive = { ...current.drive!, memoryReport }; saveDriverRun(store, current); });
+  }
   // Tester follow-up G Part 5.2: the notes ccloop acknowledged at a phase start are delivered (one row each, once).
   const liveNotes = report.liveNotes;
   if (liveNotes !== undefined && run.taskId !== null) write(deps, () => noteLiveNoteDeliveries(store, { groupId: run.groupId, taskId: run.taskId!, runId }, liveNotes.delivered));

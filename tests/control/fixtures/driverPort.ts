@@ -89,6 +89,8 @@ export function fakeCcloopPort(input: {
    * Off (the default), the port has no readFeatures and every run keeps today's result copy.
    */
   attemptRef?: boolean;
+  /** Memory in runs spec §3: advertise features.memory "v1" and echo the envelope's bundle (the dispatch proof). */
+  memory?: boolean;
   /**
    * Change-sized runs §5.7 (P2): what a keyed run writes into each extra directory (contract.context.additionalRepos), by
    * key. Under the key the port records each extra as ccloop P1's recordExtras does -- a commit in a worktree of that
@@ -203,11 +205,13 @@ export function fakeCcloopPort(input: {
     const toolRules = input.toolRules?.(claim.workItemId);
     const pathPolicyMisses = stop.terminal ? input.pathPolicyMisses?.(claim.workItemId) : undefined;
     const liveCeilingStop = stop.terminal ? input.liveCeilingStop?.(claim.workItemId, envelope) : undefined;
-    return { events, candidate, ...(attempt === undefined ? {} : { attempt }), ...(dirs === undefined ? {} : { dirs }), terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: keyed ? null : repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}), ...(budgetSnapshot === undefined ? {} : { budgetSnapshot }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }), ...(toolRules === undefined ? {} : { toolRules }), ...(pathPolicyMisses === undefined ? {} : { pathPolicyMisses }), ...(liveCeilingStop === undefined ? {} : { liveCeilingStop }) };
+    // Memory in runs spec §3: the echo ccloop answers when the envelope carried `work.memory` (the dispatch proof).
+    const memory = work.memory === undefined ? undefined : { sha256: work.memory.sha256, ids: work.memory.ids, tokens: work.memory.tokens };
+    return { events, candidate, ...(attempt === undefined ? {} : { attempt }), ...(dirs === undefined ? {} : { dirs }), ...(memory === undefined ? {} : { memory }), terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: keyed ? null : repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}), ...(budgetSnapshot === undefined ? {} : { budgetSnapshot }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }), ...(toolRules === undefined ? {} : { toolRules }), ...(pathPolicyMisses === undefined ? {} : { pathPolicyMisses }), ...(liveCeilingStop === undefined ? {} : { liveCeilingStop }) };
   };
 
   const port: ExecutionPort = {
-    ...(input.attemptRef === true ? { readFeatures: async () => ({ protocol: 1 as const, attemptRef: "v1" as const }) } : {}),
+    ...(input.attemptRef === true || input.memory === true ? { readFeatures: async () => ({ protocol: 1 as const, ...(input.attemptRef === true ? { attemptRef: "v1" as const } : {}), ...(input.memory === true ? { memory: "v1" as const } : {}) }) } : {}),
     // Agent selection spec §4.6: capabilities protocol 3 -- the selection asked about, echoed and filled.
     resolveAgent: async (partial) => ({ selection: { agent: "codex", model: "fixture-model", contextWindow: "agent-default", ...partial }, configHash: "c".repeat(64), timeoutMs: 120_000, killGraceMs: 0, capabilities: input.capabilities, singleCallExecution: "v1" }),
     listAgents: async () => ({ installations: [] }),

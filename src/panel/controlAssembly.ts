@@ -155,6 +155,8 @@ export interface ControlAssemblyInput {
   corrections?: { dir: string; by: string; panel?: PanelCorrections };
   /** Corrections-to-ccmem spec 2026-10-21 As-built: present when ccmem is configured (and the person did not opt out). */
   ccmemCorrections?: { ccmemBin: string; env: NodeJS.ProcessEnv };
+  /** Memory in runs spec 2026-11-20 §4.1: ccmem's binary and env for the A2 bundle; absent = the run carries no memory. */
+  memory?: { ccmemBin: string; env: NodeJS.ProcessEnv };
 }
 
 /**
@@ -441,6 +443,7 @@ export async function assembleControlRuntime(input: ControlAssemblyInput): Promi
       // Multi-directory projects spec §6.3: the composed overview's member names come from the registry's members.
       multiDirProjectOf,
       ccloopBin: env.ORCA_CCLOOP_BIN!, agentsTablePath: env.ORCA_AGENTS_TABLE!, dispatchedPersonDir, astGrepBin: resolveAstGrepBin(env),
+      ...(input.memory === undefined ? {} : { memory: input.memory }),
       // Handoff grace: the run's frozen killGraceMs + 60 s (driverHandoff.handoffGraceMsOf, agent selection spec §6.6).
       // *** ERRATUM (ccloop consolidation step 1, 2026-10-01, Orca session be653b22, ruling R5) *** the grace is max(killGraceMs, frozen recovery window + 5 s) + 60 s.
       kickPump: () => { void pump(); }, crash: input.driverCrash, handoffExtraGraceMs: input.handoffExtraGraceMs,

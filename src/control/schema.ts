@@ -63,6 +63,10 @@ export type PriorFailure=z.infer<typeof priorFailureSchema>;
 // text 1-4096 UTF-8 bytes. Optional and never defaulted, so an envelope without it keeps its exact bytes and hash.
 export const operatorNoteSchema=z.object({text:utf8Bounded(4096),scope:z.enum(["next-attempt","remaining-attempts"])}).strict();
 export type OperatorNote=z.infer<typeof operatorNoteSchema>;
+// Memory in runs spec 2026-11-20 §3 (Correction 2026-11-21: ids are ccmem's integer rowids). The producer is Orca; ccloop
+// only verifies the sha256 and never re-tokenizes. Absent on every envelope without memory, so its bytes stay unchanged.
+export const memoryBundleSchema=z.object({format:z.literal("ccloop-memory-v1"),sha256:z.string().regex(/^[a-f0-9]{64}$/),tokens:safeInteger.positive(),ids:z.array(safeInteger.positive()).min(1).max(64),text:utf8Bounded(8192)}).strict();
+export type MemoryBundle=z.infer<typeof memoryBundleSchema>;
 // Multi-directory projects spec §7.1 / §11.1: the written directories beyond the primary, in the contract's order. Absent
 // for every single-repository envelope, so its bytes and hash are unchanged.
 const additionalRepoKeySchema=z.string().regex(/^[a-z0-9_](?:[a-z0-9._-]*[a-z0-9_])?$/);
@@ -72,7 +76,7 @@ const additionalRepoWorkSchema=z.object({key:additionalRepoKeySchema,targetRepo:
 export const handoffDirsSchema=z.object({inputDir:z.string().min(1),outputDir:z.string().min(1)}).strict();
 // Change-sized runs spec 2026-11-19 §6.2 (P0): ccloop P1's attempt-as-ref delivery key, known so a stored P2 envelope parses;
 // optional and never defaulted, and nothing sends it in P0, so every envelope keeps its exact bytes and hash.
-const loopWorkSchema=z.object({kind:z.literal("loop"),contract:z.unknown(),targetRepo:z.string().min(1),base:z.string().min(1),sourceDir:z.string().min(1),skillPluginDir:z.string().min(1).optional(),codexSkillsDir:z.string().min(1).optional(),ompSkillsDir:z.string().min(1).optional(),priorFailures:z.array(priorFailureSchema).min(1).max(PRIOR_FAILURE_BOUNDS.entries).optional(),operatorNote:operatorNoteSchema.optional(),additionalRepos:z.array(additionalRepoWorkSchema).min(1).max(7).optional(),handoff:handoffDirsSchema.optional(),attemptDelivery:z.literal("ref-v1").optional()}).strict();
+const loopWorkSchema=z.object({kind:z.literal("loop"),contract:z.unknown(),targetRepo:z.string().min(1),base:z.string().min(1),sourceDir:z.string().min(1),skillPluginDir:z.string().min(1).optional(),codexSkillsDir:z.string().min(1).optional(),ompSkillsDir:z.string().min(1).optional(),priorFailures:z.array(priorFailureSchema).min(1).max(PRIOR_FAILURE_BOUNDS.entries).optional(),operatorNote:operatorNoteSchema.optional(),additionalRepos:z.array(additionalRepoWorkSchema).min(1).max(7).optional(),handoff:handoffDirsSchema.optional(),attemptDelivery:z.literal("ref-v1").optional(),memory:memoryBundleSchema.optional()}).strict();
 const singleCallWorkSchema=z.object({kind:z.literal("single-call"),prompt:z.string().min(1),responseSchema:z.record(z.unknown()).refine(schema=>schema.type==="object",{message:"response-schema-not-object"}),maxOutputTokens:safeInteger.positive(),sourceDir:z.string().min(1)}).strict();
 export const startEnvelopeSchema=z.object({protocol:z.union([z.literal(3),z.literal(4)]),mode:z.literal("verify-saved-result").optional(),savedResultRecovery:z.object({packagePath:z.string().min(1),packageHash:z.string().regex(/^[a-f0-9]{64}$/),admissionHash:z.string().regex(/^[a-f0-9]{64}$/),recoveryOf:recoveryOfSchema}).strict().optional(),tokenPolicy:tokenPolicySchema.optional(),liveCeiling:z.object({protocol:z.literal(1),revision:safeInteger.positive(),tokens:safeInteger,cause:z.enum(["group","pause-line","task-cap"])}).strict().optional(),claim:z.object({groupId:idSchema,workItemId:idSchema,taskId:idSchema.nullable(),runId:idSchema,generation:safeInteger.positive(),graphVersion:safeInteger,targetVersion:safeInteger,commandId:idSchema,configHash:z.string().min(1),agent:agentSelectionSchema,grant:grantSchema,ownerToken:idSchema}).strict(),contractHash:z.string().regex(/^[a-f0-9]{64}$/),inputCheckpoint:inputCheckpointSchema.nullable(),work:z.discriminatedUnion("kind",[loopWorkSchema,singleCallWorkSchema])}).strict().superRefine((value,ctx)=>{
   if((value.mode!==undefined)!==(value.savedResultRecovery!==undefined)||value.mode!==undefined&&(value.protocol!==4||value.inputCheckpoint!==null||value.work.kind!=="loop"))ctx.addIssue({code:"custom",message:"invalid-saved-result-mode"});
@@ -86,6 +90,8 @@ export const startEnvelopeSchema=z.object({protocol:z.union([z.literal(3),z.lite
   if(value.mode!==undefined&&value.work.kind==="loop"&&value.work.operatorNote!==undefined)ctx.addIssue({code:"custom",path:["work","operatorNote"],message:"operator-note-with-saved-result"});
   // Tester follow-up G §10.2 (ccloop C1): nor the handoff directories, which only a prompt uses.
   if(value.mode!==undefined&&value.work.kind==="loop"&&value.work.handoff!==undefined)ctx.addIssue({code:"custom",path:["work","handoff"],message:"handoff-with-saved-result"});
+  // Memory in runs spec 2026-11-20 §3: a verify-only recovery builds no prompt, so it carries no bundle either.
+  if(value.mode!==undefined&&value.work.kind==="loop"&&value.work.memory!==undefined)ctx.addIssue({code:"custom",path:["work","memory"],message:"memory-with-saved-result"});
   // Change-sized runs spec 2026-11-19 §6.2 (ccloop's own rules, P1): the attempt-as-ref delivery rides protocol 4 only, and
   // never a saved-result recovery, whose delivery checks read the result repository the key would remove.
   if(value.work.kind==="loop"&&value.work.attemptDelivery!==undefined&&value.protocol!==4)ctx.addIssue({code:"custom",path:["work","attemptDelivery"],message:"attempt-delivery-requires-protocol4"});

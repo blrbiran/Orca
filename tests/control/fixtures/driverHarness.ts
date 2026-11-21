@@ -86,6 +86,8 @@ export interface HarnessOptions {
   wrapPort?: (port: ExecutionPort) => ExecutionPort;
   /** Change-sized runs P2: the synthetic ccloop advertises attemptRef "v1" and records keyed attempts (driverPort.ts). */
   attemptRef?: boolean;
+  /** Memory in runs spec §3: the synthetic ccloop advertises features.memory "v1" and echoes the bundle. */
+  memory?: boolean;
   /** Change-sized runs §5.7 (P2): what a keyed run writes into each extra directory (driverPort.ts `extraFiles`). */
   extraFiles?: (workItemId: string, key: string) => Record<string, string>;
 }
@@ -125,6 +127,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     ...(options.candidateMissing ? { candidateMissing: options.candidateMissing } : {}),
     ...(options.sealedOwnerProof === true ? { sealedOwnerProof: true } : {}),
     ...(options.attemptRef === true ? { attemptRef: true } : {}),
+    ...(options.memory === true ? { memory: true } : {}),
     ...(options.extraFiles === undefined ? {} : { extraFiles: options.extraFiles }),
   });
   fake.port.listAgents = options.agentKinds === undefined ? h.deps.port.listAgents : async () => options.agentKinds!;
