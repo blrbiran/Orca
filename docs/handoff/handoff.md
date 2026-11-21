@@ -78,7 +78,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
   - Orca `src/memory/outcomeOutbox.ts`：driver pass 末尾 drain；终态或带 outcome 的 blocked run、且 collect 已回显 memory 才入队；payload 首次冻结；`(project key, run id)` 幂等；0→sent、64→refused（逐 run）、其它→failed（attempts<2 再试）；无 verb 的 ccmem 是 `unsupported` 探针；dir 项目 `skipped`。失败只动 outbox 行，不动 run。默认开（绝对 `ORCA_CCMEM_BIN`＋control），`--no-ccmem-outcomes` 关，`--ccmem-outcomes` 保留具名拒绝。
   - 已 repin ccloop 到含 `work.memory` 的提交（`chore(deps): repin ccloop …`）。
 - **门（现测）**：Orca typecheck 0、build 0；ccmem 全量 1028/1028；ccloop typecheck 0、build 0，聚焦 99 条绿；**quick 门 270 文件／1703 条：1692 过、9 跳过、2 红**——都在 `tests/panel/security.test.ts` 的「真进程 5 s 内自行退出」（load 55–66）；**该文件单跑 11/11 绿**（重跑，不是门）⇒ 判负载。**wide 门**（`TMPDIR=/tmp npm run test:wide -- --base 5f72e9c4 --force`，面板已停，load 42–60）：root **958 文件：928 过、30 skipped、0 红**，用例 **7640 过、117 skipped、0 红**；web 未被选中（无 web 改动），单独 `npm run check --workspace web` **291 文件／2414 条全过**。**没有树哈希戳**（跑时工作树带着 handoff 改动）。
-- **诚实边界**：bundle 与 outbox 只用 fake ccmem／注入 runner 验过，没有真 ccmem＋真面板的付费长跑；ccloop 的 `work.memory` 未跑全量门；#328 只覆盖已提交路径；ccmem 真库未迁移（备份 `global.db.bak.1795271000180`，schema 17，下次开库升 18）。
+- **诚实边界**：bundle 与 outbox 只用 fake ccmem／注入 runner 验过，没有真 ccmem＋真面板的付费长跑；ccloop 的 `work.memory` 未跑全量门；#328 只覆盖已提交路径；ccmem 真库已由 hook 升到 schema 18（备份 `global.db.bak.1795271000180`，`orca_run_outcomes` 已建）。
 - **待人**：无阻塞项。测试者侧 #416 需在他们的 Codex `/hooks` 批准一次；#386 建议关闭；#415 P2 仍不排期；#385 v9 仍需付费评测。
 
 ### 3.上一轮（2026-11-21，会话 `cf2d6dfd`）—— #419/#370、#328、#375、#366、#418 spec；syncskill #424/#425
