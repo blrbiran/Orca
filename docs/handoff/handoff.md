@@ -64,7 +64,15 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
-### 3.最新（2026-11-21，会话 `cf2d6dfd` 之后）—— 台账 A 组（#366/#328/#386）＋ `work.memory` bundle 与 #418 回写；三仓已推
+### 3.最新（2026-11-22，syncskill #426/#427）—— 失败 push 的 staging 清理、`prune`、远端 manifest 原子写
+
+- **人的话**：「同意，继续」。本轮按台账待处理清单只做 syncskill 两条未决（#426/#427）；**无 push 授权**（两个提交留 syncskill 本地 main）。Orca／ccloop／ccmem 零代码改动。
+- **#426**（syncskill）：`promoteSkill` 失败时删掉自己消费不了的 staging；`pushSkillDirectory` 在 rsync 非 fallback 失败与 promote 失败时 best-effort 调 receiver 的 `remove-staging`（清理失败不掩盖原错误）；新增 `prune-staging` 动词与 `syncskill prune [server|--all] --apply --older-than <hours>`（默认 24 h dry-run，只认 `.<skill>.staging-*`，不碰 live 目录，输出 path/age/bytes）。判据 `tests/integration/transport.test.ts` 新增／改写 7 条；7 条定向变异在 `git clone --local` 副本各打红自己的判据并还原。
+- **#427**（syncskill）：`write-manifest` 与 `apply` 的最终写改 `writeJsonAtomic`（同目录 temp + `rename`；写前把**可解析的**旧 manifest 存 `manifest.json.bak`，损坏的当前文件不覆盖好备份）；读取给具名 `manifest-invalid: <path> … restore <path>.bak …`，`readManifest`／`probeAccess` 共用。
+- **门（现测）**：syncskill `npm test` **77 文件／852 条全过**（本批前 843）、`npm run build` RC 0。两个提交在本地 main（`fb47bb7` 修复、`62e78b0` 计划文档），未推。
+- **诚实边界**：`prune` 只处理 `.staging-*`；`.backup-*`（`swapSkillDirectory` 两次 rename 之间崩溃可能遗留）未纳入，登记。失败注入只用 fake runtime／临时目录，未在真 ssh/rsync 远端跑。
+
+### 3.上一轮（2026-11-21，会话 `cf2d6dfd` 之后）—— 台账 A 组（#366/#328/#386）＋ `work.memory` bundle 与 #418 回写；三仓已推
 
 - **人的话**：开头 `allow-push`；「尽量将这些要做的task都完整做完」「暂时不要考虑context大小」「并行的任务尽量派 subagent」「这次批准改写所有必要的判据」「允许必要的付费真跑」；repin 后可推 ccloop、完成后可推三仓；卡住的事先按建议做，最后报审并写三仓 handoff＋10 行以内的 exec summary。**本轮无付费 provider 调用**。
 - **A 组（Orca 仓内，各先写判据见红）**：
@@ -563,7 +571,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ### 4.0 接手顺序（会话 `cf2d6dfd` 2026-11-21 滚动；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
 
 0. **本会话收尾（按序）**：wide 结果确认后 `npm run build`＋`npm run build --workspace web`（已做）＋`orca panel restart` → `orca status`；推 Orca／ccmem／ccloop main；syncskill 的 `f856228` 只留本地（本轮 push 授权只点名 Orca／ccloop／ccmem）。
-1. **下一轮候选**：`work.memory` bundle 与 #418 outbox 已在 main（本轮）；余下 #385 v9（要付费评测）、#416 codex A/B（需测试者在自己的 Codex `/hooks` 批准一次）、#363 settle lane 分片、#370 全量状态模型、#386（本轮建议按「不修」关闭，待测试者更新台账）；#415 P2 external-content 人裁不排期。
+1. **下一轮候选**：`work.memory` bundle 与 #418 outbox 已在 main（本轮）；syncskill #426/#427 已修（本地 main，未推，见 §3.最新）；余下 #385 v9（要付费评测）、#416 codex A/B（需测试者在自己的 Codex `/hooks` 批准一次）、#363 settle lane 分片、#370 全量状态模型、#386（本轮建议按「不修」关闭，待测试者更新台账）；#415 P2 external-content 人裁不排期。
 2. **本轮已完成**：#419/#370（archived/closed 的 `groupSummary.state` 读作终态词）、#328（worktree + 共享 ref 交付的 confirm 提示）、#375（ccloop MCP warnings 在 `run transcript`/Web 可见＋`orca doctor` 检查；`--no-mcp` 在 omp 19.0.1 不存在）、#366（`orca gc --include-uncleaned`）、#418（run/task 回写 spec＋独立 review 更正）、syncskill #424/#425（`-e` quoting＋push staging/promote）。
 3. **沿用的结论**：#225/#297 不得许诺硬封顶；#224/#266/#196 要同仓精确样本；#320 时间只来自 `ccloop.line-observed`；负载高时 `driverReconcileN`、`driverSettleLane`、`schedulerBridge`、`criteriaBaseRun`、`multiDirDue`、`security`、`allowanceHeldSettlement`、`executionDriverE2E` R-F、`groupAcceptanceBranchMissing` 常抖，与未改动 main 对照判定。**`test:affected` 按与 `origin/main` 的 diff 选文件：一批改动已经推上去后再跑 wide，会选 0 个文件并报「green」——要门本批就用 `npm run test:wide -- --base <会话起点> --force`，并把选中的文件数照抄进报告。** ccloop 的 `dist` 若是增量构建可能陈旧（改完 ccloop 先 `/bin/rm -rf dist && npm run build`）。
 
@@ -757,6 +765,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 1. ~~push~~ **已推（会话 `57896c64`，2026-11-20）**：Orca、ccloop、ccmem 本地 main＝远端（`ls-remote` 现核）；syncskill 的 #398 本地提交未推（授权只到三仓）。测试者台账 `orca_archived_files/issue-20261023.md` 本会话未动；对本会话已修项已过期：#382 #383 #384 #386 #387(证据) #388 #389 #390 #391 #392 #393 #394 #396 #397 #398 #399。**会话 `9299e610`（2026-11-20 第三批）已修**：#400（working-tree `core.symlinks`）、#389（operator set-limit 旁安装）、#390（选择框位置/文案）、#393（前端增量游标；服务端全局 `dispatchBlocked` 缺口登记）、#370（归档清 wake＋unarchive 重新 arm continuation）、#383（reported＋两绿记 flaky）、#369 残余（`provider-error` 豁免、stalled 文案）；ccmem #396 代码已生效（daemon 已重启，日志未轮转）、syncskill #398 已重 build 并实测 0.18–0.28s。**三仓推送已完成**（`/usr/bin/git ls-remote` 现核本地＝远端）。台账状态表仍待测试者更新。
    - **会话 `c8fc876f`（2026-11-20 第四批）新增已修**：#401（hint 读 code 前缀＋点名候选）、#402（brief 列未答行＋`--command` 可写 suite 名）、#387（验收证据＋tip 测试数不足一半判 failed）、#393（服务端 cursor）、#385（requirement 单元提示，v9 暂缓）；ccloop #369（静默 run 1 s ceiling tick，已推＋repin）、ccmem #396（日志轮转已执行＋vec_backfill 退避，daemon 待重启）。#370 只出设计（状态模型）。**请测试者更新**：#369 可收窄为「模型目录健康未接入」；#370 转设计；#395 转设计；#401/#402 转为已修待现场复核。
    - **会话 `cc03e171`（2026-11-20 深夜）新增**：syncskill **#421 #422**、ccmem **#413 #418 #416 度量**、Orca **#418 #419 #366** 上本地 main；ccmem／ccloop 已推，Orca 待 wide 后推；面板 wide 后重装。**请测试者更新**：#421/#422 已修待现场复核；#413 已实现原生 ollama provider（本机无模型，未切配置）；#415 仍只修 P1；#418 读路径已实现、写回/纠正默认仍按设计；#419 生命周期已修（历史组 panel start 自动收敛）；#366 `orca gc`＋`status --disk` 已实现（workspace 的 no-checkout 情况仍跳过）。**待人**：#417 `work.memory` bundle 实现、#413 真实 Ollama 链路、#363 settle lane 分片、#419 `--all-derived`、#416 codex P0。
+   - **2026-11-22 syncskill #426/#427 已修**：失败 push 的 staging 树清理＋`syncskill prune`（默认 24 h dry-run）、远端 `manifest.json` 改 temp+rename 并保留 `manifest.json.bak`、损坏时给具名 `manifest-invalid`。代码在 syncskill 本地 main（`fb47bb7`、`62e78b0`），**未 push**。**请测试者更新**为已修待现场复核（真 ssh/rsync 失败注入未跑，仅 fake runtime／临时目录）。
 
 2. **看真面板**（人此前「先默认通过，之后有问题我会再找你」——不催）：G 轮新 UI——Settings → Agents 首次使用检测与安装、`--repo` 面板的「怎么换多项目」、模型不在目录时禁用提交、「按零结算并关闭」、accept-attempt 表单的 diff 统计与检查、组详情只渲染当前区域、依赖图层内排序与「N 条隐含依赖已隐藏」、无改动标记与「撤销并重跑／按无改动接受」、需求复核面板与三个出口、Problems 里的落地回归行、本组放行按钮与放行列表——都只在 jsdom 测过；F、E、D 轮的同样没在真浏览器看过（F 轮：低频功能收进 More／「⋯」、需求表单「选项」、Board 无主按钮等）。
 2d. ~~审 H 轮与 G 轮控制器与各席的可逆决定~~ 人已审（I 轮开轮「未评论的部分同意」，原话在 I 轮台账）；I 轮的可逆决定人 2026-11-13「同意」（J 轮台账）；J 轮的人 2026-11-14「同意」（K 轮台账）。K 轮是否仍待审须以对应台账的 `Ruling:` 行现核；旧 §4.0 第 2 条指针已失效。
