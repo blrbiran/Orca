@@ -1121,6 +1121,20 @@ async function deliveryChoiceConfirmLines(c: WriteContext, repoId: string): Prom
   try { chosen = (await c.read(`repositories/${encodeURIComponent(repoId)}/integration`) as { chosen?: unknown } | null)?.chosen; } catch { return []; }
   return chosen === false ? [DELIVERY_NOT_CHOSEN, DELIVERY_FOR_LATER] : [];
 }
+/**
+ * Tester #328: a worktree workspace points at the project's shared Git directory read-only, so no agent can move `main`
+ * (or `orca/<group>`) from inside the run. Delivery still lands through Orca, but a goal that asks the agent to merge has
+ * no legal move; name the two supported answers before the spend instead of letting a run invent a workaround.
+ */
+async function workspaceDeliveryConfirmLines(c: WriteContext, repoId: string, integration: unknown): Promise<string[]> {
+  const delivery = (integration as { scheme?: { delivery?: unknown } } | null | undefined)?.scheme?.delivery;
+  if (typeof delivery !== "string" || delivery === "keep" || delivery === "working-tree") return [];
+  let mode: unknown;
+  try { mode = (await c.read(`repositories/${encodeURIComponent(repoId)}/workspace`) as { workspaceMode?: unknown } | null)?.workspaceMode; } catch { return []; }
+  return mode === "worktree"
+    ? [`workspace mode: worktree -- the agent cannot write the shared Git directory; to merge into main use clone (orca project set-workspace-mode <project> --mode clone) or --delivery working-tree`]
+    : [];
+}
 async function confirmPayload(c: WriteContext): Promise<unknown> {
   const view = await groupView(c);
   const funding = await c.read(`groups/${group(c)}/funding-preview`);
@@ -1162,6 +1176,13 @@ async function confirmPayload(c: WriteContext): Promise<unknown> {
   // confirm proceeds. Not for a folder or multi-directory group (their delivery is fixed).
   if (typeof view.plan.repoId === "string" && (view.summary as { placement?: unknown; multiDir?: unknown }).placement === undefined
     && (view.summary as { multiDir?: unknown }).multiDir === undefined) confirmNote.push(...await deliveryChoiceConfirmLines(c, view.plan.repoId));
+  // Tester #328: a worktree workspace cannot write the shared Git directory. Say so before the run, not after it invents
+  // `.git-merge-local`; a clone or working-tree delivery is the supported answer.
+  if (typeof view.plan.repoId === "string") {
+    const workspaceLines = await workspaceDeliveryConfirmLines(c, view.plan.repoId, (view as { integration?: unknown }).integration);
+    confirmNote.push(...workspaceLines);
+    instructionWarnings.push(...workspaceLines);
+  }
   return {
     planHash: view.plan.planHash, proposalVersion: view.proposal.proposalVersion, budgetMode,
     profileIds: { estimator: bindings.estimator?.profileId ?? null, worker: bindings.worker!.profileId, handoff: bindings.handoff!.profileId, goalReview: bindings.goalReview!.profileId },
