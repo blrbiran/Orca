@@ -19,7 +19,7 @@ orca status --json
 orca status --disk
 ```
 
-## `orca gc [--apply] [--older-than <older-than>] [--keep-last <keep-last>] [--group <group>]`
+## `orca gc [--apply] [--older-than <older-than>] [--keep-last <keep-last>] [--include-uncleaned] [--group <group>]`
 
 reclaim disk from settled runs in archived groups: <stateDir>.runs/<runId> and <stateDir>.workspaces/<runId> only; dry run by default
 
@@ -28,6 +28,7 @@ reclaim disk from settled runs in archived groups: <stateDir>.runs/<runId> and <
 - `--apply`: actually delete (default: print what would be removed and how much it would free)
 - `--older-than <n>`: keep runs touched within this many days (default 30)
 - `--keep-last <n>`: keep the newest N runs regardless of age
+- `--include-uncleaned`: also reclaim runs whose driver never finished its cleanup (marked in the plan; every other guard still holds)
 - `--group <group>`: limit to one group's runs
 - Exit codes: 0 the plan ran (dry run, or applied); 1 refused here: no control store, or it cannot be read.
 
@@ -35,6 +36,7 @@ reclaim disk from settled runs in archived groups: <stateDir>.runs/<runId> and <
 orca gc
 orca gc --older-than 7 --keep-last 3
 orca gc --apply --group my-group
+orca gc --apply --include-uncleaned --older-than 30
 orca gc --json
 ```
 

@@ -36,12 +36,13 @@ function seedGroup(h: Awaited<ReturnType<typeof openTestStore>>, id: string, arc
 
 function seedRun(
   h: Awaited<ReturnType<typeof openTestStore>>, groupId: string, runId: string,
-  options: { state?: string; active?: number; endedAt?: number; drive?: Record<string, unknown> } = {},
+  options: { state?: string; active?: number; endedAt?: number; drive?: Record<string, unknown>; operatorAcceptance?: Record<string, unknown> } = {},
 ) {
   const body = {
     state: options.state ?? "settled",
     ...(options.endedAt === undefined ? {} : { endedAt: options.endedAt }),
     ...(options.drive === undefined ? {} : { drive: options.drive }),
+    ...(options.operatorAcceptance === undefined ? {} : { operatorAcceptance: options.operatorAcceptance }),
   };
   h.store.db.prepare("INSERT INTO runs(id,group_id,work_item_id,generation,active,body) VALUES (?,?,?,?,?,?)")
     .run(runId, groupId, "T1", 1, options.active ?? 0, JSON.stringify(body));
@@ -259,6 +260,50 @@ describe("orca gc (#366)", () => {
       expect(reasonOf(result, "run-open")).toBe("run-not-terminal:landed");
       expect(existsSync(join(runsRoot, "run-orphan"))).toBe(true);
       expect(existsSync(join(runsRoot, "run-open"))).toBe(true);
+    } finally { await h.dispose(); }
+  });
+  // Tester #366 follow-up: historical runs whose driver never wrote `cleanedUp` were unreclaimable. The default stays
+  // conservative; the explicit opt-in still requires the terminal group, terminal run and age guards.
+  it("keeps a run whose driver never finished cleanup by default", async () => {
+    const { h, stateDir, runsRoot } = await caseDir();
+    try {
+      seedGroup(h, "g-archived");
+      seedRun(h, "g-archived", "run-uncleaned", { endedAt: OLD, drive: { cleanedUp: false, targetRepo: null } });
+      await makeRunDir(join(runsRoot, "run-uncleaned"), 256, OLD);
+      const result = await gcControl({ stateDir, now: NOW });
+      expect(reasonOf(result, "run-uncleaned")).toBe("not-cleaned-up");
+      expect(result.planned).toEqual([]);
+    } finally { await h.dispose(); }
+  });
+
+  it("--include-uncleaned plans it, marks it, and still refuses a pending publish or acceptance", async () => {
+    const { h, stateDir, runsRoot } = await caseDir();
+    try {
+      seedGroup(h, "g-archived");
+      seedRun(h, "g-archived", "run-uncleaned", { endedAt: OLD, drive: { cleanedUp: false, targetRepo: null } });
+      seedRun(h, "g-archived", "run-publish", { endedAt: OLD, drive: { cleanedUp: false, publishError: "projection unavailable" } });
+      seedRun(h, "g-archived", "run-accept", { endedAt: OLD, drive: { cleanedUp: false }, operatorAcceptance: { state: "pending" } });
+      for (const id of ["run-uncleaned", "run-publish", "run-accept"]) await makeRunDir(join(runsRoot, id), 128, OLD);
+      const result = await gcControl({ stateDir, now: NOW, includeUncleaned: true });
+      expect(result.planned.map((entry) => entry.runId)).toEqual(["run-uncleaned"]);
+      expect(result.planned[0]).toMatchObject({ uncleaned: true });
+      expect(reasonOf(result, "run-publish")).toBe("publish-pending");
+      expect(reasonOf(result, "run-accept")).toBe("acceptance-pending");
+    } finally { await h.dispose(); }
+  });
+
+  it("the CLI passes --include-uncleaned through", async () => {
+    const { h, stateDir, runsRoot } = await caseDir();
+    try {
+      seedGroup(h, "g-archived");
+      seedRun(h, "g-archived", "run-uncleaned", { endedAt: OLD, drive: { cleanedUp: false } });
+      await makeRunDir(join(runsRoot, "run-uncleaned"), 256, OLD);
+      const { io, out } = capture();
+      const args = parsed({ json: true, "include-uncleaned": true }, stateDir);
+      args.global.json = true;
+      expect(await runGc(args, io)).toBe(0);
+      const line = JSON.parse(out().trim()) as { body: { planned: Array<{ runId: string; uncleaned?: boolean }> } };
+      expect(line.body.planned).toEqual([expect.objectContaining({ runId: "run-uncleaned", uncleaned: true })]);
     } finally { await h.dispose(); }
   });
 });

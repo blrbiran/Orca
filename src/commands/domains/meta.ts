@@ -19,11 +19,12 @@ export const META_ROWS: CommandDef[] = [
       { name: "apply", type: "boolean", summary: "actually delete (default: print what would be removed and how much it would free)" },
       { name: "older-than", type: "integer", summary: "keep runs touched within this many days (default 30)" },
       { name: "keep-last", type: "integer", summary: "keep the newest N runs regardless of age" },
+      { name: "include-uncleaned", type: "boolean", summary: "also reclaim runs whose driver never finished its cleanup (marked in the plan; every other guard still holds)" },
       { name: "group", type: "string", summary: "limit to one group's runs" },
     ], access: "panel-local",
     mapsTo: { kind: "local", load: async () => (await import("../local/gc.js")).runGc },
     exitCodes: { 0: "the plan ran (dry run, or applied)", 1: "refused here: no control store, or it cannot be read" },
-    examples: ["orca gc", "orca gc --older-than 7 --keep-last 3", "orca gc --apply --group my-group", "orca gc --json"], format: () => "",
+    examples: ["orca gc", "orca gc --older-than 7 --keep-last 3", "orca gc --apply --group my-group", "orca gc --apply --include-uncleaned --older-than 30", "orca gc --json"], format: () => "",
   },
   {
     domain: "doctor", action: null, summary: "status's checks plus slower ones (agent CLIs on the service PATH, ~/.orca modes, stale sockets), with one fix line per failure (read-only)",

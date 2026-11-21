@@ -28,7 +28,7 @@ export function formatGc(result: GcResult): string {
   const lines: string[] = [];
   lines.push(result.dryRun ? "orca gc: dry run (nothing removed; pass --apply to delete)" : "orca gc: applied");
   for (const item of result.dryRun ? result.planned : result.removed) {
-    lines.push(`  ${result.dryRun ? "would remove" : "removed"} ${item.kind} ${item.path} (${formatBytes(item.bytes)}${item.worktree ? ", git worktree" : ""})`);
+    lines.push(`  ${result.dryRun ? "would remove" : "removed"} ${item.kind} ${item.path} (${formatBytes(item.bytes)}${item.worktree ? ", git worktree" : ""}${item.uncleaned === true ? ", driver cleanup incomplete" : ""})`);
   }
   for (const skip of result.skipped) {
     lines.push(`  skipped ${skip.runId}${skip.path === null ? "" : ` ${skip.path}`}: ${skip.reason}${skip.detail === undefined ? "" : ` (${skip.detail})`}`);
@@ -49,6 +49,7 @@ export async function runGc(args: ParsedArgs, io: CommandIo): Promise<number> {
       apply: args.flags.apply === true,
       olderThanDays: integer(args, "older-than", 30),
       keepLast: integer(args, "keep-last", 0),
+      ...(args.flags["include-uncleaned"] === true ? { includeUncleaned: true } : {}),
       ...(typeof args.flags.group === "string" ? { groupId: args.flags.group } : {}),
       repoResolver: repoResolver(io),
     });

@@ -41,6 +41,12 @@ export interface GcOptions {
   olderThanDays?: number;
   /** Keep the newest N runs in scope whatever their age (0: none). */
   keepLast?: number;
+  /**
+   * Tester #366 follow-up: also reclaim runs whose driver never wrote `cleanedUp` (historical runs, or a driver that
+   * died before its cleanup pass). Off by default: the skip is the conservative answer. Every other guard still holds,
+   * and each such item is marked `uncleaned` in the plan so the output says what it is.
+   */
+  includeUncleaned?: boolean;
   /** Only runs of this group are considered. */
   groupId?: string;
   /** The clock, ms since the epoch (tests). */
@@ -49,7 +55,7 @@ export interface GcOptions {
   repoResolver?: (repoId: string) => string | null;
 }
 
-export interface GcItem { runId: string; kind: "runs" | "workspaces"; path: string; bytes: number; worktree: boolean }
+export interface GcItem { runId: string; kind: "runs" | "workspaces"; path: string; bytes: number; worktree: boolean; uncleaned?: boolean }
 export interface GcSkip { runId: string; path: string | null; reason: string; detail?: string }
 export interface GcResult {
   dryRun: boolean;
@@ -175,7 +181,7 @@ interface Candidate {
   skip: { reason: string; detail?: string } | undefined;
 }
 
-function basicSkip(run: RunRow, group: GroupRow | undefined): { reason: string; detail?: string } | undefined {
+function basicSkip(run: RunRow, group: GroupRow | undefined, includeUncleaned: boolean): { reason: string; detail?: string } | undefined {
   if (run.active) return { reason: "run-active" };
   const terminal = groupIsTerminal(group);
   if (terminal === "no") return { reason: group === undefined ? "group-not-found" : "group-not-archived" };
@@ -183,7 +189,7 @@ function basicSkip(run: RunRow, group: GroupRow | undefined): { reason: string; 
   const state = typeof run.body.state === "string" ? run.body.state : "unknown";
   if (!isTerminalRunState(state)) return { reason: `run-not-terminal:${state}` };
   const drive = run.body.drive as { cleanedUp?: unknown; publishError?: unknown } | undefined;
-  if (drive !== undefined && drive.cleanedUp !== true) return { reason: "not-cleaned-up" };
+  if (drive !== undefined && drive.cleanedUp !== true && !includeUncleaned) return { reason: "not-cleaned-up" };
   // The driver keeps a settled, cleaned run in scope until a failed publish succeeds (executionDriver.driverRunIds).
   if (drive !== undefined && drive.publishError !== null && drive.publishError !== undefined) return { reason: "publish-pending" };
   // ... and an owner's acceptance still to carry out (acceptAttemptDriver.acceptPending).
@@ -219,7 +225,7 @@ export async function gcControl(options: GcOptions): Promise<GcResult> {
     if (options.groupId !== undefined && run.groupId !== options.groupId) continue;
     const group = groups.get(run.groupId);
     const touchedAt = touchOf(byName.get(runId), workspaceByName.get(runId), run.body);
-    candidates.push({ runId, run, group, runsDir: byName.get(runId), workspacesDir: workspaceByName.get(runId), touchedAt, skip: basicSkip(run, group) });
+    candidates.push({ runId, run, group, runsDir: byName.get(runId), workspacesDir: workspaceByName.get(runId), touchedAt, skip: basicSkip(run, group, options.includeUncleaned === true) });
   }
 
   // --keep-last protects the newest N eligible runs whatever their age; age then applies to the rest.
@@ -236,15 +242,17 @@ export async function gcControl(options: GcOptions): Promise<GcResult> {
       skipped.push({ runId: candidate.runId, path: null, reason: "too-recent", detail: new Date(candidate.touchedAt).toISOString() });
       continue;
     }
+    const uncleaned = options.includeUncleaned === true && candidate.run.body.drive !== undefined
+      && (candidate.run.body.drive as { cleanedUp?: unknown }).cleanedUp !== true;
     if (candidate.runsDir !== undefined) {
       assertDirectChild(runsRoot, candidate.runsDir.path);
       const size = await directorySize(candidate.runsDir.path);
-      planned.push({ item: { runId: candidate.runId, kind: "runs", path: candidate.runsDir.path, bytes: size.bytes, worktree: false }, worktreeRepo: null });
+      planned.push({ item: { runId: candidate.runId, kind: "runs", path: candidate.runsDir.path, bytes: size.bytes, worktree: false, ...(uncleaned ? { uncleaned: true } : {}) }, worktreeRepo: null });
     }
     if (candidate.workspacesDir !== undefined) {
       assertDirectChild(workspacesRoot, candidate.workspacesDir.path);
       const size = await directorySize(candidate.workspacesDir.path);
-      const item: GcItem = { runId: candidate.runId, kind: "workspaces", path: candidate.workspacesDir.path, bytes: size.bytes, worktree: false };
+      const item: GcItem = { runId: candidate.runId, kind: "workspaces", path: candidate.workspacesDir.path, bytes: size.bytes, worktree: false, ...(uncleaned ? { uncleaned: true } : {}) };
       // Registration decides the removal command, so it is resolved in both modes: dry-run then names what apply would do.
       const candidatePaths = repoCandidates(candidate.run, candidate.group, options.repoResolver);
       const derived = await commonDirRepo(candidate.workspacesDir.path);

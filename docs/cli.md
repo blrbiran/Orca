@@ -15,7 +15,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 
 ### `orca gc`
 
-- `orca gc [--apply] [--older-than <older-than>] [--keep-last <keep-last>] [--group <group>]` — reclaim disk from settled runs in archived groups: <stateDir>.runs/<runId> and <stateDir>.workspaces/<runId> only; dry run by default
+- `orca gc [--apply] [--older-than <older-than>] [--keep-last <keep-last>] [--include-uncleaned] [--group <group>]` — reclaim disk from settled runs in archived groups: <stateDir>.runs/<runId> and <stateDir>.workspaces/<runId> only; dry run by default
 
 ### `orca doctor`
 
