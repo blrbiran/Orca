@@ -41,3 +41,11 @@ Session `032cc670`. Human: allow-push; 尽量做完；不考虑 context；「这
 - #393(b) review: drop the fallback → the readable-group criterion red.
 - v9: unassigned / edge / independent / final-verification each → 1 failed / 5 passed.
 - syncskill: drop recover-backup wiring → 2 red; drop rm-before-cp → 1 red.
+
+## Gate correction (important for the next agent)
+The first wide gate used `ORCA_CCLOOP_BIN=/Users/biran/.orca/ccloop/node_modules/ccloop/dist/cli.js` — the **installed
+package**, which has no `tests/fixtures/fake-codex.mjs`. Every real-ccloop E2E then failed with `MODULE_NOT_FOUND`, and
+~69 files went red — NOT code regressions. The same E2E files pass 11/11 solo against the **main checkout build**
+`/Users/biran/code/skills/orca/ccloop/dist/cli.js` (which has the fixtures). The final wide gate re-ran with that build;
+result in handoff §3. Lesson: the handoff's own §八 warning was right — point `ORCA_CCLOOP_BIN` at a ccloop clone/main
+checkout with tests, never at the installed package.
