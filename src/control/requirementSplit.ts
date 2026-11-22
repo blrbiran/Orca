@@ -186,6 +186,20 @@ export const SPLIT_INSTRUCTION_V8 = SPLIT_INSTRUCTION_V7
   .replace(`${REQUIREMENT_CONFLICTS_RULE}\n`, `${REQUIREMENT_CONFLICTS_RULE}\n${FEEDBACK_STANDS_RULE}\n`)
   .replace(`${IMPLIED_PATH_RULE}\n`, `${IMPLIED_PATH_RULE}\n${RUNTIME_DATA_RULE}\n`);
 
+/** The single-directory head a new split call sends since tester #385 (version 9). */
+export const SPLIT_PROMPT_HEAD_V9 = "Orca requirement split, instruction version 9.";
+/**
+ * Tester #385: the splitter was never asked for the delivery graph the requirement stated, so a stated unit could be
+ * merged or lose an edge, and an acceptance's own final verification could be handed to no task. Version 9 asks the
+ * answer to state the graph it was given; validateSplitDraft checks the draft against that claim (deliveryGraphProblems).
+ */
+export const DELIVERY_GRAPH_RULE = "- When the requirement's goal or a success condition names delivery units (a labelled list such as T1..T6, a sentence that two units are independent, or a final documentation-and-overall-verification step), report the graph in `deliveryGraph`: `units` is one entry per named unit with the `taskIds` that carry it and the units it must follow (`dependsOn`); `independent` lists the groups of units the requirement calls independent; `finalVerification` names the task whose `checks` run the requirement's overall verification, or null. A task's `dependsOn` stays within what the graph orders, and tasks the graph calls independent share no edge. When the requirement names no units, omit `deliveryGraph`.";
+/** Version 9 is version 8 plus the graph rule and template line; the V5-V8 bytes stay as they are. */
+export const SPLIT_INSTRUCTION_V9 = SPLIT_INSTRUCTION_V8
+  .replace(SPLIT_PROMPT_HEAD_V8, SPLIT_PROMPT_HEAD_V9)
+  .replace(`${PARALLEL_RULE}\n`, `${PARALLEL_RULE}\n${DELIVERY_GRAPH_RULE}\n`)
+  .replace("  \"notes\": anything the person should know about this split", "  \"deliveryGraph\": optional { \"units\": [ { \"unit\": a unit the requirement names, \"taskIds\": [ ], \"dependsOn\": [ ] } ], \"independent\": [ [ unit, unit ] ], \"finalVerification\": a task id or null },\n  \"notes\": anything the person should know about this split");
+
 const str = { type: "string" }, strings = { type: "array", items: str };
 /**
  * Multi-directory projects spec §6.4: the instruction for a project of several directories. A task names the
@@ -275,6 +289,20 @@ export const SPLIT_JSON_SCHEMA_V7: Readonly<Record<string, unknown>> = deepFreez
   ...SPLIT_JSON_SCHEMA_V6,
   properties: { ...(SPLIT_JSON_SCHEMA_V6.properties as object), requirementConflicts: {
     type: "array", items: { type: "object", additionalProperties: false, required: ["criterion", "why"], properties: { criterion: str, feedback: str, why: str } },
+  } },
+});
+
+/** Split instruction version 9: the optional `deliveryGraph` (spec 2026-11-23 §2), strict like every other key. */
+export const SPLIT_JSON_SCHEMA_V9: Readonly<Record<string, unknown>> = deepFreeze({
+  ...SPLIT_JSON_SCHEMA_V7,
+  properties: { ...(SPLIT_JSON_SCHEMA_V7.properties as object), deliveryGraph: {
+    type: "object", additionalProperties: false, required: ["units"],
+    properties: {
+      units: { type: "array", items: { type: "object", additionalProperties: false, required: ["unit", "taskIds"],
+        properties: { unit: str, taskIds: strings, dependsOn: strings } } },
+      independent: { type: "array", items: strings },
+      finalVerification: { type: ["string", "null"] },
+    },
   } },
 });
 
@@ -690,6 +718,57 @@ export function importReasons(error: ControlError): string[] {
  * test files each task's checks name against its own targetPaths (#239), each trace --
  * and only for a draft with none, the import itself (one reason per item it names) and the layers.
  */
+/**
+ * Tester #385 (split instruction v9, spec 2026-11-23 §3): the draft checked against the delivery graph it claims. Code
+ * cannot compare the graph to prose, so it only keeps the model to its own claim -- an unclaimed or doubly-claimed task,
+ * an edge outside the graph's order, an edge between units the graph calls independent, and a final-verification claim
+ * with no suite check. Each is a hand-back reason, not a refusal; a draft with no `deliveryGraph` passes untouched.
+ */
+export function deliveryGraphProblems(output: SplitOutput): string[] {
+  const graph = output.deliveryGraph;
+  if (graph === undefined) return [];
+  const reasons: string[] = [];
+  const ids = new Set(output.tasks.map((task) => task.taskId));
+  const unitOf = new Map<string, string>();
+  for (const unit of graph.units) {
+    for (const taskId of unit.taskIds) {
+      if (!ids.has(taskId)) { reasons.push(`delivery-graph-unit-unknown-task:${unit.unit}:${taskId}`); continue; }
+      const prior = unitOf.get(taskId);
+      if (prior !== undefined && prior !== unit.unit) reasons.push(`delivery-graph-unit-ambiguous:${taskId}`);
+      else unitOf.set(taskId, unit.unit);
+    }
+  }
+  for (const task of output.tasks) if (!unitOf.has(task.taskId)) reasons.push(`delivery-graph-unit-unassigned:${task.taskId}`);
+  // A task may depend only on units its own unit's `dependsOn` names (a dependency inside the same unit is its own order).
+  for (const task of output.tasks) {
+    const unit = unitOf.get(task.taskId);
+    if (unit === undefined) continue;
+    const graphUnit = graph.units.find((entry) => entry.unit === unit)!;
+    const allowed = new Set(graphUnit.dependsOn);
+    for (const dependency of task.dependsOn) {
+      const depUnit = unitOf.get(dependency);
+      if (depUnit === undefined || depUnit === unit) continue;
+      if (!allowed.has(depUnit)) reasons.push(`delivery-graph-edge:${task.taskId}:${dependency}`);
+    }
+  }
+  // Two units the requirement calls independent share no edge between their tasks.
+  const independentUnits = new Map<string, number>();
+  graph.independent.forEach((group, index) => { for (const unit of group) independentUnits.set(unit, index); });
+  for (const task of output.tasks) for (const dependency of task.dependsOn) {
+    const a = unitOf.get(task.taskId), b = unitOf.get(dependency);
+    if (a === undefined || b === undefined || a === b) continue;
+    const groupA = independentUnits.get(a), groupB = independentUnits.get(b);
+    if (groupA !== undefined && groupA === groupB) reasons.push(`delivery-graph-independent:${task.taskId}:${dependency}`);
+  }
+  // The final-verification claim runs the named suite (the same command shape requirementDelivery.ts names).
+  const FULL_SUITE = /\b(npm (?:run )?test|pytest|go test \.\/...|cargo test|make test)\b/i;
+  const runsSuite = (taskId: string): boolean => (output.tasks.find((task) => task.taskId === taskId)?.checks ?? []).some((check) => FULL_SUITE.test(check));
+  if (graph.finalVerification !== null && graph.finalVerification !== undefined && !runsSuite(graph.finalVerification)) {
+    reasons.push(`delivery-graph-final-verification:${graph.finalVerification}`);
+  }
+  return reasons;
+}
+
 export async function validateSplitDraft(input: { output: SplitOutput; plan: SplitPlanFile; repo: string; commit: string; criterionIds: readonly string[]; adrIds: readonly string[] }): Promise<SplitValidation> {
   const reasons: string[] = [];
   const { output, plan } = input;
@@ -744,6 +823,8 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
   const known = new Set([...input.criterionIds, ...input.adrIds]);
   for (const task of output.tasks) for (const trace of task.traces) if (!known.has(trace)) reasons.push(`trace:${task.taskId}:${trace}`);
   for (const id of input.criterionIds) if (!output.tasks.some((task) => task.traces.includes(id))) reasons.push(`untraced:${id}`);
+  // Split instruction v9 (tester #385): the draft against the delivery graph it claims.
+  for (const reason of deliveryGraphProblems(output)) reasons.push(reason);
   if (reasons.length > 0) return { ok: false, reasons, layers: null, implicitEdges: null };
   try {
     normalizeControlPlan({ ...schedulerControlPlanSourceOf(plan, plan.targetRepo), repoId: "requirement", planId: "requirement-draft" });
@@ -773,7 +854,7 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
  * `project-overview`; absent, the bytes are the single-repository ones. With `multi`, `instructionVersion` is the multi
  * instruction's own: 5, or 6 (the default).
  */
-export function buildSplitPrompt(input: { document: string; overview: { canonicalJson: string; hash: string }; earlierDrafts: DraftBody[]; multi?: boolean; instructionVersion?: 5 | 6 | 7 | 8;
+export function buildSplitPrompt(input: { document: string; overview: { canonicalJson: string; hash: string }; earlierDrafts: DraftBody[]; multi?: boolean; instructionVersion?: 5 | 6 | 7 | 8 | 9;
   /** Review M1: the latest draft when a revision withdrew the consensus (consensusWithdrawn.lastDraftNo); feedback before it is not carried. */
   revisionBoundary?: number | null }): string {
   const nonce = input.overview.hash.slice(0, 16);
@@ -789,7 +870,8 @@ export function buildSplitPrompt(input: { document: string; overview: { canonica
   }
   const instruction = input.multi === true ? (input.instructionVersion === 5 ? SPLIT_INSTRUCTION_MULTI_V5 : SPLIT_INSTRUCTION_MULTI_V6)
     : input.instructionVersion === 5 ? SPLIT_INSTRUCTION_V5 : input.instructionVersion === 6 ? SPLIT_INSTRUCTION_V6
-    : input.instructionVersion === 7 ? SPLIT_INSTRUCTION_V7 : SPLIT_INSTRUCTION_V8;
+    : input.instructionVersion === 7 ? SPLIT_INSTRUCTION_V7 : input.instructionVersion === 8 ? SPLIT_INSTRUCTION_V8
+    : SPLIT_INSTRUCTION_V9;
   const contextName = input.multi === true ? "project-overview" : "repository-overview";
   // Dogfood finding (3), single version 8 and multi version 6 only (older versions keep their bytes): a draft Orca drafts
   // again after code handed back a draft written after the person's feedback carries that feedback, the draft it was given

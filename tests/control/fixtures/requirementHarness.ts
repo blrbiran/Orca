@@ -43,7 +43,9 @@ const HEADS = { clarify: ["Orca requirement clarification, instruction version 4
   // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) — the #351 addendum adds single-repository split v7; v5, v6 and multi v5 stay known.
   // Ruling: human 「这次批准改写所有必要的判据」 (Orca session 3ba26002, 2026-11-19): dogfood finding (3) and tester #362 add single-repository split v8; v5, v6, v7 and multi v5 stay known.
   // Ruling: human 「这次批准改写所有必要的判据」 (Orca session 3ba26002, 2026-11-19): multi-directory requirementConflicts (human 「同意」) add multi split v6; multi v5 stays known.
-  split: ["Orca requirement split, instruction version 5.", "Orca requirement split, instruction version 6.", "Orca requirement split, instruction version 7.", "Orca requirement split, instruction version 8.", "Orca requirement split (several directories), instruction version 5.", "Orca requirement split (several directories), instruction version 6."],
+  // Ruling: human 「这次批准改写所有必要的判据」 (Orca session, 2026-11-23): split instruction v9 (tester #385) adds the
+  // optional deliveryGraph; v5-v8 and multi v5/v6 stay known.
+  split: ["Orca requirement split, instruction version 5.", "Orca requirement split, instruction version 6.", "Orca requirement split, instruction version 7.", "Orca requirement split, instruction version 8.", "Orca requirement split, instruction version 9.", "Orca requirement split (several directories), instruction version 5.", "Orca requirement split (several directories), instruction version 6."],
   estimate: ["You are estimating the budget"] } as const;
 const sha = (bytes: Buffer): string => createHash("sha256").update(bytes).digest("hex");
 

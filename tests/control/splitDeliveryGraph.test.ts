@@ -1,0 +1,78 @@
+import { describe, expect, it } from "vitest";
+import { buildSplitPrompt, deliveryGraphProblems, SPLIT_INSTRUCTION_V8, SPLIT_INSTRUCTION_V9 } from "../../src/control/requirementSplit.js";
+import type { SplitOutput } from "../../src/control/requirementSchemas.js";
+import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
+
+// Split instruction v9 (spec 2026-11-23-split-instruction-v9-design.md, tester #385): the answer states the delivery
+// graph the requirement gave it, and validateSplitDraft keeps the draft to that claim. Code cannot read prose, so the
+// checks below are the model against its own `deliveryGraph` -- each a hand-back reason, not a refusal.
+const base = VALID_SPLIT.tasks[0]!;
+const task = (taskId: string, dependsOn: string[] = [], checks = ["node src/check.js"]) =>
+  ({ ...base, taskId, title: taskId, targetPaths: ["src/a.js"], successCondition: "done", checks, dependsOn, traces: ["AC1"] });
+const draft = (tasks: ReturnType<typeof task>[], deliveryGraph?: SplitOutput["deliveryGraph"]): SplitOutput =>
+  ({ tasks, notes: "", ...(deliveryGraph === undefined ? {} : { deliveryGraph }) });
+
+describe("split instruction v9 head and graph rule (#385)", () => {
+  it("the v9 prompt says version 9 and carries the delivery-graph rule; v8's bytes are unchanged", () => {
+    const overview = { canonicalJson: "{}", hash: "a".repeat(64) };
+    const v9 = buildSplitPrompt({ document: "D.", overview, earlierDrafts: [], instructionVersion: 9 });
+    expect(v9.split("\n")[0]).toBe("Orca requirement split, instruction version 9.");
+    expect(v9).toContain("deliveryGraph");
+    // mutation: pick V8 for instructionVersion 9 -> the head assertion above is red.
+    // A version-8 call keeps version 8's bytes: its head is version 8 and it never mentions the graph key.
+    const v8 = buildSplitPrompt({ document: "D.", overview, earlierDrafts: [], instructionVersion: 8 });
+    expect(v8.split("\n")[0]).toBe("Orca requirement split, instruction version 8.");
+    expect(v8.startsWith(SPLIT_INSTRUCTION_V8)).toBe(true);
+    expect(v8).not.toContain("deliveryGraph");
+    expect(SPLIT_INSTRUCTION_V9).not.toBe(SPLIT_INSTRUCTION_V8);
+  });
+});
+
+describe("a draft is checked against the delivery graph it claims (#385)", () => {
+  it("a draft with no deliveryGraph passes untouched", () => {
+    // mutation: flag a draft with no graph -> red
+    expect(deliveryGraphProblems(draft([task("a")]))).toEqual([]);
+  });
+
+  it("names a task the graph does not claim", () => {
+    // mutation: drop the unassigned loop -> red
+    const output = draft([task("a"), task("b")], { units: [{ unit: "T1", taskIds: ["a"], dependsOn: [] }], independent: [], finalVerification: null });
+    expect(deliveryGraphProblems(output)).toContain("delivery-graph-unit-unassigned:b");
+  });
+
+  it("refuses an edge outside the graph's order and accepts one inside it", () => {
+    const graph: SplitOutput["deliveryGraph"] = {
+      units: [{ unit: "T1", taskIds: ["a"], dependsOn: [] }, { unit: "T2", taskIds: ["b"], dependsOn: [] }],
+      independent: [["T1", "T2"]], finalVerification: null,
+    };
+    // mutation: allow every cross-unit edge -> the first assertion is red ("b" -> "a" leaks).
+    expect(deliveryGraphProblems(draft([task("a"), task("b", ["a"])], graph))).toContain("delivery-graph-edge:b:a");
+    // An edge the graph orders is fine: T2 follows T1.
+    const ordered: SplitOutput["deliveryGraph"] = {
+      units: [{ unit: "T1", taskIds: ["a"], dependsOn: [] }, { unit: "T2", taskIds: ["b"], dependsOn: ["T1"] }],
+      independent: [], finalVerification: null,
+    };
+    expect(deliveryGraphProblems(draft([task("a"), task("b", ["a"])], ordered))).toEqual([]);
+  });
+
+  it("refuses an edge between units the requirement calls independent", () => {
+    const graph: SplitOutput["deliveryGraph"] = {
+      units: [{ unit: "T2a", taskIds: ["a"], dependsOn: [] }, { unit: "T2b", taskIds: ["b"], dependsOn: [] }],
+      independent: [["T2a", "T2b"]], finalVerification: null,
+    };
+    // mutation: drop the independence loop -> red
+    expect(deliveryGraphProblems(draft([task("a"), task("b", ["a"])], graph))).toContain("delivery-graph-independent:b:a");
+  });
+
+  it("a final-verification claim must actually run the suite; the positive shape passes", () => {
+    const bad = draft([task("a", [], ["node src/check.js"])], {
+      units: [{ unit: "T1", taskIds: ["a"], dependsOn: [] }], independent: [], finalVerification: "a",
+    });
+    // mutation: accept any finalVerification task -> red
+    expect(deliveryGraphProblems(bad)).toContain("delivery-graph-final-verification:a");
+    const good = draft([task("a", [], ["npm test"])], {
+      units: [{ unit: "T1", taskIds: ["a"], dependsOn: [] }], independent: [], finalVerification: "a",
+    });
+    expect(deliveryGraphProblems(good)).toEqual([]);
+  });
+});

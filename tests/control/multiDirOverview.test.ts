@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
 import { sha256Canonical } from "../../src/control/canonicalJson.js";
 import { buildRepositoryOverview, dividedOverviewLimits, OVERVIEW_LIMITS, type ProjectOverview } from "../../src/control/requirementOverview.js";
 import { buildClarifyPrompt, CLARIFY_INSTRUCTION_V3 } from "../../src/control/requirementClarify.js";
-import { buildSplitPrompt, SPLIT_INSTRUCTION_MULTI_V6, SPLIT_INSTRUCTION_V6, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_V7, SPLIT_JSON_SCHEMA_MULTI, SPLIT_JSON_SCHEMA_MULTI_V6 } from "../../src/control/requirementSplit.js";
+import { buildSplitPrompt, SPLIT_INSTRUCTION_MULTI_V6, SPLIT_INSTRUCTION_V6, SPLIT_JSON_SCHEMA, SPLIT_JSON_SCHEMA_V9, SPLIT_JSON_SCHEMA_MULTI, SPLIT_JSON_SCHEMA_MULTI_V6 } from "../../src/control/requirementSplit.js";
 import { multiSplitOutputSchema } from "../../src/control/requirementSchemas.js";
 import { readRequirementGroup } from "../../src/control/requirementRecords.js";
 import { vaultKeyOf } from "../../src/flow/vault/paths.js";
@@ -263,15 +263,17 @@ describe("a single-repository group's prompts are byte-equal to today's (M5, §6
     try {
       await split.until(() => split.fake.calls.accept.length > 0);
       const envelope = split.fake.calls.accept[0]! as { work: { kind: string; prompt: string; responseSchema: unknown } };
-      // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) — new single-repository calls send split instruction v7 and its schema (V6 plus the optional requirementConflicts).
-      expect(envelope.work.responseSchema).toEqual(SPLIT_JSON_SCHEMA_V7);
+      // Ruling: human 「这次批准改写所有必要的判据」 (Orca session, 2026-11-23) — tester #385 makes new single-repository calls
+      // send split instruction v9 and its schema (V7 plus the optional deliveryGraph).
+      expect(envelope.work.responseSchema).toEqual(SPLIT_JSON_SCHEMA_V9);
       // Ruling: human approved rewriting all necessary criteria, Orca session 7753e97d, 2026-10-27 (version 1 -> 2)
       // Ruling: 「这次批准改写所有必要的判据」 (human, tester feedback round 2026-10-28, controller a9f9d6de): split instruction version 2 -> 3 (#107); it still encodes: a single-repository group is sent the single instruction.
       // Ruling: 2026-11-17 #328, new single-repository calls advertise the structured history proposal.
       // Ruling: human 「这次批准改写所有必要的判据」 (Orca session ca534c51, 2026-11-18) — the #351 addendum makes the single-repository split instruction version 7.
-      // Ruling: human 「这次批准改写所有必要的判据」 (Orca session 3ba26002, 2026-11-19): dogfood finding (3) and tester #362 make a new single-directory split call send instruction version 8 (this criterion still
-      // encodes: a single-repository group is sent the single instruction, at the newest version).
-      expect(envelope.work.prompt.startsWith("Orca requirement split, instruction version 8.")).toBe(true);
+      // Ruling: human 「这次批准改写所有必要的判据」 (Orca session, 2026-11-23): tester #385 makes a new single-directory split
+      // call send instruction version 9 (this criterion still encodes: a single-repository group is sent the single
+      // instruction, at the newest version).
+      expect(envelope.work.prompt.startsWith("Orca requirement split, instruction version 9.")).toBe(true);
       expect(envelope.work.prompt).toContain("for one software repository");
       expect(envelope.work.prompt).toContain("<<<ORCA-DATA repository-overview ");
       expect(envelope.work.prompt).not.toContain("project-overview");

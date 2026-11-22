@@ -117,9 +117,20 @@ export const REQUIREMENT_CONFLICT_BOUNDS = { entries: 8, bytes: 1024 } as const;
 const conflictText = z.string().refine((s) => s.length > 0 && Buffer.byteLength(s, "utf8") <= REQUIREMENT_CONFLICT_BOUNDS.bytes,
   { message: `1-${REQUIREMENT_CONFLICT_BOUNDS.bytes} utf8 bytes` });
 export const requirementConflictSchema = z.object({ criterion: conflictText, feedback: conflictText.optional(), why: conflictText }).strict();
+/**
+ * Split instruction v9 (spec 2026-11-23-split-instruction-v9-design.md): the delivery graph the requirement stated, as
+ * the split claims it carried it. Optional and never defaulted, so a draft without one stores and hashes as v8 did.
+ */
+const deliveryUnitSchema = z.object({ unit: nonempty, taskIds: z.array(nonempty), dependsOn: z.array(nonempty) }).strict();
+export const deliveryGraphSchema = z.object({
+  units: z.array(deliveryUnitSchema),
+  independent: z.array(z.array(nonempty)),
+  finalVerification: nonempty.nullable(),
+}).strict();
 // D4: optional and never defaulted, so a draft without conflicts stores, shows and hashes as before.
 export const splitOutputSchema = z.object({ tasks: z.array(splitTaskSchema).min(1), notes: z.string(), historyExpectation: historyExpectationSchema.optional(),
-  requirementConflicts: z.array(requirementConflictSchema).min(1).max(REQUIREMENT_CONFLICT_BOUNDS.entries).optional() }).strict();
+  requirementConflicts: z.array(requirementConflictSchema).min(1).max(REQUIREMENT_CONFLICT_BOUNDS.entries).optional(),
+  deliveryGraph: deliveryGraphSchema.optional() }).strict();
 /**
  * Multi-directory projects spec §6.1: one task's writes as the model names them, per directory (`dir`, `targetPaths`,
  * `checks`). A non-primary entry may have no checks; the primary's checks are checked by validation (O5).
