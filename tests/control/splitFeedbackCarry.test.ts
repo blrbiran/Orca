@@ -49,7 +49,9 @@ describe("an automatic re-draft keeps the person's feedback (dogfood finding 3)"
       // mutation: drop requirementConflicts from the block -> red
       expect(block(prompts[2]!)).toEqual({ draftNo: 2, tasks: INVALID_SPLIT.tasks, feedback: FEEDBACK, feedbackOnDraft: 1, requirementConflicts: CONFLICTS,
         handedBackFor: readDraft(x.store, "r", 2).reasons.map((reason) => expect.stringContaining(reason)) });
-      expect(prompts[2]!.startsWith("Orca requirement split, instruction version 8.")).toBe(true);
+      // Ruling: human 「这次批准改写所有必要的判据」 (Orca session, 2026-11-23): tester #385 makes a new single-repository
+      // split call send instruction version 9; the carried-feedback block above is unchanged from v8's.
+      expect(prompts[2]!.startsWith("Orca requirement split, instruction version 9.")).toBe(true);
       // Draft 3 reports no conflict about the feedback, so the view says so.
       const view = readRequirementView(x.store, "e", "r");
       // mutation: drop feedbackAfterRedraft from the view -> red

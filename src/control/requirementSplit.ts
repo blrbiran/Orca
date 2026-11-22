@@ -892,7 +892,9 @@ export function buildSplitPrompt(input: { document: string; overview: { canonica
   // Dogfood finding (3), single version 8 and multi version 6 only (older versions keep their bytes): a draft Orca drafts
   // again after code handed back a draft written after the person's feedback carries that feedback, the draft it was given
   // on, and the conflicts the revised draft reported.
-  const carries = instruction === SPLIT_INSTRUCTION_V8 || instruction === SPLIT_INSTRUCTION_MULTI_V6;
+  // v9 (tester #385) is v8 plus the delivery-graph rule; it carries the standing feedback (and the draft's conflicts)
+  // exactly as v8 does.
+  const carries = instruction === SPLIT_INSTRUCTION_V8 || instruction === SPLIT_INSTRUCTION_V9 || instruction === SPLIT_INSTRUCTION_MULTI_V6;
   const standing = carries && latest !== undefined && latest.feedback === null ? standingFeedback(input.earlierDrafts, input.revisionBoundary ?? null) : null;
   // Review M5: the revised draft's conflicts go with the carried feedback only (the spec correction's words).
   const conflicts = standing !== null ? conflictsOfDraft(latest!) : [];
