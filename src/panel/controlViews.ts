@@ -1047,8 +1047,15 @@ export function readControlSummary(
   for (const groupId of sortedUnique(groupIds)) {
     try {
       // Tester #393(b): with a request-scoped cache, the group the overview will also read is read here once. An
-      // archived group (null) is not read by the overview, so its summary comes from the ordinary reader.
-      const shared = cache === undefined ? undefined : readOverviewGroupSource(store, groupId, cache);
+      // archived group (null) is not read by the overview, so its summary comes from the ordinary reader. The
+      // overview's source reader checks identities the summary does not (a run or work item whose stored owner
+      // disagrees); a group it refuses is still the summary's to answer, so a refusal falls back to the ordinary
+      // reader rather than turning a readable group into `unreadable` -- the overview keeps its own stricter answer.
+      let shared: GroupSourceV1 | null | undefined;
+      if (cache !== undefined) {
+        try { shared = readOverviewGroupSource(store, groupId, cache); }
+        catch (error) { if (!(error instanceof ControlError) || error.code !== "recovery-blocked") throw error; }
+      }
       groups.push(shared === undefined || shared === null ? readGroupSummary(store, groupId) : shared.summary);
     }
     catch (error) {
