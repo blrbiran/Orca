@@ -107,7 +107,7 @@ Whether v9 makes drafts correct is a real-model question and costs a paid requir
 Until this runs, #385 stays **partially resolved**: the hints are the backstop, v9 is the intended fix, and neither is
 paid-verified.
 
-## 6. Criteria (as implemented)
+## 6. Criteria (as implemented — `tests/control/splitDeliveryGraph.test.ts`, 7)
 
 The implementation task writes these first, each seen red before it is green:
 
