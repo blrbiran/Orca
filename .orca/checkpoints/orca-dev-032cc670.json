@@ -1,0 +1,50 @@
+{
+  "v": 1,
+  "runId": "orca-dev-032cc670",
+  "runtime": "claude-code",
+  "sessionRef": "032cc670-e5ce-4131-89a4-181ce74432ee",
+  "writtenAt": "2026-11-22T22:58:49.414Z",
+  "head": "6d6c12bbf8cc2ce0c3e80fb80c7460e28f33237e",
+  "level": {
+    "kind": "reading",
+    "level": 451466,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 2
+  },
+  "next": [
+    "Wait for the final wide gate (/tmp/orca-wide-final.log, ORCA_CCLOOP_BIN=ccloop main checkout) to finish; classify any red by solo-run before calling it a regression.",
+    "If wide is green: npm run build && npm run build --workspace web, then orca panel restart, then orca status (expect all ok).",
+    "Push Orca main to origin (allow-push granted this session).",
+    "Then write the handoff executive summary in chat."
+  ],
+  "open": [
+    "#385 v9 paid evaluation not run (needs the policy-dogfood-20261119-1 and links-dogfood-20261120-1 goals, paid).",
+    "ccmem #395 tail-bound (2 MB) still awaits the human ruling; fix 1 (parse once) already landed.",
+    "Earlier wide gate (bad ORCA_CCLOOP_BIN) showed 69 failures; re-run with the correct ccloop build is the final gate."
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "Push Orca main (allowed this session via allow-push; doing it after the gate)."
+    },
+    {
+      "kind": "named-authorization",
+      "what": "#385 v9 paid evaluation — needs a paid requirement call; spec 2026-11-23-split-instruction-v9-design.md §5."
+    },
+    {
+      "kind": "named-authorization",
+      "what": "ccmem #395 stop-hook 2 MB tail bound — accept or adjust."
+    }
+  ],
+  "measurements": [
+    {
+      "command": "cd /Users/biran/code/skills/orca/Orca && grep -E 'Test Files|Tests ' /tmp/orca-wide-final.log | tail -3",
+      "exitCode": 0,
+      "commit": "6d6c12bbf8cc2ce0c3e80fb80c7460e28f33237e",
+      "observedAt": "2026-11-22T22:58:49.272Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-032cc670-m7gFbZ/1.txt"
+    }
+  ]
+}
