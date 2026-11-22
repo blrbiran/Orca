@@ -334,7 +334,9 @@ export const SPLIT_JSON_SCHEMA_MULTI_V6: Readonly<Record<string, unknown>> = dee
  */
 export function withoutEmptySetup(raw: unknown): unknown {
   if (raw === null || typeof raw !== "object" || !Array.isArray((raw as { tasks?: unknown }).tasks)) return raw;
-  return withoutEmptyTaskSetup(withoutEmptyConflicts(raw) as { tasks: unknown[] });
+  // v9 (tester #385): fold a null or empty-units deliveryGraph first, so codex's required-nullable optional key does
+  // not refuse the call (#358). Then the conflicts and per-task setup folds, as before.
+  return withoutEmptyTaskSetup(withoutEmptyConflicts(withoutEmptyDeliveryGraph(raw)) as { tasks: unknown[] });
 }
 /**
  * The `requirementConflicts` half of withoutEmptySetup. Multi instruction version 6 uses it alone: a multi task has no
@@ -350,6 +352,20 @@ export function withoutEmptyConflicts(raw: unknown): unknown {
       const { feedback: _null, ...rest } = entry as Record<string, unknown>;
       return rest;
     }) };
+}
+/**
+ * Split instruction v9 (tester #385): the `deliveryGraph` half of the same fold. Codex's strict projection makes an
+ * optional key required-nullable (#358), so a codex split that names no units answers `"deliveryGraph": null`; the
+ * strict schema would refuse the whole call. Fold a null or an empty `units` list away, exactly as an empty
+ * `requirementConflicts` is; anything else is left for the schema to judge.
+ */
+function withoutEmptyDeliveryGraph(raw: unknown): unknown {
+  if (raw === null || typeof raw !== "object" || !Array.isArray((raw as { tasks?: unknown }).tasks)) return raw;
+  if (!("deliveryGraph" in (raw as Record<string, unknown>))) return raw;
+  const { deliveryGraph, ...others } = raw as Record<string, unknown>;
+  if (deliveryGraph === null) return others;
+  if (typeof deliveryGraph === "object" && Array.isArray((deliveryGraph as { units?: unknown }).units) && (deliveryGraph as { units: unknown[] }).units.length === 0) return others;
+  return raw;
 }
 function withoutEmptyTaskSetup(raw: { tasks: unknown[] }): unknown {
   const tasks = (raw as { tasks: unknown[] }).tasks.map((task) => {

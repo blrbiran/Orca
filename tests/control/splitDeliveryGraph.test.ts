@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSplitPrompt, deliveryGraphProblems, SPLIT_INSTRUCTION_V8, SPLIT_INSTRUCTION_V9 } from "../../src/control/requirementSplit.js";
+import { buildSplitPrompt, deliveryGraphProblems, SPLIT_INSTRUCTION_V8, SPLIT_INSTRUCTION_V9, withoutEmptySetup } from "../../src/control/requirementSplit.js";
 import type { SplitOutput } from "../../src/control/requirementSchemas.js";
 import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 
@@ -74,5 +74,18 @@ describe("a draft is checked against the delivery graph it claims (#385)", () =>
       units: [{ unit: "T1", taskIds: ["a"], dependsOn: [] }], independent: [], finalVerification: "a",
     });
     expect(deliveryGraphProblems(good)).toEqual([]);
+  });
+});
+
+describe("a codex split's required-nullable deliveryGraph is folded before the strict schema (#385)", () => {
+  it("drops a null or empty-units deliveryGraph, and keeps a real one", () => {
+    // #358: codex's strict projection makes an optional key required-nullable, so the model answers `"deliveryGraph": null`
+    // when it names no units. The strict schema would refuse the whole call; the fold folds it away.
+    // mutation: return raw for a null graph -> the first assertion is red (the key survives).
+    const base = { tasks: VALID_SPLIT.tasks, notes: "" };
+    expect(Object.hasOwn(withoutEmptySetup({ ...base, deliveryGraph: null }) as object, "deliveryGraph")).toBe(false);
+    expect(Object.hasOwn(withoutEmptySetup({ ...base, deliveryGraph: { units: [], independent: [], finalVerification: null } }) as object, "deliveryGraph")).toBe(false);
+    const real = { units: [{ unit: "T1", taskIds: [VALID_SPLIT.tasks[0]!.taskId], dependsOn: [] }], independent: [], finalVerification: null };
+    expect(withoutEmptySetup({ ...base, deliveryGraph: real })).toMatchObject({ deliveryGraph: real });
   });
 });
