@@ -14,7 +14,9 @@ import { readDraft, readRequirementGroup, readRound } from "../../src/control/re
 // split call send instruction version 7, so the fake claude queue matches that head.
 // Ruling: human 「这次批准改写所有必要的判据」 (Orca session 3ba26002, 2026-11-19): dogfood finding (3) and tester #362 make a new single-directory split call send instruction version 8;
 // the fake claude queue matches that head (this criterion still encodes: the queue answers the split call Orca sends).
-import { SPLIT_PROMPT_HEAD_V8 as SPLIT_PROMPT_HEAD } from "../../src/control/requirementSplit.js";
+// Ruling: human 「这次批准改写所有必要的判据」 (Orca session, 2026-11-23): tester #385 makes a new single-directory split
+// call send instruction version 9; the fake claude queue matches that head (still: the queue answers the split call Orca sends).
+import { SPLIT_PROMPT_HEAD_V9 as SPLIT_PROMPT_HEAD } from "../../src/control/requirementSplit.js";
 import { readCanonicalRecord } from "../../src/control/snapshot.js";
 import { readWebGroup } from "../../src/control/webService.js";
 import type { ControlRuntime } from "../../src/panel/controlAssembly.js";
