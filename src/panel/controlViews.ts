@@ -47,7 +47,7 @@ import { readProjectionChanges, readProjectionState } from "../control/projectio
 import { effectiveTaskLabels, readTaskLabelState } from "../control/labels.js";
 import { choosePlanByLabels, loopPlanDefinition } from "../control/loopPlans.js";
 import { recipeExpandsTo } from "../control/loopRecipeCheck.js";
-import { decodeEstimateRecord, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, readWork } from "../control/queries.js";
+import { decodeEstimateRecord, estimateIsStale, readArchivedPlan, readBudgetProposal, readEstimateRecord, readWork, type BudgetProposalRecord, type EstimateRecord } from "../control/queries.js";
 import { NEWEST_ESTIMATE_INSTRUCTION, olderEstimateInstruction } from "../control/estimateInstructionAge.js";
 import { readCanonicalRecord } from "../control/snapshot.js";
 import { sameProfileHash } from "../control/profiles.js";
@@ -939,10 +939,28 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   return parsed.data;
 }
 
+/**
+ * Tester #393(b): the per-group source one request reads, keyed by group id. `/api/control/summary` needs each group
+ * twice -- for the summary it answers and for the needs-you flag the overview computes -- so the route hands both
+ * readers the same map and each stored group, work and run body is decoded once. Null is an archived group (the
+ * overview skips it); a group that refuses by name is never cached, so both readers raise it themselves.
+ */
+export interface GroupSourceV1 {
+  body: ReturnType<typeof groupBody>;
+  summary: GroupSummaryV1;
+  proposal: BudgetProposalRecord | null;
+  estimates: EstimateRecord[];
+  workItems: Array<z.infer<typeof workBodySchema>>;
+  runs: Array<z.infer<typeof persistedRunSchema> & { active: boolean }>;
+  blockers: ReturnType<typeof blockerRows>;
+}
+export type GroupSourceCache = Map<string, GroupSourceV1 | null>;
+
 /** Stored overview facts share one lazy row snapshot; detail still owns proof/profile admission. */
-export function readOverviewGroupSource(store: ControlStore, groupId: string) {
+export function readOverviewGroupSource(store: ControlStore, groupId: string, cache?: GroupSourceCache): GroupSourceV1 | null {
+  if (cache !== undefined) { const hit = cache.get(groupId); if (hit !== undefined) return hit; }
   const body = groupBody(store, groupId);
-  if (archivedMarkOf(body) !== null) return null;
+  if (archivedMarkOf(body) !== null) { cache?.set(groupId, null); return null; }
   const snapshot = readGroupSnapshot(store, groupId);
   let canonicalRecords: ReadonlyMap<string, string> | undefined;
   if (body.status !== "clarifying") {
@@ -974,7 +992,9 @@ export function readOverviewGroupSource(store: ControlStore, groupId: string) {
     if (run === undefined) return blocked(`run-missing:${work.currentRunId}`);
     if (run.workItemId !== work.workItemId || run.taskId !== work.taskId || run.phase !== "work") return blocked(`run-work-identity:${run.runId}`);
   }
-  return { body, summary, proposal, estimates, workItems, runs, blockers: blockerRows(store, groupId, snapshot) };
+  const source = { body, summary, proposal, estimates, workItems, runs, blockers: blockerRows(store, groupId, snapshot) };
+  cache?.set(groupId, source);
+  return source;
 }
 
 /**
@@ -1012,6 +1032,7 @@ export function readControlSummary(
   epoch: string,
   sinceChangeSeq: number | null,
   forceComplete = false,
+  cache?: GroupSourceCache,
 ): ControlSummaryV1 {
   const state = readProjectionState(store);
   const changes = forceComplete || sinceChangeSeq === null
@@ -1024,7 +1045,12 @@ export function readControlSummary(
   // is not a recovery-blocked refusal, or the summary's own schema below -- still refuses the whole read.
   const groups: GroupSummaryV1[] = [], unreadable: Array<{ groupId: string; reason: string; requirement: boolean | null }> = [];
   for (const groupId of sortedUnique(groupIds)) {
-    try { groups.push(readGroupSummary(store, groupId)); }
+    try {
+      // Tester #393(b): with a request-scoped cache, the group the overview will also read is read here once. An
+      // archived group (null) is not read by the overview, so its summary comes from the ordinary reader.
+      const shared = cache === undefined ? undefined : readOverviewGroupSource(store, groupId, cache);
+      groups.push(shared === undefined || shared === null ? readGroupSummary(store, groupId) : shared.summary);
+    }
     catch (error) {
       if (!(error instanceof ControlError) || error.code !== "recovery-blocked") throw error;
       unreadable.push({ groupId, reason: error.detail ?? error.code, requirement: storedRequirementBlock(store, groupId) });

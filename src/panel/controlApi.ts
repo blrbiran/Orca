@@ -48,7 +48,7 @@ import type { ControlStore } from "../control/store.js";
 import type { TrustedControlConfig } from "./controlConfig.js";
 import { controlErrorCatalog, sendControlError, sendMappedControlError } from "./controlErrors.js";
 import { registerTranscriptRoutes } from "../agentTranscript/routes.js";
-import { deliveryQuestionView, estimatorInstructionOf, integrationView, readControlGroup, readControlRecovery, readControlSummary, readGroupSummary, readRequirementView, readRunActivityView, readRunEntry, readRunEvidence, readSelectionPreview, readUnreadableRuns, taskHandoffView } from "./controlViews.js";
+import { deliveryQuestionView, estimatorInstructionOf, integrationView, readControlGroup, readControlRecovery, readControlSummary, readGroupSummary, readRequirementView, readRunActivityView, readRunEntry, readRunEvidence, readSelectionPreview, readUnreadableRuns, taskHandoffView, type GroupSourceCache } from "./controlViews.js";
 import { readStoredHandoff } from "../control/taskHandoffs.js";
 import { costOutliersOf, phaseEndUsageOf } from "../control/runUsageView.js";
 import { confirmKnownRed, knownRedAtBase, type KnownRedAtBase } from "../control/knownRedAtBase.js";
@@ -288,9 +288,11 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       sendControlError(res, 400, "query-invalid", "sinceChangeSeq must be a canonical decimal safe integer");
       return;
     }
-    const summary = readControlSummary(deps.store, deps.epoch, since);
-    // Tester #393(b): the needs-you flags are the overview pass's own result, not a second withNeedsYou walk over the groups.
-    res.json({ ...summary, groups: withNeedsYouFromOverview(readControlOverview(deps.store, deps.epoch, since), summary.groups) });
+    // Tester #393(b): the needs-you flags are the overview pass's own result, not a second walk over the groups; the
+    // request-scoped cache makes both readers decode each group's stored bodies once.
+    const cache: GroupSourceCache = new Map();
+    const summary = readControlSummary(deps.store, deps.epoch, since, false, cache);
+    res.json({ ...summary, groups: withNeedsYouFromOverview(readControlOverview(deps.store, deps.epoch, since, cache), summary.groups) });
   }));
 
   // Tester #393(a): `?sinceChangeSeq=` answers only what moved, as the summary does; unchanged is the same tiny shape.
@@ -328,8 +330,9 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
   });
 
   app.get("/api/control/groups", (_req, res) => {
-    const summary = readControlSummary(deps.store, deps.epoch, null, true);
-    res.json({ ...summary, groups: withNeedsYouFromOverview(readControlOverview(deps.store, deps.epoch), summary.groups) });
+    const cache: GroupSourceCache = new Map();
+    const summary = readControlSummary(deps.store, deps.epoch, null, true, cache);
+    res.json({ ...summary, groups: withNeedsYouFromOverview(readControlOverview(deps.store, deps.epoch, null, cache), summary.groups) });
   });
 
   // N1 spec §11.2: a requirement's details; its group view is refused while it is clarifying (DR25).

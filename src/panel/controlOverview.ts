@@ -10,7 +10,7 @@ import { fullSuiteCommand } from "../control/fullSuite.js";
 import { deliveredAcceptanceProblem } from "../control/groupAcceptanceRecord.js";
 import { hasRequirementBlock } from "../control/requirementRecords.js";
 import { compareText, overviewSchema, type OverviewV1, type OverviewStepV1, type OverviewDestinationV1 } from "../control/webProtocol.js";
-import { BUSY_WORK, decodeRecoveryBlockerRow, readOverviewGroupSource } from "./controlViews.js";
+import { BUSY_WORK, decodeRecoveryBlockerRow, readOverviewGroupSource, type GroupSourceCache } from "./controlViews.js";
 
 type Source = NonNullable<ReturnType<typeof readOverviewGroupSource>>;
 const UNKNOWN_RUN = new Set(["unknown", "attempt-unknown", "attempt-proof-invalid"]);
@@ -58,9 +58,9 @@ const PROBLEM_KINDS: ReadonlySet<OverviewStepV1["kind"]> = new Set(["requirement
  * The summary's `needsYou` for one group, from the overview's own problem rows. Undefined when a stored fact the
  * overview needs does not read (the overview lists that group as an issue instead); the page then keeps its fallback.
  */
-export function groupNeedsYou(store: ControlStore, groupId: string): boolean | undefined {
+export function groupNeedsYou(store: ControlStore, groupId: string, cache?: GroupSourceCache): boolean | undefined {
   try {
-    const source = readOverviewGroupSource(store, groupId);
+    const source = readOverviewGroupSource(store, groupId, cache);
     if (source === null) return false;
     let problem = false;
     groupSteps(store, source, (kind) => { if (PROBLEM_KINDS.has(kind)) problem = true; });
@@ -237,7 +237,7 @@ function overviewGroupIds(store: ControlStore, changes: ReturnType<typeof readPr
 
 /** Synchronous, request-local stored facts only. Navigation never asserts command eligibility. `sinceChangeSeq`: only
  * the groups that moved since it, or -- when none did -- the tiny empty shape the summary also answers. */
-export function readControlOverview(store: ControlStore, epoch: string, sinceChangeSeq: number | null = null): OverviewV1 {
+export function readControlOverview(store: ControlStore, epoch: string, sinceChangeSeq: number | null = null, cache?: GroupSourceCache): OverviewV1 {
   const state = readProjectionState(store);
   const changes = sinceChangeSeq === null ? null : readProjectionChanges(store, sinceChangeSeq);
   const changed = overviewGroupIds(store, changes);
@@ -257,7 +257,7 @@ export function readControlOverview(store: ControlStore, epoch: string, sinceCha
     const groupId = String(row.id);
     let repoId: string | null = null;
     try {
-      const source = readOverviewGroupSource(store, groupId);
+      const source = readOverviewGroupSource(store, groupId, cache);
       if (source === null) continue;
       repoId = source.summary.repoId;
       if (source.summary.archived) continue;
