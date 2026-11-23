@@ -64,6 +64,30 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
+### 3.最新（2026-11-24，会话 `221948a1`）—— 测试者台账 A/B/C 批（#434 #437 #441 #442 #443 #444 #446 P0 #447 #448 #449 #450 #451 #435 #436）
+
+- **人的话**：开头 `allow-push`（到次日 04:38Z）；「尽量将这些要做的task都完整做完」「暂时不要考虑context大小」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」；改 ccloop 与 repin 后可 push ccloop，repin 完成后可 push Orca，全部完成后可 push 四仓；卡住的事先按建议做、最后报审。#437 与 #449 都按我提的建议做（下面各一条）。**本轮无付费 provider 调用。**
+- **顺序按测试者的建议**：先让读数可信（#444 #448 #447 #435），再接外部真值（#441），再让人看得见（#442 #434 #450 #443），最后是规则统一（#437）与数据面（#446 P0）；#449 在 syncskill。
+- **ccmem（4 笔，全量 1075/1075）**：
+  - **#444**：成功路径原本写 `tasks.status='completed'`，而 v0.1 spec 的 CHECK 只许 `'success'`（**该约束在仓库历史上从未进过迁移**，是早期库带进来的）⇒ UPDATE 抛错、catch 把**跑成功**的任务记成 `failed`，本机 38 行。现在写 `'success'`，成功记账**移出** dispatch 的 try/catch（记账失败再也不会被报成任务失败），读侧两种词都认。38 行历史行的修复 SQL 未执行，归人。
+  - **#448**：新增 `scripts/daemon/failure-excerpt.mjs`。`claude -p` 写 stderr，但 `codex exec --json` 把错误全写 stdout 且 stderr 为 0 字节 ⇒ 摘录只有 `codex exec exit 1: `。现在 stderr 为空时读 stdout，并取结构化的 `turn.failed.error.message` / 最后一条 `error` item，而不是 900 字节的 JSON 行。判据含一条真实 fake-codex 的 `fail-stdout` 模式。
+  - **#447**：`summarize_pending` 现在可人工跑（`admin cron run summarize_pending --session <id>`，payload 取自 Stop hook 记下的 `session_context`）；lease 无行时 `last=`/`--history`/`--issues` 回退读 task 行；`cron run` 入队后 `touchWakeFile()`；help 补齐四个 flag；未知子命令 exit 64 并打 usage。**改写了两条既有判据**（都带 `Ruling (#447)` 注释）。
+  - **#435**：`semantic off` 后 `on` 抛 `TypeError … (reading 'load')` —— `resolveEnabled` 先读 config_kv，`off` 留下 `enabled=false` ⇒ `getProvider` 返回 null。现在先落 kv、再解析 provider，失败回滚；`<verb> --help` 不再执行该 verb。
+  - **#451**：`run-tests.sh` 的解释器改为候选＋`PATH`＋具名报错（原为写死 `/usr/local/bin/node`）；`package.json` 两个 threat 脚本同改。`CCMEM_STRICT_INTERPRETER=1` 让「找不到 node」这条在有任何回落的机器上也能被钉住。
+  - **#436**：README 补 ollama（含三个键）、`orca-outcome`/`orca-correction`/`list --json`、`npm test` 一节；`embedding.remote_host`/`remote_path_template`/`ollama_timeout_ms` 三个「代码读、两处配置都不声明」的键补进 `config.default.json` 与 `DEFAULT_CONFIG`。判据从 CLI 的 usage 串与读这些键的模块反推，不重述名单。
+  - **#446 P0（迁移 020）**：`memories.session_id` / `transcript_path`（可空 + 部分索引），`insertMemory` 收可选 `provenance`，summarize 的写入点填它；抽取 schema 把 `learned` 列入 `required`，prompt 要求 `learned`/`investigated`。**存量行保持 NULL**；从 audit 回填是单独的可选步骤（会重写用户数据），归人。
+- **Orca（6 笔，typecheck RC 0，quick 门见下）**：
+  - **#441**：`ccloopPort` 的 collect mapper 漏了 `memory`（schema 与类型都有）⇒ `drive.memoryReport` 永空、整条 run-outcome 回写空转。补上，判据走**真 port**（`handoffWire` 的 fake ccloop）。
+  - **#442**：`readOverviewGroupSource` 的预取只含 `plan.tasks`，漏 `body.appendedTasks` 的合约哈希 ⇒ 带追加 task 的组抛 `recovery-blocked`、`needsYou` 消失、巡检面全盲。补进预取。
+  - **#434**：`deliversLocally` 覆盖 `working-tree`，且 working-tree 只有真写了（`lastIntegrated`、无 pending、非 blocked）才算交付；`recovery list` 新增 `integrationBlocked` 行，`group brief` 的 `warnings` 新增 `delivery-blocked:<scheme>:<code>`。**「retry-integration 静默覆盖未提交改动」两轮都推不出机制、未复现**，未修也未否认。
+  - **#450**：`orca panel --help` 会**起一个 panel**（`--help` 不在 `SERVICE_SUBCOMMANDS` ⇒ 落 alias `runPanel`，`parsePanelArgs` 静默忽略未知 flag，`await started.closed` 不返回）。现在 `--help`/`-h` 打用法；`parsePanelArgs` 逐字拒绝不认识的 flag，`orca panel --bytypo x` 也起不来了。
+  - **#437**：写侧（`groupTaskAppend`）把追加的 `ready` fix task 的有限 grant 记进 reserve，读侧（`assertKnownConservation`）在 token-policy 组里对它计 0 ⇒ 差额恰为该 grant，所有改预算命令永久 423。两侧改用同一个 `allocationCommitment`（`tokenPolicy.ts`）。**这是本轮的语义裁定**（人「按你的建议」）：以读侧规则为准，因为读侧有 #212 的裁定背书。夹具上：修前读侧抛 `recovery-blocked`、append 加 1,300,000；修后接受、加 0。
+  - **#443**：README 新增「Disk use, and what `orca gc` does not reclaim」（gc 的两个 root、资格守卫、每个 skip 原因、artifacts 不在范围内及原因），Known limitations 与 Troubleshooting 各一条，`What writes where` 表补 `artifacts` 兄弟目录。
+- **设计稿（只设计，未写码，待人裁）**：#433 `docs/superpowers/specs/2026-11-24-artifact-reclamation-design.md`（推荐给 `orca gc` 加 off-by-default 的 `--include-artifacts`，资格由 store 的引用扫描决定；否掉独立命令与引用计数）；#431 `docs/superpowers/specs/2026-11-24-zero-change-spend-design.md`（把「8.1M token / 零改动 / 不可续跑」拆成可见性、可续跑性、ccloop 侧刹车三件事，推荐本轮只做可见性）。两篇都列了待裁问题。
+- **syncskill（1 笔，build RC 0）**：**#449** `includeStateOf` 三态（unset = 回落到 link 矩阵 / empty = 该 server 不带技能、**不授权删除** / list）；`orphansForCleanup` 一处计算供 dry-run 与真清理共用；`PushResult` 增 `deleted_skills`/`warnings`，`--json` 报删除行与计数，dry-run 打印将删的技能。`include: []` 旧语义是「每个远端技能都成 orphan ⇒ 授权后 rm -rf 全部」，现已改（这是本轮的语义裁定，人「按你的建议」）。
+- **门（现测）**：ccmem `npm test` **1075/1075**；syncskill `npm test` 1746/1747（3 个文件 5 s 超时，单跑 80/80 全绿 ⇒ 负载，load 250）；Orca quick 门 root 276 文件 **47 红全部同一句 `control-socket-path-too-long`**（本会话 TMPDIR 过长），10 个失败文件单跑 **80 条全绿** ⇒ 环境；web `npx vitest run` **291 文件 / 2414 条全绿**；`npm run build` 与 `web` build RC 0，panel 已重启（`orca status` 全 ok）。
+- **诚实边界**：#444 的 38 行历史行未改（归人）；#446 存量行 NULL、audit 回填未做；#433/#431 只有设计；#434 的 retry 覆盖未复现；wide 门未跑（load 250）；#439 的 `LAUNCH_RELAUNCH_LIMIT` 仍为 2、ccloop pin 仍是 `75cdf60`（本轮 ccloop 无改动，故未 repin）。
+
 ### 3.最新（2026-11-23 晚，会话 `ec9efff6`）—— ccmem #395 兼容性修正、syncskill #428/#429/#430、Orca #432/#438/#439/#440；四仓已推
 
 - **人的话**：开头 `allow-push`（闸门已识别，到次日 01:42Z）；「尽量将这些要做的task都完整做完」「这个session暂时不要考虑context大小」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」；允许 push ccloop／Orca 与四仓。**本轮无付费 provider 调用**（#385 评测未跑，见 §八）。
@@ -601,7 +625,11 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
-### 4.0 接手顺序（会话 `cf2d6dfd` 2026-11-21 滚动；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
+### 4.0 接手顺序（会话 `221948a1` 2026-11-24 滚动；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
+
+0. **本会话留给人裁的四件事**（都在 §3.最新）：①#433/#431 两份设计稿的开放问题；②ccmem 真实库应用迁移 019/020（先备份）；③#444 的 38 行历史行修复 SQL 是否执行；④#434 的 retry 覆盖是否继续查。
+1. **下一轮候选**（本会话未做）：`#385` v9 付费评测（三条模型通道的恢复条件见上一节）；wide 门（本轮 load 250，只有 quick 与 web 门）；`#439` 的 `LAUNCH_RELAUNCH_LIMIT`；#446 的 P1/P2（校正任务）与 audit 回填。
+
 
 0. **本会话收尾（按序）**：wide 结果确认后 `npm run build`＋`npm run build --workspace web`（已做）＋`orca panel restart` → `orca status`；推 Orca／ccmem／ccloop main；syncskill 的 `f856228` 只留本地（本轮 push 授权只点名 Orca／ccloop／ccmem）。
 1. **下一轮候选**（截至会话 `ec9efff6`）：
