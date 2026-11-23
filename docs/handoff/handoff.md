@@ -64,7 +64,21 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
-### 3.最新（2026-11-23，会话 `032cc670`）—— #393(b) overview 重复读、#385 拆分指令 v9、syncskill `.backup-*` 崩溃恢复；四仓已推
+### 3.最新（2026-11-23 晚，会话 `ec9efff6`）—— ccmem #395 兼容性修正、syncskill #428/#429/#430、Orca #432/#438/#439/#440；四仓已推
+
+- **人的话**：开头 `allow-push`（闸门已识别，到次日 01:42Z）；「尽量将这些要做的task都完整做完」「这个session暂时不要考虑context大小」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」；允许 push ccloop／Orca 与四仓。**本轮无付费 provider 调用**（#385 评测未跑，见 §八）。
+- **ccmem #395 收尾（本会话最实质的一件）**：上一轮留下的 worktree 有语法错（`summarize-pending.mjs` 一段复制残留）且 `insertRetryTask` 没接线。更要紧的是**上一轮 handoff 的兼容性说法是错的**：旧 daemon 不认识 `transcript_window`、走全量解析再 `slice(0, last_message_seq)`，而当时这个数是**窗口内** entry 数 ⇒ 摘要的是会话开头。现在 `last_message_seq` 与 `session_context` 两个计数恢复**全文含义**（新 `scanTranscript`：一次流式扫描、只数完整行、按各 agent 归一化规则计数、不留正文），窗口只喂推断与入队元数据；新旧 daemon 因此都对，重启只决定是否启用范围读。另：重试走 `insertRetryTask`（陈旧快照不入队），Stop 不再 supersede（唯一索引去重）。全量 **1,046/1,046**；判据含「剥掉 `transcript_window` 的 payload 仍摘要到最新一轮」，变异回窗口计数即红。
+- **syncskill 三件（已合 main）**：#428 `push --on-conflict`（引擎早已支持，缺 CLI 入口）；#429 新增 `skill remove <name> [--keep-files] [--dry-run] [--yes-destructive]`（lstat 拒符号链接、realpath 必须留在托管根内、非交互要 `--yes-destructive`、交互要 confirm；`link remove` 删空 key）；#430 `prune --recover-backups --json` 现在带 `backups` 段并补了 CLI 级判据。全量 **872/872**，build RC 0（`dist/receiver` 不再嵌套）。9 条 `skill remove` 判据在旧码上全红。
+- **Orca 四件（主题行 `fix(cli,panel): the four tester items #432 #438 #439 #440`）**：
+  - **#440**：`requirement show` 的 draft 走通用 160 字符 `compact()`，而 `reasons` 排在 `output` 之后 ⇒ 永远被截掉。现在每个带 reasons 的 draft 单独一行，含 code、`explainSplitReason` 的解释、以及「Orca 会自动重出」。
+  - **#438**：卡片与 `group brief` 只显示 used/limit，「3.1M/6M」看着还剩一半，而 `groupHeadroom()`（真正决定能否 claim 的那个数）已是 0——在途 run 的 live ceiling 占着 `group.reserved`。`card.budget` 增 `reservedTokens`／`headroomTokens`（同一个 `groupHeadroom()`），严格视图 schema 收下，Web 卡片在有预约时点名，精确数进 title。
+  - **#439（Orca 半边）**：B' 因 `launch-never-claimed` 阻塞时**一行 stderr 都不写**（`grep <runId> panel.err.log` 为空），而其它 block 路径都写。现在写一行并带 relaunch 次数。**超时本身在 ccloop**（见下）。
+  - **#432**：被 expectation 停下的 task 只说原因、不说出路；现在点名两个出口（`task retry --as-person`，或继续组里 ready 的任务）。**根因报告要更正**：测试者说「下游 ready 却不派发」——`t3..t6` 依赖被 stop 的 `t1`，`nextClaimableTask` 判它们不可领是**对的**；真问题是「没有 next、state 仍是 running、看不出是我刚 stop 的」。按这个修。
+  - **判据**：`requirementShowReasons`（2，先红在缺行）、`boardCard` #438（两个方向各见一次红：缺键、headroom 漏算 reserved）、`launchNeverClaimed` 的 stderr 一条（删掉写入即红）、`groupShowExpectation`（按授权改写，带 Ruling 行）。quick 门 root 与 web **0 个失败文件**。
+- **ccloop 一件（主题行 `fix(control): the worker receipt timeout is settable, and unset every default stays 2000 ms (Orca #439)`）**：`workerReceiptTimeoutMs()` 读 `CCLOOP_WORKER_RECEIPT_TIMEOUT_MS`，未设／非法／非正数都保持 2000 ms；`command.ts` 的 accept 把它传进 binding（这正是 Orca 实际走的路径，此前从不传）。判据 2 条，其中一条**完全不传 `receiptTimeoutMs`**（生产形状）等一个 2600 ms 才回执的 worker；变异 M1 只打红它。typecheck RC 0，新增＋accept＋workerLost **23/23**。
+- **诚实边界**：#434 **只分析未改**——`workingTreeDelivery.judge()` 的 `have ∈ was` 规则看起来会继续拒绝冲突（WT-4 判据也证实未提交文件逐字节保留），**测试者报的「retry-integration 覆盖未提交改动」我推不出机制、没有复现**，所以既没修也没否认。#433（artifacts 从不回收，本机 4.9 GiB）**只做注解**的设想也没落地。#437（写侧/读侧 reserve 口径不一致导致 423 死锁）本轮未动。#385 的 v9 付费评测未跑。#432 只改显示与 next，不改派发。#439 的 `LAUNCH_RELAUNCH_LIMIT` 仍为 2。
+
+### 3.上一轮（2026-11-23，会话 `032cc670`）—— #393(b) overview 重复读、#385 拆分指令 v9、syncskill `.backup-*` 崩溃恢复；四仓已推
 
 - **人的话**：开头 `allow-push`；「尽量将这些要做的task都完整做完」「这个session暂时不要考虑context大小」；「这次批准改写所有必要的判据。这一轮允许必要的付费真跑」；本轮临时允许 push ccloop／Orca；全部完成后允许 push 四仓。**本轮无付费 provider 调用**。
 - **#393(b)（`fix(control): the summary and the overview share one read of each group (#393b)`）**：`/api/control/summary` 每个组读两遍（`readGroupSummary` 一笔、`readOverviewGroupSource` 一笔）。新增请求级 `GroupSourceCache`，`readControlSummary` 与 `readControlOverview` 都接受它，summary 与 `/api/control/groups` 两条路由共用一个 Map ⇒ 每组的 stored body 每请求只解一次。判据 `tests/panel/summaryOverviewSharedRead.test.ts`（读计数：无缓存时同一 work body 解析 2 次、有缓存 1 次），变异（summary 忽略缓存）打红。
@@ -583,8 +597,13 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ### 4.0 接手顺序（会话 `cf2d6dfd` 2026-11-21 滚动；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
 
 0. **本会话收尾（按序）**：wide 结果确认后 `npm run build`＋`npm run build --workspace web`（已做）＋`orca panel restart` → `orca status`；推 Orca／ccmem／ccloop main；syncskill 的 `f856228` 只留本地（本轮 push 授权只点名 Orca／ccloop／ccmem）。
-1. **下一轮候选**：#393(b) 已完成（本轮）。**可直接做的小件**：ccmem #395 第 2 条 stop hook 字节尾部截断（设计稿 `.superpowers/sdd/plan/design-395-hooks.md`，2 MB 上界待人裁，见 §8）。**#385 v9 已实现**（本轮，`SPLIT_INSTRUCTION_V9`），**付费评测待人**（§8 新条）。余下 #363 settle lane 分片、#370 全量状态模型、#386（建议按「不修」关闭，待测试者更新台账）；#415 P2 external-content 人裁不排期；#416 codex A/B 等测试者在自己 Codex `/hooks` 批准一次。
-2. **本轮已完成**：#419/#370（archived/closed 的 `groupSummary.state` 读作终态词）、#328（worktree + 共享 ref 交付的 confirm 提示）、#375（ccloop MCP warnings 在 `run transcript`/Web 可见＋`orca doctor` 检查；`--no-mcp` 在 omp 19.0.1 不存在）、#366（`orca gc --include-uncleaned`）、#418（run/task 回写 spec＋独立 review 更正）、syncskill #424/#425（`-e` quoting＋push staging/promote）。
+1. **下一轮候选**（截至会话 `ec9efff6`）：
+   - **#434**：`working-tree` 交付在 integration 冲突时组仍读 `done landed=true`。确定该修的两半：`deliversLocally()` 应覆盖 `working-tree`（冲突时不算 done），冲突要进 `group brief` warnings 与 `recovery list`。**「retry-integration 覆盖未提交改动」未复现，动手前先在临时仓试**。
+   - **#437**：写侧 `groupTaskAppend.ts` 把 `ready` fix task 的有限 token 计入 reserve，读侧 `webService.ts` 对同形态计 0 ⇒ 单维差额恰等于该 task 的 work+handoff 时 `assertKnownConservation` 永久 423。两侧要**用同一个函数**；并让报错带维度与两个数。
+   - **#433**：artifacts 从不回收（本机 4.9 GiB / 52,672 目录）。至少让 `status --disk` 与 `gc --json` 说明它不在 `gc` 范围；真正的可达性 GC 要单独 spec（删用户数据）。
+   - **#385 v9 付费评测**：两段历史 goal 原文不在磁盘上，dogfood 仓库也已删。人已授权换现存组测，但现存 5 个组都不是 8 单元形态，测不到原问题（§八）。
+   - **#439 剩余**：`LAUNCH_RELAUNCH_LIMIT = 2` 对零成本失败仍偏紧；`run show` 未带 relaunch 次数与 `accepted.json` 的 launch/worker。
+2. **本轮已完成**：ccmem #395 兼容性修正（见 ccmem handoff）、syncskill #428/#429/#430、Orca #432/#438/#439(Orca 半边)/#440、ccloop `CCLOOP_WORKER_RECEIPT_TIMEOUT_MS`。
 3. **沿用的结论**：#225/#297 不得许诺硬封顶；#224/#266/#196 要同仓精确样本；#320 时间只来自 `ccloop.line-observed`；负载高时 `driverReconcileN`、`driverSettleLane`、`schedulerBridge`、`criteriaBaseRun`、`multiDirDue`、`security`、`allowanceHeldSettlement`、`executionDriverE2E` R-F、`groupAcceptanceBranchMissing` 常抖，与未改动 main 对照判定。**`test:affected` 按与 `origin/main` 的 diff 选文件：一批改动已经推上去后再跑 wide，会选 0 个文件并报「green」——要门本批就用 `npm run test:wide -- --base <会话起点> --force`，并把选中的文件数照抄进报告。** ccloop 的 `dist` 若是增量构建可能陈旧（改完 ccloop 先 `/bin/rm -rf dist && npm run build`）。
 
 ### 4.1 人保留的操作与授权边界
@@ -791,8 +810,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 6. **magpie 实验**：「请求存档」人 2026-11-11 已打开（本机目录，当天即有文件）；实验本身按 ccmem handoff §6.5 在**干净会话**里跑（真模型调用每次先问），做完关存档、删目录。
 7. **检查点写入**：`dev checkpoint write` 被 auto 模式审批拦（用会话转录当来源，聊天授权不解除），需人在终端跑或给该命令加一条 Bash 允许规则。
 8. **待人审的控制器裁定**（人回复后删对应项）：
-   - **#385 v9 的付费评测（2026-11-23 提出，待人批）**：v9 已实现、判据绿（人本轮「同意」）。要判断提示是否真修好 #385，需一次付费 requirement 调用（clarify+split）：拿 `policy-dogfood-20261119-1` 与 `links-dogfood-20261120-1` 的 goal 原文各跑一次，看 draft 1 的 `deliveryGraph.units` 是否点名每个 goal 单元、有无合并/丢边、`finalVerification` 是否真跑 `npm test`。spec §5 有完整配方。**未跑**。
-   - **ccmem #395 尾部上界（2026-11-22 提出，待人裁）**：stop hook 第 2 条「按字节尾部截断」的开放问题 (a)——2 MB tail 是否可接受（会丢掉超长会话最开头几轮）。设计稿 `.superpowers/sdd/plan/design-395-hooks.md`。裁定后即可实现。**本轮未做**（fix 1 只解析一次已落）。
+   - **#385 v9 付费评测（2026-11-23，会话 `ec9efff6`）**：人已授权「换一个 group 测」。但本机控制库只剩 5 个组（`requirement-37df7f6e-…`、`g-28d9b560`、`dogfood-20261119-count`、`[-c]`、`a3-20261120`），**没有一个是 8 单元交付图形态**；`policy-dogfood-20261119-1` / `links-dogfood-20261120-1` 的 goal 原文全盘搜索只命中引用它们的文档，dogfood 仓库目录也已不存在。换组测不到「v9 是否修好 #385」这件事本身，所以**未跑**，等人决定：给 goal 原文，还是接受用现组做一次「v9 不劣于 v8」的弱验证。
+   - **本轮控制器裁定（人「有问题先按建议执行」）**：①#432 按「显示＋next」修，不按「派发丢了」修（下游不可领是正确的）；②#439 的 ccloop 超时用 env 变量、缺省值不变；③#434 只分析未改（第二现场未复现）；④#433 未动；⑤#437 未动。
    - **会话 `48bc4690` 的可逆决定（人「有问题先按你的建议执行」）**：①#417 按人裁「明确不支持＋写清」：`orca status` 的 ccmem 行改为常驻 **warn**（面板与纠正导出照常），README 同步；②#419 把卡在 group cap 的 judge 读成 `failed`（复用现有终态枚举，未加新 state），历史派生组不自动归档；③syncskill #404 在 `links` 与 `include` 都未声明时维持「全部本地」旧行为；④syncskill #411 的 `--config` 只接受 `config.json`/`config.yaml` 两类文件名，其余拒绝；⑤syncskill 测试基建改了两个「真实 `~/.syncskill` 快照」的实现（sha256 → size+mtime）与三条 5 s 边缘用例的时限；⑥ccmem daemon 已重启（备份 `.bak.1795183564694`，G1 未重写 plist）。
    - **C-1（会话 `48bc4690`，需人裁）**：A3 里两次失败的需求调用各以 `charge-remaining-grant` 记满 1M grant（组 2M 耗尽）。读码：这是 D2 明文策略（未知用量不静默记零；`singleCallSettlement.ts` 记 `run.remaining.work`）。候选：(a) 维持 D2，只把 CLI/recovery 的 hint 带上金额并优先推荐 `charge-observed-floor`；(b) 失败调用在**无任何输出**时按 `release-known-zero`（要 ccloop 给 `usageKnownZero`，SIGKILL 的 claude 拿不到）；(c) 把 requirement call 的 grant 从 1M 降低（cap 而非估算，影响 clarify/split 的大 prompt）。**未改码**。**2026-11-21 人「同意」**：按 (a) 实现并加金额门槛 —— 单次调用 `charge-remaining-grant` 超过 250,000 tokens 时 agent 无 person token 即拒 `large-charge-needs-person:<n>`，person 仍可结算；`singleCallUsageLowerBound` 也让视图给出 `charge-observed-floor` 选项。见 §3.最新。
    - **会话 `c8fc876f` 的可逆决定（人「有问题先按你的建议执行」）**：①#401 hint 剥 code 前缀并点名已安装候选（一个 perAgent 分支仍是旧文案）；②#402 brief 只加未答行、card 的 `pendingDecisions` 未计入（轮询成本）；`--command` 先前缀后包含、歧义拒绝；③#387 tip `# tests` 不足 base 一半即 `failed`（阈值粗糙，合法删测试可能误伤）；`acceptanceProblem` 的 command 在合并 base 后取最后一条（旧行为）；④#385 只做单仓提示、v9 暂缓；⑤#370 只写设计（状态模型变更）；⑥#395 只写设计；⑦A3 用 claude 起跑、失败后归档 scratch 组；⑧ccmem 的日志轮转已对真实日志执行一次（616 MB→0 B），退避未重启 daemon。
