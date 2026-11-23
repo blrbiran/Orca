@@ -304,6 +304,8 @@ export const en = {
       criteriaReviewDebugging: "{{taskId}}: criteria review running",
       criteriaReviewFailed: "{{taskId}}: criteria review failed ({{reason}})",
       budget: "{{used}} of {{limit}} tokens",
+      // Tester #438: used/limit alone read as free budget while the headroom a claim sees was 0.
+      budgetReserved: "{{used}} of {{limit}} tokens · {{reserved}} reserved · {{headroom}} left",
       budgetUnlimited: "{{used}} tokens (no limit)",
       decisions_one: "{{count}} decision to review",
       decisions_other: "{{count}} decisions to review",

@@ -167,9 +167,13 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
       {waiting !== null && <p className="detail-note">{waiting}</p>}
       {reason !== null && <p className="detail-note" data-testid="board-card-reason">{t(`board.card.reason.${reason}` as const)}</p>}
       {facts !== undefined && (
-        // Issue #84: the budget's figures short (K/M/B), the exact ones in the title.
-        <p className="detail-note num" data-testid="board-card-budget" title={[facts.budget.usedTokens, facts.budget.limitTokens].flatMap((n) => (n === null ? [] : [formatTokens(n, currentLanguage())])).join(" / ")}>
-          {facts.budget.limitTokens === null ? t("board.card.budgetUnlimited", { used: shortTokens(facts.budget.usedTokens) }) : t("board.card.budget", { used: shortTokens(facts.budget.usedTokens), limit: shortTokens(facts.budget.limitTokens) })}
+        // Issue #84: the budget's figures short (K/M/B), the exact ones in the title. Tester #438: once anything is
+        // reserved, used/limit alone reads as free budget, so the card names the reserve and what a claim actually sees.
+        <p className="detail-note num" data-testid="board-card-budget" title={[facts.budget.usedTokens, facts.budget.limitTokens, facts.budget.reservedTokens, facts.budget.headroomTokens].flatMap((n) => (n === null ? [] : [formatTokens(n, currentLanguage())])).join(" / ")}>
+          {facts.budget.limitTokens === null ? t("board.card.budgetUnlimited", { used: shortTokens(facts.budget.usedTokens) })
+            : facts.budget.reservedTokens > 0 || (facts.budget.headroomTokens ?? 1) === 0
+              ? t("board.card.budgetReserved", { used: shortTokens(facts.budget.usedTokens), limit: shortTokens(facts.budget.limitTokens), reserved: shortTokens(facts.budget.reservedTokens), headroom: shortTokens(facts.budget.headroomTokens ?? 0) })
+              : t("board.card.budget", { used: shortTokens(facts.budget.usedTokens), limit: shortTokens(facts.budget.limitTokens) })}
           {facts.pendingDecisions > 0 ? ` · ${t("board.card.decisions", { count: facts.pendingDecisions })}` : ""}
           {facts.firstFailure !== null ? ` · ${t("board.card.failure", { taskId: facts.firstFailure.taskId, cause: causeText(facts.firstFailure.cause) })}` : ""}
         </p>

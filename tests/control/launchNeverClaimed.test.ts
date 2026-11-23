@@ -37,6 +37,23 @@ describe("B': a launch no worker claimed is accepted again, bounded (#308)", () 
       expect(t.h.store.dispatchBlocked).toBe(false);
     } finally { await t.h.dispose(); }
   });
+
+  // Tester #439: this block left no trace in panel.err.log (grep for the runId found nothing), so the only description
+  // a person had was `blockedReason`. Every other block path writes one line; this one must too.
+  it("writes one line to stderr when it blocks, so the run is findable in the panel log (#439)", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "never-claimed" }); try {
+      const runId = await t.claim();
+      const lines: string[] = [];
+      const write = process.stderr.write.bind(process.stderr);
+      process.stderr.write = ((chunk: string | Uint8Array) => { lines.push(String(chunk)); return true; }) as typeof process.stderr.write;
+      try {
+        await t.until(t.driver(), () => t.body(runId).state === "blocked");
+      } finally { process.stderr.write = write; }
+      // mutation: drop the stderr.write beside the block -> this is empty and the test is red.
+      expect(lines.join("")).toContain(`orca-driver: ${runId}: blocked at B': launch-never-claimed`);
+      expect(lines.join("")).toMatch(/relaunch/i);
+    } finally { await t.h.dispose(); }
+  });
 });
 
 describe("a requirement call blocked on a launch no worker claimed is visible and retryable (#308)", () => {

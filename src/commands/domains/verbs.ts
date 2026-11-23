@@ -212,7 +212,10 @@ export function budgetStateLines(groupId: string, source: { workItems?: Array<{ 
     }
     if (s.groupCapStop !== null) lines.push(`task ${item.taskId}: group cap reached (the group has used its token limit; this run used ${s.groupCapStop.observedTokens})`,
       `  next: orca group set-limit ${groupId} --limit '{"tokens":<higher>,...}'  (the task continues with its work; a codex task's ceiling is checked only after a whole phase ends, so a single execute can go past the cap)`);
-    if (s.usageStopped !== null) lines.push(`task ${item.taskId}: stopped over its expectation by ${s.usageStopped.principal}`);
+    // Tester #432: a stopped task said only why it stopped. A person read `state: running` with 0 runs and no way out;
+    // the two supported exits are a retry (a fresh claim) or continuing the group's other ready work.
+    if (s.usageStopped !== null) lines.push(`task ${item.taskId}: stopped over its expectation by ${s.usageStopped.principal}`,
+      `  next: orca task retry ${groupId} ${item.taskId} --as-person  (give it a fresh claim)  or  continue the group's ready tasks`);
     return lines;
   });
 }

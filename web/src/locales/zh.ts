@@ -152,6 +152,8 @@ export const zh: Translation<typeof en> = {
       criteriaReviewDebugging: "{{taskId}}：判据审查进行中",
       criteriaReviewFailed: "{{taskId}}：判据审查失败（{{reason}}）",
       budget: "已用 {{used}} / {{limit}} token",
+      // #438：只报已用/上限会让人以为还有余额，而 claim 实际看到的 headroom 已经是 0。
+      budgetReserved: "已用 {{used}} / {{limit}} token · 已预约 {{reserved}} · 剩余 {{headroom}}",
       budgetUnlimited: "已用 {{used}} token（不限额）",
       decisions_one: "{{count}} 条决定待审",
       decisions_other: "{{count}} 条决定待审",

@@ -14,6 +14,7 @@ import { REPEATED_FAILURE_STOP } from "../../control/repeatedFailureStop.js";
 import { offPlanWriteText, type OffPlanWrite } from "../../control/offPlanWrites.js";
 import { goalPathLine, impliedPathAddedLine, impliedPathLine, requirementUnitLine, type GoalPathOutsideTargets, type ImpliedPathAddition, type ImpliedPathOutsideTargets, type RequirementUnitProblem } from "../../control/splitImpliedPaths.js";
 import { deliveryProblemLine, type DeliveryProblem } from "../../control/requirementDelivery.js";
+import { explainSplitReason } from "../../control/requirementSplit.js";
 import { phaseEndBudgetLines, runUsageLines, taskCostLine, type UsageRun } from "./usageLines.js";
 import { viewTaskCost, type TaskCost } from "../../control/taskCost.js";
 import { runUsageDetailLines, type UsageDetailLine } from "./usageDetailLines.js";
@@ -172,8 +173,11 @@ function feedbackAfterRedraftLine(draftNo: number, carry: FeedbackAfterRedraft):
 }
 
 function requirementShow(body: unknown): string {
-  const drafts = (field(body, "drafts") ?? []) as Array<{ draftNo: number; layers: string[][] | null; parallelCandidates?: Array<{ before: string; after: string }>; impliedPathsOutsideTargets?: ImpliedPathOutsideTargets[]; goalPathsOutsideTargets?: GoalPathOutsideTargets[]; requirementUnits?: RequirementUnitProblem[]; requirementDelivery?: DeliveryProblem[]; runtimeDataPaths?: Array<{ taskId: string; dir?: string; path: string }>; feedbackAfterRedraft?: FeedbackAfterRedraft; impliedPathsAdded?: ImpliedPathAddition[] | null; overlapSerialized?: Array<{ a: string; b: string; paths: string[] }>; implicitEdges?: Array<{ from: string; to: string; conflicts: Array<{ a: string; b: string }> }> | null; output?: { tasks?: Array<object>; requirementConflicts?: Array<{ criterion: string; feedback?: string; why: string }> } | null }>;
+  const drafts = (field(body, "drafts") ?? []) as Array<{ draftNo: number; layers: string[][] | null; parallelCandidates?: Array<{ before: string; after: string }>; impliedPathsOutsideTargets?: ImpliedPathOutsideTargets[]; goalPathsOutsideTargets?: GoalPathOutsideTargets[]; requirementUnits?: RequirementUnitProblem[]; requirementDelivery?: DeliveryProblem[]; runtimeDataPaths?: Array<{ taskId: string; dir?: string; path: string }>; feedbackAfterRedraft?: FeedbackAfterRedraft; impliedPathsAdded?: ImpliedPathAddition[] | null; overlapSerialized?: Array<{ a: string; b: string; paths: string[] }>; implicitEdges?: Array<{ from: string; to: string; conflicts: Array<{ a: string; b: string }> }> | null; reasons?: string[]; autoRetry?: number; state?: string; output?: { tasks?: Array<object>; requirementConflicts?: Array<{ criterion: string; feedback?: string; why: string }> } | null }>;
   const lines = drafts.flatMap((draft) => [
+    // Tester #440: WHY the draft came back. It sits after `output` in the JSON, so the generic 160-character compact()
+    // line below always cut it off and only `--json` showed it. The explanation is the one the Web UI prints.
+    ...(draft.reasons ?? []).map((reason) => `draft ${draft.draftNo} ${draft.state === "invalid" ? "invalid" : "rejected"}: ${reason}${explainSplitReason(reason) === null ? "" : ` -- ${explainSplitReason(reason)}`}${draft.state === "invalid" && (draft.autoRetry ?? 0) > 0 ? " (Orca re-drafts on its own)" : ""}`),
     ...(draft.layers === null ? [] : [`draft ${draft.draftNo} layers: ${draft.layers.map((layer) => `[${layer.join(", ")}]`).join(" -> ")}`]),
     // Tester #384: a declared edge whose pair a broad target-path overlap already orders (#268). The declaration adds no
     // order code does not already enforce, so a person drops exactly the pairs they name (or all of them on purpose).

@@ -1082,7 +1082,13 @@ export async function stepBPrime(deps: ExecutionDriverDeps, runId: string): Prom
   // counted as an unknown outcome. A saved-result run is left to its own settlement above (it never calls accept again).
   if (status.kind === "unknown" && status.launch === "never-claimed" && run.mode !== "verify-saved-result" && run.recoveryOf === undefined) {
     const relaunches = run.drive.relaunches ?? 0;
-    if (relaunches >= LAUNCH_RELAUNCH_LIMIT) { blockRun(deps, runId, "B'", "launch-never-claimed"); return true; }
+    if (relaunches >= LAUNCH_RELAUNCH_LIMIT) {
+      // Tester #439: every other block path writes one line; this one wrote none, so `grep <runId> panel.err.log` found
+      // nothing and a person had only `blockedReason` to go on. The relaunch count is the one number that explains it.
+      process.stderr.write(`orca-driver: ${runId}: blocked at B': launch-never-claimed after ${relaunches} relaunch(es) -- no worker wrote its receipt in time\n`);
+      blockRun(deps, runId, "B'", "launch-never-claimed");
+      return true;
+    }
     write(deps, () => { const current = readDriverRun(deps.store, runId); current.drive = { ...current.drive!, relaunches: relaunches + 1 }; saveDriverRun(deps.store, current); });
     try { status = await portFor(deps, run).accept(readStartEnvelope(deps.store, run)); }
     catch (error) { const line = peerFailureLogLine(runId, error); if (line !== null) process.stderr.write(line); status = { kind: "unknown" }; }

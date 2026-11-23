@@ -67,7 +67,7 @@ describe("the board tab (kanban spec §4)", () => {
   it("shows cards in columns with their facts, and a drop sends the one command or is refused on the page", () => {
     const onCommand = vi.fn<(action: ControlAction) => void>();
     const groups = [
-      g({ groupId: "run1", state: "running", goal: "Do X", card: { budget: { usedTokens: 1200, limitTokens: 5000 }, pendingDecisions: 2, firstFailure: { taskId: "a", cause: "required-check-failed" } } }),
+      g({ groupId: "run1", state: "running", goal: "Do X", card: { budget: { usedTokens: 1200, limitTokens: 5000, reservedTokens: 0, headroomTokens: 3800 }, pendingDecisions: 2, firstFailure: { taskId: "a", cause: "required-check-failed" } } }),
       g({ groupId: "wait", orchestration: { ...queued, state: "waiting-prerequisite", waitingFor: ["run1"] } }),
       g({ groupId: "draft1", state: "draft" }),
     ];
@@ -78,7 +78,8 @@ describe("the board tab (kanban spec §4)", () => {
     // Failure-cause spec 2026-10-21 §5: a cause ccloop typed is worded (was the raw code; Ruling in the commit body).
     // Issue #84: the budget's figures short (was "1200 of 5000 tokens"), the exact ones in the title.
     expect(card.textContent).toContain("1.2K of 5K tokens · 2 decisions to review · a failed: a required check failed");
-    expect(within(card).getByTitle("1,200 / 5,000")).toBeTruthy();
+    // #438: the title now carries the reserve and the headroom too (exact figures; the line above is the short form).
+    expect(within(card).getByTitle("1,200 / 5,000 / 0 / 3,800")).toBeTruthy();
     expect(within(screen.getByRole("region", { name: "Queued" })).getByTestId("board-card-wait").textContent).toContain("waiting for run1");
     const transfer = dataTransfer();
     fireEvent.dragStart(card, { dataTransfer: transfer });
@@ -111,7 +112,7 @@ describe("the board tab (kanban spec §4)", () => {
   });
 
   it("keeps a failure the panel cannot word (an Orca reason, or a cause it does not know) as written", () => {
-    const card = (cause: string) => g({ groupId: `g-${cause}`, state: "running", card: { budget: { usedTokens: 0, limitTokens: null }, pendingDecisions: 0, firstFailure: { taskId: "a", cause } } });
+    const card = (cause: string) => g({ groupId: `g-${cause}`, state: "running", card: { budget: { usedTokens: 0, limitTokens: null, reservedTokens: 0, headroomTokens: null }, pendingDecisions: 0, firstFailure: { taskId: "a", cause } } });
     render(<BoardView groups={[card("terminal:failed"), card("a-newer-cause")]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
     expect(screen.getByTestId("board-card-g-terminal:failed").textContent).toContain("a failed: terminal:failed");
     expect(screen.getByTestId("board-card-g-a-newer-cause").textContent).toContain("a failed: a-newer-cause");
@@ -198,7 +199,7 @@ describe("the system-debug badge (#58)", () => {
 
   // Issue #217: an exhausted escalation states the task's own cause, not the debug ladder's result as if it were Orca's fault.
   it("words an exhausted escalation with the task's original failure cause when the card knows it", () => {
-    const card = { budget: { usedTokens: 1, limitTokens: null }, pendingDecisions: 0, firstFailure: { taskId: "T4", cause: "rate-limited" } };
+    const card = { budget: { usedTokens: 1, limitTokens: null, reservedTokens: 0, headroomTokens: null }, pendingDecisions: 0, firstFailure: { taskId: "T4", cause: "rate-limited" } };
     const groups = [g({ groupId: "e", state: "running", escalation: [{ taskId: "T4", state: "exhausted", reason: "debug-failed" }] as never, card })];
     render(<BoardView groups={groups} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
     const line = screen.getByTestId("board-card-escalation").textContent!;
@@ -210,7 +211,7 @@ describe("the system-debug badge (#58)", () => {
   it("boxes a board card's badge so a second line stays inside its border", () => {
     // Ruling: human 「这次批准改写所有必要的判据」 (tester round 2026-10-28, controller session a9f9d6de; the `.board-card .badge` rule became
     // utilities on each badge in BoardView.tsx, so the criterion reads the rendered badges instead of styles.css)
-    const groups = [g({ groupId: "stopped", stopState: "paused", card: { budget: { usedTokens: 1, limitTokens: null }, pendingDecisions: 0, firstFailure: null, reviewFindings: { major: 1, minor: 2 } } })];
+    const groups = [g({ groupId: "stopped", stopState: "paused", card: { budget: { usedTokens: 1, limitTokens: null, reservedTokens: 0, headroomTokens: null }, pendingDecisions: 0, firstFailure: null, reviewFindings: { major: 1, minor: 2 } } })];
     render(<BoardView groups={groups} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
     const badges = [...screen.getByTestId("board-card-stopped").querySelectorAll<HTMLElement>(".badge")];
     expect(badges.length).toBe(3);
@@ -265,7 +266,7 @@ describe("the status light (H8)", () => {
     expect(led).toMatch(/&\[data-led="failed"\] \{[^}]*background: var\(--danger\)/);
     expect(led).toMatch(/&\[data-led="waiting"\] \{[^}]*background: var\(--warn\)/);
     expect(utility("num")).toContain("font-variant-numeric: tabular-nums");
-    render(<BoardView groups={[g({ groupId: "b", state: "running", card: { budget: { usedTokens: 1200, limitTokens: 5000 }, pendingDecisions: 0, firstFailure: null } })]}
+    render(<BoardView groups={[g({ groupId: "b", state: "running", card: { budget: { usedTokens: 1200, limitTokens: 5000, reservedTokens: 0, headroomTokens: 3800 }, pendingDecisions: 0, firstFailure: null } })]}
       scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
     // mutation: drop "num" from the board card's budget line -> its figures jitter as they poll, red
     expect(screen.getByTestId("board-card-budget").classList.contains("num")).toBe(true);

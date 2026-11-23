@@ -83,7 +83,7 @@ import { readHandoffRecords, readStoredHandoff, type TaskHandoffRecord } from ".
 import type { LiveNoteViewV1, TaskHandoffViewV1 } from "../control/webProtocol.js";
 import { EXPECTATION_FLOOR_TOKENS, expectationModelApplies, hardCapOf, tokenIntentOf } from "../control/expectationModel.js";
 import { estimateHistoryView } from "../control/estimateHistory.js";
-import { boundingCeilingOf, liveCeilingRecordSchema } from "../control/liveCeiling.js";
+import { boundingCeilingOf, groupHeadroom, liveCeilingRecordSchema } from "../control/liveCeiling.js";
 import { abandonRequestSchema, abandonSettlementSchema } from "../control/abandonRun.js";
 import { allTasksDone, prerequisiteDoneFrom, prerequisitesOf, waitingPrerequisites } from "../control/groupEdges.js";
 import { overlapSerialized, parallelCandidates } from "../control/splitParallel.js";
@@ -708,7 +708,11 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
   // Tester follow-up G spec §2.4/§2.5: how many tasks are over their expectation, wait for a decision, or wait at the cap.
   const alerts = expectationModelApplies(body) ? budgetAlerts(snapshot, taskIds) : null;
   return {
-    budget: { usedTokens: tokens(body.used) ?? 0, limitTokens: tokens(body.limit) }, pendingDecisions: pending + flagged, firstFailure,
+    // Tester #438: used/limit alone read as "55% left" while the headroom a claim sees was 0, because the in-flight runs'
+    // live ceilings hold group.reserved. reservedTokens and headroomTokens come from the same groupHeadroom() the stop
+    // uses (liveCeiling.ts), so the card and the decision cannot disagree.
+    budget: { usedTokens: tokens(body.used) ?? 0, limitTokens: tokens(body.limit), reservedTokens: tokens(body.reserved) ?? 0,
+      headroomTokens: groupHeadroom(body as unknown as Parameters<typeof groupHeadroom>[0]) }, pendingDecisions: pending + flagged, firstFailure,
     ...(findings.length === 0 ? {} : { reviewFindings: { major, minor: findings.length - major } }),
     ...(expectation === null ? {} : { expectation }),
     ...(alerts === null ? {} : { budgetAlerts: alerts }),

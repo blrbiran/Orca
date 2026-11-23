@@ -1754,7 +1754,7 @@ export const groupSummarySchema = z
     // marks a start refused PERSISTENT_REFUSALS times in a row (needs-you for this group only).
     // Kanban spec §4: a board card's facts; given for every group with a plan (optional so older fixtures parse).
     card: z.object({
-      budget: z.object({ usedTokens: safeInteger, limitTokens: safeInteger.nullable() }).strict(),
+      budget: z.object({ usedTokens: safeInteger, limitTokens: safeInteger.nullable(), reservedTokens: safeInteger, headroomTokens: safeInteger.nullable() }).strict(),
       pendingDecisions: safeInteger,
       // Tester #229 (plan 2026-11-10 follow-up B, T1): `next`, the command that resumes the failed task's run in place --
       // only when it is blocked at a step other than C.

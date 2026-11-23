@@ -7,8 +7,12 @@ import { profileSnapshot, webFixture } from "../control/fixtures/web.js";
 describe("a board card's facts (kanban spec §4)", () => {
   it("budget, decisions waiting for a person, and the first failed task with its cause", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }, { taskId: "b" }]); try {
-      const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as { used: { tokens: number }; limit: { tokens: number | null } };
-      expect(readGroupSummary(h.store, "g").card).toEqual({ budget: { usedTokens: body.used.tokens, limitTokens: body.limit.tokens }, pendingDecisions: 0, firstFailure: null });
+      const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as { used: { tokens: number }; limit: { tokens: number | null }; reserved: { tokens: number } };
+      // Ruling: human 2026-11-23 (「这次批准改写所有必要的判据」, tester #438) -- the card names the reserve and the headroom a
+      // claim sees beside used/limit. Without that, "3.1M of 6M" read as free budget while the headroom was already 0.
+      expect(readGroupSummary(h.store, "g").card).toEqual({ budget: { usedTokens: body.used.tokens, limitTokens: body.limit.tokens,
+        reservedTokens: body.reserved.tokens, headroomTokens: body.limit.tokens === null ? null : Math.max(0, body.limit.tokens - body.used.tokens - body.reserved.tokens) },
+        pendingDecisions: 0, firstFailure: null });
       h.store.transaction(() => flagDecision(h.store, { decisionId: "r/agent-0", groupId: "g", runId: null, source: "reconcile", reason: "r", evidence: [], by: "orca-auto", at: "t" }));
       // mutation: drop the flagged count -> 0, red
       expect(readGroupSummary(h.store, "g").card!.pendingDecisions).toBe(1);
@@ -17,6 +21,27 @@ describe("a board card's facts (kanban spec §4)", () => {
       h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id='b'").run(JSON.stringify({ ...work, currentRunId: "rb" }));
       // mutation: read only failureCode -> null, red
       expect(readGroupSummary(h.store, "g").card!.firstFailure).toEqual({ taskId: "b", cause: "terminal:exhausted" });
+    } finally { await h.dispose(); }
+  });
+
+  // Tester #438: the card showed used/limit only, so "3.1M of 6M" read as 48% free while the headroom that stops a claim
+  // was already 0 (the in-flight runs' live ceilings hold group.reserved). The same groupHeadroom() the stop uses is now
+  // on the card, so the two can never disagree.
+  it("shows the reserved tokens and the headroom a claim actually sees (#438)", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }]); try {
+      const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as { limit: { tokens: number | null }; used: { tokens: number }; reserved: { tokens: number } };
+      const initial = readGroupSummary(h.store, "g").card!.budget as { usedTokens: number; limitTokens: number | null; reservedTokens: number; headroomTokens: number | null };
+      // mutation (report only used/limit) -> both new keys undefined, red.
+      expect(initial.reservedTokens).toBe(body.reserved.tokens);
+      // the fixture already holds a reserve; headroom is the same arithmetic the stop uses (limit - used - reserved), floored at 0
+      expect(initial.headroomTokens).toBe(body.limit.tokens === null ? null : Math.max(0, body.limit.tokens - body.used.tokens - body.reserved.tokens));
+      // Raise the reserve until it eats the whole remainder: mutation (headroom computed without reserved) -> red here.
+      const raised = body.limit.tokens === null ? body.reserved.tokens + 1 : body.limit.tokens - body.used.tokens;
+      const current = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+      h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...current, reserved: { ...current.reserved, tokens: raised } }));
+      const budget = readGroupSummary(h.store, "g").card!.budget as { reservedTokens: number; headroomTokens: number | null };
+      expect(budget.reservedTokens).toBe(raised);
+      expect(budget.headroomTokens).toBe(0);
     } finally { await h.dispose(); }
   });
 

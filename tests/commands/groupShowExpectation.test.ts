@@ -25,6 +25,9 @@ describe("group show's budget lines (spec §2.2-§2.5)", () => {
       "  next: orca group set-limit g1 --limit '{\"tokens\":<higher>,...}'  (the task continues with its work; a codex task's ceiling is checked only after a whole phase ends, so a single execute can go past the cap)",
       "task c: hard cap 400000 tokens (a person's; no pause line)",
       "task c: stopped over its expectation by agent:claude",
+      // Ruling: human 2026-11-23 (「这次批准改写所有必要的判据」, tester #432) -- a stopped task now names its two exits,
+      // because a group can read `state: running` with no run and no next while it waits on the person.
+      "  next: orca task retry g1 c --as-person  (give it a fresh claim)  or  continue the group's ready tasks",
     ]);
   });
 });
