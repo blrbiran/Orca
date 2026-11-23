@@ -76,6 +76,13 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
   - **#432**：被 expectation 停下的 task 只说原因、不说出路；现在点名两个出口（`task retry --as-person`，或继续组里 ready 的任务）。**根因报告要更正**：测试者说「下游 ready 却不派发」——`t3..t6` 依赖被 stop 的 `t1`，`nextClaimableTask` 判它们不可领是**对的**；真问题是「没有 next、state 仍是 running、看不出是我刚 stop 的」。按这个修。
   - **判据**：`requirementShowReasons`（2，先红在缺行）、`boardCard` #438（两个方向各见一次红：缺键、headroom 漏算 reserved）、`launchNeverClaimed` 的 stderr 一条（删掉写入即红）、`groupShowExpectation`（按授权改写，带 Ruling 行）。quick 门 root 与 web **0 个失败文件**。
 - **ccloop 一件（主题行 `fix(control): the worker receipt timeout is settable, and unset every default stays 2000 ms (Orca #439)`）**：`workerReceiptTimeoutMs()` 读 `CCLOOP_WORKER_RECEIPT_TIMEOUT_MS`，未设／非法／非正数都保持 2000 ms；`command.ts` 的 accept 把它传进 binding（这正是 Orca 实际走的路径，此前从不传）。判据 2 条，其中一条**完全不传 `receiptTimeoutMs`**（生产形状）等一个 2600 ms 才回执的 worker；变异 M1 只打红它。typecheck RC 0，新增＋accept＋workerLost **23/23**。
+- **#385 v9 付费评测（2026-11-23 深夜，会话 `ec9efff6` 续做）—— 三条通道全部不可用，本轮未跑**：人提供了 goal 原文（`orca_archived_files/evidence-385-goal-text.md`，三个现场逐字）。面板已重装到本轮构建后，`requirement open` 实际发起过真实调用，结果：
+  - **claude**：`claude-exit-error: You've hit your weekly limit · resets 9am (Asia/Shanghai)` ×3（重试 2 次后 round `failed`），**0 token**；
+  - **omp**：`omp-exit-error`，events 里是 `Couldn't connect to localhost:4000 (connection refused)`——本地 LiteLLM 端点（由人起停）没起，**0 token**；
+  - **codex 0.170.0**：面板直接拒 `agent-selection-rejected: estimator:single-call-unavailable`，**未发请求**。
+  - 两个探针组（`385-v9-policy`、`385-probe`）已归档。**恢复条件**：claude 周额度重置（次日 9 点 Asia/Shanghai）或人起 LiteLLM。**这次没有花任何钱**。
+  - 重跑方法：`./bin/orca requirement open --idea "$(cat /tmp/orca-385/goal-0.txt)" --group 385-v9-policy --language en --project orca-dogfood --agent claude`，等 `awaiting-answers` 后 `requirement answer --finish` → `consensus`（触发 split），再看 draft 1 的 `deliveryGraph`。三个现场：goal-0 policy（8 单元）、goal-2 lock2（5 单元）、goal-4 links（中文，finalVerification）。
+
 - **诚实边界**：#434 **只分析未改**——`workingTreeDelivery.judge()` 的 `have ∈ was` 规则看起来会继续拒绝冲突（WT-4 判据也证实未提交文件逐字节保留），**测试者报的「retry-integration 覆盖未提交改动」我推不出机制、没有复现**，所以既没修也没否认。#433（artifacts 从不回收，本机 4.9 GiB）**只做注解**的设想也没落地。#437（写侧/读侧 reserve 口径不一致导致 423 死锁）本轮未动。#385 的 v9 付费评测未跑。#432 只改显示与 next，不改派发。#439 的 `LAUNCH_RELAUNCH_LIMIT` 仍为 2。
 
 ### 3.上一轮（2026-11-23，会话 `032cc670`）—— #393(b) overview 重复读、#385 拆分指令 v9、syncskill `.backup-*` 崩溃恢复；四仓已推
@@ -810,7 +817,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 6. **magpie 实验**：「请求存档」人 2026-11-11 已打开（本机目录，当天即有文件）；实验本身按 ccmem handoff §6.5 在**干净会话**里跑（真模型调用每次先问），做完关存档、删目录。
 7. **检查点写入**：`dev checkpoint write` 被 auto 模式审批拦（用会话转录当来源，聊天授权不解除），需人在终端跑或给该命令加一条 Bash 允许规则。
 8. **待人审的控制器裁定**（人回复后删对应项）：
-   - **#385 v9 付费评测（2026-11-23，会话 `ec9efff6`）**：人已授权「换一个 group 测」。但本机控制库只剩 5 个组（`requirement-37df7f6e-…`、`g-28d9b560`、`dogfood-20261119-count`、`[-c]`、`a3-20261120`），**没有一个是 8 单元交付图形态**；`policy-dogfood-20261119-1` / `links-dogfood-20261120-1` 的 goal 原文全盘搜索只命中引用它们的文档，dogfood 仓库目录也已不存在。换组测不到「v9 是否修好 #385」这件事本身，所以**未跑**，等人决定：给 goal 原文，还是接受用现组做一次「v9 不劣于 v8」的弱验证。
+   - **#385 v9 付费评测（2026-11-23，会话 `ec9efff6`）**：人已提供 goal 原文（`orca_archived_files/evidence-385-goal-text.md`）。**本轮三条模型通道全不可用**（claude 周额度用尽、omp 的 LiteLLM 未起、codex 无单次调用能力），实测已记在 §3.最新。**零花费**。恢复后按 §3.最新「重跑方法」跑三个现场。
    - **本轮控制器裁定（人「有问题先按建议执行」）**：①#432 按「显示＋next」修，不按「派发丢了」修（下游不可领是正确的）；②#439 的 ccloop 超时用 env 变量、缺省值不变；③#434 只分析未改（第二现场未复现）；④#433 未动；⑤#437 未动。
    - **会话 `48bc4690` 的可逆决定（人「有问题先按你的建议执行」）**：①#417 按人裁「明确不支持＋写清」：`orca status` 的 ccmem 行改为常驻 **warn**（面板与纠正导出照常），README 同步；②#419 把卡在 group cap 的 judge 读成 `failed`（复用现有终态枚举，未加新 state），历史派生组不自动归档；③syncskill #404 在 `links` 与 `include` 都未声明时维持「全部本地」旧行为；④syncskill #411 的 `--config` 只接受 `config.json`/`config.yaml` 两类文件名，其余拒绝；⑤syncskill 测试基建改了两个「真实 `~/.syncskill` 快照」的实现（sha256 → size+mtime）与三条 5 s 边缘用例的时限；⑥ccmem daemon 已重启（备份 `.bak.1795183564694`，G1 未重写 plist）。
    - **C-1（会话 `48bc4690`，需人裁）**：A3 里两次失败的需求调用各以 `charge-remaining-grant` 记满 1M grant（组 2M 耗尽）。读码：这是 D2 明文策略（未知用量不静默记零；`singleCallSettlement.ts` 记 `run.remaining.work`）。候选：(a) 维持 D2，只把 CLI/recovery 的 hint 带上金额并优先推荐 `charge-observed-floor`；(b) 失败调用在**无任何输出**时按 `release-known-zero`（要 ccloop 给 `usageKnownZero`，SIGKILL 的 claude 拿不到）；(c) 把 requirement call 的 grant 从 1M 降低（cap 而非估算，影响 clarify/split 的大 prompt）。**未改码**。**2026-11-21 人「同意」**：按 (a) 实现并加金额门槛 —— 单次调用 `charge-remaining-grant` 超过 250,000 tokens 时 agent 无 person token 即拒 `large-charge-needs-person:<n>`，person 仍可结算；`singleCallUsageLowerBound` 也让视图给出 `charge-observed-floor` 选项。见 §3.最新。
