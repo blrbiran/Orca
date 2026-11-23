@@ -971,7 +971,15 @@ export function readOverviewGroupSource(store: ControlStore, groupId: string, ca
     if (body.planHash === undefined) return blocked("group-plan-missing");
     // Validate-shaped references only; the existing authority reader below still checks every canonical byte/hash.
     const references = controlPlanSchema.parse(JSON.parse(readCanonicalRecord(store, body.planHash)));
-    const hashes = sortedUnique([body.planHash, ...references.tasks.map(task => task.originalContractHash)]);
+    // Tester #442: a task appended after confirm (groupTaskAppend.ts) lives in `body.appendedTasks`, and
+    // queries.ts's authority reader checks its contract record too. Missing from this pre-fetch, that hash made
+    // readCanonicalRecord refuse the whole group (recovery-blocked) and `needsYou` vanished from the overview.
+    const appended = (body as { appendedTasks?: Array<{ originalContractHash?: unknown }> }).appendedTasks ?? [];
+    const hashes = sortedUnique([
+      body.planHash,
+      ...references.tasks.map(task => task.originalContractHash),
+      ...appended.flatMap(task => typeof task.originalContractHash === "string" ? [task.originalContractHash] : []),
+    ]);
     canonicalRecords = new Map(store.db.prepare("SELECT hash,body FROM execution_snapshots WHERE hash IN (SELECT value FROM json_each(?))").all(JSON.stringify(hashes)).map(row => [String(row.hash), String(row.body)]));
   }
   const summary = readGroupSummaryFromSnapshot(store, groupId, snapshot, canonicalRecords);

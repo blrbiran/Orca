@@ -123,3 +123,34 @@ describe("collect's handoffFiles and liveNotes through the real port (ccloop C4)
     await expect(bad.port.collect(bad.envelope, 0)).rejects.toThrow("control-response-invalid");
   });
 });
+
+// Memory in runs spec 2026-11-20 §3 (tester #441): ccloop echoes the memory bundle it dispatched, the collection
+// schema already carries `memory`, and the ExecutionReport type already names it — but the collect mapper expanded
+// twenty `response.*` keys and not this one, so `drive.memoryReport` was always undefined and the whole run-outcome
+// writeback to ccmem sat idle (`orca_run_outcomes` 0 rows). memoryEnvelope.test.ts passed because its port was
+// synthetic. This one goes through the real port: drop `memory` from the mapper and it fails.
+describe("collect's memory echo through the real port (#441)", () => {
+  const MEMORY = { sha256: hx("7"), ids: [11, 12, 13], tokens: 512 };
+  it("hands ccloop's memory echo on as report.memory", async () => {
+    const h = await fixture({ collectExtra: { memory: MEMORY } });
+    const report = await h.port.collect(h.envelope, 0);
+    expect(report.memory).toEqual(MEMORY);
+  });
+  it("states no memory key when ccloop sent none", async () => {
+    const h = await fixture();
+    const report = await h.port.collect(h.envelope, 0);
+    expect(Object.hasOwn(report, "memory")).toBe(false);
+  });
+  // mutation: .passthrough() on memoryReportSchema -> the extra key is accepted, red
+  it("refuses a memory echo of the wrong shape", async () => {
+    for (const memory of [
+      { ...MEMORY, extra: 1 },
+      { ...MEMORY, sha256: "short" },
+      { ...MEMORY, ids: [] },
+      { ...MEMORY, tokens: 0 },
+    ]) {
+      const h = await fixture({ collectExtra: { memory } });
+      await expect(h.port.collect(h.envelope, 0), JSON.stringify(memory)).rejects.toThrow("control-response-invalid");
+    }
+  });
+});
