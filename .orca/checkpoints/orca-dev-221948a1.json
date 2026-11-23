@@ -3,11 +3,11 @@
   "runId": "orca-dev-221948a1",
   "runtime": "claude-code",
   "sessionRef": "221948a1-6776-4acf-8f84-4c4da9e00758",
-  "writtenAt": "2026-11-23T17:00:32.126Z",
-  "head": "7fe6ddb6fae67bdfc6de4331450ac8a031ae4790",
+  "writtenAt": "2026-11-23T17:52:56.162Z",
+  "head": "9436f53ee29fc4415b5e0096c36e4f2a3ebd8549",
   "level": {
     "kind": "reading",
-    "level": 336443,
+    "level": 422541,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
@@ -34,9 +34,9 @@
     {
       "command": "cd /Users/biran/code/skills/orca/ccmem && npm test",
       "exitCode": 0,
-      "commit": "7fe6ddb6fae67bdfc6de4331450ac8a031ae4790",
-      "observedAt": "2026-11-23T17:00:32.016Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-221948a1-24n0xv/1.txt"
+      "commit": "9436f53ee29fc4415b5e0096c36e4f2a3ebd8549",
+      "observedAt": "2026-11-23T17:52:56.057Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-221948a1-SiDsZW/1.txt"
     }
   ]
 }
