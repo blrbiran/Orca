@@ -3,40 +3,47 @@
   "runId": "orca-dev-221948a1",
   "runtime": "claude-code",
   "sessionRef": "221948a1-6776-4acf-8f84-4c4da9e00758",
-  "writtenAt": "2026-11-23T18:05:34.318Z",
-  "head": "1288c4a6da844555fe80b2111c4b6c6911ab4125",
+  "writtenAt": "2026-11-23T18:37:38.583Z",
+  "head": "adc21a107562b45ffc34a69eccc00abe5ffc09cb",
   "level": {
     "kind": "reading",
-    "level": 452408,
+    "level": 494097,
     "windowTokens": 1000000,
     "t1": 330000,
     "t2": 450000,
     "band": 2
   },
   "next": [
-    "#450 panel --help 判据与修法（进行中）",
-    "#434 前半 deliversLocally 覆盖 working-tree + 冲突进 brief/recovery",
-    "批次 C：#451 ccmem 解释器路径、#436/#443 README",
-    "批次 D：#437 reserve 同函数、#433 GC spec、#446 P0、#449 三态、#431 brainstorm"
+    "#446 P0：memories 溯源列 + summarize prompt 引导 investigated/learned（迁移 020）",
+    "#433 artifacts GC 设计 spec",
+    "#431 brainstorm（零改动烧 8M 的可见性与可续跑性）",
+    "Orca wide 门（load 高，需避开）",
+    "写三仓 handoff + 推送"
   ],
   "open": [
-    "#442 已修待提交",
-    "#441 已修待提交",
-    "ccmem 批次 A 已提交（本地 main，未 push）"
+    "#444 #448 #447 #435（ccmem 已提交）",
+    "#441 #442 #450 #434 #437 #443（Orca 已提交）",
+    "#436 #451（ccmem 已提交）",
+    "#449（syncskill 已提交）",
+    "Orca quick 门 10 个文件 47 红全部是 control-socket-path-too-long（TMPDIR 过长），单跑 80 条全绿"
   ],
   "awaitingHuman": [
     {
       "kind": "irreversible",
-      "what": "ccmem 真实库需要应用迁移 019（先备份）"
+      "what": "ccmem 真实库应用迁移 019/020（先备份）"
+    },
+    {
+      "kind": "irreversible",
+      "what": "#444 历史 38 行 CHECK 失败行的修复 SQL 需人裁定是否执行"
     }
   ],
   "measurements": [
     {
       "command": "cd /Users/biran/code/skills/orca/ccmem && npm test",
       "exitCode": 0,
-      "commit": "1288c4a6da844555fe80b2111c4b6c6911ab4125",
-      "observedAt": "2026-11-23T18:05:34.230Z",
-      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-221948a1-hddpSn/1.txt"
+      "commit": "adc21a107562b45ffc34a69eccc00abe5ffc09cb",
+      "observedAt": "2026-11-23T18:37:38.495Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-221948a1-dB3F59/1.txt"
     }
   ]
 }
