@@ -7,7 +7,7 @@ import type { FlowDeps } from "../flow/kernel.js";
 import { peerCode, peerErrorCode, peerFailure } from "./ccloopPort.js";
 import {portFor,readStartEnvelope,retainSavedInterruption,readDriverRun,describeError,groupStopped} from "./executionDriver.js";
 import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
-import { finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
+import { allocationCommitment, finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
 import { appliedWorkAttempts } from "./budgetSuggestions.js";
 import { EXPECTATION_FLOOR_TOKENS, expectationModelApplies, writeTokenIntent } from "./expectationModel.js";
 import { repoTaskHistory } from "./estimateHistory.js";
@@ -486,8 +486,10 @@ export function assertKnownConservation(store: ControlStore, group: Group, propo
       if(!prior||prior.active!==0||JSON.parse(String(prior.body)).unknown.work||JSON.parse(String(prior.body)).unknown.handoff)throw new ControlError("recovery-blocked","released-funding-invalid");
       return zero();
     }
-    if (["draft", "ready"].includes(work.status)) return hasTokenPolicy(store,group.groupId)?{...allocation.amount,tokens:0}:amountSchema.parse(allocation.amount);
-    if (allocation.state === "terminal") return zero();
+    // Tester #437: one rule, shared with the writer (allocationCommitment) -- the two sides drifted and every budget
+    // command answered 423 for a group with an appended fix task.
+    if (["draft", "ready"].includes(work.status) || allocation.state === "terminal")
+      return allocationCommitment(allocation.amount, { status: work.status, terminal: allocation.state === "terminal", tokenPolicy: hasTokenPolicy(store,group.groupId) });
     const current = typeof work.currentRunId === "string" ? store.db.prepare("SELECT body FROM runs WHERE group_id=? AND id=? AND work_item_id=?").get(group.groupId, work.currentRunId, allocation.ownerId) : undefined;
     if (!current) throw new ControlError("recovery-blocked");
     const run = JSON.parse(String(current.body));

@@ -29,6 +29,21 @@ export function finiteCommitment(allowance:BudgetAmount):Amount {
  return {...allowance,tokens:allowance.tokens===null?0:allowance.tokens};
 }
 
+/**
+ * Tester #437: how much of an allocation the group's reserve holds, given the owner's stored status — THE one rule the
+ * writer (groupTaskAppend.ts) and the reader (webService.ts assertKnownConservation) both use.
+ *
+ * In a token-policy group a `draft`/`ready` task's grant is an expectation: nothing is held until a claim funds it from
+ * headroom (#212). Before this existed the writer counted the appended fix task's finite grant and the reader counted
+ * zero, so `group.reserved` could never be re-derived and every budget command answered 423 forever. Every other status
+ * is a real commitment; an allocation already settled terminal holds nothing.
+ */
+export function allocationCommitment(allowance:BudgetAmount, input:{status:string; terminal:boolean; tokenPolicy:boolean}):Amount {
+ if (input.terminal) return {tokens:0,activeMs:0,attempts:0,sessions:0};
+ if (input.tokenPolicy && (input.status === "draft" || input.status === "ready")) return {...allowance,tokens:0};
+ return finiteCommitment(allowance);
+}
+
 /** Independent bounded reconciliation default; source task ceilings never make this call unbounded. */
 export const DEFAULT_RECONCILE_TOKENS=3_000_000;
 export function finiteReconcileTokens(ceilings:readonly(number|null)[]):number {

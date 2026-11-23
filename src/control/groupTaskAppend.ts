@@ -14,7 +14,7 @@ import { executionSnapshotSchema } from "./webProtocol.js";
 import type { ControlStore } from "./store.js";
 import type { TaskWrite } from "./requirementRecords.js";
 import type { Amount } from "./types.js";
-import { finiteCommitment, type BudgetAmount } from "./tokenPolicy.js";
+import { allocationCommitment, finiteCommitment, type BudgetAmount } from "./tokenPolicy.js";
 
 /**
  * Tester follow-up G spec §3.4 (human: 「自动在同一组里开一个修复任务」): a task appended to a confirmed group -- the
@@ -41,8 +41,14 @@ export function appendConfirmedTaskInTransaction(store: ControlStore, groupId: s
   const missing = input.dependsOn.find((id) => !plan.plan.tasks.some((task) => task.taskId === id));
   if (missing !== undefined) throw new ControlError("recovery-blocked", `append-dependency:${missing}`);
   // The reserve must fund both allocations in every finite dimension, or nothing is written.
-  // A work grant with no token number (expectation model) commits no tokens, as confirm commits it (finiteCommitment).
-  const total = add(finiteCommitment(input.work), input.handoff);
+  // Tester #437: this is the SAME rule the reader re-derives with (allocationCommitment, tokenPolicy.ts). A new task is
+  // `ready`, so in a token-policy group its token dimension is an expectation and holds nothing -- counting it here while
+  // the reader counted zero made `group.reserved` unrecoverable and answered every budget command 423 forever.
+  const policy = hasTokenPolicy(store, groupId);
+  const total = add(
+    allocationCommitment(input.work, { status: "ready", terminal: false, tokenPolicy: policy }),
+    allocationCommitment(input.handoff, { status: "ready", terminal: false, tokenPolicy: policy }),
+  );
   for (const d of ["tokens", "activeMs", "attempts", "sessions"] as const) {
     const left = proposal.explicitUnallocatedReserve[d];
     if (left !== null && left < total[d]) throw new ControlError("group-budget-unavailable", d);
