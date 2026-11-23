@@ -1,0 +1,41 @@
+{
+  "v": 1,
+  "runId": "orca-dev-ec9efff6",
+  "runtime": "claude-code",
+  "sessionRef": "ec9efff6-9e09-4cfc-b550-a8b71e5b6700",
+  "writtenAt": "2026-11-23T14:36:06.879Z",
+  "head": "9f8d190b83d39ab350a4965f6302a58de244b420",
+  "level": {
+    "kind": "reading",
+    "level": 483828,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 2
+  },
+  "next": [
+    "run the #385 v9 paid evaluation with the now-provided goal texts (policy + links现场; lock2 as a third)",
+    "restart the ccmem daemon after a .backup, then verify the range read path by behaviour not pid",
+    "remove the two finished worktrees (ccmem stop-tail-395, ccloop tester-issues-20261123)"
+  ],
+  "open": [
+    "#434 second site (retry-integration overwriting uncommitted edits) still unreproduced",
+    "#437 write/read reserve mismatch is the largest remaining item",
+    "panel not reinstalled after this round's Orca changes"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "ccmem daemon restart (db backup first, ~1.6 GB)"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "cd /Users/biran/code/skills/orca/ccmem && /usr/local/bin/node --no-warnings --experimental-sqlite scripts/cli.mjs admin daemon status",
+      "exitCode": 0,
+      "commit": "9f8d190b83d39ab350a4965f6302a58de244b420",
+      "observedAt": "2026-11-23T14:36:06.778Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-ec9efff6-fSnwpW/1.txt"
+    }
+  ]
+}
