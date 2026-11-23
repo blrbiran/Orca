@@ -1,0 +1,42 @@
+{
+  "v": 1,
+  "runId": "orca-dev-221948a1",
+  "runtime": "claude-code",
+  "sessionRef": "221948a1-6776-4acf-8f84-4c4da9e00758",
+  "writtenAt": "2026-11-23T17:00:32.126Z",
+  "head": "7fe6ddb6fae67bdfc6de4331450ac8a031ae4790",
+  "level": {
+    "kind": "reading",
+    "level": 336443,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 1
+  },
+  "next": [
+    "#450 panel --help 判据与修法（进行中）",
+    "#434 前半 deliversLocally 覆盖 working-tree + 冲突进 brief/recovery",
+    "批次 C：#451 ccmem 解释器路径、#436/#443 README",
+    "批次 D：#437 reserve 同函数、#433 GC spec、#446 P0、#449 三态、#431 brainstorm"
+  ],
+  "open": [
+    "#442 已修待提交",
+    "#441 已修待提交",
+    "ccmem 批次 A 已提交（本地 main，未 push）"
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "irreversible",
+      "what": "ccmem 真实库需要应用迁移 019（先备份）"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "cd /Users/biran/code/skills/orca/ccmem && npm test",
+      "exitCode": 0,
+      "commit": "7fe6ddb6fae67bdfc6de4331450ac8a031ae4790",
+      "observedAt": "2026-11-23T17:00:32.016Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-221948a1-24n0xv/1.txt"
+    }
+  ]
+}
