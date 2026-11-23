@@ -61,7 +61,21 @@ export function allTasksDone(works: Iterable<unknown>): boolean {
  * projects spec §9.9: a multi group's work is on several branches, so it is never a stack base either.
  */
 function deliversLocally(group: Record<string, unknown>): boolean {
-  return dirWorkspaceOf(group) !== null || multiDirOf(group) !== null || readGroupIntegration(group)?.scheme.delivery === "local";
+  const scheme = readGroupIntegration(group)?.scheme.delivery;
+  // Tester #434: `working-tree` delivers into the person's checkout, not onto the group branch. Without it here, a
+  // group whose write was REFUSED (paths the person had edited: `integration-working-tree-conflict:…`) still read
+  // `done landed=true`, and its dependents moved on files that were never written.
+  return dirWorkspaceOf(group) !== null || multiDirOf(group) !== null || scheme === "local" || scheme === "working-tree";
+}
+
+/**
+ * Tester #434: whether the group's local delivery actually finished. `local` needs its integration idle after a commit;
+ * `working-tree` needs a write that landed (`lastIntegrated` set, nothing pending) — a conflict or a not-yet-written tip
+ * is not delivered, however done the group's tasks are.
+ */
+function localDeliveryCaughtUp(group: Record<string, unknown>, integration: NonNullable<ReturnType<typeof readGroupIntegration>>): boolean {
+  if (integration.scheme.delivery === "working-tree") return integration.lastIntegrated !== null && integration.pending === null && integration.state !== "blocked";
+  return integration.lastIntegrated !== null && integration.pending === null && integration.conflict === null && integration.state === "idle";
 }
 
 /**
@@ -112,7 +126,7 @@ export function prerequisiteDoneFrom(store: ControlStore, groupId: string,
   if (multiDirOf(group) !== null) return multiLandingDone(group);
   if (!deliversLocally(group)) return true;
   const integration = readGroupIntegration(group)!;
-  return integration.lastIntegrated !== null && integration.pending === null && integration.conflict === null && integration.state === "idle";
+  return localDeliveryCaughtUp(group, integration);
 }
 
 /** The orchestrator's and the board's answer (orchestration.ts PrerequisiteReader): direct prerequisites not done yet. */

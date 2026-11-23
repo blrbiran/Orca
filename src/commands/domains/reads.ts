@@ -38,9 +38,18 @@ const ids = (context: WriteContext, name: string): string => context.ids[name]!;
  * lines, since its row (two commands) is longer than the generic one-line item, which is cut at 160 characters.
  */
 function recoveryList(body: unknown): string {
-  const { heldTasks, unresolvedRuns, finishedHidden, ...rest } = (body ?? {}) as { heldTasks?: Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }>;
-    unresolvedRuns?: Array<{ groupId: string; taskId: string; runId: string; code: string; next: string[] }>; finishedHidden?: number };
+  const { heldTasks, unresolvedRuns, integrationBlocked, finishedHidden, ...rest } = (body ?? {}) as { heldTasks?: Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }>;
+    unresolvedRuns?: Array<{ groupId: string; taskId: string; runId: string; code: string; next: string[] }>;
+    integrationBlocked?: Array<{ groupId: string; delivery: string; reason: string; next: string }>; finishedHidden?: number };
   const lines = [text(rest)];
+  // Tester #434: a delivery the record says was refused, whole lines like a held task's, with the command that retries it.
+  if (integrationBlocked !== undefined && integrationBlocked.length > 0) {
+    lines.push("integrationBlocked:");
+    for (const row of integrationBlocked) {
+      lines.push(`  - ${row.groupId}: ${row.delivery} delivery refused: ${row.reason}`);
+      lines.push(`    next: ${row.next}`);
+    }
+  }
   // Tester #372: the finished handoff rows the default read leaves out.
   if (finishedHidden !== undefined) lines.push(`${finishedHidden} finished handoff row${finishedHidden === 1 ? "" : "s"} hidden (orca recovery list --all shows them)`);
   if (heldTasks !== undefined) {

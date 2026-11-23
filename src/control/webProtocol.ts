@@ -2644,6 +2644,9 @@ export const recoveryViewSchema = z
     // Stuck-runs spec 2026-11-17 S4 (third bullet): a run a stop could not end -- its handoff request's outcome is unknown
     // (handoff-unresolved) or ccloop did not stop it within the grace after an abandon (abandon-unresolved) -- still active.
     unresolvedRuns: z.array(z.object({ groupId: idSchema, taskId: idSchema, runId: idSchema, code: z.enum(["handoff-unresolved", "abandon-unresolved"]), next: z.array(nonemptyString).min(1) }).strict()).optional(),
+    // Tester #434: a delivery the integration record says was refused (a working-tree write the checkout would not take,
+    // a prerequisite not written yet, a busy checkout), with the command that retries it. Absent when none is blocked.
+    integrationBlocked: z.array(z.object({ groupId: idSchema, delivery: nonemptyString, reason: nonemptyString, next: nonemptyString }).strict()).optional(),
   })
   .strict()
   .superRefine((value, ctx) =>

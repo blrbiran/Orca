@@ -9,6 +9,14 @@ import { fileURLToPath } from "node:url";
 import { SERVICE_USAGE } from "./commands/serviceUsage.js";
 
 async function runPanel(args: string[]): Promise<number> {
+  // Tester #450: `orca panel --help` used to reach startPanelFromArgs and START a panel (random port, never
+  // exits). Every other domain answers --help with its usage line; this arm does too, and must run before the
+  // --service check so `--service --help` cannot start the managed form either.
+  if (args.includes("--help") || args.includes("-h")) {
+    const { PANEL_USAGE } = await import("./commands/serviceUsage.js");
+    process.stdout.write("usage: orca panel <run|install|start|stop|restart|status|logs|uninstall>\n\n" + PANEL_USAGE);
+    return 0;
+  }
   // Panel service spec §5 / plan D2: only the managed form takes the lock and writes panel.json.
   if (args.includes("--service")) {
     const { runServicePanel } = await import("./service/servicePanel.js");

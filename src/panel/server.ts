@@ -114,7 +114,39 @@ export function panelReadyLines(started: StartedPanel): { stdout: string; stderr
   };
 }
 
+/**
+ * The words a panel boot accepts (tester #450). parsePanelArgs ignored anything it did not know, so
+ * `orca panel --help` — after cli.ts's alias fell through to it — started a server on a random port instead of
+ * printing usage, and `orca panel --bytypo x` booted a panel with nobody's identity set. Every unknown word is
+ * refused by name now, the same rule the registry's own commands follow.
+ */
+const PANEL_VALUE_FLAGS = [
+  "--by", "--bind", "--port", "--root", "--repo", "--projects-file", "--dist", "--session-days",
+  "--profile", "--plan", "--control-state-dir", "--control-wake-ms", "--estimator-profile", "--estimate-mode",
+] as const;
+const PANEL_BOOLEAN_FLAGS = [
+  "--i-know-this-is-exposed", "--no-control", "--ccmem-corrections", "--no-ccmem-corrections",
+  "--ccmem-outcomes", "--no-ccmem-outcomes",
+] as const;
+
+function refuseUnknownPanelWords(args: string[]): void {
+  for (let i = 0; i < args.length; i += 1) {
+    const word = args[i]!;
+    if (!word.startsWith("-")) continue;
+    const takesValue = (PANEL_VALUE_FLAGS as readonly string[]).includes(word);
+    if (!takesValue && !(PANEL_BOOLEAN_FLAGS as readonly string[]).includes(word)) {
+      // Tester #450's own live shape: the refusal must name the word and point at the usage line.
+      throw new PanelRejection(
+        "panel-argument-invalid",
+        `orca panel run does not take ${JSON.stringify(word)}; see orca panel --help for the flags it does take`,
+      );
+    }
+    if (takesValue) i += 1;
+  }
+}
+
 export function parsePanelArgs(args: string[], env: NodeJS.ProcessEnv): PanelOptions {
+  refuseUnknownPanelWords(args);
   const flag = (name: string): string | undefined => {
     const index = args.indexOf(name);
     return index === -1 ? undefined : args[index + 1];

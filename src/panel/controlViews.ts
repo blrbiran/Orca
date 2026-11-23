@@ -2097,7 +2097,8 @@ export function readControlRecovery(store: ControlStore, epoch: string, options:
   const finishedHidden = outboxRows.length - handoffOutbox.length;
   const heldTasks = heldTaskRows(store);
   const unresolvedRuns = unresolvedRunRows(store);
-  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }), ...(capBlocked.length === 0 ? {} : { capBlocked }), ...(handoffOutbox.length === 0 ? {} : { handoffOutbox }), ...(finishedHidden === 0 ? {} : { finishedHidden }), ...(heldTasks.length === 0 ? {} : { heldTasks }), ...(unresolvedRuns.length === 0 ? {} : { unresolvedRuns }) };
+  const integrationBlocked = integrationBlockedRows(store);
+  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }), ...(capBlocked.length === 0 ? {} : { capBlocked }), ...(handoffOutbox.length === 0 ? {} : { handoffOutbox }), ...(finishedHidden === 0 ? {} : { finishedHidden }), ...(heldTasks.length === 0 ? {} : { heldTasks }), ...(unresolvedRuns.length === 0 ? {} : { unresolvedRuns }), ...(integrationBlocked.length === 0 ? {} : { integrationBlocked }) };
   const parsed = recoveryViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`recovery-view:${parsed.error.issues[0]?.message ?? "invalid"}`);
   return parsed.data;
@@ -2184,6 +2185,27 @@ function capBlockedRows(store: ControlStore): Array<{ groupId: string; scope: st
     if (block === null || typeof block.scope !== "string" || typeof block.period !== "string" || typeof block.capTokens !== "number") continue;
     out.push({ groupId, scope: block.scope, period: block.period, capTokens: block.capTokens, grantTokens: typeof block.grantTokens === "number" ? block.grantTokens : null,
       next: `orca usage set-cap --scope ${block.scope} --period ${block.period} --tokens <more than ${block.capTokens}>` });
+  }
+  return out;
+}
+
+/**
+ * Tester #434: a delivery the integration RECORD says was refused — a `working-tree` write the checkout would not take
+ * (paths the person had edited), a working-tree prerequisite not written yet, a busy checkout — holds files the person
+ * asked for while every other surface reads the group as done. `recovery list` names it with the command that retries it.
+ * Only a blocking record is a row: `conflict`/`resolving` are already integration-review steps with their own copy, and an
+ * idle or delivered record owes nothing.
+ */
+function integrationBlockedRows(store: ControlStore): Array<{ groupId: string; delivery: string; reason: string; next: string }> {
+  const out: Array<{ groupId: string; delivery: string; reason: string; next: string }> = [];
+  for (const row of store.db.prepare("SELECT id, body FROM groups ORDER BY id").all()) {
+    let group: Record<string, unknown>;
+    try { group = JSON.parse(String(row.body)) as Record<string, unknown>; } catch { continue; }
+    if (archivedMarkOf(group) !== null) continue;
+    const integration = readGroupIntegration(group);
+    if (integration === null || integration.state !== "blocked" || typeof integration.reason !== "string") continue;
+    out.push({ groupId: String(row.id), delivery: integration.scheme.delivery, reason: integration.reason.slice(0, 300),
+      next: `orca group retry-integration ${String(row.id)}` });
   }
   return out;
 }

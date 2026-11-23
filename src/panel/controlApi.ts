@@ -99,6 +99,20 @@ function workingTreeBrief(store: ControlStore, service: WebControlService | unde
   } catch { return {}; }
 }
 
+/**
+ * Tester #434: the brief's warning for a delivery the record says was refused, or null. A failed read is no warning
+ * (the full view names the group's own state), like the note helpers beside this one.
+ */
+function refusedDeliveryWarning(store: ControlStore, groupId: string): string | null {
+  try {
+    const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+    if (row === undefined) return null;
+    const integration = readGroupIntegration(JSON.parse(String(row.body)));
+    if (integration === null || integration.state !== "blocked" || typeof integration.reason !== "string") return null;
+    return `delivery-blocked:${integration.scheme.delivery}:${integration.reason.split(":")[0] === undefined ? integration.reason : integration.reason.split(":")[0]}`;
+  } catch { return null; }
+}
+
 /** Task 4 review minor 4: the brief's L4 note never fails the brief -- a failed read is no note, said on stderr once. */
 function knownRedNote(store: ControlStore, groupId: string): KnownRedAtBase[] {
   try { return knownRedAtBase(store, groupId); }
@@ -357,7 +371,10 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     // Tester #285: with a run under way whose agent reports usage only at phase end, the brief says so (absent otherwise).
     try { const summary = readGroupSummary(deps.store, groupId), phaseEndUsage = phaseEndUsageOf(deps.store, groupId);
       // Tester follow-up K, item 2: the acceptance's warning (no full suite adopted, or a flaky one) as the brief's own key.
-      const warnings = summary.acceptance?.warning === undefined ? [] : [summary.acceptance.warning];
+      // Tester #434: a delivery the record says was refused belongs in this list too — `state=done` beside no warning read
+      // as delivered while the working-tree write had been refused.
+      const refusedDelivery = refusedDeliveryWarning(deps.store, groupId);
+      const warnings = [...(summary.acceptance?.warning === undefined ? [] : [summary.acceptance.warning]), ...(refusedDelivery === null ? [] : [refusedDelivery])];
       // Tester #321 part C: the tasks costing a multiple of the group median, or running long (absent when none); display only.
       const costOutliers = costOutliersOf(deps.store, groupId, deps.store.now());
       // Tester #348: the runs whose stored body does not decode, each with its task (or null) and why; absent when none.

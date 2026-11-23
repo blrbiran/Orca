@@ -204,6 +204,22 @@ describe("recovery list prints a held task's commands (stuck-runs S4)", () => {
   });
 });
 
+// Tester #434: a delivery the record says was refused prints as whole lines with the command that retries it, the same
+// shape a held task's row takes; every other field prints as before.
+describe("recovery list prints a refused delivery (tester #434)", () => {
+  it("names the group, the delivery and the reason, then the retry command", async () => {
+    const body = { schema: "orca-control-recovery-v1", epoch: "e", dispatchBlocked: false, blockers: [],
+      integrationBlocked: [{ groupId: "dirty-upper-1", delivery: "working-tree",
+        reason: "integration-working-tree-conflict:src/upper.js,src/upper.test.js", next: "orca group retry-integration dirty-upper-1" }] };
+    const p = await fakePanel({ "GET recovery": { status: 200, body } });
+    const out = await cli(["recovery", "list"], p.dir);
+    expect(out.code, out.stderr).toBe(0);
+    expect(out.stdout).toContain("integrationBlocked:");
+    expect(out.stdout).toContain("  - dirty-upper-1: working-tree delivery refused: integration-working-tree-conflict:src/upper.js,src/upper.test.js");
+    expect(out.stdout).toContain("    next: orca group retry-integration dirty-upper-1");
+  });
+});
+
 describe("against a real panel", () => {
   it("group list, recovery list and orchestration show answer as the panel's GET does", async () => {
     const w = await workspace();
