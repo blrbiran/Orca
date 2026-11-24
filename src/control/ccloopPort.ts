@@ -205,16 +205,24 @@ export function dispatchedRunOf(payload:unknown):string|null{
  * `dispatchedPersonDir` (CLI v2 spec §15.3-§15.4): read per call (the panel knows it once its store is open), the empty directory a dispatched run's ORCA_PERSON_DIR names, so the
  * person's token store is not where its CLI looks. Every call about a run starts its ccloop with ORCA_DISPATCHED_RUN set
  * to that run, and every process ccloop starts for the run (the worker, each agent) inherits it.
+ *
+ * Tester #439: every call also starts its ccloop with CCLOOP_WORKER_RECEIPT_TIMEOUT_MS (ccloop dc8f8cd; unset there means
+ * 2000 ms, which a loaded machine misses and the run blocks `launch-never-claimed`). A non-empty value in the panel's own
+ * environment (`env`, default process.env, read per call) is the person's and passes through; otherwise 10000.
  */
-export function createCcloopExecutionPort(options:{binary:string;agentsTablePath:string;timeoutMs:number;log?:(line:string)=>void;dispatchedPersonDir?:()=>string|undefined}):ExecutionPort {
+export const WORKER_RECEIPT_TIMEOUT_ENV="CCLOOP_WORKER_RECEIPT_TIMEOUT_MS";
+const ORCA_WORKER_RECEIPT_TIMEOUT_MS="10000";
+export function createCcloopExecutionPort(options:{binary:string;agentsTablePath:string;timeoutMs:number;log?:(line:string)=>void;dispatchedPersonDir?:()=>string|undefined;env?:NodeJS.ProcessEnv}):ExecutionPort {
  const binary=regularAbsolute(options.binary,"control-binary-invalid",true),table=agentsTablePath(options.agentsTablePath);
  if(!Number.isSafeInteger(options.timeoutMs)||options.timeoutMs<=0)throw new ControlError("control-port-options-invalid");
  const evidenceContext=new Map<string,StartEnvelope>(),key=(ref:ArtifactRef)=>`${ref.artifactId}:${ref.hash}`;
  const peer=(method:string,payload:unknown,timeoutMs=options.timeoutMs)=>new Promise<unknown>((resolve,reject)=>{
    const run=dispatchedRunOf(payload);
    const personDir=run===null?undefined:options.dispatchedPersonDir?.();
-   const env=run===null?undefined:{...process.env,[DISPATCHED_RUN_ENV]:run,...(personDir===undefined?{}:{ORCA_PERSON_DIR:personDir})};
-   const child=execFile(binary,["control",method,"--agents",table],{encoding:"utf8",maxBuffer:MAX_OUTPUT,timeout:timeoutMs,...(env===undefined?{}:{env})},(error,stdout,stderr)=>{
+   const panelEnv=options.env??process.env,receipt=panelEnv[WORKER_RECEIPT_TIMEOUT_ENV];
+   const env={...panelEnv,[WORKER_RECEIPT_TIMEOUT_ENV]:receipt===undefined||receipt===""?ORCA_WORKER_RECEIPT_TIMEOUT_MS:receipt,
+    ...(run===null?{}:{[DISPATCHED_RUN_ENV]:run,...(personDir===undefined?{}:{ORCA_PERSON_DIR:personDir})})};
+   const child=execFile(binary,["control",method,"--agents",table],{encoding:"utf8",maxBuffer:MAX_OUTPUT,timeout:timeoutMs,env},(error,stdout,stderr)=>{
     if(error){const e=error as Error&{code?:number|string;killed?:boolean};if(e.code==="ERR_CHILD_PROCESS_STDIO_MAXBUFFER"||/maxBuffer/i.test(e.message))return reject(new ControlError("control-response-too-large"));if(e.killed)return reject(new ControlError("control-peer-timeout"));const suffix=String(stderr).trim();
     // Tester follow-up I: ccloop never started (an errno, not an exit: its file gone mid-install, say) -- name the path,
     // which leads with "/" so peerFailure never reads it as a ccloop code. Was the bare `control-peer-exit:ENOENT`.

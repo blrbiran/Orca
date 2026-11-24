@@ -19,6 +19,8 @@ const config = JSON.parse(await readFile(tablePath, "utf8"));
 let stdin = "";
 for await (const chunk of process.stdin) stdin += chunk;
 if (config.record) await writeFile(config.record, JSON.stringify({ argv: process.argv.slice(2), stdin }));
+// Tester #439: opt-in, so every other record keeps its shape -- the receipt timeout this process was started with.
+if (config.recordEnv) await writeFile(config.recordEnv, JSON.stringify({ receiptTimeout: process.env.CCLOOP_WORKER_RECEIPT_TIMEOUT_MS ?? null }));
 if (config.mode === "exit2") { process.stderr.write("remote-refusal\n"); process.exit(2); }
 if (config.refuse) { process.stderr.write(`${config.refuse}\n`); process.exit(2); }
 if (config.fail) { process.stderr.write(`${config.fail}\n`); process.exit(1); }
