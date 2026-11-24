@@ -64,14 +64,25 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
-### 3.最新（2026-11-24 晚，会话 `d7ca40c0`→`6f9b7b78`）—— 测试分档落地（四仓）、#432 出口、测试者台账新一批（Orca #467 #470 #439；ccmem #459 #464 #458 #460；syncskill #471 #472 #473 #456；ccloop #465）、面板重装
+### 3.最新（2026-11-25 凌晨，会话 `6add92a5`）—— repin ccloop（#465）、#466 基线核实、launchd 域修正、syncskill #462、ccmem #460/#445/#452/#461 余项；#469/#468 spec 审阅与 #470、FTS 两篇设计稿
+
+- **人的话**：开头列计划；「推四仓 => 已push」「残留清理 => 已执行」「8 个孤儿 yes => 已kill」「#469+#468 spec => 派独立subagent review」；随后 `allow-push`、「尽量完整做完」「忽略 context」「批准改写必要判据」「允许必要付费真跑」（**本轮无付费调用**）、「卡住先按建议做，最后报审」。
+- **Orca（主题行，已合入并推）**：`chore(deps): repin ccloop to 276114a for the codex MCP-list retry (#465)`；`fix(service): a shell outside the login session acts on the panel loaded in gui/<uid>`（**新发现**：agent 的 shell／ssh 里 `launchctl managername` 答 `Background`，Orca 一律去 `user/501`，而面板在 `gui/501` ⇒ `panel stop` 说 not loaded、`status` 说 launchd not loaded、`restart` 会在旁边再起一个面板；现在 label 已在 `gui/<uid>` 加载就用它；面板 service spec 追加更正）；`fix(control): an agent's pre-existing failure is run at the group's base before the person is asked (#466)`＋`test(control): the #466 review-wait criterion fails when the review does not wait`（agent 自报的命令若是该 task 已确认的 required check ⇒ 申请 L3 base run；green ⇒ 行带 `notConfirmedAtBase`、不进 brief 的等待列表与 Problems 计数、review 事实行说「在组的 base 上通过」；pending 时 review 等；#341 spec 追加更正）；两篇 spec：`docs(spec): record the independent review of the artifact integrity draft (#469, #468)`（**未实现**）、`docs(spec): orca project remove and its groups' ownership (#470 P1, draft)`。
+- **判据**：#466 六个变异各只打红自己（M5 第一版是空判据 —— `Number(null)`＝0 永远 ≥，见 Rule 9；已改并在 clone 里看见红）；launchd 变异只打红新判据。变异全在 `git clone --local` 副本。
+- **门（现测，`TMPDIR=/tmp`、`--base main`、`ORCA_CCLOOP_BIN=/Users/biran/code/skills/orca/.wt-ccloop-276114a/dist/cli.js`）**：repin `npm test` 104 文件 → 10 红：9 个整文件红＝Rule 17 守卫（门中途人的 `allow-push` 往真 `~/.orca/gate/push-grants/` 写了一个文件；**当时面板也没停住**，见上 launchd），1 条 `allowanceHeldSettlement` 30 s 超时（load 222）；`--rerun-failed`（重跑，不是门）9/10 过，该文件单跑 2/2 两次、未改动 main 上 2/2 ⇒ 负载。launchd `npm test` 16 文件 141 过／1 跳过（`realSmoke`）。#466 `npm test` root 98 文件 1179 过＋web 99 文件 986 过、0 跳过；推迟的 `webCcloopSmoke` 单跑 6/6。
+- **面板**：主检出 `npm ci`（ccloop `276114a` 已装已构建）→ root/web build RC 0 → `launchctl bootstrap gui/501 …plist`（之前为跑门 bootout 过）→ `orca panel restart` → `orca status` 全 ok（`panel status` 从本 Background shell 已能看见 `launchd running`）。
+- **syncskill（已合入）**：#462 `fix(install,doctor): print where a local skill really lives; doctor accepts the shared agents target`（打印真实落点；`isKnownLinkTarget` 由 install 与 doctor 共用）。build RC 0、`npm test` 78/896、install e2e 3/3（本会话主检出现测）。
+- **ccmem（已合入）**：#460 restart 同 stop 的数据根拒绝；#445 非额度失败连续 3 次 ⇒ status 报 `llm unhealthy`（计数在 daemon 内，**daemon 未重启 ⇒ 尚未开始记**）；#452 diagnose 报近 24 h 未到达 hook 的 codex 会话（Orca 派发的 hook 关闭会话也计入，已知噪声）；#461 共享 `raceLoop`、整轮 5000 ms、`finally` kill；FTS 设计稿 `docs(spec): FTS matches any discriminative term…`。细节见 ccmem handoff。
+- **诚实边界**：#469/#468 只有审阅＋修订建议，未写码（原裁定「人审后实现」）；#466 只在 required check 逐字等于报告命令时核实；测试者 #466 里 3 条 `prunable` worktree 不是 Orca base run 的路径，未处理；#470 P1、FTS 都只是设计稿。
+
+### 3.上一轮（2026-11-24 晚，会话 `d7ca40c0`→`6f9b7b78`）—— 测试分档落地（四仓）、#432 出口、测试者台账新一批（Orca #467 #470 #439；ccmem #459 #464 #458 #460；syncskill #471 #472 #473 #456；ccloop #465）、面板重装
 
 - **人的话**：开头「先列计划再做」；测试分档两问「同意你的建议」；#466/#465/#471/#472/#462/#468+#469/以后再设计 各条「同意你的建议」；随后 `allow-push`、「尽量完整做完」「忽略 context」「批准改写必要判据」「卡住先按建议做，最后报审」。
 - **测试分档（人裁，CLAUDE.md Rule 18 已改）**：Orca `npm test` = 改动部分（改动的测试＋镜像目录[>60 只取同名]＋**直接** import 者＋目录表），**补丁与合入 main 都用它**；≥30 s 与真 ccloop E2E 推迟到 `npm run test:full`，除非改的就是它或 pin 规则选中；无结果缓存时仍按改动选（只是不能按耗时推迟）；`test:wide`/`test:all` 删除，`--wide` 具名拒绝；`test:full` 留树哈希戳。root/web 都开 vitest 5 的 `fsModuleCache`（小文件 15.5 s → 4.3–6.3 s，load≈85 现测）。**relocateUserData 不是瓶颈**：133 MB 的 `~/.orca` 一次快照 15–36 ms。ccloop 新增 `scripts/test-affected.mjs`（`npm test`＝改动部分，`test:full`＝原全量，红了自动跑 `check-known-reds`）；syncskill 加 `vitest.config.ts` 排除 `.claude/**`（原 155 文件＝78＋worktree 副本 77）、`install-cli` 改用仓内 tsx（107.8 s → 84.4 s）。实测：本批合入门 150 文件／约 5 min（旧 wide 918 文件）。
 - **Orca 本批（主题行）**：`feat(test): npm test is the changed part…`、`chore(test): persist vitest's transform cache; Rule 18…`；**#432** `fix(control): a person's retry takes back a task stopped at its pause line`（只有 person 可 retry，按 `continue` 的规则把暂停线推过已用量，保留被停 run 的工作；agent 被拒 `usage-stopped-needs-person`）＋ cherry-pick 的卡片提示那笔（其提交说明里的「known gap」已被前一笔关闭）；`test(web): fixtures carry the card budget's reserved and headroom fields…`（**main 上 web typecheck 原本就红**，11 行，已修）；**#467** settle 时把仍 `ready` 的 ladder/judge 组推到 `review`；**#470** 目录不存在的项目改报 `missingPaths`（status 为 warn 不再 exit 1、list 打 warning、Web 琥珀提示），删除项目留给 spec；**#439** `blockRun` 自己写一行日志（catch 路径保留原行、B' 字节不变）；spec 草稿 `docs/superpowers/specs/2026-11-24-artifact-integrity-design.md`（#469＋#468，待人审）。每条新判据都先红、变异只打红自己（变异全在 clone 里，还原 0 字节）。
 - **门（现测，`TMPDIR=/tmp`，面板已停，load 270–330）**：三批 `npm test` 均绿 —— 150/1129＋web 5/78；39/349＋web 26/290；59/397（1 跳过 = `driverSkillsReal`）。另：`tests/scripts`＋`tests/service` 22/239（1 跳过）、web 全量 291/2414。`build.test.ts` 的 panel boot 在长 TMPDIR 下红 = `control-socket-path-too-long`，环境。
 - **面板**：主检出 `npm ci`（ccloop `f8d368e` 已装、已构建）→ root/web build RC 0 → `orca panel restart` → `orca status` 全 ok。
-- **未推（push 被闸门拒）**：会话中途重启换了 session id，`allow-push` 只记在旧 id 上，`git push` 被 Tier 0 闸门拦。**四仓本地 main 都领先远端**；ccloop 的 #465（`fix(codex): a missing MCP list is read once more…`）因此**还没 repin 进 Orca**（npm 只能装 GitHub 上有的提交）。
+- **推送**：本轮 push 被闸门拒（会话中途换 id，`allow-push` 记在旧 id 上）；四仓由人随后手动推了，#465 已在会话 `6add92a5` repin。
 - **诚实边界**：ccloop 全量（`test:full`）load≈330 下 35 红／11 文件，**同 11 文件在未改动的 ccloop main 克隆里 28 红** ⇒ 负载；syncskill `profile-inject-cli` 一次 5 s 超时，单跑两次 14/14、main 对照 14/14；syncskill 测试目录有 202 条预先存在的 tsc 类型错误（`tsc -p tsconfig.json` 含 tests；build 干净）。ccmem #460 的「plist 数据根」检查只在 `daemon stop` 做，`restart` 未做（plist-drift 夹具故意用 `/tmp/root`）。#434「retry 覆盖未提交改动」仍未复现。**机器上有 8 个孤儿 `yes` 进程**（ppid 1，11-20 起，各吃一核），非本会话所起，未动。
 
 ### 3.上一轮（2026-11-24 续做，会话 `221948a1` 之后）—— ccmem hook 全超时事故、测试者台账新一批（#432–#457）、测试耗时分析
@@ -646,12 +657,13 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
-### 4.0 接手顺序（2026-11-24 晚滚动；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
+### 4.0 接手顺序（2026-11-25 滚动；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
 
-0. **人先做（agent 做不成）**：四仓 `git push origin main`（闸门拒了本会话）；推完 ccloop 后 agent 才能 `node scripts/pin-ccloop.mjs` 把 #465 repin 进 Orca，再 `npm ci`＋build＋`orca panel restart`。agent worktree `.claude/worktrees/agent-aae7bc8d849928d67`（locked）、`agent-ab83f…`、`tester-issues-20261123`、syncskill 的 `/private/tmp/ss-baseline` 需 `--force` 删，分支 `worktree-agent-aef036a28f1d93c8f`／`worktree-agent-aae7bc8d849928d67`（内容已在 main）需 `branch -D` —— 命令在会话末的报告里。
-1. **候选（已裁、未做）**：#466（只有 agent 自报的「基线失败」先跑 Orca 的 base check，绿就标未证实、不卡人；改 #341 L2 裁定，先写短 spec 注）；syncskill #462（打印真实落点；doctor 认已知 agent 目录）；#468＋#469 按 `2026-11-24-artifact-integrity-design.md` 实现（人审后）；ccmem #445 余项（非额度的启动失败归为 backend-unhealthy）、#452 余项（近 24 h 无注入的 codex 会话）、#461（共享超时 helper＋`finally kill`）、#460 余项（restart 的数据根检查）。
-2. **以后单独设计（人已同意）**：ccmem FTS 的 AND→OR 与 #453 的门一起改；#470 的 `project remove` 与其组归属；#445 是否做付费后端探针。
-3. **沿用的结论**：跑门前停面板（Rule 17 守卫）；`TMPDIR=/tmp`（长 TMPDIR 下 panel boot 红 `control-socket-path-too-long`）；`--base` 用会话起点或 `main`；`ORCA_CCLOOP_BIN=/Users/biran/code/skills/orca/.wt-ccloop-f8d368e/dist/cli.js`；load 高时超时红先单跑、再和未改动 main 的克隆对照。zsh 下变量不分词，传文件列表用 `${=F}`。
+0. **人先审（agent 做不成）**：#469＋#468 spec 的审阅一节（`2026-11-24-artifact-integrity-design.md` 末「Review and revisions」），**第一件要人定的是「删除由面板执行」**；#470 `project remove` 设计稿（`2026-11-25-project-remove-design.md` §5 三问）；ccmem FTS 设计稿（ccmem `docs/superpowers/specs/2026-11-25-fts-or-relevance-gate-design.md` §5 两问）。人审后按修订后的顺序实现。
+1. **残留（归人）**：`/Users/biran/code/skills/orca/.wt-repin-465`（worktree，内有真 `node_modules`，`git worktree remove` 需 `--force`，分支 `repin-ccloop-465` 已合入可 `-d`）；变异／对照克隆 `.wt-466-mut/`、`.wt-launchd-mut/`、`.wt-ss-462-mut/`、`.wt-ccloop-276114a/`（**门还要用它，下次 repin 前保留**）、`.wt-ccloop-f8d368e/`（已过期可删）；日志 `.wt-*.log`。
+2. **ccmem daemon 重启**（#445 计数要 daemon 内代码；照 ccmem handoff §0.2 先备份）—— 归人或下一轮按授权做。
+3. **以后单独设计（人已同意）**：#445 付费后端探针要不要做。
+4. **沿用的结论**：跑门前停面板 —— **用 `launchctl bootout gui/501/dev.orca.panel`**（修复前的 `orca panel stop` 在 agent shell 里停不掉；修复后 `orca panel stop` 可用，但先 `orca panel status` 确认 manager 行），跑完 `launchctl bootstrap gui/501 ~/Library/LaunchAgents/dev.orca.panel.plist`＋`orca panel restart`；**人在门跑时发 `allow-push` 会写真 `~/.orca/gate/push-grants/`，Rule 17 守卫整文件红，属环境**；`TMPDIR=/tmp`；`--base main`；`ORCA_CCLOOP_BIN=/Users/biran/code/skills/orca/.wt-ccloop-276114a/dist/cli.js`；load 高时超时红先单跑、再和未改动 main 对照；zsh 传文件列表用 `${=F}`；本机 `cp` 是 `-i` 别名，覆盖用 `/bin/cp -f`。
 
 ### 4.1 人保留的操作与授权边界
 
@@ -857,6 +869,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 6. **magpie 实验**：「请求存档」人 2026-11-11 已打开（本机目录，当天即有文件）；实验本身按 ccmem handoff §6.5 在**干净会话**里跑（真模型调用每次先问），做完关存档、删目录。
 7. **检查点写入**：`dev checkpoint write` 被 auto 模式审批拦（用会话转录当来源，聊天授权不解除），需人在终端跑或给该命令加一条 Bash 允许规则。
 8. **待人审的控制器裁定**（人回复后删对应项）：
+   - **会话 `6add92a5` 的可逆决定（人「卡住先按建议做，最后报审」）**：①#466 只核实「逐字等于 task 已确认 required check」的报告命令（不是的仍按旧行为等人），base green ⇒ 未证实、不等人，red/unknown ⇒ 旧行为，review 在 base run pending 时等待；②launchd：非 Aqua shell 先探 `gui/<uid>/<label>`，已加载就用 gui（未加载仍按 spec §4 用 user）；③#469/#468 **没有按原 spec 实现**——审阅发现三处高严重度缺口（删除与面板竞争、引用扫描必须穿透 artifact 内容并 fail-closed、缺 data 的行会毒化之后的同内容写入），改为先写修订建议等人审；④ccmem #445 的阈值「连续 3 次非额度失败」、超时不计、只报不切；⑤ccmem #452 以「hook 是否跑到」而非「是否注入」判定，Orca 派发的 hook 关闭会话会计入（噪声）；⑥syncskill #462 保留 install 默认链 `agents`，改为 doctor 认它（`isKnownLinkTarget` 共用）。
    - **#385 v9 付费评测（2026-11-23，会话 `ec9efff6`）**：人已提供 goal 原文（`orca_archived_files/evidence-385-goal-text.md`）。**本轮三条模型通道全不可用**（claude 周额度用尽、omp 的 LiteLLM 未起、codex 无单次调用能力），实测已记在 §3.最新。**零花费**。恢复后按 §3.最新「重跑方法」跑三个现场。
    - **本轮控制器裁定（人「有问题先按建议执行」）**：①#432 按「显示＋next」修，不按「派发丢了」修（下游不可领是正确的）；②#439 的 ccloop 超时用 env 变量、缺省值不变；③#434 只分析未改（第二现场未复现）；④#433 未动；⑤#437 未动。
    - **会话 `48bc4690` 的可逆决定（人「有问题先按你的建议执行」）**：①#417 按人裁「明确不支持＋写清」：`orca status` 的 ccmem 行改为常驻 **warn**（面板与纠正导出照常），README 同步；②#419 把卡在 group cap 的 judge 读成 `failed`（复用现有终态枚举，未加新 state），历史派生组不自动归档；③syncskill #404 在 `links` 与 `include` 都未声明时维持「全部本地」旧行为；④syncskill #411 的 `--config` 只接受 `config.json`/`config.yaml` 两类文件名，其余拒绝；⑤syncskill 测试基建改了两个「真实 `~/.syncskill` 快照」的实现（sha256 → size+mtime）与三条 5 s 边缘用例的时限；⑥ccmem daemon 已重启（备份 `.bak.1795183564694`，G1 未重写 plist）。
