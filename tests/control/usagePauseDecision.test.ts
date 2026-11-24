@@ -13,7 +13,7 @@ import { VERB_ACCESS } from "../../src/panel/humanOnly.js";
 import type { StartEnvelope } from "../../src/control/executionPort.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
-import { readControlGroup, readControlSummary } from "../../src/panel/controlViews.js";
+import { readControlGroup, readControlSummary, readGroupSummary } from "../../src/panel/controlViews.js";
 
 type Harness = Awaited<ReturnType<typeof driverHarness>>;
 const M = 1_000_000;
@@ -168,6 +168,19 @@ describe("deciding on a paused task (spec §2.5)", { timeout: 300_000 }, () => {
       expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM runs WHERE work_item_id='a'").get()!.n).toBe(1);
       // A second decision finds nothing waiting.
       expect(decide(t, { decision: "continue" })).toMatchObject({ error: { code: "usage-pause-not-waiting" } });
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  // Tester #432: after `decide-usage --decision stop` the group brief (the card's firstFailure; the brief is the summary)
+  // said only `task-blocked`, with no way out, while the group read `running` with 0 runs. It names the stop and the retry
+  // that gives the task a fresh claim, the same command `group show` prints (verbs.ts budgetStateLines).
+  it("a stopped task's card names the stop and the retry group show names", async () => {
+    const { t, driver } = await paused(["a", "b"], 40 * M);
+    try {
+      expect(decide(t, { decision: "stop" })).toMatchObject({ result: { decision: "stop" } });
+      // mutation: drop the usageStopped branch in cardFacts -> { cause: "task-blocked" } with no next, red.
+      expect(readGroupSummary(t.h.store, "g").card!.firstFailure).toEqual({ taskId: "a", cause: "usage-stopped", next: "orca task retry g a --as-person" });
       await driver.stop();
     } finally { await t.h.dispose(); }
   });

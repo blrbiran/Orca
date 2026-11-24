@@ -679,8 +679,10 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
     const runCause = run === undefined || run === null ? null : typeof run.drive?.failureCause?.cause === "string" ? run.drive.failureCause.cause : typeof run.failureCode === "string" ? run.failureCode : typeof run.drive?.blockedReason === "string" ? run.drive.blockedReason : null;
     // Issue #153: a blocked task whose run names no cause still shows (the overview's own `task-blocked`), not nothing.
     // Tester follow-up G spec §2.1/§2.5: a task waiting at its pause line or at the group cap says so, with what answers it.
-    const waiting = (work as { usagePause?: unknown; groupCapStop?: unknown } | undefined);
+    const waiting = (work as { usagePause?: unknown; usageStopped?: unknown; groupCapStop?: unknown } | undefined);
     if (work?.status === "blocked" && waiting?.usagePause !== undefined) { firstFailure = { taskId, cause: "usage-paused", next: `orca task decide-usage ${groupId} ${taskId} --decision continue|stop`, ...(continueRestartsFresh(store, work as never) ? { note: USAGE_PAUSE_FRESH_START } : {}) }; break; }
+    // Tester #432: a task stopped at its pause line named only `task-blocked`; its way out is a fresh claim (group show's line).
+    if (work?.status === "blocked" && waiting?.usageStopped !== undefined) { firstFailure = { taskId, cause: "usage-stopped", next: `orca task retry ${groupId} ${taskId} --as-person` }; break; }
     if (work?.status === "blocked" && waiting?.groupCapStop !== undefined) { firstFailure = { taskId, cause: "group-cap-reached", next: `orca group set-limit ${groupId} --limit <a higher limit>` }; break; }
     // Stuck-runs spec 2026-11-17 S4: a task held behind a run a handoff stopped, once the stop is lifted, is the person's;
     // it names the command that moves it (recovery list's heldTasks row has both).
