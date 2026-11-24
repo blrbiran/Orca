@@ -144,3 +144,12 @@ panel.json names a live panel (same start time) whose pid is not launchd's, or w
 the port; under the detached manager it applies the `start --detach` checks. No `--port` (or `--port 0`) and no `lsof`
 on PATH skip the port check. Code: `src/service/managerConflict.ts`. Criteria: `tests/service/managerConflict.test.ts`
 (fake launchctl/lsof, temp panel and LaunchAgents dirs).
+
+## Correction (2026-11-25, Orca session `6add92a5`, Claude Opus 5.5, on main after `chore(deps): repin ccloop to 276114a…`): the launchd domain
+
+§4's rule ("`gui/<uid>` when `launchctl managername` answers Aqua, else `user/<uid>`") stays as written for a label that
+is loaded nowhere. Measured on this machine: a shell outside the login session (an agent's Bash, ssh) answers
+`Background`, while the person's panel runs as `gui/501/dev.orca.panel` — `orca panel stop` printed
+`not loaded; nothing to stop`, `status` said `launchd not loaded` beside an answering panel, and `restart` would have
+bootstrapped a second panel into `user/501`. The domain is now `gui/<uid>` also when `launchctl print gui/<uid>/<label>`
+exits 0 (the label is loaded there); otherwise §4's rule applies unchanged. An Aqua shell runs no extra command.

@@ -8,10 +8,16 @@ import { renderPlist } from "./render.js";
 export const LAUNCHD_NOT_LOADED = new Set([3, 113, 125]);
 
 const launchctl = (ctx: ServiceContext, args: string[]) => ctx.run("launchctl", args, { env: ctx.env });
-/** Spec §4: gui/<uid> when launchctl managername answers Aqua, else user/<uid>. */
+/**
+ * Spec §4: gui/<uid> when launchctl managername answers Aqua, else user/<uid> -- unless the label is already loaded in
+ * gui/<uid> (spec Correction of 2026-11-25): a shell outside the login session (an agent's, ssh) answers Background while
+ * the person's panel runs in their GUI domain, and the user domain then never saw it -- stop said "not loaded" and
+ * restart bootstrapped a second panel beside the running one.
+ */
 export function domain(ctx: ServiceContext): string {
   const answer = launchctl(ctx, ["managername"]);
-  return answer.code === 0 && answer.stdout.trim() === "Aqua" ? `gui/${ctx.uid}` : `user/${ctx.uid}`;
+  if (answer.code === 0 && answer.stdout.trim() === "Aqua") return `gui/${ctx.uid}`;
+  return launchctl(ctx, ["print", target(ctx, `gui/${ctx.uid}`)]).code === 0 ? `gui/${ctx.uid}` : `user/${ctx.uid}`;
 }
 const target = (ctx: ServiceContext, dom: string): string => `${dom}/${ctx.paths.label}`;
 const failed = (ctx: ServiceContext, verb: string, r: { code: number; stderr: string }): number => {

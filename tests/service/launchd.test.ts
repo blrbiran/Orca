@@ -30,12 +30,26 @@ describe("launchd (spec §4, macOS table)", () => {
     expect(await s.fake.calls()).toEqual(["launchctl managername", `launchctl bootout ${s.target}`, `launchctl enable ${s.target}`, `launchctl bootstrap gui/501 ${s.plist}`]);
   });
 
-  it("uses user/<uid> when the manager is not Aqua (ssh, no GUI session)", async () => {
+  it("uses user/<uid> when the manager is not Aqua (ssh, no GUI session) and nothing is loaded in gui/<uid>", async () => {
     const s = await setup(false);
     await s.fake.output("launchctl", "managername", "Background\n");
+    // Ruling (2026-11-25, launchd domain correction): the label is probed in gui/<uid> first; here it is not loaded there.
+    await s.fake.codes("launchctl", "print", [113]);
     const { ctx } = fakeContext(s.fake, s.paths);
     await launchd.install(ctx);
     expect((await s.fake.calls()).at(-1)).toBe(`launchctl bootstrap user/501 ${s.plist}`);
+  });
+
+  // Found 2026-11-25 (Orca session 6add92a5): an agent's shell answers Background while the person's panel runs in
+  // gui/501; stop said "not loaded; nothing to stop" and restart would bootstrap a second panel into user/501.
+  it("acts on gui/<uid> from a Background shell when the label is loaded there (stop, restart)", async () => {
+    const s = await setup(false);
+    await s.fake.output("launchctl", "managername", "Background\n");
+    const { ctx, out } = fakeContext(s.fake, s.paths);
+    // mutation: drop the gui probe from domain() -> bootout user/501/... , red
+    expect(await launchd.stop(ctx)).toBe(0);
+    expect(await s.fake.calls()).toEqual(["launchctl managername", `launchctl print ${s.target}`, `launchctl bootout ${s.target}`]);
+    expect(out.join("\n")).not.toContain("not loaded");
   });
 
   it("retries a bootstrap that exits 5 (label still draining) after a bootout, until it succeeds", async () => {
