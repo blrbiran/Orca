@@ -393,17 +393,21 @@ describe("an agent-only report is checked at the group's base before anyone is a
   }, 240_000);
 
   it("the review waits while the base run for a reported check is pending, and starts once it answers", async () => {
-    // Another pending base run on the same repository holds it (one base run per repository at a time) for 5 s, so the
-    // reported check's own base run is still pending when every task is done and the acceptance has passed.
-    const w = await reviewWorld({ harness: { requiredChecks: ["true", "sleep 5"], decisions: (id) => (id.endsWith("a") ? [marker("true", "saw it red")] : []) } });
+    // Another pending base run on the same repository holds it (one base run per repository at a time) for 20 s, so the
+    // reported check's own base run is still pending when every task is done and the acceptance has passed. The holder is
+    // not a required check, so the group acceptance never runs it (a required `sleep` made the acceptance itself wait
+    // past the answer and the mutation below stayed green -- seen in a clone, 2026-11-25).
+    const w = await reviewWorld({ harness: { decisions: (id) => (id.endsWith("a") ? [marker("true", "saw it red")] : []) } });
     try {
       const base = git(w.t.repo, "rev-parse", "HEAD");
-      w.t.h.store.db.prepare("INSERT INTO base_check_results(repo_id,base,command,result,tail,why,group_id,task_id,run_id,requested_at,at,attempts) VALUES ('repo',?,'sleep 5','pending',NULL,NULL,'g','a','run-holder',0,NULL,1)").run(base);
+      w.t.h.store.db.prepare("INSERT INTO base_check_results(repo_id,base,command,result,tail,why,group_id,task_id,run_id,requested_at,at,attempts) VALUES ('repo',?,'sleep 20','pending',NULL,NULL,'g','a','run-holder',0,NULL,1)").run(base);
       await w.runAll();
       await w.t.until(w.driver, () => w.review()?.state === "passed" || w.review()?.state === "not-passed", 3000);
-      const answeredAt = Number(w.t.h.store.db.prepare("SELECT at FROM base_check_results WHERE command='true'").get()!.at);
-      // mutation: drop the reportedBaseCheckPending wait from reviewRequirements -> the round starts before the answer, red
-      expect(w.review()!.rounds[0]!.at).toBeGreaterThanOrEqual(answeredAt);
+      const answered = w.t.h.store.db.prepare("SELECT result, at FROM base_check_results WHERE command='true'").get()!;
+      // mutation: drop the reportedBaseCheckPending wait from reviewRequirements -> the round starts while the row is still
+      // pending (result 'pending', at null), red. (A bare Number(at) read null as 0 and could not go red -- seen in a clone.)
+      expect(answered.result).toBe("green");
+      expect(w.review()!.rounds[0]!.at).toBeGreaterThanOrEqual(Number(answered.at));
     } finally { await w.t.h.dispose(); }
   }, 300_000);
 
