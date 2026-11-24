@@ -310,7 +310,7 @@ const summary = (over: Partial<GroupSummaryV1>): GroupSummaryV1 => ({
 
 describe("a review finding's badge on an involved group's card (spec §7, criterion 11)", () => {
   it("major red, minor grey; none without findings", () => {
-    const card = { budget: { usedTokens: 10, limitTokens: null }, pendingDecisions: 0, firstFailure: null };
+    const card = { budget: { usedTokens: 10, limitTokens: null, reservedTokens: 0, headroomTokens: null }, pendingDecisions: 0, firstFailure: null };
     render(<BoardView groups={[summary({ groupId: "g", card: { ...card, reviewFindings: { major: 1, minor: 2 } } }), summary({ groupId: "h", card })]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
     const major = within(screen.getByTestId("board-card-g")).getByTestId("board-card-findings-major");
     const minor = within(screen.getByTestId("board-card-g")).getByTestId("board-card-findings-minor");

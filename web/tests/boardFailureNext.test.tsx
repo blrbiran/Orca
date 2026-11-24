@@ -13,7 +13,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 const g = (groupId: string, firstFailure: NonNullable<GroupSummaryV1["card"]>["firstFailure"]): GroupSummaryV1 => ({
   groupId, repoId: "r", state: "running", commandRevision: 7, projectionSeq: 1, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0,
   completion: { done: 0, total: 2 }, counts: { idle: 1, running: 0, waiting: 0, blocked: 1, done: 0 }, executionPending: false,
-  card: { budget: { usedTokens: 1, limitTokens: null }, pendingDecisions: 0, firstFailure },
+  card: { budget: { usedTokens: 1, limitTokens: null, reservedTokens: 0, headroomTokens: null }, pendingDecisions: 0, firstFailure },
 });
 const NEXT = "orca recovery retry --run run-e7";
 

@@ -70,7 +70,7 @@ describe("the board card shows expected against used (§7 item 4)", () => {
   const g = (groupId: string, expectation?: { expectedTokens: number; usedTokens: number | null }): GroupSummaryV1 => ({
     groupId, repoId: "r", state: "running", commandRevision: 7, projectionSeq: 1, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0,
     completion: { done: 0, total: 1 }, counts: { idle: 0, running: 1, waiting: 0, blocked: 0, done: 0 }, executionPending: false,
-    card: { budget: { usedTokens: 1, limitTokens: null }, pendingDecisions: 0, firstFailure: null, ...(expectation === undefined ? {} : { expectation }) },
+    card: { budget: { usedTokens: 1, limitTokens: null, reservedTokens: 0, headroomTokens: null }, pendingDecisions: 0, firstFailure: null, ...(expectation === undefined ? {} : { expectation }) },
   });
   it("×3.2 when the group used 3.2 times its expectation, unknown when its usage is unknown, nothing without one", () => {
     render(<BoardView groups={[g("over", { expectedTokens: 1_500_000, usedTokens: 4_800_000 }), g("lost", { expectedTokens: 1_500_000, usedTokens: null }), g("plain")]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);

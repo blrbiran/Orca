@@ -238,7 +238,7 @@ describe("the conclusion card (#319 proposal 1)", () => {
   // Review fix 2: a decisions read still loading or failed does not make pending decisions vanish.
   it("counts pending decisions from the summary while the read is loading, and says a failed read failed", () => {
     const value = done(); value.summary.state = "running";
-    value.summary.card = { budget: { usedTokens: 0, limitTokens: null }, pendingDecisions: 2, firstFailure: null };
+    value.summary.card = { budget: { usedTokens: 0, limitTokens: null, reservedTokens: 0, headroomTokens: null }, pendingDecisions: 2, firstFailure: null };
     show(value);
     // mutation: drop the summary.card fallback -> "Nothing", red
     expect(line("waiting").textContent).toBe("2 decisions wait for you");
@@ -248,7 +248,7 @@ describe("the conclusion card (#319 proposal 1)", () => {
     expect(line("waiting").textContent).toContain("Decisions could not be read (control-unavailable)");
     expect(line("waiting").textContent).toContain("2 decisions wait for you");
     cleanup();
-    value.summary.card.pendingDecisions = 0;
+    value.summary.card!.pendingDecisions = 0;
     show(value, { failed: "control-unavailable" });
     expect(line("waiting").textContent).toBe("Decisions could not be read (control-unavailable)");
   });

@@ -21,7 +21,7 @@ const FAILED: GroupAcceptanceV1 = { tip: "c".repeat(40), result: "failed", comma
 const g = (groupId: string, groupProblem?: GroupSummaryV1["groupProblem"]): GroupSummaryV1 => ({
   groupId, repoId: "r", state: "review", commandRevision: 7, projectionSeq: 1, stopMode: null, stopState: null, claimBlocked: false, recoveryBlockerCount: 0,
   completion: { done: 2, total: 2 }, counts: { idle: 0, running: 0, waiting: 0, blocked: 0, done: 2 }, executionPending: false,
-  card: { budget: { usedTokens: 1, limitTokens: null }, pendingDecisions: 0, firstFailure: null },
+  card: { budget: { usedTokens: 1, limitTokens: null, reservedTokens: 0, headroomTokens: null }, pendingDecisions: 0, firstFailure: null },
   ...(groupProblem === undefined ? {} : { acceptance: FAILED, groupProblem }),
 });
 const PROBLEM = { code: "group-acceptance-failed:npm test", why: "group-acceptance-failed", next: [NEXT, "orca group waive-acceptance g-acc --note '<why>'"] };
