@@ -598,9 +598,8 @@ function ccloopWorldTests(suite) {
   return rows;
 }
 
-// --full: every test file, replacing the changed-part rows (the rules above still ran, so an unknown path is still named).
+// --full: every test file (the changed-part rules above still ran, so their reasons still print beside it).
 if (full) {
-  for (const suite of ["root", "web"]) selection[suite].clear();
   select("root", listTests("tests", ROOT_TEST), "test:full (every test file)", "--full");
   select("web", listTests("web/tests", WEB_TEST), "test:full (every test file)", "--full");
 }
