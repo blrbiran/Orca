@@ -201,7 +201,12 @@ describe("tester #434: retry-integration after a refused working-tree write keep
       // `was` now holds from's entry, pending.tip's (Orca's first bytes) and nothing of the person's.
       expect(await w.pass()).toBe(true);
       expect(w.record().reason).toBe("integration-working-tree-conflict:src/upper.js");
+      // The blocked settle keeps a working-tree write-ahead (integrationPass.ts:618), and retry-integration keeps it
+      // too: clearing it would drop the crashed tip's entry from `was` (and could hide a real overwrite in either
+      // direction). mutation: resetIntegrationForRetry also nulls pending -> red here.
+      expect(w.record().pending).toMatchObject({ tip: first, new: first });
       w.retry();
+      expect(w.record()).toMatchObject({ state: "idle", pending: { tip: first, new: first } });
       expect(await w.pass()).toBe(true);
       // mutation: let a pending-tip entry stand for "Orca wrote this" without an oid comparison -> the person's file is
       // taken as Orca's and overwritten with ORCA TWO, red
