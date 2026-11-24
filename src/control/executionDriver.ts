@@ -341,7 +341,8 @@ function parallelClaimField(reason: string, confirmed: Pick<ReturnType<typeof re
 
 /** spec §2.2: a run that cannot move on its own is blocked alone, with the step and the reason. */
 /** `runFields`: keys set on the run itself beside the block (a single call's lower bound, spec 2026-10-27 §9 R4). */
-export function blockRun(deps: Pick<ExecutionDriverDeps, "store" | "admissionGate">, runId: string, step: DriveStep, reason: string, patch: Partial<DriveRecord> = {}, runFields: Record<string, unknown> = {}): void {
+/** Tester #439: every block writes one line to the panel log (only B' did), so `grep <runId> panel.err.log` finds it; `detail` follows the reason. */
+export function blockRun(deps: Pick<ExecutionDriverDeps, "store" | "admissionGate">, runId: string, step: DriveStep, reason: string, patch: Partial<DriveRecord> = {}, runFields: Record<string, unknown> = {}, detail?: string): void {
   write(deps, () => {
     const run = readDriverRun(deps.store, runId);
     if (run.drive === undefined) throw new ControlError("recovery-blocked", `drive-missing:${runId}`);
@@ -350,6 +351,7 @@ export function blockRun(deps: Pick<ExecutionDriverDeps, "store" | "admissionGat
     run.drive = { ...run.drive, ...patch, blockedAt: step, blockedReason: reason };
     saveDriverRun(deps.store, run);
   });
+  process.stderr.write(`orca-driver: ${runId}: blocked at ${step}: ${reason}${detail === undefined ? "" : ` ${detail}`}\n`);
 }
 
 /** Integration spec §5: what the integration pass needs, from the driver's own deps and state. */
@@ -1083,10 +1085,8 @@ export async function stepBPrime(deps: ExecutionDriverDeps, runId: string): Prom
   if (status.kind === "unknown" && status.launch === "never-claimed" && run.mode !== "verify-saved-result" && run.recoveryOf === undefined) {
     const relaunches = run.drive.relaunches ?? 0;
     if (relaunches >= LAUNCH_RELAUNCH_LIMIT) {
-      // Tester #439: every other block path writes one line; this one wrote none, so `grep <runId> panel.err.log` found
-      // nothing and a person had only `blockedReason` to go on. The relaunch count is the one number that explains it.
-      process.stderr.write(`orca-driver: ${runId}: blocked at B': launch-never-claimed after ${relaunches} relaunch(es) -- no worker wrote its receipt in time\n`);
-      blockRun(deps, runId, "B'", "launch-never-claimed");
+      // Tester #439: the relaunch count is the one number that explains this block; blockRun writes the line with it.
+      blockRun(deps, runId, "B'", "launch-never-claimed", {}, {}, `after ${relaunches} relaunch(es) -- no worker wrote its receipt in time`);
       return true;
     }
     write(deps, () => { const current = readDriverRun(deps.store, runId); current.drive = { ...current.drive!, relaunches: relaunches + 1 }; saveDriverRun(deps.store, current); });

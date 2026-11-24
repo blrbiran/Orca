@@ -52,6 +52,24 @@ describe("B': a launch no worker claimed is accepted again, bounded (#308)", () 
       // mutation: drop the stderr.write beside the block -> this is empty and the test is red.
       expect(lines.join("")).toContain(`orca-driver: ${runId}: blocked at B': launch-never-claimed`);
       expect(lines.join("")).toMatch(/relaunch/i);
+      // The line is written once: blockRun writes it, with the relaunch detail the B' site passes.
+      expect(lines.join("").split(`blocked at B'`).length - 1).toBe(1);
+    } finally { await t.h.dispose(); }
+  });
+
+  // Tester #439 remainder: of blockRun's call sites only B' logged; most A2/C/E blocks left nothing in panel.err.log.
+  // blockRun itself now writes the line, so every block is findable by its run id.
+  it("every block writes one line naming the run, the step and the reason", async () => {
+    const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "exhausted" }); try {
+      const runId = await t.claim();
+      const lines: string[] = [];
+      const write = process.stderr.write.bind(process.stderr);
+      process.stderr.write = ((chunk: string | Uint8Array) => { lines.push(String(chunk)); return true; }) as typeof process.stderr.write;
+      try {
+        await t.until(t.driver(), () => t.body(runId).state === "blocked");
+      } finally { process.stderr.write = write; }
+      // mutation: drop the write from blockRun -> no line for a C block, red
+      expect(lines.join("")).toContain(`orca-driver: ${runId}: blocked at C: terminal:exhausted\n`);
     } finally { await t.h.dispose(); }
   });
 });
