@@ -79,3 +79,84 @@ Automatic (timer) reclamation; hash dedup (`hardlink`/shared directory); restori
 - On a copy of a store with deleted `data` files, every group view renders and names the missing ids; no read path answers
   `control-internal-error` for a missing artifact (a test over every view route).
 - `orca gc --include-artifacts --apply` never removes an artifact that any surviving row names, for each holder kind.
+
+## Review and revisions (2026-11-25, Orca session `6add92a5`, Claude Opus 5.5; on main after `chore(deps): repin ccloop to 276114a…`)
+
+The human asked for an independent review (「请你审 #469+#468 的 spec。 => 派独立subagent review」). A read-only reviewer
+subagent (no conclusion handed to it) checked every claim against main `98dd522c`. The text above is unchanged; this
+section records what the review found and the controller's recommended revisions. **Still not implemented**: the human's
+review of this section comes first (the ruling was "implement after the human reviews").
+
+### Facts corrected (reviewer, verified against code)
+
+1. §2 line 1: the throw is at `src/panel/controlViews.ts:1654` (not 1652). The chain is `validTerminalClosure` →
+   `sealedProof` → `settlementProof` / `settlementArtifact` (`terminalRunClosure.ts:24-48`); each layer catches and
+   returns false/null, and `blocked()` (`controlViews.ts:360`) turns the false into `recovery-blocked`.
+2. §2 line 3 is **wrong**: `readArtifact` (`archive.ts:155-164`) already names `artifact-not-found` (no row),
+   `artifact-hash-mismatch` and `control-path-symlink`. A missing `data` file is not a ControlError at all: `assertRegular`
+   (`paths.ts:35-37`) lets a raw ENOENT escape, mapped to `control-internal-error` — the tester's `run show` 500, because
+   `readRunEvidence` (`controlViews.ts:2402-2405`) only tolerates the first two codes.
+3. **Missed by §2**: `group show` never reaches `readArtifact`; it fails through `settlementArtifact`
+   (`usageSettlement.ts:79-90`), a second synchronous reader that throws a plain `Error` swallowed by `sealedProof`.
+   Changing `readArtifact` alone does not fix `group show`.
+4. `run show` fails for **every** run of a group with one bad closure: `readRunEntry` goes through `readControlGroup`
+   (`controlViews.ts:1878-1886`) and `readRunEvidence` calls `runViews` again (`:2398`).
+
+### Gaps (by severity) and the recommended revision
+
+- **High — the delete races the panel.** `gc` opens the store read-only out of process (`gc.ts:85`); "delete the
+  directory and `DELETE FROM artifacts` in one transaction" cannot hold (a file system delete is not in a sqlite
+  transaction, and gc has no write path). Content ids (`sha256-<hash>`) are shared: `publishOnce` reuses an existing
+  directory (`archive.ts:104-112`), so a live run can come to name an id between the scan and the `rm`.
+  **Recommendation:** the delete is done **by the panel**, under its admission gate, as a control command; the CLI only
+  asks (dry run stays out of process and read-only). This is the decision the human should make first.
+- **High — the holder scan is not a list of tables.** Ids are also named *inside* artifacts (snapshot `bundle` /
+  `tree[].ref` `snapshot.ts:71-72`; capsule `artifacts.normalization` `runDiagnosis.ts:57`; packet `rawLogs`/`artifacts`
+  `handoff.ts:17`; `logs[].ref` `savedResultRecovery.ts:46`), and in more tables than §3.3 lists (`usage_events`
+  `usageSettlement.ts:144`, `savedRecovery.admission`, `funding.historicalPolicy.authority` `fundedAllowance.ts:189-190`,
+  `savedNoDispatch`, `savedSettlement`, `terminalClosure`). **Recommendation:** the scan expands transitively through
+  artifact contents and fails closed (an unparseable artifact counts as "still referenced"); a structural criterion
+  enumerates `sqlite_master` tables and columns and goes red on any table the scan has not classified.
+- **High — a row whose `data` is gone poisons later writes.** `observeDuplicate` throws
+  `artifact-id-conflict:data-missing` when the directory exists without `data` (`archive.ts:61`), so any later write of the
+  same content fails a live run; a fully removed directory republishes (`:58`). **Recommendation:** on publish, a row
+  present with `data` missing is restored from the bytes being written (same hash, safe); criterion: delete only `data`,
+  write the same content, the write succeeds and the file is back.
+- **Medium — degradation is already silent today** (`runDiagnosis.ts:47-65` returns null; `settlementPreview` reports a
+  missing proof as `run-stop-proof-required` `controlViews.ts:2464`; `validSavedNoDispatch` catches to false
+  `savedResultNoDispatch.ts:14`). **Recommendation:** one named state, `evidence-missing:<id>`, used by all of them.
+- **Medium — a third closure state.** A degraded run must not read `terminalClosed: true`, and leaving the field out sends
+  the Web (`runFacts.ts:63-64`) down a path that offers Close, which `terminalRunClosure.ts:65` then refuses.
+  **Recommendation:** `closure: "evidence-missing"` on the view; `validTerminalClosure` stays two-valued and strict for
+  the decision paths (`retryTask.ts:290,298`, `savedResultRecovery.ts:71`, `systemDebug.ts:306`), each with a criterion
+  naming its refusal code.
+- **Medium — the stuck runs need an exit.** With decision paths strict, the tester's 42 runs in live groups can never be
+  retried or closed; "see the integrity line" is a dead end because the line repairs nothing. **Recommendation:** the hint
+  names the exit that works (archive the group); nothing else in this change.
+- **Low:** `doctor` reading the store out of process needs gc's read-only open and `busy_timeout`; "referenced by a live
+  group" needs the same full scan as reclamation, so it is not "stat only". Name the new code `artifact-data-missing`
+  (not `artifact-missing`, too close to `artifact-not-found`).
+
+### Scope (recommended)
+
+- Drop `gc --forget-missing-artifacts` (it permanently drops index rows and is not #469's P0).
+- The integrity line goes in `orca doctor` only; `status --disk` keeps its file-system-only promise (`status.ts:278-280`).
+- Criteria: "no view route answers `control-internal-error`" enumerates the route table, not a hand list; the fixture is
+  a run **with** a `terminalClosure` whose report or stop-proof `data` is deleted, in two variants (directory removed /
+  only `data` removed).
+
+### Open questions, recommended answers
+
+1. Clock: run-scoped first, as approved — and say in the README that this frees little (the tester measured only 73
+   artifacts held solely by archived/terminal groups), so a small result is not read as a bug.
+2. No dedup (also: `assertRegular` requires `nlink === 1`, `paths.ts:37`; hard links would break every read).
+3. Archived groups' decision evidence goes with the group; the dry run lists each id; `--apply` asks nothing more.
+4. **Who deletes: the panel** (see the first High gap). Human decision needed before step 3 of §4.
+
+### Revised order (after the human's review)
+
+1. #469 reads: `artifact-data-missing` from both readers (`readArtifact`, `settlementArtifact`); view paths degrade to
+   `closure: "evidence-missing"`; decision paths refuse by code; the poisoned-write repair.
+2. `orca doctor` integrity line (read-only open).
+3. #468: panel-side delete command with the transitive, fail-closed scan and the `sqlite_master` structural criterion.
+4. README.
