@@ -12,6 +12,7 @@ import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { VERB_ACCESS } from "../../src/panel/humanOnly.js";
 import type { StartEnvelope } from "../../src/control/executionPort.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
+import { withCommandContext } from "../../src/control/commandClient.js";
 import { readControlGroup, readControlSummary } from "../../src/panel/controlViews.js";
 
 type Harness = Awaited<ReturnType<typeof driverHarness>>;
@@ -111,6 +112,41 @@ describe("deciding on a paused task (spec §2.5)", { timeout: 300_000 }, () => {
       // mutation: drop floor(used / 10E) + 1 from the multiple -> 20M <= used, refused, red
       expect(decide(t, { decision: "continue" })).toMatchObject({ result: { decision: "continue", nextLine: 40 * M } });
       expect(readWork(t.h.store, "g", "a")).toMatchObject({ status: "ready", pauseLine: { multiple: 4, taskUsedAtDecision: used } });
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  // Tester #432 (human 2026-11-24: 「按你的建议做」): a stopped task had no way out -- group show advertised
+  // `orca task retry <g> <t> --as-person`, and retry refused it (task-not-retryable run-state:settled-recoverable). A
+  // person's retry now takes it back, as a continue would: the line moves past what it used and its work is kept. An
+  // agent's retry is refused by name: the stop was a person's or an agent's decision to spend no more, and only a person
+  // reverses spending.
+  it("a stopped task is retried by a person, with its line moved past what it used; an agent's retry is refused by name", async () => {
+    const { t, driver, first, knobs } = await paused(["a", "b"], 40 * M);
+    try {
+      expect(decide(t, { decision: "stop" })).toMatchObject({ result: { decision: "stop" } });
+      const before = JSON.stringify(readWork(t.h.store, "g", "a"));
+      // mutation: drop the person check -> the agent's retry succeeds, red
+      expect(t.service.retryTask(t.h.command("retry-task", { taskId: "a", runId: first }))).toMatchObject({ error: { code: "task-not-retryable", message: expect.stringContaining("usage-stopped-needs-person") } });
+      expect(JSON.stringify(readWork(t.h.store, "g", "a"))).toBe(before);
+      const command = t.h.command("retry-task", { taskId: "a", runId: first });
+      // mutation: drop the usage-stopped branch -> task-not-retryable run-state:settled-recoverable, red
+      const answer = withCommandContext(command.commandId, { client: "web", principal: "user:owner", personAuthority: true }, () => t.service.retryTask(command));
+      expect(answer).toMatchObject({ result: { kind: "task-retried", taskId: "a", fromRunId: first } });
+      // used 10M of a 40M group: the next line is min(20M, 10M + 15M) = 20M, as continue would set it.
+      // mutation: leave the pause line where it was -> the next claim's ceiling is 10M <= used, red below
+      expect(readWork(t.h.store, "g", "a")).toMatchObject({ status: "ready", pauseLine: { multiple: 2, taskUsedAtDecision: 10 * M } });
+      expect(readWork(t.h.store, "g", "a")).not.toHaveProperty("usageStopped");
+      expect(readGroupActivity(t.h.store, "g", 50).find(e => e.kind === "task-retried")?.body).toMatchObject({ fromRunId: first, reason: "usage-stopped" });
+      knobs.exhausted = false;
+      let second: string | null = null;
+      for (let i = 0; i < 4 && second === null; i++) {
+        await driver.round();
+        const claimed = await deliverScheduledStart(t.dispatch, "g");
+        if (claimed.kind === "claimed" && t.body(claimed.runId).taskId === "a") second = claimed.runId;
+      }
+      expect(second).not.toBeNull();
+      expect(t.body(second!).liveCeiling).toMatchObject({ cause: "pause-line", tokens: 10 * M });
       await driver.stop();
     } finally { await t.h.dispose(); }
   });

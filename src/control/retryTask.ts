@@ -14,7 +14,8 @@ import type { Amount } from "./types.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
 import type { FrozenWorkAgent } from "./agentFreeze.js";
 import { applyAgentSwitch, AUTO_AGENT, runAgentAgrees, type SwitchSource } from "./agentSwitch.js";
-import { commandPrincipalFor, routedDispatchedRunFor } from "./commandClient.js";
+import { commandPrincipalFor, routedDispatchedRunFor, settlingPersonFor } from "./commandClient.js";
+import { movePauseLine } from "./usagePause.js";
 import { appendTopUp, topUpSum, withTopUp } from "./workTopUp.js";
 import { authorizeWorkTopUp } from "./authorizeWorkTopUp.js";
 import { continuationIdentity, registrationOf } from "./continuation.js";
@@ -253,6 +254,24 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           saveRunBody(store,{...run,state:"settled-failed",savedNoDispatchConsumedBy:command.commandId,drive:{...run.drive!,outcome:"not-started",stopReason:"saved-result-not-dispatched"}},false);
           Object.assign(work,{status:"ready",retryGrantSourceRunId:runId,pendingRunId:null});setAllocationStates(store,groupId,taskId,"retrying",run.grant);saveWork(store,groupId,work as never);
           recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,reason:"saved-result-not-dispatched",...afterBody}});deps.beforeCommit?.();return commandSuccess(context,{kind:"task-retried",taskId,fromRunId:runId});
+        }
+        // Tester #432 (human 2026-11-24, 「按你的建议做」): a task stopped at its pause line (usage-pause-decide stop) had no
+        // way out. A person's retry takes it back as a continue would (usagePause.ts movePauseLine: the line moves past what
+        // it used, or the claim would stop at once), keeping the stopped run's work through allowancePredecessorRunId, which
+        // the stop left in place. Only a person: the stop decided to spend no more, and an agent does not reverse that.
+        if ((work as { usageStopped?: unknown }).usageStopped !== undefined) {
+          if (settlingPersonFor(command.commandId) === null) throw new ControlError("task-not-retryable", `usage-stopped-needs-person:orca task retry ${groupId} ${taskId} --as-person`);
+          if (live || run.state !== "settled-recoverable" || work.status !== "blocked" || (work as { allowancePredecessorRunId?: string }).allowancePredecessorRunId !== runId)
+            throw new ControlError("task-not-retryable", `usage-stopped-run-state:${run.state}`);
+          if (incoming !== null) throw new ControlError("retry-top-up-unsupported", "usage-stopped");
+          const stopped = work as unknown as Record<string, unknown>;
+          stopped.pauseLine = movePauseLine(store, groupId, taskId, readGroup(store, groupId), stopped).pauseLine;
+          delete stopped.usageStopped;
+          work.status = "ready";
+          saveWork(store, groupId, work as never);
+          recordActivity(store, { groupId, taskId, runId, kind: "task-retried", body: { fromRunId: runId, reason: "usage-stopped", ...afterBody } });
+          deps.beforeCommit?.();
+          return commandSuccess(context, { kind: "task-retried", taskId, fromRunId: runId });
         }
         const held = !live && run.state === "settled-recoverable" && run.recoverable === true && work.status === "held"
           && allocations.length === 2 && allocations.every(a => a.state === "held" && settlementSame(a.amount, run.remaining[a.bucket as "work" | "handoff"]))

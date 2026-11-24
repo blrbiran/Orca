@@ -77,6 +77,31 @@ export function classifyCeilingStop(store: ControlStore, run: { runId: string; g
   return outcome;
 }
 
+/**
+ * The pause line a task continues under (spec §2.5): the next multiple, and at least the first one above what the task
+ * used, capped by half the group's remainder (pauseLineFor). Refused usage-pause-no-headroom when the task has no
+ * expectation and usage-pause-group-headroom (naming set-limit) when the group has too little left. Shared by continue
+ * and by a person's retry of a stopped task (#432, retryTask.ts), which must not claim under the line it already passed.
+ */
+export function movePauseLine(store: ControlStore, groupId: string, taskId: string, group: ReturnType<typeof readGroup>, work: Record<string, unknown> & { usagePause?: { expectationTokens: number | null } }): { nextLine: number | null; pauseLine: { multiple: number; taskUsedAtDecision: number; groupUsedAtDecision: number } } {
+  const expectation = work.usagePause?.expectationTokens ?? taskExpectation(store, groupId, work as never)?.tokens ?? null;
+  if (expectation === null) throw new ControlError("usage-pause-no-headroom", "no-expectation");
+  const state = pauseStateOf(work);
+  const used = taskWorkTokens(store, groupId, taskId);
+  const groupUsed = group.used.tokens;
+  // Tester #305 (follow-up J): a run that overshot its line (ccloop stops at a phase boundary or between turns)
+  // may have used more than the next multiple too, and that line was then refused for good. The next line is the
+  // next multiple and at least the first one above what the task used: k = max(k + 1, floor(used / 10E) + 1).
+  // Correction (follow-up L): "between turns" holds only for claude and omp, which ccloop stops inside a call; codex
+  // runs one turn per phase, so it stops only after the whole phase (follow-up K) and can overshoot by far more.
+  const multiple = Math.max(state.multiple + 1, Math.floor(used / (PAUSE_LINE_MULTIPLE * expectation)) + 1);
+  const nextLine = pauseLineFor({ expectationTokens: expectation, multiple, groupLimitTokens: (group.limit as { tokens: number | null }).tokens, taskUsedAtDecision: used, groupUsedAtDecision: groupUsed });
+  // Only half the group's remainder can still hold the line at or below what the task used: the group needs more.
+  // Tester #300: an unlimited group has no pause line (null); a task paused before that ruling continues with none.
+  if (nextLine !== null && nextLine <= used) throw new ControlError("usage-pause-group-headroom", `${nextLine}<=${used}:orca group set-limit ${groupId} --limit <a higher limit>`);
+  return { nextLine, pauseLine: { multiple, taskUsedAtDecision: used, groupUsedAtDecision: groupUsed } };
+}
+
 export type UsagePauseDecideCommand = Extract<RawAuthorityCommandV1, { verb: "usage-pause-decide" }>;
 
 /**
@@ -111,22 +136,7 @@ export function applyUsagePauseDecide(deps: { store: ControlStore; admissionGate
         // Tester #295 residue (follow-up K): continuing from a run with no complete checkpoint starts the task afresh.
         const fresh = decision === "continue" && continueRestartsFresh(store, work as never);
         if (decision === "continue") {
-          const expectation = work.usagePause.expectationTokens ?? taskExpectation(store, groupId, work as never)?.tokens ?? null;
-          if (expectation === null) throw new ControlError("usage-pause-no-headroom", "no-expectation");
-          const state = pauseStateOf(work);
-          const used = taskWorkTokens(store, groupId, taskId);
-          const groupUsed = group.used.tokens;
-          // Tester #305 (follow-up J): a run that overshot its line (ccloop stops at a phase boundary or between turns)
-          // may have used more than the next multiple too, and that line was then refused for good. The next line is the
-          // next multiple and at least the first one above what the task used: k = max(k + 1, floor(used / 10E) + 1).
-          // Correction (follow-up L): "between turns" holds only for claude and omp, which ccloop stops inside a call; codex
-          // runs one turn per phase, so it stops only after the whole phase (follow-up K) and can overshoot by far more.
-          const multiple = Math.max(state.multiple + 1, Math.floor(used / (PAUSE_LINE_MULTIPLE * expectation)) + 1);
-          nextLine = pauseLineFor({ expectationTokens: expectation, multiple, groupLimitTokens: (group.limit as { tokens: number | null }).tokens, taskUsedAtDecision: used, groupUsedAtDecision: groupUsed });
-          // Only half the group's remainder can still hold the line at or below what the task used: the group needs more.
-          // Tester #300: an unlimited group has no pause line (null); a task paused before that ruling continues with none.
-          if (nextLine !== null && nextLine <= used) throw new ControlError("usage-pause-group-headroom", `${nextLine}<=${used}:orca group set-limit ${groupId} --limit <a higher limit>`);
-          work.pauseLine = { multiple, taskUsedAtDecision: used, groupUsedAtDecision: groupUsed };
+          ({ nextLine, pauseLine: work.pauseLine } = movePauseLine(store, groupId, taskId, group, work));
           delete work.usagePause;
           work.status = "ready";
           if (note !== undefined) work.pendingOperatorNote = note; else delete work.pendingOperatorNote;
