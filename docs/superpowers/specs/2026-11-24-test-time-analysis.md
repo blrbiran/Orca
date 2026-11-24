@@ -85,3 +85,10 @@ absolute seconds are inflated; proportions hold): 996 files, ~19,960 file-second
    default-resolution E2E)? My call: changed-part plus the smoke set only when the ccloop pin changes (already a rule).
 2. May E2E files that run > 60 s move to the release tier even when a module they import changes? My call: yes, unless
    the change is to the file itself or to the module it exists to test.
+
+## Outcome (2026-11-24 evening, session `d7ca40c0`/`6f9b7b78`)
+
+Implemented as proposed; the human answered both open questions 「同意你的建议」 (merges run the changed part only; slow and
+real-ccloop files defer to test:full unless they changed or the pin rule selected them). Measured: `relocateUserData` is
+15-36 ms per snapshot on a 133 MB `~/.orca` (not a cost); vitest's transform is (fsModuleCache now on, Orca root and web).
+The redundancy candidates in §2.5 were not removed (each needs its mutation run); they are out of the routine runs by tier.
