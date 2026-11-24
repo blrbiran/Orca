@@ -64,7 +64,18 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
-### 3.最新（2026-11-24，会话 `221948a1`）—— 测试者台账 A/B/C 批（#434 #437 #441 #442 #443 #444 #446 P0 #447 #448 #449 #450 #451 #435 #436）
+### 3.最新（2026-11-24 续做，会话 `221948a1` 之后）—— ccmem hook 全超时事故、测试者台账新一批（#432–#457）、测试耗时分析
+
+- **人的话**：「另外三件必须一起处理 => 本机帮我处理；测试者机器给我方法」「先修 hook 迁移（B）…其他按你的建议走」；#453「同意，继续」（先校准）；#432「按你的建议做，但是放在下一个session做」；`allow-push`；人已手动推过一批、已清空废纸篓；「当前测试总是跑全量非常浪费时间…下个session需要优先解决…这个session你可以先做分析并记录」。
+- **ccmem（细节在 ccmem handoff §1 最新节，全部已推）**：hook 全超时的根因是 `openDb()` 在待迁移时对 1.73 GB 库做 `VACUUM INTO`（实测 12.04 s，hook 时限 2/5/3 s）⇒ 永远迁不完、每次留 `.partial`（226 个、131.5 GB，已进废纸篓、人已清空）。修法：**已有库只由 `ccmem admin migrate` 升级**，hook/CLI/daemon 待迁移时拒绝并指路。随后按测试者台账做了 #454（异链库的重复列）、#455、#445（`daemon status` 提取健康行，只扫最新 20 万行）、#452、#453（按 embedding 签名的 cosine 下限，bge-m3 0.60，在真库副本上校准）。新发现登记未修：FTS 查询是 AND，自然语言 prompt 几乎从不命中词面检索。
+- **syncskill（已推）**：#457 `remote add` 对已有 server 改为合并、`--host` 可省；#456 远端列表读失败不再当成「空」，报 `E_REMOTE_TRANSPORT`（exit 5）。agent 报的 4 个超时文件在分支上重跑 53/53。
+- **Orca 本批（主题行，按合入顺序）**：`chore(deps): repin ccloop to f8d368e for the settable worker receipt timeout (#439)`；`fix(control): every ccloop control process waits 10 s for a worker receipt unless the panel names its own (#439)`（`ccloopPort` 给每个 control 子进程传 `CCLOOP_WORKER_RECEIPT_TIMEOUT_MS=10000`，面板环境已有非空值则沿用）；两笔 #434 复现判据（`test(control): the tester #434 retry sequence keeps the person's untracked files`、`… pin that retry-integration keeps the working-tree write-ahead`）；`fix(control): a later landing accepted on a new tip is not delivered until that tip is written (#434 review)`（`localDeliveryCaughtUp` 补上与 `archiveGroup` 的 `owedDelivery` 相同的 tip 比较，变异只打红新判据）；测试耗时分析 `docs/superpowers/specs/2026-11-24-test-time-analysis.md`。
+- **#434「retry-integration 覆盖未提交改动」**：第三次调查（独立 agent，测试者原序列＋6 个变体）**仍未复现**；retry 只重置 `state/reason`，`judge` 写前判两次，送达/投递代码自测试者 HEAD `48bfc086` 起字节未变。唯一能改字节的路径：`readHaves` 用 `git hash-object`（带 clean filter），CRLF/LF 归一化下一个字节不同的文件可能被当作 `from` 的条目。要定论需测试者的 checkout 路径、`core.autocrlf`／`.gitattributes`。
+- **#432 未合**：agent 分支 `worktree-agent-aae7bc8d849928d67` 上的 `fix(panel): a task stopped at its pause line names the stop and its retry on the card and brief (#432)` 提示 `task retry --as-person`，但该命令对被 stop 的任务**必被拒**（`retryTask.ts` 的 held/released/closed/abandoned 四个口子都不含 `usageStopped`；`usage-pause-decide stop` 只写 `usageStopped`、run 与 allocation 原样）。`group show` 自 `475e27ad` 起已在给这条跑不通的提示。人已同意下一轮按建议补一个仅限 person 的 retry 口子，之后再合卡片提示。
+- **门（现测）**：wide（`--base 4d9bea07`，`ORCA_CCLOOP_BIN` = `/Users/biran/code/skills/orca/.wt-ccloop-f8d368e/dist/cli.js`，load 82–135，**面板开着**）：918 文件选中（=全量，见测试耗时分析）、**902 过 / 16 红**；用例 7357 过、8 红、19 跳过。8 条用例红全是 5–43 s 超时；另 8 个文件整文件红是 Rule 17 守卫（面板运行期间真 `~/.orca` 多 1 条目），不是代码。`npm test -- --rerun-failed`（**重跑，不是门**）：16 文件中 15 过，用例 313 过、1 红 = `schedulerBridge`「runs a real conflicting graph…」30 s 超时（伴随 `worktree remove --force` 在负载下失败）；该文件单跑 **9/9 绿** ⇒ 判负载。#434 修复与相邻 5 文件 66/66、typecheck 0。
+- **诚实边界**：#453 的下限只在 bge-m3 校准；#454 只覆盖 `ADD COLUMN`，017/018 的 `CREATE` 遇异链对象仍会失败；#445 未做付费的 LLM 探针；#434 覆盖仍未复现；#432 出口未做；面板未按本批重装（本批代码只在下次 `npm run build` + `orca panel restart` 后进面板，且主检出需 `npm ci` 装上 f8d368e）。
+
+### 3.上一轮（2026-11-24，会话 `221948a1`）—— 测试者台账 A/B/C 批（#434 #437 #441 #442 #443 #444 #446 P0 #447 #448 #449 #450 #451 #435 #436）
 
 - **人的话**：开头 `allow-push`（到次日 04:38Z）；「尽量将这些要做的task都完整做完」「暂时不要考虑context大小」「这次批准改写所有必要的判据」「这一轮允许必要的付费真跑」；改 ccloop 与 repin 后可 push ccloop，repin 完成后可 push Orca，全部完成后可 push 四仓；卡住的事先按建议做、最后报审。#437 与 #449 都按我提的建议做（下面各一条）。**本轮无付费 provider 调用。**
 - **顺序按测试者的建议**：先让读数可信（#444 #448 #447 #435），再接外部真值（#441），再让人看得见（#442 #434 #450 #443），最后是规则统一（#437）与数据面（#446 P0）；#449 在 syncskill。
@@ -625,21 +636,14 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
-### 4.0 接手顺序（会话 `221948a1` 2026-11-24 滚动；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
+### 4.0 接手顺序（2026-11-24 续做滚动；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
 
-0. **本会话留给人裁的四件事**（都在 §3.最新）：①#433/#431 两份设计稿的开放问题；②ccmem 真实库应用迁移 019/020（先备份）；③#444 的 38 行历史行修复 SQL 是否执行；④#434 的 retry 覆盖是否继续查。
-1. **下一轮候选**（本会话未做）：`#385` v9 付费评测（三条模型通道的恢复条件见上一节）；wide 门（本轮 load 250，只有 quick 与 web 门）；`#439` 的 `LAUNCH_RELAUNCH_LIMIT`；#446 的 P1/P2（校正任务）与 audit 回填。
-
-
-0. **本会话收尾（按序）**：wide 结果确认后 `npm run build`＋`npm run build --workspace web`（已做）＋`orca panel restart` → `orca status`；推 Orca／ccmem／ccloop main；syncskill 的 `f856228` 只留本地（本轮 push 授权只点名 Orca／ccloop／ccmem）。
-1. **下一轮候选**（截至会话 `ec9efff6`）：
-   - **#434**：`working-tree` 交付在 integration 冲突时组仍读 `done landed=true`。确定该修的两半：`deliversLocally()` 应覆盖 `working-tree`（冲突时不算 done），冲突要进 `group brief` warnings 与 `recovery list`。**「retry-integration 覆盖未提交改动」未复现，动手前先在临时仓试**。
-   - **#437**：写侧 `groupTaskAppend.ts` 把 `ready` fix task 的有限 token 计入 reserve，读侧 `webService.ts` 对同形态计 0 ⇒ 单维差额恰等于该 task 的 work+handoff 时 `assertKnownConservation` 永久 423。两侧要**用同一个函数**；并让报错带维度与两个数。
-   - **#433**：artifacts 从不回收（本机 4.9 GiB / 52,672 目录）。至少让 `status --disk` 与 `gc --json` 说明它不在 `gc` 范围；真正的可达性 GC 要单独 spec（删用户数据）。
-   - **#385 v9 付费评测**：两段历史 goal 原文不在磁盘上，dogfood 仓库也已删。人已授权换现存组测，但现存 5 个组都不是 8 单元形态，测不到原问题（§八）。
-   - **#439 剩余**：`LAUNCH_RELAUNCH_LIMIT = 2` 对零成本失败仍偏紧；`run show` 未带 relaunch 次数与 `accepted.json` 的 launch/worker。
-2. **本轮已完成**：ccmem #395 兼容性修正（见 ccmem handoff）、syncskill #428/#429/#430、Orca #432/#438/#439(Orca 半边)/#440、ccloop `CCLOOP_WORKER_RECEIPT_TIMEOUT_MS`。
-3. **沿用的结论**：#225/#297 不得许诺硬封顶；#224/#266/#196 要同仓精确样本；#320 时间只来自 `ccloop.line-observed`；负载高时 `driverReconcileN`、`driverSettleLane`、`schedulerBridge`、`criteriaBaseRun`、`multiDirDue`、`security`、`allowanceHeldSettlement`、`executionDriverE2E` R-F、`groupAcceptanceBranchMissing` 常抖，与未改动 main 对照判定。**`test:affected` 按与 `origin/main` 的 diff 选文件：一批改动已经推上去后再跑 wide，会选 0 个文件并报「green」——要门本批就用 `npm run test:wide -- --base <会话起点> --force`，并把选中的文件数照抄进报告。** ccloop 的 `dist` 若是增量构建可能陈旧（改完 ccloop 先 `/bin/rm -rf dist && npm run build`）。
+0. **最先做：测试分档（人点名，跨四仓）**。按 `docs/superpowers/specs/2026-11-24-test-time-analysis.md`：日常与合入 main 都只跑改动部分（直接 import＋文件名镜像，**不再传递 import**），全量单独成 `npm run test:full`，只在发布或人要求时跑；同一笔改 CLAUDE.md Rule 18。ccloop 移植 `test-affected`；syncskill 加 vitest 配置排除 `.claude/worktrees/**`。先量 `tests/setup/relocateUserData.ts` 的每文件开销。文档末两个开放问题待人裁。
+1. **#432 出口**（人已同意）：给 `retryTask` 加 `usageStopped` 的 person-only 口子（参照 held/abandoned 分支；先确认与 #437 统一后的 reserve 规则不冲突），判据先红；然后再合 agent 分支上的卡片提示那笔（需 rebase）。
+2. **面板**：主检出 `npm ci`（装上 f8d368e）→ `npm run build`＋`npm run build --workspace web` → `orca panel restart` → `orca status`。
+3. **候选**：FTS AND 问题（ccmem，需单独设计）；#454 残余（017/018 `CREATE` 幂等、迁移身份）；#433/#431 设计稿按 §3 上一轮的建议定稿后实现；#385 v9 付费评测；`LAUNCH_RELAUNCH_LIMIT`。
+4. **待人清理**：agent worktree `.claude/worktrees/agent-aae7bc8d849928d67`（locked，有 #432 那笔和独立 node_modules）、`agent-aef036a28f1d93c8f`（其两笔已 rebase 进 main，可删）以及其它更早的 `agent-*`；`/tmp/oMut439`；syncskill 的 `.claude/worktrees/tester-open-issues-20261123` 与 `/private/tmp/ss-baseline` worktree 登记；ccloop `stash@{0}`（过期 handoff 行）。
+5. **沿用的结论**：负载高时 `driverReconcileN`、`schedulerBridge`、`driftLock`、`security`、`chainsApi`、`taskResultPaired` 等常超时，和未改动 main 对照判定；跑门前停面板，否则 Rule 17 守卫整文件红；`--base` 用会话起点，否则推过之后选 0 个文件。
 
 ### 4.1 人保留的操作与授权边界
 
