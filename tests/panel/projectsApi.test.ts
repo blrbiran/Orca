@@ -69,7 +69,7 @@ describe("GET /api/projects", () => {
     registerProjectRoutes(app, { opts: { repos }, controlRepoId: (key) => (key === "zeta" ? "zeta-0123abcd" : null) });
     const res = await fetch(`${await listen(app)}/api/projects`);
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ source: "command-line", editable: false, pendingRestart: [], fileError: null, projects: [
+    expect(await res.json()).toEqual({ source: "command-line", editable: false, pendingRestart: [], fileError: null, missingPaths: [], projects: [
       { projectKey: "Alpha", name: "Alpha", path: repos[1]!.path, controlRepoId: null },
       { projectKey: "zeta", name: "zeta", path: repos[0]!.path, controlRepoId: "zeta-0123abcd" },
     ] });
@@ -82,7 +82,7 @@ describe("GET /api/projects", () => {
     const app = express();
     registerProjectRoutes(app, { opts: { repos: [{ projectKey: "ccloop", path: join(root, "a") }, { projectKey: "Orca", path: join(root, "b") }] }, controlRepoId: () => null });
     const body = await (await fetch(`${await listen(app)}/api/projects`)).json() as { projects: Array<{ projectKey: string }> };
-    expect(body).toEqual({ source: "command-line", editable: false, pendingRestart: [], fileError: null, projects: [
+    expect(body).toEqual({ source: "command-line", editable: false, pendingRestart: [], fileError: null, missingPaths: [], projects: [
       { projectKey: "Orca", name: "Orca", path: join(root, "b"), controlRepoId: null },
       { projectKey: "ccloop", name: "ccloop", path: join(root, "a"), controlRepoId: null },
     ] });
@@ -94,7 +94,7 @@ describe("GET /api/projects", () => {
     expect((await fetch(`${url}/api/projects`)).status).toBe(401);
     const res = await session.fetch("/api/projects");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ source: "command-line", editable: false, pendingRestart: [], fileError: null, projects: [
+    expect(await res.json()).toEqual({ source: "command-line", editable: false, pendingRestart: [], fileError: null, missingPaths: [], projects: [
       { projectKey: "Alpha", name: "Alpha", path: repos[1]!.path, controlRepoId: null },
       { projectKey: "zeta", name: "zeta", path: repos[0]!.path, controlRepoId: null },
     ] });
@@ -107,7 +107,7 @@ describe("GET /api/projects", () => {
     const { session } = await panelApp(repos, control);
     const res = await session.fetch("/api/projects");
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ source: "command-line", editable: false, pendingRestart: [], fileError: null, projects: [
+    expect(await res.json()).toEqual({ source: "command-line", editable: false, pendingRestart: [], fileError: null, missingPaths: [], projects: [
       { projectKey: "Alpha", name: "Alpha", path: repos[1]!.path, controlRepoId: controlRepoKey("Alpha") },
       { projectKey: "zeta", name: "zeta", path: repos[0]!.path, controlRepoId: controlRepoKey("zeta") },
     ] });

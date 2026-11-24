@@ -367,6 +367,7 @@ export const en = {
     fileModeStore: "<absolute path of this panel's control store>",
     fileModeRepoId: "<repo id>",
     fileError: "The projects file is invalid: {{message}}",
+    missingPaths: "Folder not found, so not mounted: {{items}}. Restore the folder, or delete the entry from the projects file.",
     pendingRestart: "Changes that need a restart: {{items}}.",
     restartWarning: "After the restart, groups of a removed or moved project cannot continue.",
     listUnavailable: "The project list is unavailable; groups are not shown until it is read.",

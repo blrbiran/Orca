@@ -75,7 +75,7 @@ export async function listProjects(deps: ProjectsDeps): Promise<unknown> {
   const projects = repos
     .map((repo) => ({ projectKey: repo.projectKey, name: repo.projectKey, path: repo.path, controlRepoId: deps.controlRepoId(repo.projectKey) }))
     .sort((left, right) => compareText(left.projectKey, right.projectKey));
-  return { source: "command-line", editable: false, projects, pendingRestart: [], fileError: null };
+  return { source: "command-line", editable: false, projects, pendingRestart: [], fileError: null, missingPaths: [] };
 }
 
 /** The row of a project the registry just changed, single or multi. */

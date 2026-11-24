@@ -215,6 +215,7 @@ export const zh: Translation<typeof en> = {
     fileModeStore: "<本面板控制库的绝对路径>",
     fileModeRepoId: "<仓库 id>",
     fileError: "项目配置文件无效：{{message}}",
+    missingPaths: "找不到目录，未挂载：{{items}}。恢复该目录，或从项目配置文件中删除这一条。",
     pendingRestart: "需要重启才生效的改动：{{items}}。",
     restartWarning: "重启后，被删除或移动的项目下的组将无法继续。",
     listUnavailable: "项目列表不可用；读到它之前不显示任何组。",

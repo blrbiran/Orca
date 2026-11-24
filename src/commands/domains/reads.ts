@@ -320,6 +320,8 @@ const projectList = (body: unknown): string => {
   if (lines.length === 0) lines.push("no projects");
   const fileError = field(body, "fileError");
   if (typeof fileError === "string") lines.push(`error: the projects file is not in effect (the list above is the last good one): ${fileError}`);
+  const missing = field(body, "missingPaths");
+  if (Array.isArray(missing) && missing.length > 0) lines.push(`warning: folder not found, not mounted: ${missing.join("; ")} (restore the folder, or delete the entry from the projects file)`);
   const pending = field(body, "pendingRestart");
   if (Array.isArray(pending) && pending.length > 0) lines.push(`restart needed for: ${pending.join(", ")} (orca panel restart)`);
   return lines.join("\n");

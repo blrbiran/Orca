@@ -48,6 +48,8 @@ export interface ProjectsListV1 {
   multiDirProjects?: MultiDirProjectEntryV1[];
   pendingRestart: string[];
   fileError: string | null;
+  /** Tester #470: projects whose folder is gone at boot ("<id>: <path>"), not mounted; the file itself is in effect. */
+  missingPaths: string[];
 }
 
 export class ProjectRegistryError extends Error {
@@ -114,6 +116,7 @@ export function createProjectRegistry(input: {
   let seen: FileSignature | null = input.boot.signature;
   let pendingRestart: string[] = [];
   let fileError: string | null = null;
+  let missingPaths: string[] = [];
 
   const fail = (code: string, status: number, message: string): never => { throw new ProjectRegistryError(code, status, message); };
 
@@ -370,7 +373,8 @@ export function createProjectRegistry(input: {
   // The trusted config was built with display name = id; give it the file's names (spec §6). Issue #201: an entry the
   // control plane could not mount (its folder is gone) is not a reason to stop the registry; it is named instead.
   const bootRenameErrors: string[] = [];
-  for (const p of running) if (p.name !== p.id) {
+  // Tester #470: a project whose folder is gone was never mounted; it is named in missingPaths, not renamed here.
+  for (const p of running) if (p.name !== p.id && existsSync(p.path)) {
     try { control?.rename(controlRepoKey(p.id), p.name); }
     catch (error) { bootRenameErrors.push(`project ${p.id}: ${(error as Error).message}`); }
   }
@@ -386,7 +390,9 @@ export function createProjectRegistry(input: {
     runningMulti.push({ id: entry.id, name: entry.name, dirs: [...entry.dirs] });
     multiPaths.set(entry.id, realPathsOf(entry, bootConfig.projects));
   }
-  const bootErrors = [...bootRenameErrors, ...running.filter((p) => !existsSync(p.path)).map((p) => `project moved: ${p.id}: ${p.path}`), ...bootPlanErrors, ...bootMultiErrors];
+  // Tester #470: a folder that is gone is not a broken file (it made `orca status` fail and the Web say "invalid").
+  missingPaths = running.filter((p) => !existsSync(p.path)).map((p) => `${p.id}: ${p.path}`);
+  const bootErrors = [...bootRenameErrors, ...bootPlanErrors, ...bootMultiErrors];
   if (bootErrors.length > 0) fileError = bootErrors.join("; ");
 
   const view = (): ProjectsListV1 => ({
@@ -397,6 +403,7 @@ export function createProjectRegistry(input: {
     }),
     pendingRestart: [...pendingRestart],
     fileError,
+    missingPaths: [...missingPaths],
   });
 
   const containingName = (id: string | null, name: string): boolean =>

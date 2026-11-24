@@ -336,6 +336,14 @@ describe("the human project list says a broken projects file and pending restart
     ]);
   });
 
+  it("a project whose folder is gone is a warning line, not an error (#470)", async () => {
+    // mutation: drop the missingPaths line -> only the row, red
+    expect(await listed({ source: "file", projects: ROWS, fileError: null, pendingRestart: [], missingPaths: ["gone: /tmp/x"] })).toEqual([
+      "proj  repo  repo-1  /repos/proj",
+      "warning: folder not found, not mounted: gone: /tmp/x (restore the folder, or delete the entry from the projects file)",
+    ]);
+  });
+
   it("a healthy file adds no line", async () => {
     expect(await listed({ source: "file", projects: ROWS, fileError: null, pendingRestart: [] })).toEqual(["proj  repo  repo-1  /repos/proj"]);
   });

@@ -71,7 +71,7 @@ describe("file mode", () => {
   it("B4: add and rename over HTTP take effect with no restart, in the API and in the control config", async () => {
     const w = world();
     const { call } = await boot(["--projects-file", w.file], w.env);
-    expect((await call("GET", "/api/projects")).body).toEqual({ source: "file", editable: true, projects: [], pendingRestart: [], fileError: null });
+    expect((await call("GET", "/api/projects")).body).toEqual({ source: "file", editable: true, projects: [], pendingRestart: [], fileError: null, missingPaths: [] });
     const repo = w.gitRepo("web");
     const added = await call("POST", "/api/projects", { name: "Web", path: repo });
     expect(added).toEqual({ status: 201, body: { project: { projectKey: "web", name: "Web", path: repo, controlRepoId: controlRepoKey("web") } } });
@@ -96,7 +96,12 @@ describe("file mode", () => {
     expect((await call("GET", "/api/control/config")).body.repositories).toEqual([{ repoId: controlRepoKey("kept"), displayName: "Kept" }]);
     expect((await call("GET", "/api/projects")).body).toMatchObject({
       projects: [{ projectKey: "kept", name: "Kept", path: kept, controlRepoId: controlRepoKey("kept") }, { projectKey: "moved", name: "Moved", path: join(w.root, "gone"), controlRepoId: null }],
-      fileError: expect.stringContaining("project moved:"),
+      // Ruling (tester #470, human 2026-11-24 「同意你的建议」): a project whose folder is gone used to be named in fileError,
+      // which made `orca status` exit 1 and the Web show a red "file is invalid" -- for a file that is valid. It is named
+      // in missingPaths now; fileError stays for a file the panel could not apply. Rewritten from fileError "project moved:".
+      // mutation: keep pushing it into fileError -> fileError is a string, red
+      fileError: null,
+      missingPaths: [`moved: ${join(w.root, "gone")}`],
     });
   });
 
@@ -124,7 +129,7 @@ describe("command-line mode", () => {
     const repo = w.gitRepo("proj");
     const { call } = await boot(["--repo", `proj=${repo}`], w.env);
     expect((await call("GET", "/api/projects")).body).toEqual({
-      source: "command-line", editable: false, pendingRestart: [], fileError: null,
+      source: "command-line", editable: false, pendingRestart: [], fileError: null, missingPaths: [],
       projects: [{ projectKey: "proj", name: "proj", path: repo, controlRepoId: controlRepoKey("proj") }],
     });
     expect(await call("POST", "/api/projects", { name: "X", path: repo })).toMatchObject({ status: 409, body: { code: "projects-from-command-line" } });

@@ -30,6 +30,8 @@ export interface ProjectsAnswerV1 {
   multiDirProjects?: MultiDirProjectV1[];
   pendingRestart?: string[];
   fileError?: string | null;
+  /** Tester #470: "<id>: <path>" of each registered project whose folder is gone; absent from an older panel. */
+  missingPaths?: string[];
 }
 
 export const projectName = (project: ProjectV1): string => project.name ?? project.projectKey;

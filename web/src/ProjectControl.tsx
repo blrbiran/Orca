@@ -185,6 +185,7 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
           projects: singles.map((p) => ({ id: p.projectKey, name: p.projectKey, path: p.path })) }, null, 2)}</pre>
       </details>}
       {props.answer.fileError ? <p role="alert">{t("project.fileError", { message: props.answer.fileError })}</p> : null}
+      {(props.answer.missingPaths ?? []).length > 0 && <p role="note" data-tone="warn">{t("project.missingPaths", { items: props.answer.missingPaths!.join("; ") })}</p>}
       {(props.answer.pendingRestart ?? []).length > 0 && (
         <p role="note">
           {t("project.pendingRestart", { items: props.answer.pendingRestart!.join(", ") })}

@@ -259,9 +259,13 @@ export async function projectsCheck(ctx: CheckContext): Promise<StatusCheck> {
     throw error;
   }
   if (answer.status !== 200) return { level: "warn", subject: "projects", fact: `not checked: the panel answered ${answer.status}` };
-  const body = answer.body as { projects?: unknown[]; fileError?: unknown; pendingRestart?: unknown };
+  const body = answer.body as { projects?: unknown[]; fileError?: unknown; pendingRestart?: unknown; missingPaths?: unknown };
   if (typeof body.fileError === "string") {
     return { level: "fail", subject: "projects", fact: `the projects file is not in effect (the panel keeps the last good list): ${body.fileError}`, fix: "fix the projects file; orca project list shows what the panel uses" };
+  }
+  // Tester #470: a registered folder that is gone is a warning; the file is in effect, and `status` must not exit 1 for it.
+  if (Array.isArray(body.missingPaths) && body.missingPaths.length > 0) {
+    return { level: "warn", subject: "projects", fact: `folder not found, not mounted: ${body.missingPaths.join("; ")}`, fix: "restore the folder, or delete the entry from the projects file (there is no remove command yet)" };
   }
   if (Array.isArray(body.pendingRestart) && body.pendingRestart.length > 0) {
     return { level: "warn", subject: "projects", fact: `restart needed for: ${body.pendingRestart.join(", ")}`, fix: "orca panel restart" };

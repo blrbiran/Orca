@@ -47,7 +47,7 @@ describe("the project registry", () => {
     expect(added).toEqual({ id: "web-app", name: "Web App", path });
     const read = readProjectsFile(w.file);
     expect(read.kind === "valid" && read.config).toEqual({ version: 1, projects: [{ id: "web-app", name: "Web App", path }] });
-    expect(reg.list()).toEqual({ source: "file", editable: true, projects: [added], pendingRestart: [], fileError: null });
+    expect(reg.list()).toEqual({ source: "file", editable: true, projects: [added], pendingRestart: [], fileError: null, missingPaths: [] });
     expect(w.repos).toEqual([{ projectKey: "web-app", path }]);
     expect(w.calls).toEqual([`add:${controlRepoKey("web-app")}:Web App`]);
   });

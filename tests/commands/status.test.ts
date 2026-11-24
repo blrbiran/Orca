@@ -402,6 +402,13 @@ describe("projects check (issue 148)", () => {
     expect(await answering({ projects: ROWS, fileError: null, pendingRestart: ["alpha"] })).toMatchObject({ level: "warn", subject: "projects", fact: expect.stringContaining("alpha"), fix: "orca panel restart" });
   });
 
+  // Tester #470: one registered folder that is gone (a temp dir) made `orca status` exit 1 and broke every script that
+  // runs it; the file itself is fine. It is a warning that names the project and its path.
+  it("a project whose folder is gone is a warning, not a fail", async () => {
+    // mutation: treat missingPaths as a fail (or ignore it) -> fail/ok, red
+    expect(await answering({ projects: ROWS, fileError: null, pendingRestart: [], missingPaths: ["gone: /tmp/x"] })).toMatchObject({ level: "warn", subject: "projects", fact: expect.stringContaining("gone: /tmp/x") });
+  });
+
   it("a healthy file is ok", async () => {
     expect(await answering({ projects: ROWS, fileError: null, pendingRestart: [] })).toMatchObject({ level: "ok", subject: "projects" });
   });
