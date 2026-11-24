@@ -6,6 +6,8 @@
 .ccmem
 .codegraph
 
+orca_dogfooding
+
 # openwolf
 .wolf/_archive/
 .wolf/buglog.json
