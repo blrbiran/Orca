@@ -341,8 +341,11 @@ function parallelClaimField(reason: string, confirmed: Pick<ReturnType<typeof re
 
 /** spec §2.2: a run that cannot move on its own is blocked alone, with the step and the reason. */
 /** `runFields`: keys set on the run itself beside the block (a single call's lower bound, spec 2026-10-27 §9 R4). */
-/** Tester #439: every block writes one line to the panel log (only B' did), so `grep <runId> panel.err.log` finds it; `detail` follows the reason. */
-export function blockRun(deps: Pick<ExecutionDriverDeps, "store" | "admissionGate">, runId: string, step: DriveStep, reason: string, patch: Partial<DriveRecord> = {}, runFields: Record<string, unknown> = {}, detail?: string): void {
+/**
+ * Tester #439: every block writes one line to the panel log (most did not), so `grep <runId> panel.err.log` finds it;
+ * `detail` follows the reason. `null`: the caller writes its own line (the driver's catch paths, with logError's detail).
+ */
+export function blockRun(deps: Pick<ExecutionDriverDeps, "store" | "admissionGate">, runId: string, step: DriveStep, reason: string, patch: Partial<DriveRecord> = {}, runFields: Record<string, unknown> = {}, detail?: string | null): void {
   write(deps, () => {
     const run = readDriverRun(deps.store, runId);
     if (run.drive === undefined) throw new ControlError("recovery-blocked", `drive-missing:${runId}`);
@@ -351,7 +354,7 @@ export function blockRun(deps: Pick<ExecutionDriverDeps, "store" | "admissionGat
     run.drive = { ...run.drive, ...patch, blockedAt: step, blockedReason: reason };
     saveDriverRun(deps.store, run);
   });
-  process.stderr.write(`orca-driver: ${runId}: blocked at ${step}: ${reason}${detail === undefined ? "" : ` ${detail}`}\n`);
+  if (detail !== null) process.stderr.write(`orca-driver: ${runId}: blocked at ${step}: ${reason}${detail === undefined ? "" : ` ${detail}`}\n`);
 }
 
 /** Integration spec §5: what the integration pass needs, from the driver's own deps and state. */
@@ -2291,7 +2294,7 @@ export async function recordStepFailure(deps: ExecutionDriverDeps, context: Driv
     // so a later error on it (a transient collect failure, an H-settle that threw) never moves it -- `stepOf`
     // would name "E" for every blocked run. The original reason is kept as the prefix; the new error follows it.
     if (run.state === "blocked" && run.drive.blockedAt !== null) {
-      blockRun(deps, runId, run.drive.blockedAt, laterError(run.drive.blockedReason, describeError(error)));
+      blockRun(deps, runId, run.drive.blockedAt, laterError(run.drive.blockedReason, describeError(error)), {}, {}, null);
       process.stderr.write(`orca-driver: ${runId}: blocked at ${run.drive.blockedAt}: ${logError(error)}\n`);
     } else {
       // Tester #229/#230: a landed run whose settle failed transiently stays landed, so a later round runs E again,
@@ -2319,7 +2322,7 @@ export async function recordStepFailure(deps: ExecutionDriverDeps, context: Driv
         retries.delete(runId);
       }
       const step = stepOf(run);
-      blockRun(deps, runId, step, describeError(error));
+      blockRun(deps, runId, step, describeError(error), {}, {}, null);
       process.stderr.write(`orca-driver: ${runId}: blocked at ${step}: ${logError(error)}\n`);
     }
     return "progressed";
