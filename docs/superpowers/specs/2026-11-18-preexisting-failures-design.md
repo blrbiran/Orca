@@ -295,3 +295,23 @@ as written; it is corrected here.
 group's base. One answer now matters to that rule: `allow-fix` on the suite's command (the person asked for the
 pre-existing failure to be repaired) withholds the relative pass, so the criterion stays not-met and takes the fix path
 as before. `relative` and `edit-requirement`, and no answer, leave the rule to apply.
+
+## Correction (2026-11-25, Orca session `6add92a5`, Claude Opus 5.5, on main after `chore(deps): repin ccloop to 276114a…`): an agent's report is checked at the base before anyone is asked (#466)
+
+Human ruling 2026-11-24 (session `d7ca40c0`, 「同意你的建议」 on #466). L2 and §11 stay as written for the rows they
+describe; this narrows when an agent-only row asks the person.
+
+- **Why:** tester #466 — a group green at its base (473/0) and at its tip (605/0) sat at `review` because one task's
+  agent reported `npm test` red "before its change" (598/1). The agent ran it at its own start, which holds the group's
+  earlier tasks' work, not at the group's base; the review read the unanswered row and did not pass.
+- **What:** when a work run's agent reports a pre-existing failure on a command that is one of the task's confirmed
+  required checks, step C asks L3's base run for it (same table, cache and runner; `requestReportedBaseCheck`). A command
+  that is not a confirmed required check is never run (§3's rule holds). When the base answers **green**, the row carries
+  `notConfirmedAtBase`, leaves the brief's `preexistingFailuresWaiting` and the Problems count, and the review's fact line
+  says the check passed at the base ("not confirmed … judge this check as the requirement states it"). Red or unknown at
+  the base: the row is as before. The requirement review waits while such a base run is pending for an unanswered row.
+- **Cost / limit:** one base run per distinct reported required check per (repository, base), paid only after an agent
+  reported a failure (the 2026-11-18 ruling against running checks before a start is untouched). A reported command that
+  is not word-for-word a required check stays an unconfirmed, waiting row as before. The tester's three `prunable`
+  worktrees (`/private/tmp/base2-*`, `basecheck-*`, `cl-*`) are not paths Orca's base run uses (it uses the acceptance
+  scratch path); they are not addressed here.

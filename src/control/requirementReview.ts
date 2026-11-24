@@ -40,7 +40,7 @@ import type { FrozenSlot } from "./agentSelection.js";
 import type { ControlStore } from "./store.js";
 import { offPlanFactLines } from "./offPlanWrites.js";
 import { failureNamesLine } from "./failureNames.js";
-import { preexistingFailureFactLines } from "./preexistingFailure.js";
+import { preexistingFailureFactLines, reportedBaseCheckPending } from "./preexistingFailure.js";
 import type { Amount } from "./types.js";
 import type { BudgetAmount } from "./tokenPolicy.js";
 
@@ -363,6 +363,9 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
         continue;
       }
       if (!roundDue(store, groupId, review)) continue;
+      // Tester #466: an agent's unanswered "pre-existing failure" whose base run is still pending is confirmed (or not)
+      // before the review is told about it -- an unconfirmed report alone kept a green group at review.
+      if (reportedBaseCheckPending(store, groupId, body)) continue;
       // #337 §4, §5.2, §5.6 (human: 「不要卡在」): a folder or multi-directory group is reviewed on its work branches. It runs no
       // group-wide acceptance on a tip and Orca places its work by itself, so neither wait below applies; a work branch
       // that is gone ends the review (noted) and never rewrites the acceptance record.

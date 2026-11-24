@@ -672,6 +672,8 @@ export interface PreexistingFailureV1 {
   reportedBy: Array<{ taskId: string; runId: string; chose: string }>;
   sources: Array<"agent" | "base-check">;
   baseCheck?: { taskId: string; runId: string; at: number };
+  /** Tester #466: agents reported it and Orca's run at the group's base was green; absent otherwise. */
+  notConfirmedAtBase?: { at: number };
   answer: PreexistingFailureAnswerV1 | null;
   answered?: { by: string; at: number };
   /** Task 2 review I-1: false for a group whose requirement review does not run; the row is information only. */

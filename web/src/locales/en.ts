@@ -892,6 +892,7 @@ export const en = {
       reported: "Reported by task {{task}}: {{command}} already failed before its change; its choice: {{chose}}",
       choseNothing: "(it said nothing)",
       baseCheck: "Orca ran {{command}} at the group's base after task {{task}} failed it: red there too.",
+      notConfirmed: "Not confirmed: Orca ran {{command}} at the group's base and it passed there, so it was not failing before this group's work began. Nothing waits for your answer.",
       keepsRunning: "The group keeps running. Your answer is recorded for the requirement review.",
       notAnswerable: "This group has no requirement review to tell, so there is nothing to answer: this is shown for information.",
       answered: "Answered: {{answer}} (by {{by}}).",

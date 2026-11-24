@@ -18,6 +18,7 @@ import { write } from "../../src/control/executionDriver.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
 import { FIXTURE_SLOT } from "./fixtures/requirement.js";
+import { reviewWorld } from "./fixtures/reviewWorld.js";
 
 type Harness = Awaited<ReturnType<typeof driverHarness>>;
 const LANDED = ["landed", "settled"];
@@ -358,6 +359,64 @@ describe("fix round 1: who can answer, and an answer outlives its pruned report 
       t.h.store.db.prepare("UPDATE runs SET body='broken run' WHERE id=?").run(runId);
       // mutation: parse every run body -> SyntaxError, red
       expect(readPreexistingFailures(t.h.store, "g", groupBody(t)).map((row) => row.command)).toEqual(["npm test"]);
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+});
+
+/**
+ * Tester #466 (human ruling 2026-11-24, 「同意你的建议」): an agent's "pre-existing failure" was its own reading at its own
+ * start -- which holds the group's earlier tasks' work -- and a group whose suite was green at its base and at its tip sat
+ * at review waiting for a person's answer to it. Orca now runs a reported command once at the group's base when it is one
+ * of the task's confirmed required checks (the L3 base run, same cache); green there means "not confirmed": the row no
+ * longer waits for the person and the review is told the check passed at the base. The review waits for that answer.
+ */
+describe("an agent-only report is checked at the group's base before anyone is asked (#466)", () => {
+  it("a reported required check that is green at the base is not confirmed: no waiting row, the review hears it passed there", async () => {
+    // "true" is every harness contract's required check (driverHarness): it passes at the base.
+    const w = await reviewWorld({ harness: { decisions: (id) => (id.endsWith("a") ? [marker("true", "baseline run before edits reported # tests 598, # fail 1")] : []) } });
+    try {
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "passed" || w.review()?.state === "not-passed", 150);
+      const base = w.t.h.store.db.prepare("SELECT command, result FROM base_check_results").all();
+      // mutation: drop requestReportedBaseCheck from recordPreexistingFailures -> no row, red
+      expect(base).toEqual([{ command: "true", result: "green" }]);
+      const body = JSON.parse(String(w.t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+      // mutation: drop the notConfirmedAtBase filter from preexistingFailureWaiting -> one waiting row, red
+      expect(preexistingFailureWaiting(w.t.h.store, "g", body)).toEqual([]);
+      // mutation: drop the green loop in preexistingFailureRows -> no notConfirmedAtBase, red
+      expect(readControlGroup(w.t.h.store, "epoch-test", "g").preexistingFailures).toEqual([expect.objectContaining({ command: "true", sources: ["agent"], notConfirmedAtBase: { at: expect.any(Number) }, answer: null, answerable: true })]);
+      // mutation: keep the old fact line for a not-confirmed row -> "not answered by the person", red
+      const prompt = w.calls[0]!.prompt;
+      expect(prompt).toContain("Reported pre-existing failure `true` is not confirmed: reported by a (chose: baseline run before edits reported # tests 598, # fail 1), but Orca ran it at the group's base and it passed there");
+      expect(prompt).not.toContain("not answered by the person");
+    } finally { await w.t.h.dispose(); }
+  }, 240_000);
+
+  it("the review waits while the base run for a reported check is pending, and starts once it answers", async () => {
+    // Another pending base run on the same repository holds it (one base run per repository at a time) for 5 s, so the
+    // reported check's own base run is still pending when every task is done and the acceptance has passed.
+    const w = await reviewWorld({ harness: { requiredChecks: ["true", "sleep 5"], decisions: (id) => (id.endsWith("a") ? [marker("true", "saw it red")] : []) } });
+    try {
+      const base = git(w.t.repo, "rev-parse", "HEAD");
+      w.t.h.store.db.prepare("INSERT INTO base_check_results(repo_id,base,command,result,tail,why,group_id,task_id,run_id,requested_at,at,attempts) VALUES ('repo',?,'sleep 5','pending',NULL,NULL,'g','a','run-holder',0,NULL,1)").run(base);
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "passed" || w.review()?.state === "not-passed", 3000);
+      const answeredAt = Number(w.t.h.store.db.prepare("SELECT at FROM base_check_results WHERE command='true'").get()!.at);
+      // mutation: drop the reportedBaseCheckPending wait from reviewRequirements -> the round starts before the answer, red
+      expect(w.review()!.rounds[0]!.at).toBeGreaterThanOrEqual(answeredAt);
+    } finally { await w.t.h.dispose(); }
+  }, 300_000);
+
+  it("a red answer at the base keeps the row waiting; a command that is not a required check is never run", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const scope = { repoId: "repo", base: "b".repeat(40) };
+      write(t.deps, () => recordPreexistingFailures(t.h.store, { groupId: "g", taskId: "a", runId: "run-a1" }, { decisions: [marker("true", "x"), marker("npm test", "y")] }));
+      t.h.store.db.prepare("INSERT INTO base_check_results(repo_id,base,command,result,tail,why,group_id,task_id,run_id,requested_at,at,attempts) VALUES (?,?,'true','red',NULL,NULL,'g','a','run-a1',1,5,1)").run(scope.repoId, scope.base);
+      // mutation: mark any answered row not confirmed (drop the green test) -> notConfirmedAtBase on a red row, red
+      expect(preexistingFailureRows(t.h.store, "g", {}, scope, []).map((row) => [row.command, row.notConfirmedAtBase])).toEqual([["npm test", undefined], ["true", undefined]]);
+      // No run of this group has a base yet (nothing claimed), so nothing was asked; and "npm test" is not this task's
+      // required check, so it is never asked for at all.
+      expect(t.h.store.db.prepare("SELECT command FROM base_check_results WHERE command='npm test'").all()).toEqual([]);
     } finally { await t.h.dispose(); }
   }, 60_000);
 });

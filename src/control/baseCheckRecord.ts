@@ -87,7 +87,22 @@ export function pendingBaseChecks(store: ControlStore): BaseCheckRow[] {
 export function requestBaseCheck(store: ControlStore, run: { groupId: string; taskId: string; runId: string; mode?: unknown; recoveryOf?: unknown }, last: { rejectCategory: string; failingCommand: string | null } | undefined): boolean {
   if (run.mode !== undefined || run.recoveryOf !== undefined) return false;
   if (last === undefined || last.rejectCategory !== "required-check-failed" || last.failingCommand === null) return false;
-  const command = last.failingCommand;
+  return askBaseCheck(store, run, last.failingCommand);
+}
+
+/**
+ * Tester #466 (human ruling 2026-11-24, 「同意你的建议」; spec 2026-11-18 Correction of 2026-11-25): a task run's agent
+ * reported `command` red before its change (preexistingFailure.ts). Its word alone is not evidence -- it ran the check at
+ * its own start, which holds the group's earlier tasks' work -- so the same base run L3 makes after a failure is asked for,
+ * on the same terms: a work run only, only a command the person confirmed as the task's required check, cached by
+ * (repository, base, command). Answers whether the row is now pending for this run.
+ */
+export function requestReportedBaseCheck(store: ControlStore, run: { groupId: string; taskId: string; runId: string; mode?: unknown; recoveryOf?: unknown }, command: string): boolean {
+  if (run.mode !== undefined || run.recoveryOf !== undefined) return false;
+  return askBaseCheck(store, run, command);
+}
+
+function askBaseCheck(store: ControlStore, run: { groupId: string; taskId: string; runId: string }, command: string): boolean {
   if (isGroupArchived(store, run.groupId)) return false;
   // Only a command the person confirmed as the task's required check is ever run by Orca (never a string from elsewhere).
   if (!readConfirmedTaskExecution(store, run.groupId, run.taskId).contract.verification.requiredChecks.includes(command)) return false;

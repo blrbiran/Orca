@@ -736,6 +736,7 @@ export const zh: Translation<typeof en> = {
       reported: "任务 {{task}} 发现 {{command}} 在它改动之前就已经失败；它的做法：{{chose}}",
       choseNothing: "（它没有说明）",
       baseCheck: "任务 {{task}} 没有通过 {{command}} 之后，Orca 在组的基线上运行了它：那里也是红的。",
+      notConfirmed: "未证实：Orca 在组的基线上运行了 {{command}}，结果是绿的，说明本组开工前它并没有失败。不需要你回答。",
       keepsRunning: "组会继续运行。你的回答会记录下来，交给需求复核。",
       notAnswerable: "这个组没有需求复核可以告知，所以无需回答：这里只是告知。",
       answered: "已回答：{{answer}}（{{by}}）。",

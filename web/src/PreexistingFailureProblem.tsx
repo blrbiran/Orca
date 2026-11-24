@@ -36,6 +36,7 @@ export function PreexistingFailureProblem(props: {
               <li key={by.runId}>{t("control.preexistingFailure.reported", { task: by.taskId, command: row.command, chose: by.chose === "" ? t("control.preexistingFailure.choseNothing") : by.chose })}</li>
             ))}
             {row.baseCheck !== undefined && <li>{t("control.preexistingFailure.baseCheck", { command: row.command, task: row.baseCheck.taskId })}</li>}
+            {row.notConfirmedAtBase !== undefined && <li data-preexisting-not-confirmed="">{t("control.preexistingFailure.notConfirmed", { command: row.command })}</li>}
           </ul>
           <p>{t(row.answerable ? "control.preexistingFailure.keepsRunning" : "control.preexistingFailure.notAnswerable")}</p>
           {row.answer !== null && <p>{t("control.preexistingFailure.answered", { answer: t(`control.preexistingFailure.answer.${row.answer}`), by: row.answered?.by ?? "" })}</p>}

@@ -13,7 +13,7 @@
  * key, so every group recorded before this change keeps its bytes.
  */
 import { recordActivity } from "./activity.js";
-import { answeredBaseChecksAt, baseCheckScopeOf } from "./baseCheckRecord.js";
+import { answeredBaseChecksAt, baseCheckScopeOf, readBaseCheck, requestReportedBaseCheck } from "./baseCheckRecord.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { dirWorkspaceOf } from "./dirGroup.js";
 import { multiDirOf } from "./multiGroup.js";
@@ -46,6 +46,11 @@ export interface PreexistingFailureRow {
   sources: Array<"agent" | "base-check">;
   /** The base run's red answer: the run of this group that failed the check, and when the base answered. */
   baseCheck?: { taskId: string; runId: string; at: number };
+  /**
+   * Tester #466: only agents reported it, and Orca's own run of the command at the group's base was green, so the report is
+   * not confirmed: the row does not wait for the person and the review is told the check passed at the base. Absent otherwise.
+   */
+  notConfirmedAtBase?: { at: number };
   answer: PreexistingFailureAnswer | null;
   /** Who recorded the answer, and when; absent while unanswered. */
   answered?: { by: string; at: number };
@@ -100,6 +105,8 @@ export function recordPreexistingFailures(store: ControlStore, run: { groupId: s
   if (store.db.prepare("SELECT 1 FROM activity WHERE run_id=? AND kind='preexisting-failure' LIMIT 1").get(run.runId) !== undefined) return 0;
   for (const report of reports) {
     recordActivity(store, { groupId: run.groupId, taskId: run.taskId, runId: run.runId, kind: "preexisting-failure", body: { taskId: run.taskId, runId: run.runId, ...report } });
+    // Tester #466: the agent's word is checked once at the group's base when the command is one Orca may run.
+    requestReportedBaseCheck(store, run, report.command);
   }
   return reports.length;
 }
@@ -146,8 +153,9 @@ export function preexistingFailureRows(store: ControlStore, groupId: string, bod
     if (!row.sources.includes("agent")) row.sources.push("agent");
     if (!row.reportedBy.some((by) => by.runId === report.runId)) row.reportedBy.push({ taskId: report.taskId, runId: report.runId, chose: report.chose });
   }
+  const answered = scope !== null && (failed.length > 0 || rows.size > 0) ? answeredBaseChecksAt(store, scope.repoId, scope.base) : [];
   if (scope !== null && failed.length > 0) {
-    for (const check of answeredBaseChecksAt(store, scope.repoId, scope.base)) {
+    for (const check of answered) {
       if (check.result !== "red") continue;
       const own = failed.find((run) => run.command === check.command);
       if (own === undefined) continue;
@@ -155,6 +163,11 @@ export function preexistingFailureRows(store: ControlStore, groupId: string, bod
       row.sources.push("base-check");
       row.baseCheck = { taskId: own.taskId, runId: own.runId, at: check.at ?? check.requestedAt };
     }
+  }
+  // Tester #466: a row only agents reported, whose command Orca ran at the group's base and found green, is not confirmed.
+  for (const check of answered) {
+    const row = rows.get(check.command);
+    if (check.result === "green" && row !== undefined && !row.sources.includes("base-check")) row.notConfirmedAtBase = { at: check.at ?? check.requestedAt };
   }
   // Task 2 review I-2: an answer outlives its sources (activity retention may prune the only report): it keeps its row.
   for (const [command, answer] of answersOf(body)) {
@@ -194,6 +207,9 @@ export function preexistingFailureFactLines(store: ControlStore, groupId: string
       ...(row.baseCheck === undefined ? [] : [`red at the group's base when Orca ran it there after ${row.baseCheck.taskId} failed it`]),
     ].join("; ") || "its reports are no longer kept";
     const answer = row.answer === null ? "not answered by the person" : `answered "${row.answer}": ${ANSWER_MEANS[row.answer]}`;
+    if (row.notConfirmedAtBase !== undefined && row.answer === null) {
+      return `Reported pre-existing failure \`${cutUtf8(row.command, 300)}\` is not confirmed: ${learned}, but Orca ran it at the group's base and it passed there, so it was not failing before the group's work began. Judge this check as the requirement states it.`;
+    }
     return `Pre-existing failure \`${cutUtf8(row.command, 300)}\` (already failing before a task changed anything): ${learned}. ${answer}.`;
   });
 }
@@ -229,9 +245,23 @@ export function matchPreexistingCommand<T extends { command: string }>(rows: rea
 export function preexistingFailureWaiting(store: ControlStore, groupId: string, body: unknown): Array<{ command: string; answerable: boolean; reportedBy: number }> {
   const answerable = answerableGroup(store, groupId, body);
   return readPreexistingFailures(store, groupId, body)
-    .filter((row) => row.answer === null)
+    .filter((row) => row.answer === null && row.notConfirmedAtBase === undefined)
     .map((row) => ({ command: row.command, answerable, reportedBy: row.reportedBy.length }))
     .sort((left, right) => compareText(left.command, right.command));
+}
+
+/**
+ * Tester #466: whether the group's requirement review should wait -- an unanswered row only agents reported has its base
+ * run still pending, so the review would be told an unconfirmed report Orca is about to confirm or not.
+ */
+export function reportedBaseCheckPending(store: ControlStore, groupId: string, body: unknown): boolean {
+  const answers = answersOf(body);
+  const commands = new Set(store.db.prepare("SELECT body FROM activity WHERE group_id=? AND kind='preexisting-failure'").all(groupId)
+    .map((row) => (JSON.parse(String(row.body)) as { command: string }).command).filter((command) => !answers.has(command)));
+  if (commands.size === 0) return false;
+  const scope = baseCheckScopeOf(store, groupId);
+  if (scope === null) return false;
+  return [...commands].some((command) => readBaseCheck(store, { ...scope, command })?.result === "pending");
 }
 
 export type AnswerPreexistingFailureCommand = Extract<RawAuthorityCommandV1, { verb: "answer-preexisting-failure" }>;

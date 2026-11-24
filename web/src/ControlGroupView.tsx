@@ -638,7 +638,7 @@ export function ControlGroupView(props: ControlGroupViewProps): JSX.Element {
   const problemCount = view.recoveryBlockers.length + view.runs.filter(isProblemRun).length + (props.refusal ? 1 : 0) + (view.summary.acceptance?.result === "failed" ? 1 : 0) + (view.summary.landingWatch?.supersededBy === undefined ? view.summary.landingWatch?.regressions.length ?? 0 : 0) + budgetWaiting(view).length + (view.unreadableRuns?.length ?? 0)
     // Pre-existing failures spec L2 (#341): a row waits for the person until it is answered -- only an answerable one: a
     // group with no requirement review shows its rows for information, with nothing that could clear them (final review).
-    + (view.preexistingFailures?.filter(row => row.answerable && row.answer === null).length ?? 0);
+    + (view.preexistingFailures?.filter(row => row.answerable && row.answer === null && row.notConfirmedAtBase === undefined).length ?? 0);
   const workspaceMode = workspace === undefined ? undefined
     : workspace !== null && workspace.repoId === view.plan.repoId ? workspace.workspaceMode : null;
 
