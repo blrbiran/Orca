@@ -12,6 +12,7 @@ import { initialLanding } from "../../src/control/multiLandingRecord.js";
 import type { ControlStore } from "../../src/control/store.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 import { openTestStore } from "./fixtures/store.js";
+import { writeSystemDebugSettled } from "../../src/control/systemDebug.js";
 
 const SHA = { base: "a".repeat(40), landed: "b".repeat(40) };
 const LOCAL = { delivery: "local", trigger: "task", method: "merge", target: "main" } as const;
@@ -125,6 +126,28 @@ describe("system verdict groups (review-exit spec §3.1, controller decision; cr
       group(h.store, "check", { systemDebug: { ...mark("ladder", { state: "done", at: 1, detail: null }).systemDebug, source: { kind: "integration-check", groupId: "o", taskId: null, runId: null } } }, ["ready"]);
       // mutation: drop the verdict predicate -> [], red; widen it to every system kind -> ["ladder","check"], red
       expect(pass(h.store)).toEqual(["ladder"]);
+    } finally { await h.dispose(); }
+  });
+});
+
+// Tester #467: a ladder whose debug run failed in planning never wrote a checkpoint, so its group never reached
+// `review` (the checkpoint write is what sets it) and stayed `ready` with debug-failed settled -- counted as a blocked
+// task and "needing you" forever. The row above builds the group as `review`, which the failure path cannot produce.
+// The settle write now moves a still-`ready` ladder or judge group to `review`, so the pass closes it on its own rule.
+describe("a system verdict group settled before it reached review (#467)", () => {
+  const ladderMark = { systemDebug: { source: { kind: "ladder", groupId: "o", taskId: "t0", runId: "run-o" }, stackOn: null, inputHash: "a".repeat(64), settled: null } };
+  it("a ladder settled debug-failed while still ready is moved to review by the settle and then done", async () => {
+    const h = await openTestStore(); try {
+      group(h.store, "ladder", { ...ladderMark, status: "ready" }, ["blocked"]);
+      group(h.store, "draft", { ...ladderMark, status: "draft" }, ["ready"]);
+      h.store.transaction(() => { writeSystemDebugSettled(h.store, "ladder", "debug-failed", null); writeSystemDebugSettled(h.store, "draft", "superseded", null); });
+      // mutation: drop the ready -> review move in writeSystemDebugSettled -> the pass answers [] and it stays ready, red
+      expect(status(h.store, "ladder")).toBe("review");
+      expect(pass(h.store)).toEqual(["ladder"]);
+      expect(status(h.store, "ladder")).toBe("done");
+      expect(doneRows(h.store, "ladder")).toEqual([{ from: "review", cause: "verdict" }]);
+      // A draft (never confirmed) is left as it is: only a group that ran is closed this way.
+      expect(status(h.store, "draft")).toBe("draft");
     } finally { await h.dispose(); }
   });
 });

@@ -267,7 +267,12 @@ export function writeSystemDebugSettled(store: ControlStore, groupId: string, st
   const body = groupBody(store, groupId);
   const mark = body === null ? null : readSystemDebugMark(body);
   if (body === null || mark === null || mark.settled !== null) return false;
-  store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...body, systemDebug: { ...mark, settled: { state, at: store.now(), detail: detail === null ? null : detail.slice(0, 500) } } }), groupId);
+  // Tester #467: a ladder or judge group whose run failed before any checkpoint (the checkpoint write is what sets
+  // `review`) was still `ready` here, and groupDone.ts closes only `review`/`running` groups: it stayed ready with its
+  // verdict recorded, counted as a blocked task needing a person. The settle moves it to `review` in the same write.
+  const kind = mark.source.kind;
+  const ran = body.status === "ready" && (kind === "ladder" || kind === "criteria-review");
+  store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...body, ...(ran ? { status: "review" } : {}), systemDebug: { ...mark, settled: { state, at: store.now(), detail: detail === null ? null : detail.slice(0, 500) } } }), groupId);
   return true;
 }
 
