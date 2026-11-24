@@ -110,4 +110,23 @@ describe("a refused working-tree write does not read as delivered (#434)", { tim
       expect(prerequisiteDone(w.store, "g")).toBe(true);
     } finally { await w.dispose(); }
   });
+
+  it("a later landing accepted on a new tip is not done until that tip is written", async () => {
+    const w = await world();
+    try {
+      w.commitOn({ "a.txt": "theirs\n" });
+      w.finish();
+      expect(await integratePendingGroups(w.deps())).toBe(true);
+      expect(prerequisiteDone(w.store, "g")).toBe(true);
+      // A second task lands and the group is accepted on that tip before the pass writes it: lastIntegrated still names
+      // the first tip, so b.txt is in no checkout yet. retry-integration reaches the same window (it keeps lastIntegrated).
+      const second = w.commitOn({ "b.txt": "new\n" });
+      w.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...w.body(),
+        acceptance: { tip: second, result: "passed", why: "multi-landing", commands: [], at: 2, fullSuite: { command: null, suggestion: null, exits: [], flaky: false } } }));
+      // mutation: localDeliveryCaughtUp ignores the accepted tip (lastIntegrated !== null alone) -> true here, red
+      expect(prerequisiteDone(w.store, "g")).toBe(false);
+      expect(await integratePendingGroups(w.deps())).toBe(true);
+      expect(prerequisiteDone(w.store, "g")).toBe(true);
+    } finally { await w.dispose(); }
+  });
 });

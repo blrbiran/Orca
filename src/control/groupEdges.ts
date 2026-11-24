@@ -7,7 +7,7 @@ import { ControlError } from "./errors.js";
 import { groupExecutionPendingInStore } from "./executionPending.js";
 import { readGroupIntegration } from "./integrationScheme.js";
 import { historySatisfied } from "./historyAcceptance.js";
-import { acceptanceSatisfied, deliveredAcceptanceSatisfied, landedTaskCount } from "./groupAcceptanceRecord.js";
+import { acceptanceOf, acceptanceSatisfied, deliveredAcceptanceSatisfied, landedTaskCount } from "./groupAcceptanceRecord.js";
 import { reviewSatisfied } from "./requirementReviewRecord.js";
 import { readGroupOrchestration } from "./orchestration.js";
 import type { ControlStore } from "./store.js";
@@ -74,8 +74,13 @@ function deliversLocally(group: Record<string, unknown>): boolean {
  * is not delivered, however done the group's tasks are.
  */
 function localDeliveryCaughtUp(group: Record<string, unknown>, integration: NonNullable<ReturnType<typeof readGroupIntegration>>): boolean {
-  if (integration.scheme.delivery === "working-tree") return integration.lastIntegrated !== null && integration.pending === null && integration.state !== "blocked";
-  return integration.lastIntegrated !== null && integration.pending === null && integration.conflict === null && integration.state === "idle";
+  // #434 review: a later landing accepted on a new tip is not delivered while lastIntegrated still names an earlier one
+  // (retry-integration keeps lastIntegrated, so the window needs no crash). Same rule as archiveGroup's owedDelivery; an
+  // acceptance that names no tip leaves "written at least once" as the store's only evidence.
+  const tip = acceptanceOf(group)?.tip ?? null;
+  const written = integration.lastIntegrated !== null && (tip === null || integration.lastIntegrated === tip);
+  if (integration.scheme.delivery === "working-tree") return written && integration.pending === null && integration.state !== "blocked";
+  return written && integration.pending === null && integration.conflict === null && integration.state === "idle";
 }
 
 /**
