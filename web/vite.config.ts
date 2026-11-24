@@ -17,5 +17,7 @@ export default defineConfig({
     // The App timer-driven criteria re-render the whole panel many times and each translated string adds per-render cost; the default 5 s left agentPreviewRefresh at 4968 ms before i18n
     // (`npm run check --workspace web` at 4ff8d23, the full web suite; Task 7 report, .superpowers/sdd/2026-10-01-panel-i18n/task-7-report.md).
     testTimeout: 15000,
+    // Persistent transform cache (human ruling 2026-11-24, test time; see the root vitest.config.ts).
+    fsModuleCache: true,
   },
 });

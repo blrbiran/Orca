@@ -654,8 +654,8 @@ These are registered, not hidden, straight from the design's own accounting:
 Day to day — iterations, fix rounds, merges into `main`, push, installing the
 panel service — `npm test` runs only the tests a change touches
 (`scripts/test-affected.mjs`: it prints every selected file with its reason,
-always runs the typecheck, and says so when it selects zero); `npm run test:all`
-runs the whole root suite. `npm run verify` is the release gate: it refuses
+always runs the typecheck, and says so when it selects zero); `npm run test:full`
+runs every root and web test file, only at release or when the human asks. `npm run verify` is the release gate: it refuses
 (exit 2) unless the human asked for a tagged release
 (`ORCA_RELEASE_TAG=<tag> npm run verify`), then runs typecheck, build, the
 whole root suite once (with formal control verification and a chain session's

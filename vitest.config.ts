@@ -13,6 +13,10 @@ export default defineConfig({
     // every file. The snapshot is now bounded (run state by top-level entry), and no criterion uses this default as a
     // speed bound; hooks that need a bound set their own.
     hookTimeout: 60_000,
+    // Human ruling 2026-11-24 (test time): vitest re-transformed every module on every run -- 65-71% of a small file's
+    // run at load ~85 (tests/metrics/cli.test.ts: 15.5 s cold, 4.3-6.3 s with this cache warm). The cache lives under
+    // node_modules/.vitest-cache, keyed by file content and config, and goes away with a reinstall.
+    fsModuleCache: true,
     // CLAUDE.md Rule 17, mechanically: no test process may run with ORCA_CONTROL_DIR unset, because
     // the shipped default for it is a real home directory. See the file for what this prevents.
     // relocateCcmem.ts does the same for ccmem's data root (memory tab spec §6.2).
