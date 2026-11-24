@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // Spec 2026-10-20 §4.1 (human ruling, session f3a75a90): `npm test` runs the tests a change touches, chosen by code
-// (CLAUDE.md Rule 5), and says what it chose and why. The whole root suite is `npm run test:all`; the full gate is the
-// release gate (`npm run verify`, spec §4.2).
+// (CLAUDE.md Rule 5), and says what it chose and why. Everything is `npm run test:full`; the release gate is
+// `npm run verify` (spec §4.2).
 //
-//   node scripts/test-affected.mjs [--base <ref>] [--dry-run] [-- <vitest args>]
+//   node scripts/test-affected.mjs [--base <ref>] [--dry-run] [--full [--force]] [--rerun-failed] [-- <vitest args>]
 //
 // Changed files = `git diff <base>...HEAD` + staged + unstaged + untracked; <base> defaults to origin/main, else main.
 // Every selected file carries its reason; zero selected files is printed as zero, never run as green. A test that
@@ -11,19 +11,21 @@
 // tests/ and web/tests/ as text not in TEXT_READERS, is not selected (accepted, spec §4.1) -- the release gate still
 // runs it. A data file under tests/ or web/tests/ selects the tests and helpers that name it, else the whole suite.
 //
-// Tiers (spec 2026-10-20 §11, human ruling session 2026-11-17 evening, 「测试精简点头同意」; CLAUDE.md Rule 18):
-//   (default) the QUICK tier, per patch set: changed test files, the mirror directory (above MIRROR_MAX test files, only
-//             its tests named after the changed module; spec §12), tests that import a changed file
-//             directly (distance 1, type-only imports dropped), and the catalogue tables when errors.ts or a locale
+// Tiers (spec 2026-10-20 §11; human ruling 2026-11-24, spec 2026-11-24-test-time-analysis.md §2-§3, 「同意你的建议」;
+// CLAUDE.md Rule 18):
+//   (default) `npm test`, per patch set AND per merge into main: changed test files, the mirror directory (above
+//             MIRROR_MAX test files, only its tests named after the changed module; spec §12), tests that import a changed
+//             file directly (distance 1, type-only imports dropped), and the catalogue tables when errors.ts or a locale
 //             changes. Files whose recorded duration (vitest's results cache) is >= 30 s, and tests that run the real
-//             ccloop, are deferred -- printed with their reason -- unless the file itself changed. A suite with no
-//             results cache falls back to the wide selection, said out loud. It is not the merge gate.
-//   --wide    the WIDE tier (`npm run test:wide`), once per merge batch into main: the selection above this comment
-//             describes, unchanged (transitive importers through vitest's `related`, nothing deferred). Green on a clean
-//             tree stamps `git rev-parse HEAD^{tree}` under <git-common-dir>/orca-gate/green/; a wide run on a stamped
-//             tree prints that and exits 0 without running, unless --force.
+//             ccloop, are deferred to test:full -- printed with their reason -- unless the file itself changed or the
+//             ccloop-pin rule selected it. Without a results cache only the by-duration deferral is lost, said out loud.
+//   --full    `npm run test:full`: every root and web test file, nothing deferred; at release or when the human asks.
+//             Green on a clean tree stamps `git rev-parse HEAD^{tree}` under <git-common-dir>/orca-gate/green/; a full
+//             run on a stamped tree prints that and exits 0 without running, unless --force.
 //   --rerun-failed  re-runs only the failed files of the last run's JSON report (<git-dir>/orca-gate/last-run.json),
 //             labelled as a re-run, not a gate.
+// The old --wide tier (transitive importers through vitest's `related`) is gone: hub modules sit under almost every test,
+// so it selected 918 of ~938 files for an 8-path batch (2026-11-24 measurement).
 // Every run (not --dry-run) holds a machine-wide lock (/tmp/orca-gate-<uid>.lock, or ORCA_GATE_LOCK), prints `uptime`
 // at start and end, and builds web/dist first when a selected test serves the panel and web/dist is missing or stale.
 import { spawnSync } from "node:child_process";
@@ -76,7 +78,7 @@ function git(args) {
 // --- arguments --------------------------------------------------------------------------------------------------
 let base;
 let dryRun = false;
-let wide = false;
+let full = false;
 let force = false;
 let rerunFailed = false;
 const vitestArgs = [];
@@ -91,12 +93,13 @@ const vitestArgs = [];
       base = a === "--base" ? argv[++i] : a.slice("--base=".length);
       if (!base) fail("--base needs a ref");
     } else if (a === "--dry-run") dryRun = true;
-    else if (a === "--wide") wide = true;
+    else if (a === "--wide") fail("--wide is gone (human ruling 2026-11-24): npm test is the merge gate; npm run test:full runs everything");
+    else if (a === "--full") full = true;
     else if (a === "--force") force = true;
     else if (a === "--rerun-failed") rerunFailed = true;
     else vitestArgs.push(a);
   }
-  if (rerunFailed && (wide || dryRun || base !== undefined)) fail("--rerun-failed takes no --wide, --dry-run or --base: it re-runs the last report's failed files");
+  if (rerunFailed && (full || dryRun || base !== undefined)) fail("--rerun-failed takes no --full, --dry-run or --base: it re-runs the last report's failed files");
 }
 
 // vitest's own parser decides which arguments are filters, so every option's value (`--maxConcurrency 3`,
@@ -273,7 +276,7 @@ async function runSelection(kind, rootFiles, webFiles, typechecks) {
 
 // --- --rerun-failed ----------------------------------------------------------------------------------------------
 if (rerunFailed) {
-  if (!existsSync(lastRunPath)) fail(`--rerun-failed: no report of a last run at ${lastRunPath}; run npm test or npm run test:wide first`);
+  if (!existsSync(lastRunPath)) fail(`--rerun-failed: no report of a last run at ${lastRunPath}; run npm test or npm run test:full first`);
   const last = JSON.parse(readFileSync(lastRunPath, "utf8"));
   const failed = { root: [], web: [] };
   for (const [suite, entry] of Object.entries(last.suites ?? {})) {
@@ -299,15 +302,15 @@ if (rerunFailed) {
 
 // --- the green stamp ---------------------------------------------------------------------------------------------
 // Checked before any selection work: an identical tree is never gated twice (session 2026-11-17 evening ruling).
-const startClean = !dryRun && wide && treeClean();
+const startClean = !dryRun && full && treeClean();
 const startTree = startClean ? headTree() : null;
 if (startTree && existsSync(join(stampDir, startTree))) {
   const stamp = readFileSync(join(stampDir, startTree), "utf8").trim();
   if (!force) {
-    console.log(`test-affected: tree ${startTree} was already gated green by a wide run (${stamp}); not running it again. --force runs it anyway`);
+    console.log(`test-affected: tree ${startTree} was already run green in full (${stamp}); not running it again. --force runs it anyway`);
     process.exit(0);
   }
-  console.log(`test-affected: tree ${startTree} was already gated green (${stamp}); --force: running it again`);
+  console.log(`test-affected: tree ${startTree} was already run green in full (${stamp}); --force: running it again`);
 }
 
 // --- changed paths ----------------------------------------------------------------------------------------------
@@ -444,11 +447,13 @@ function ccloopPinOnly() {
   }
 }
 const PIN_FILES = new Set(["package.json", "package-lock.json"]);
+// Files the pin rule selected run in npm test even when they would be deferred (ruling 2026-11-24, question 1): a repin
+// is exactly when the real-ccloop E2E must run.
+const pinSelected = new Set();
 const pinOnly = changed.some((p) => PIN_FILES.has(p)) && ccloopPinOnly();
 
-// The tier is known before the rules run: a large mirror directory is narrowed in a quick root suite only.
-const durations = { root: wide ? null : recordedDurations("root"), web: wide ? null : recordedDurations("web") };
-const quick = { root: durations.root !== null, web: durations.web !== null };
+// What each file cost on record; a suite without a results cache cannot defer by duration (said out loud below).
+const durations = { root: recordedDurations("root"), web: recordedDurations("web") };
 
 // [file whose importers to find, the changed path it stands for]
 const relatedRoot = [];
@@ -456,16 +461,17 @@ const relatedWeb = [];
 const dataFiles = [];
 let webTypecheck = false;
 
-// A large mirror directory in the quick tier (spec 2026-10-20 §12; human ruling 2026-11-18, 「同意」, session 4389b15f):
+// A large mirror directory (spec 2026-10-20 §12; human ruling 2026-11-18, 「同意」, session 4389b15f):
 // one src/control change selected tests/control whole, 374-494 files and 408-508 s per run, while the whole wide tier
 // is 799 files. Above MIRROR_MAX test files the mirror selects only the tests named after the changed module (its
 // basename as a file-name prefix, anywhere in the directory); the direct importers, changed tests, data and catalogue
-// rows still apply. A gone module also selects the tests that still import it. The wide tier selects the whole mirror.
+// rows still apply. A gone module also selects the tests that still import it. Since 2026-11-24 this holds with or
+// without a results cache.
 const MIRROR_MAX = 60;
 const narrowed = new Map(); // changed path -> the large mirror directory it did not select whole
 function selectMirror(p, dir, label) {
   const tests = listTests(dir, ROOT_TEST);
-  if (!quick.root || tests.length <= MIRROR_MAX) return select("root", tests, `${p} (${label}${dir})`, p);
+  if (tests.length <= MIRROR_MAX) return select("root", tests, `${p} (${label}${dir})`, p);
   narrowed.set(p, dir);
   const stem = p.slice(p.lastIndexOf("/") + 1).replace(/(\.test)?\.[^.]+$/, "");
   const named = stem ? tests.filter((f) => f.slice(f.lastIndexOf("/") + 1).startsWith(stem)) : [];
@@ -476,7 +482,7 @@ for (const p of changed) {
   const present = existsSync(join(root, p));
   if (pinOnly && PIN_FILES.has(p)) {
     for (const suite of ["root", "web"]) {
-      for (const [f, why] of realCcloopTests(suite)) select(suite, [f], `${p} (ccloop pin only: ${why})`, p);
+      for (const [f, why] of realCcloopTests(suite)) { select(suite, [f], `${p} (ccloop pin only: ${why})`, p); pinSelected.add(f); }
     }
   } else if (isRootConfig(p)) select("root", listTests("tests", ROOT_TEST), `${p} (config: whole suite)`, p);
   else if (WEB_CONFIG.has(p)) select("web", listTests("web/tests", WEB_TEST), `${p} (config: whole web suite)`, p);
@@ -486,7 +492,7 @@ for (const p of changed) {
     // A deleted or renamed-away module has no importers left in the graph: its mirror directory only (narrowed: above).
     if (!present) {
       if (dir) selectMirror(p, dir, "gone: mirror ");
-      if (narrowed.has(p)) relatedRoot.push([p, p]); // quick tier only: the text scan still finds its importers
+      if (narrowed.has(p)) relatedRoot.push([p, p]); // the text scan still finds its importers
     } else if (ROOT_TEST.test(p)) select("root", [p], `${p} (changed test)`, p);
     else {
       relatedRoot.push([p, p]);
@@ -514,26 +520,10 @@ for (const [suite, p] of dataFiles) {
   }
 }
 
-// vitest's `related`, through its node API: the test files that statically import a changed file, transitively.
-async function related(projectRoot, suite, pairs) {
-  if (pairs.length === 0) return;
-  const { createVitest } = await vitestNode();
-  const configFile = join(projectRoot, suite === "web" ? "vite.config.ts" : "vitest.config.ts");
-  const ctx = await createVitest("test", { root: projectRoot, config: configFile, watch: false });
-  try {
-    for (const [file, p] of pairs) {
-      ctx.config.related = [join(root, file)];
-      const specs = await ctx.getRelevantTestSpecifications();
-      select(suite, specs.map((s) => relative(root, s.moduleId)), file === p ? `${p} (imported)` : `${p} (named by ${file}, imported)`, p);
-    }
-  } finally {
-    await ctx.close();
-  }
-}
-
-// --- quick tier: direct importers, catalogue tables, deferral ---------------------------------------------------
+// --- direct importers, catalogue tables, deferral ---------------------------------------------------------------
 // vitest's results cache (node_modules/.vite/vitest/<hash>/results.json: [["<project>:<path>", { duration }]]) is the
-// only record of what a file costs. A suite without one cannot tell heavy files from light ones: it is selected wide.
+// only record of what a file costs. A suite without one cannot tell heavy files from light ones: none is deferred by
+// duration (the real-ccloop deferral does not need it).
 const SLOW_MS = 30_000;
 function recordedDurations(suite) {
   const dir = join(root, ...(suite === "web" ? ["web"] : []), "node_modules", ".vite", "vitest");
@@ -575,12 +565,10 @@ const CATALOGUE_TESTS = [
   ["root", "tests/metrics/noteCodes.test.ts"], ["root", "tests/entry/skill.test.ts"], ["web", "web/tests/i18nKeys.test.ts"],
 ];
 
-for (const [suite, pairs, projectRoot] of [["root", relatedRoot, root], ["web", relatedWeb, join(root, "web")]]) {
-  if (quick[suite]) directImporters(suite, pairs);
-  else await related(projectRoot, suite, pairs);
-}
+directImporters("root", relatedRoot);
+directImporters("web", relatedWeb);
 for (const p of changed.filter((p) => CATALOGUE_SOURCES.test(p))) {
-  for (const [suite, f] of CATALOGUE_TESTS) if (quick[suite] && existsSync(join(root, f))) select(suite, [f], `${p} (catalogue table)`, p);
+  for (const [suite, f] of CATALOGUE_TESTS) if (existsSync(join(root, f))) select(suite, [f], `${p} (catalogue table)`, p);
 }
 // A data file nothing names or imports may still be read by a test (a directory listing, a computed name): the whole
 // suite, said out loud, rather than nothing (Rule 12).
@@ -610,15 +598,22 @@ function ccloopWorldTests(suite) {
   return rows;
 }
 
-// Deferred: in a quick suite, a selected file that is slow on record or runs the real ccloop, unless it changed itself.
+// --full: every test file, replacing the changed-part rows (the rules above still ran, so an unknown path is still named).
+if (full) {
+  for (const suite of ["root", "web"]) selection[suite].clear();
+  select("root", listTests("tests", ROOT_TEST), "test:full (every test file)", "--full");
+  select("web", listTests("web/tests", WEB_TEST), "test:full (every test file)", "--full");
+}
+
+// Deferred: a selected file that is slow on record or runs the real ccloop, unless it changed itself or the pin rule
+// selected it. Never in --full.
 const deferred = [];
 const unknownCost = { root: 0, web: 0 };
-for (const suite of ["root", "web"]) {
-  if (!quick[suite]) continue;
+for (const suite of full ? [] : ["root", "web"]) {
   const real = new Map(ccloopWorldTests(suite));
   for (const file of [...selection[suite].keys()]) {
-    if (changed.includes(file)) continue;
-    const ms = durations[suite].get(file);
+    if (changed.includes(file) || pinSelected.has(file)) continue;
+    const ms = durations[suite]?.get(file);
     if (ms === undefined) unknownCost[suite] += 1;
     const why = real.has(file) ? `runs the real ccloop (${real.get(file)})` : ms !== undefined && ms >= SLOW_MS ? `recorded ${(ms / 1000).toFixed(1)} s >= ${SLOW_MS / 1000} s` : null;
     if (why === null) continue;
@@ -630,12 +625,12 @@ for (const suite of ["root", "web"]) {
 // --- report the selection ---------------------------------------------------------------------------------------
 const rootFiles = [...selection.root.keys()].sort();
 const webFiles = [...selection.web.keys()].sort();
-const tier = wide ? "wide" : quick.root || quick.web ? "quick" : "quick-fallback-wide";
-if (wide) console.log("test-affected: WIDE tier (npm run test:wide): the merge gate, run once per merge batch into main");
+const tier = full ? "full" : "changed";
+if (full) console.log("test-affected: npm run test:full: every test file (at release or when the human asks), nothing deferred");
 else {
-  console.log("test-affected: QUICK tier (npm test): per patch set; this is NOT the merge gate -- run npm run test:wide once per merge batch into main");
+  console.log("test-affected: npm test: the changed part (per patch set and per merge into main); npm run test:full runs everything, at release or when the human asks");
   for (const suite of ["root", "web"]) {
-    if (!quick[suite]) console.log(`test-affected: no vitest results cache for the ${suite} suite (${suite === "web" ? "web/" : ""}node_modules/.vite/vitest/*/results.json): its selection falls back to the wide one`);
+    if (durations[suite] === null) console.log(`test-affected: no vitest results cache for the ${suite} suite (${suite === "web" ? "web/" : ""}node_modules/.vite/vitest/*/results.json): files slow on record cannot be deferred; the selection is unchanged`);
   }
 }
 console.log(`test-affected: ${changed.length} changed paths against ${base} (committed since the merge base, staged, unstaged, untracked)`);
@@ -655,23 +650,23 @@ if (idle.length) console.log(`test-affected: changed paths that select no test: 
 const empty = rootFiles.length + webFiles.length === 0;
 if (empty) console.log(`test-affected: 0 test files selected (no changes against ${base} select any)`);
 else console.log(`test-affected: ${rootFiles.length + webFiles.length} test files selected (${rootFiles.length} root, ${webFiles.length} web)`);
-if (!wide) {
-  console.log(`test-affected: ${deferred.length} test files deferred to the wide tier (listed above as "deferred"; npm run test:wide runs them)`);
+if (!full) {
+  console.log(`test-affected: ${deferred.length} test files deferred to npm run test:full (listed above as "deferred")`);
   const unknown = unknownCost.root + unknownCost.web;
   if (unknown) console.log(`test-affected: ${unknown} selected files have no recorded duration in the results cache: run, cost unknown`);
 }
 const typechecks = [["npm", ["run", "typecheck"]]];
-if (webTypecheck) typechecks.push([join(root, "node_modules", ".bin", "tsc"), ["--noEmit", "-p", "web/tsconfig.json"]]);
+if (webTypecheck || (full && existsSync(join(root, "web", "tsconfig.json")))) typechecks.push([join(root, "node_modules", ".bin", "tsc"), ["--noEmit", "-p", "web/tsconfig.json"]]);
 console.log(`test-affected: typecheck: ${typechecks.map(([cmd, args]) => [cmd === "npm" ? cmd : relative(root, cmd), ...args].join(" ")).join(" ; ")}`);
 if (dryRun) process.exit(0);
 
 // --- run --------------------------------------------------------------------------------------------------------
 const status = await runSelection(tier, rootFiles, webFiles, typechecks);
-if (!wide) console.log(`test-affected: that was the quick tier (exit ${status}), not the merge gate; ${deferred.length} files were deferred to npm run test:wide`);
+if (!full) console.log(`test-affected: that was npm test (exit ${status}); ${deferred.length} files were deferred to npm run test:full`);
 // The stamp is the tree the run started on, and only if the worktree was clean then and is still that tree and clean now.
-if (wide && status === 0 && startTree && treeClean() && headTree() === startTree) {
+if (full && status === 0 && startTree && treeClean() && headTree() === startTree) {
   mkdirSync(stampDir, { recursive: true, mode: 0o700 });
   writeFileSync(join(stampDir, startTree), `${new Date().toISOString()} head ${git(["rev-parse", "HEAD"]).trim()} base ${base}\n`);
-  console.log(`test-affected: wide run green on a clean tree: stamped ${startTree}; a wide run on this tree will not run again`);
-} else if (wide && status === 0) console.log("test-affected: wide run green, but the worktree was not clean (or changed during the run): no stamp");
+  console.log(`test-affected: full run green on a clean tree: stamped ${startTree}; a full run on this tree will not run again`);
+} else if (full && status === 0) console.log("test-affected: full run green, but the worktree was not clean (or changed during the run): no stamp");
 process.exit(status);

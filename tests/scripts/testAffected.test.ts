@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
  * scripts/test-affected.mjs (spec 2026-10-20 §4.1, human ruling session f3a75a90): `npm test` runs the tests a change
  * touches, chosen by code, so an agent's default test command stops being the whole suite. A selection that misses a
  * row ships untested code; one that silently selects nothing looks green. Every criterion runs the real script in a
- * throwaway git repository shaped like Orca. Selection criteria use the real vitest (its `related` graph) through a
+ * throwaway git repository shaped like Orca. Selection criteria use the real vitest (its argument parser) through a
  * node_modules link; running criteria use a stub vitest and stub typecheck that record what they were given.
  */
 const script = resolve("scripts/test-affected.mjs");
@@ -115,14 +115,16 @@ function affected(repo: string, args: string[], env: Record<string, string> = {}
 // "  root tests/a/x.test.ts <- reason; reason" => "root tests/a/x.test.ts"
 const selected = (out: string) => out.split("\n").filter((l) => /^ {2}(root|web) \S+ <- /.test(l)).map((l) => l.trim().split(" <- ")[0]).sort();
 
-// The rows below are the WIDE tier's (`npm run test:wide`, spec 2026-10-20 §11): the template links the real node_modules,
-// whose vitest results cache would otherwise switch the default run to the quick tier. The quick tier's rows are in
+// The rows below are `npm test`'s (human ruling 2026-11-24: the changed part, per patch set and per merge; the wide tier
+// and its transitive `related` selection are gone). The template links the real node_modules, whose vitest results cache
+// names none of these fixture paths, so nothing here is deferred by duration; the deferral rows are in
 // testAffectedTiers.test.ts.
 function dry(repo: string, args: string[] = ["--base", "main"]) {
-  const r = affected(repo, ["--dry-run", "--wide", ...args]);
+  const r = affected(repo, ["--dry-run", ...args]);
   expect(r.code, r.out).toBe(0);
   return { ...r, files: selected(r.out) };
 }
+const deferredRows = (out: string) => out.split("\n").filter((l) => /^ {2}deferred (root|web) \S+: /.test(l)).map((l) => l.trim().replace(/^deferred /, "").split(": ")[0]).sort();
 
 describe("selection rows (dry run against the real module graph)", () => {
   it("a changed test file selects that file", () => {
@@ -132,11 +134,13 @@ describe("selection rows (dry run against the real module graph)", () => {
     expect(dry(repo).files).toEqual(["root tests/c/plain.test.ts"]);
   });
 
-  it("a src module selects its importers anywhere (related) plus every test in its mirror directory", () => {
+  // Ruling 2026-11-24 (「同意你的建议」): the row used to select every transitive importer (vitest `related`), which made
+  // tests/b/user.test.ts a row here and the whole suite a row for any hub module. Rewritten: direct importers only.
+  it("a src module selects its direct importers anywhere plus every test in its mirror directory, not transitive ones", () => {
     const repo = graphRepo();
     write(repo, "src/a/util.ts", "export const a = 2;\n");
     commit(repo);
-    expect(dry(repo).files).toEqual(["root tests/a/other.test.ts", "root tests/a/util.test.ts", "root tests/b/user.test.ts"]);
+    expect(dry(repo).files).toEqual(["root tests/a/other.test.ts", "root tests/a/util.test.ts"]);
   });
 
   it("a top-level src file mirrors to tests/entry, a script to tests/scripts", () => {
@@ -247,8 +251,8 @@ describe("selection rows (dry run against the real module graph)", () => {
     const repo = graphRepo();
     write(repo, "web/tests/setup.ts", "export const changed = 1;\n");
     commit(repo);
-    // The reason is the measure: vitest's `related` happens to answer "everything" for a setup file too, but a config
-    // row is never left to `related` (spec §4.1 rules table), so it must be the config row that selected it.
+    // The reason is the measure: a config row is never left to the import scan (spec §4.1 rules table), so it must be
+    // the config row that selected it.
     const r = dry(repo);
     expect(r.files).toEqual(["web web/tests/other.test.tsx", "web web/tests/w.test.ts"]);
     expect(r.out).toContain("  web web/tests/w.test.ts <- web/tests/setup.ts (config: whole web suite)\n");
@@ -401,12 +405,6 @@ function runRepo(): { repo: string; log: string; calls: () => Call[] } {
 }
 
 describe("pass-through", () => {
-  it("npm test is this script, so every plan and agent that says npm test gets the selection; the whole suite is test:all", () => {
-    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };
-    expect(pkg.scripts.test).toBe("node scripts/test-affected.mjs");
-    expect(pkg.scripts["test:all"]).toBe("vitest run");
-  });
-
   it("a path argument runs exactly vitest run <path>, selecting nothing itself", () => {
     const { repo, log, calls } = runRepo();
     write(repo, "docs/readme.md", "# changed\n");
@@ -528,6 +526,13 @@ describe("a repin that changes only ccloop", () => {
   // The tests that run the real ccloop, and every q fixture test (the whole suite is ALL_ROOT plus Q_TESTS).
   const CCLOOP_TESTS = ["root tests/q/spawnsCcloop.test.ts", "root tests/q/viaWorld.test.ts"];
   const Q_TESTS = [...CCLOOP_TESTS, "root tests/q/deepVia.test.ts", "root tests/q/fakeCcloop.test.ts", "root tests/q/setsFake.test.ts"].sort();
+  // A whole-suite selection (a pin file changed in any other way) defers the test that imports a ccloop world to
+  // test:full, like any other real-ccloop E2E (ruling 2026-11-24); only the pin-only rule keeps it (the next block).
+  const WHOLE = [...ALL_ROOT, ...Q_TESTS].filter((f) => f !== "root tests/q/viaWorld.test.ts").sort();
+  const expectWhole = (out: string, files: string[]) => {
+    expect(files).toEqual(WHOLE);
+    expect(deferredRows(out)).toEqual(["root tests/q/viaWorld.test.ts"]);
+  };
 
   // main gets the old pin and tests around the real binary: one reads ORCA_CCLOOP_BIN, one imports a helper that reads
   // it; and three that name ccloop without running it -- a fake `ccloopBin` field through a helper, an assignment, a
@@ -563,6 +568,9 @@ describe("a repin that changes only ccloop", () => {
     commit(repo);
     const r = dry(repo);
     expect(r.files).toEqual(CCLOOP_TESTS);
+    // Ruling 2026-11-24, question 1: a pin change still runs the real-ccloop E2E in npm test. mutation: let the deferral
+    // take a file the pin rule selected -> viaWorld (it imports a ccloop world) becomes a deferred row.
+    expect(deferredRows(r.out)).toEqual([]);
     expect(r.out).toContain("root tests/q/spawnsCcloop.test.ts <- package-lock.json (ccloop pin only: reads ORCA_CCLOOP_BIN)");
     expect(r.out).toContain(
       "root tests/q/viaWorld.test.ts <- package-lock.json (ccloop pin only: imports tests/helpers/ccloopWorld.ts, which reads ORCA_CCLOOP_BIN)");
@@ -575,7 +583,8 @@ describe("a repin that changes only ccloop", () => {
     write(repo, "package.json", pkg("b".repeat(40)));
     write(repo, "package-lock.json", lock("b".repeat(40), { "node_modules/left-pad": { version: "1.0.0" } }));
     commit(repo);
-    expect(dry(repo).files).toEqual([...ALL_ROOT, ...Q_TESTS].sort());
+    const r = dry(repo);
+    expectWhole(r.out, r.files);
   });
 
   it("a package.json change beside the pin keeps the whole suite", () => {
@@ -583,7 +592,8 @@ describe("a repin that changes only ccloop", () => {
     write(repo, "package.json", pkg("b".repeat(40), { version: "2.0.0" }));
     write(repo, "package-lock.json", lock("b".repeat(40)));
     commit(repo);
-    expect(dry(repo).files).toEqual([...ALL_ROOT, ...Q_TESTS].sort());
+    const r = dry(repo);
+    expectWhole(r.out, r.files);
   });
 
   it("another root dependency changed in the lock's root entry keeps the whole suite", () => {
@@ -593,7 +603,8 @@ describe("a repin that changes only ccloop", () => {
     changedRoot.packages[""].dependencies["left-pad"] = "^1.0.0";
     write(repo, "package-lock.json", JSON.stringify(changedRoot, null, 2) + "\n");
     commit(repo);
-    expect(dry(repo).files).toEqual([...ALL_ROOT, ...Q_TESTS].sort());
+    const r = dry(repo);
+    expectWhole(r.out, r.files);
   });
 
   // Tester follow-up I: the narrowing applies to the two pin files only. A repin is often committed with other work; the
@@ -605,7 +616,7 @@ describe("a repin that changes only ccloop", () => {
     write(repo, "src/a/util.ts", "export const a = 2;\n");
     commit(repo);
     const r = dry(repo);
-    expect(r.files).toEqual(["root tests/a/other.test.ts", "root tests/a/util.test.ts", "root tests/b/user.test.ts", ...CCLOOP_TESTS]);
+    expect(r.files).toEqual(["root tests/a/other.test.ts", "root tests/a/util.test.ts", ...CCLOOP_TESTS]);
   });
 
   it("a second dependency added beside the pin keeps the whole suite", () => {
@@ -616,7 +627,7 @@ describe("a repin that changes only ccloop", () => {
     write(repo, "package-lock.json", JSON.stringify(both, null, 2) + "\n");
     commit(repo);
     const r = dry(repo);
-    expect(r.files).toEqual([...ALL_ROOT, ...Q_TESTS].sort());
+    expectWhole(r.out, r.files);
     expect(r.out).not.toContain("ccloop pin only");
   });
 
@@ -625,7 +636,7 @@ describe("a repin that changes only ccloop", () => {
     write(repo, "package-lock.json", lock("a".repeat(40), { "node_modules/left-pad": { version: "1.0.0" } }));
     commit(repo);
     const r = dry(repo);
-    expect(r.files).toEqual([...ALL_ROOT, ...Q_TESTS].sort());
+    expectWhole(r.out, r.files);
     expect(r.out).toContain("package-lock.json (config: whole suite)");
   });
 });

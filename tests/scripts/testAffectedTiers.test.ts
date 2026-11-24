@@ -5,12 +5,14 @@ import { dirname, join, resolve } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 /**
- * The quick tier and the gate around it (spec 2026-10-20 §11; human ruling session 2026-11-17 evening, 「测试精简点头同意」).
- * Per patch set `npm test` runs a cheap selection and defers the heavy files by name; once per merge batch
- * `npm run test:wide` runs today's selection; an identical tree is never gated twice; a red run re-runs only its failed
- * files, labelled; one gate runs at a time; web/dist is built before the panel tests that need it. Each criterion runs
- * the real script in a throwaway repository with a stub vitest and typecheck that record what they were given; the
- * vitest results cache is a file the fixture writes, never the real one.
+ * The tiers and the gate around them (spec 2026-10-20 §11; human ruling session 2026-11-17 evening, 「测试精简点头同意」;
+ * rewritten for the human's 2026-11-24 ruling, spec 2026-11-24-test-time-analysis.md §2-§3, 「同意你的建议」).
+ * `npm test` runs the changed part -- per patch set AND per merge into main -- and defers the heavy files by name;
+ * `npm run test:full` runs everything and only when the human asks or at release; there is no wide tier any more (its
+ * transitive selection was the whole suite in practice: 918 of ~938 files for an 8-path batch). An identical tree is never
+ * fully run twice; a red run re-runs only its failed files, labelled; one gate runs at a time; web/dist is built before the
+ * panel tests that need it. Each criterion runs the real script in a throwaway repository with a stub vitest and
+ * typecheck that record what they were given; the vitest results cache is a file the fixture writes, never the real one.
  */
 const script = resolve("scripts/test-affected.mjs");
 const realModules = resolve("node_modules");
@@ -91,8 +93,8 @@ const rows = (out: string, kind: "selected" | "deferred") => out.split("\n")
   .filter((l) => (kind === "selected" ? /^ {2}(root|web) \S+ <- / : /^ {2}deferred (root|web) \S+: /).test(l))
   .map((l) => l.trim().replace(/^deferred /, "").split(/ <- |: /)[0]).sort();
 
-describe("the quick tier (npm test, per patch set)", () => {
-  it("selects the mirror directory and direct importers, not the transitive or type-only ones, and says it is not the merge gate", () => {
+describe("npm test (the changed part, per patch set and per merge)", () => {
+  it("selects the mirror directory and direct importers, not the transitive or type-only ones, and names test:full for the rest", () => {
     const { repo, run } = tierRepo();
     write(repo, "src/a/util.ts", "export const a = 2;\nexport type A = number;\n");
     commit(repo);
@@ -101,7 +103,9 @@ describe("the quick tier (npm test, per patch set)", () => {
     // mutation: call `related` instead of directImporters -> tests/b/user.test.ts (distance 2) and the type-only importer appear.
     expect(rows(r.out, "selected")).toEqual(["root tests/a/util.test.ts"]);
     expect(r.out).toContain("  root tests/a/util.test.ts <- src/a/util.ts (mirror tests/a/); src/a/util.ts (imported directly)\n");
-    expect(r.out).toContain("QUICK tier (npm test): per patch set; this is NOT the merge gate -- run npm run test:wide once per merge batch into main");
+    // Ruling 2026-11-24: npm test is also the merge gate, so it no longer tells anyone to run a wider tier at a merge.
+    expect(r.out).toContain("test-affected: npm test: the changed part (per patch set and per merge into main); npm run test:full runs everything, at release or when the human asks");
+    expect(r.out).not.toContain("test:wide");
   });
 
   it("defers a file slow on record and a real-ccloop world test, each printed with its reason", () => {
@@ -113,7 +117,7 @@ describe("the quick tier (npm test, per patch set)", () => {
     expect(rows(r.out, "deferred")).toEqual(["root tests/c/heavy.test.ts", "root tests/c/world.test.ts"]);
     expect(r.out).toContain("  deferred root tests/c/heavy.test.ts: recorded 45.0 s >= 30 s <- src/a/util.ts (imported directly)\n");
     expect(r.out).toContain("  deferred root tests/c/world.test.ts: runs the real ccloop (imports tests/control/fixtures/ccloopWorld.ts) <- src/a/util.ts (imported directly)\n");
-    expect(r.out).toContain("test-affected: 2 test files deferred to the wide tier");
+    expect(r.out).toContain("test-affected: 2 test files deferred to npm run test:full");
   });
 
   it("never defers a slow file that itself changed", () => {
@@ -135,16 +139,19 @@ describe("the quick tier (npm test, per patch set)", () => {
     expect(r.out).toContain("  root tests/panel/refusalCoverage.test.ts <- src/control/errors.ts (catalogue table)\n");
   });
 
-  it("with no results cache the selection is the wide one, and the output says so", () => {
+  // Ruling 2026-11-24: a missing results cache used to fall back to the transitive (wide) selection -- the whole suite in
+  // practice, on every fresh worktree. It now selects the same changed part; only the by-duration deferral is lost.
+  it("with no results cache the selection is still the changed part; only slow files cannot be deferred, and it says so", () => {
     const { repo, run } = tierRepo(null);
     write(repo, "src/a/util.ts", "export const a = 2;\nexport type A = number;\n");
     commit(repo);
     const r = run(["--dry-run", "--base", "main"]);
     expect(r.code, r.out).toBe(0);
-    expect(r.out).toContain("no vitest results cache for the root suite (node_modules/.vite/vitest/*/results.json): its selection falls back to the wide one");
-    // mutation: treat a missing cache as an empty one -> the quick selection (no b/user, heavy and world not run).
-    expect(rows(r.out, "selected")).toContain("root tests/b/user.test.ts");
-    expect(rows(r.out, "deferred")).toEqual([]);
+    expect(r.out).toContain("no vitest results cache for the root suite (node_modules/.vite/vitest/*/results.json): files slow on record cannot be deferred; the selection is unchanged");
+    // mutation: fall back to the transitive selection without a cache -> tests/b/user.test.ts (distance 2) is a row.
+    expect(rows(r.out, "selected")).toEqual(["root tests/a/util.test.ts", "root tests/c/heavy.test.ts"]);
+    // mutation: drop the real-ccloop deferral when there is no cache -> world.test.ts is a selected row.
+    expect(rows(r.out, "deferred")).toEqual(["root tests/c/world.test.ts"]);
   });
 });
 
@@ -214,47 +221,66 @@ describe("a large mirror directory in the quick tier", () => {
     expect(r.out).toContain("  root tests/c/plain.test.ts <- src/c/thing.ts (mirror tests/c/)\n");
   });
 
-  it("with no results cache (the wide fallback) a large mirror directory is still selected whole", () => {
+  it("with no results cache a large mirror directory is narrowed too", () => {
     const { repo, run } = tierRepo(null, BIG);
     write(repo, "src/big/fooBar.ts", "export const f = 2;\n");
     commit(repo);
     const r = run(["--dry-run", "--base", "main"]);
     expect(r.code, r.out).toBe(0);
-    // mutation: narrow whenever the run is not --wide (`wide ||` for `!quick.root ||`) -> 3 rows instead of 64.
-    const picked = rows(r.out, "selected");
-    expect(picked.length, r.out).toBe(64);
-    expect(picked.every((row) => row.startsWith("root tests/big/")), r.out).toBe(true);
-  });
-
-  it("the wide tier still selects a large mirror directory whole", () => {
-    const { repo, run } = tierRepo(CACHE, BIG);
-    write(repo, "src/big/fooBar.ts", "export const f = 2;\n");
-    commit(repo);
-    const r = run(["--dry-run", "--wide", "--base", "main"]);
-    expect(r.code, r.out).toBe(0);
-    // mutation: narrow in the wide tier too -> 3 rows instead of 64.
-    const picked = rows(r.out, "selected");
-    expect(picked.length, r.out).toBe(64);
-    expect(picked.every((row) => row.startsWith("root tests/big/")), r.out).toBe(true);
+    // mutation: narrow only when a results cache exists (the old `!quick.root ||`) -> 64 rows instead of 3.
+    expect(rows(r.out, "selected")).toEqual(BIG_PICKED);
   });
 });
 
-describe("the wide tier's green stamp (never gate an identical tree twice)", () => {
-  it("a green wide run on a clean tree stamps it; the next wide run on that tree runs nothing; --force runs it", () => {
+describe("npm run test:full (everything; at release or when the human asks)", () => {
+  it("selects every root and web test file and defers nothing, whatever changed", () => {
+    const { repo, run } = tierRepo(CACHE, BIG);
+    write(repo, "src/big/fooBar.ts", "export const f = 2;\n");
+    commit(repo);
+    const r = run(["--dry-run", "--full", "--base", "main"]);
+    expect(r.code, r.out).toBe(0);
+    // mutation: let --full run the changed-part selection -> 3 rows instead of every test file.
+    expect(rows(r.out, "selected").length, r.out).toBe(64 + 7);
+    // mutation: keep the deferral loop for --full -> heavy and world are deferred rows.
+    expect(rows(r.out, "deferred")).toEqual([]);
+    expect(r.out).toContain("test-affected: npm run test:full: every test file");
+  });
+
+  it("refuses the removed --wide flag and names what replaced it", () => {
+    const { run, calls } = tierRepo();
+    const r = run(["--wide", "--base", "main"]);
+    // mutation: keep accepting --wide -> exit 0 and a run.
+    expect(r.code).toBe(1);
+    expect(r.out).toContain("--wide is gone (human ruling 2026-11-24): npm test is the merge gate; npm run test:full runs everything");
+    expect(calls()).toEqual([]);
+  });
+
+  it("package.json names the tiers: npm test is this script, test:full is this script with --full, test:wide is gone", () => {
+    const pkg = JSON.parse(readFileSync("package.json", "utf8")) as { scripts: Record<string, string> };
+    expect(pkg.scripts.test).toBe("node scripts/test-affected.mjs");
+    expect(pkg.scripts["test:full"]).toBe("node scripts/test-affected.mjs --full");
+    // mutation: leave test:wide (or the old root-only test:all) in package.json -> a second "everything" name survives.
+    expect(pkg.scripts["test:wide"]).toBeUndefined();
+    expect(pkg.scripts["test:all"]).toBeUndefined();
+  });
+});
+
+describe("the full run's green stamp (never run an identical tree fully twice)", () => {
+  it("a green full run on a clean tree stamps it; the next full run on that tree runs nothing; --force runs it", () => {
     const { repo, run, calls } = tierRepo();
     write(repo, "tests/c/plain.test.ts", T("// changed"));
     commit(repo);
-    const first = run(["--wide", "--base", "main"]);
+    const first = run(["--full", "--base", "main"]);
     expect(first.code, first.out).toBe(0);
     const tree = git(repo, "rev-parse", "HEAD^{tree}").trim();
     expect(existsSync(join(repo, ".git", "orca-gate", "green", tree)), first.out).toBe(true);
     const ran = calls().length;
-    const second = run(["--wide", "--base", "main"]);
+    const second = run(["--full", "--base", "main"]);
     expect(second.code).toBe(0);
     // mutation: skip the stamp check -> typecheck and vitest are called again.
-    expect(second.out).toContain(`tree ${tree} was already gated green by a wide run`);
+    expect(second.out).toContain(`tree ${tree} was already run green in full`);
     expect(calls().length).toBe(ran);
-    const forced = run(["--wide", "--force", "--base", "main"]);
+    const forced = run(["--full", "--force", "--base", "main"]);
     expect(forced.code, forced.out).toBe(0);
     expect(calls().filter((c) => c.tool === "vitest").length).toBe(2);
   });
@@ -262,14 +288,14 @@ describe("the wide tier's green stamp (never gate an identical tree twice)", () 
   it("a dirty worktree is not stamped: its tree hash is not what ran", () => {
     const { repo, run } = tierRepo();
     write(repo, "tests/c/plain.test.ts", T("// uncommitted"));
-    const r = run(["--wide", "--base", "main"]);
+    const r = run(["--full", "--base", "main"]);
     expect(r.code, r.out).toBe(0);
     // mutation: stamp regardless of cleanliness -> the green directory exists.
     expect(existsSync(join(repo, ".git", "orca-gate", "green"))).toBe(false);
     expect(r.out).toContain("no stamp");
   });
 
-  it("a quick run never stamps", () => {
+  it("an npm test run never stamps", () => {
     const { repo, run } = tierRepo();
     write(repo, "tests/c/plain.test.ts", T("// changed"));
     commit(repo);
