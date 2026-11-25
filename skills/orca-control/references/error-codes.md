@@ -42,6 +42,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `archive-integration-resolving` | 409 |
 | `archive-run-active` | 409 |
 | `archive-stop-pending` | 409 |
+| `artifact-data-missing` | 409 |
 | `artifact-id-conflict` | 409 |
 | `artifact-not-found` | 404 |
 | `auto-confirm-selections-unresolved` | 422 |

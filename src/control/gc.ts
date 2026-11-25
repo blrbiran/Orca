@@ -13,6 +13,8 @@ import { git } from "../scheduler/gitExec.js";
  * materialised result repository) and `<stateDir>.workspaces/<runId>` (Orca's own git handle) -- and nothing else: the
  * control store, `staging`, `artifacts`, the service lock and every path outside those roots are out of scope by
  * construction (only direct children named `run-…` are ever considered, diskUsage.ts).
+ * Tester #468: `artifacts` stays out of THIS pass. `orca gc --include-artifacts` is a separate pass with its own guards
+ * (artifactReclaim.ts): its dry run plans here, read-only, and only the panel deletes.
  *
  * A run is eligible only when every guard below holds. Any doubt skips it and says why:
  *  - its group carries a terminal mark (`archived`, or the `closed` kind of the same mark, archivedMark.ts);
@@ -83,8 +85,8 @@ export interface GcResult {
   unregistered: GcWorktreeEntry[];
 }
 
-interface RunRow { groupId: string; active: boolean; body: Record<string, unknown> }
-interface GroupRow { body: Record<string, unknown> }
+export interface RunRow { groupId: string; active: boolean; body: Record<string, unknown> }
+export interface GroupRow { body: Record<string, unknown> }
 
 const DAY_MS = 86_400_000;
 
@@ -120,7 +122,7 @@ function parseBody(text: string): Record<string, unknown> {
 }
 
 /** The group's terminal mark, or why it cannot be read (archivedMarkOf throws on a mark that does not parse). */
-function groupIsTerminal(group: GroupRow | undefined): "yes" | "no" | "invalid" {
+export function groupIsTerminal(group: GroupRow | undefined): "yes" | "no" | "invalid" {
   if (group === undefined) return "no";
   try { return archivedMarkOf(group.body) === null ? "no" : "yes"; }
   catch { return "invalid"; }
@@ -231,7 +233,7 @@ interface Candidate {
   skip: { reason: string; detail?: string } | undefined;
 }
 
-function basicSkip(run: RunRow, group: GroupRow | undefined, includeUncleaned: boolean): { reason: string; detail?: string } | undefined {
+export function basicSkip(run: RunRow, group: GroupRow | undefined, includeUncleaned: boolean): { reason: string; detail?: string } | undefined {
   if (run.active) return { reason: "run-active" };
   const terminal = groupIsTerminal(group);
   if (terminal === "no") return { reason: group === undefined ? "group-not-found" : "group-not-archived" };

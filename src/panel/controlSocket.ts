@@ -2,7 +2,7 @@ import express, { type Express, type Request, type Response } from "express";
 import { chmodSync, lstatSync, unlinkSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { planLibraryImportBody, registerControlReadRoutes, verifyControlJsonBody, type ControlReadApiDeps } from "./controlApi.js";
-import { sendControlError } from "./controlErrors.js";
+import { sendControlError, sendMappedControlError } from "./controlErrors.js";
 import { registerSocketProjectRoutes, type ProjectsDeps } from "./projects.js";
 import { CLIENT_HEADER, CLIENT_PATTERN, DISPATCHED_RUN_HEADER } from "../control/commandClient.js";
 import type { Principal } from "./permissions.js";
@@ -58,9 +58,49 @@ export function buildControlSocketApp(deps: ControlReadApiDeps, projects?: Proje
   if (auth !== undefined && cliLogin !== undefined) registerCliLoginRoutes(app, auth, cliLogin);
   // CLI v2 spec §14 R4: plan registration over the socket, by the HTTP route's own handler (projects.ts).
   if (projects !== undefined) registerSocketProjectRoutes(app, projects);
+  registerArtifactReclaimRoute(app, deps);
   registerControlReadRoutes(app, deps, "socket");
   app.use((_req, res) => { sendControlError(res, 404, "route-not-found", "The control socket serves only /api/control routes."); });
   return app;
+}
+
+const integerAtLeast0 = (value: unknown): boolean => Number.isSafeInteger(value) && (value as number) >= 0;
+
+/**
+ * Tester #468 (human ruling 2026-11-25, session 5d3d0c09): `orca gc --include-artifacts --apply` asks the panel, which
+ * deletes inside its admission gate (WebControlService.reclaimArtifacts). Socket only: a run Orca dispatched is refused --
+ * deleting evidence is a person's act, as `orca gc --apply` is run from a terminal.
+ */
+function registerArtifactReclaimRoute(app: Express, deps: ControlReadApiDeps): void {
+  app.post("/api/control/gc/artifacts", (req, res) => {
+    const principal = res.locals.orcaPrincipal as Principal;
+    if (principal.kind === "agent" && principal.dispatchedRun !== undefined) {
+      sendControlError(res, 403, "control-dispatched-run-refused", `orca gc --include-artifacts --apply is not done by a run Orca dispatched (${principal.dispatchedRun}); a person reclaims artifacts from a terminal they attend.`);
+      return;
+    }
+    if (deps.service === undefined) {
+      sendControlError(res, 409, "gc-artifacts-needs-control", "this panel runs without the task control plane, so it holds no artifacts to reclaim");
+      return;
+    }
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const known = ["olderThanDays", "keepLast", "includeUncleaned", "groupId"];
+    if (typeof body !== "object" || Array.isArray(body) || Object.keys(body).some((key) => !known.includes(key))
+      || (body.olderThanDays !== undefined && !integerAtLeast0(body.olderThanDays)) || (body.keepLast !== undefined && !integerAtLeast0(body.keepLast))
+      || (body.includeUncleaned !== undefined && typeof body.includeUncleaned !== "boolean") || (body.groupId !== undefined && typeof body.groupId !== "string")) {
+      sendControlError(res, 400, "query-invalid", "gc/artifacts takes { olderThanDays?: integer >= 0, keepLast?: integer >= 0, includeUncleaned?: boolean, groupId?: string }");
+      return;
+    }
+    const options = {
+      ...(body.olderThanDays === undefined ? {} : { olderThanDays: body.olderThanDays as number }),
+      ...(body.keepLast === undefined ? {} : { keepLast: body.keepLast as number }),
+      ...(body.includeUncleaned === true ? { includeUncleaned: true } : {}),
+      ...(typeof body.groupId === "string" ? { groupId: body.groupId } : {}),
+    };
+    deps.service.reclaimArtifacts(options).then(
+      (result) => { res.json({ schema: "orca-gc-artifacts-v1", ...result }); },
+      (error: unknown) => { sendMappedControlError(res, error); },
+    );
+  });
 }
 
 /**

@@ -80,7 +80,15 @@ function currentIdentity(path:string,id:string):FileIdentity {
  * outside it (the artifact row and immutable file checks remain the cross-process guard).
  */
 const publishTails = new Map<string, Promise<void>>();
+/**
+ * Tester #468 (spec 2026-11-24 artifact reclamation, "Human rulings and implementation notes"): every id this process has
+ * begun to publish (a new one, a duplicate it reuses, a restore), noted before the first await. A writer may hold the ref
+ * only in memory until it persists the row that names it; the panel's artifact reclamation never deletes these.
+ */
+const publishedIds = new Set<string>();
+export function publishedArtifactIds(): ReadonlySet<string> { return publishedIds; }
 async function publish(store:ControlStore,id:string,temp:string,hash:string,deps:ArchiveDependencies):Promise<ArtifactRef> {
+ publishedIds.add(id);
  const prior = publishTails.get(id) ?? Promise.resolve();
  let release!: () => void;
  const gate = new Promise<void>((resolve) => { release = resolve; });

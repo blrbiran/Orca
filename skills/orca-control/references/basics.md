@@ -19,24 +19,27 @@ orca status --json
 orca status --disk
 ```
 
-## `orca gc [--apply] [--older-than <older-than>] [--keep-last <keep-last>] [--include-uncleaned] [--group <group>]`
+## `orca gc [--apply] [--older-than <older-than>] [--keep-last <keep-last>] [--include-uncleaned] [--include-artifacts] [--group <group>]`
 
-reclaim disk from settled runs in archived groups: <stateDir>.runs/<runId> and <stateDir>.workspaces/<runId> only; dry run by default
+reclaim disk from settled runs in archived groups: <stateDir>.runs/<runId> and <stateDir>.workspaces/<runId>, and with --include-artifacts the stored artifacts only they name; dry run by default
 
 - What it does: runs locally.
 - Who may: anyone; runs here, needs no panel.
 - `--apply`: actually delete (default: print what would be removed and how much it would free)
 - `--older-than <n>`: keep runs touched within this many days (default 30)
 - `--keep-last <n>`: keep the newest N runs regardless of age
-- `--include-uncleaned`: also reclaim runs whose driver never finished its cleanup (marked in the plan; every other guard still holds)
+- `--include-uncleaned`: also reclaim runs whose driver never finished its cleanup (marked in the plan; every other guard still holds). Run trees only: it does not touch artifacts
+- `--include-artifacts`: also plan the stored artifacts (<stateDir>/artifacts) that only retired runs and archived groups name, and say what holds the rest, by reason and bytes. With --apply the panel deletes them (it must be running)
 - `--group <group>`: limit to one group's runs
-- Exit codes: 0 the plan ran (dry run, or applied); 1 refused here: no control store, or it cannot be read.
+- Exit codes: 0 the plan ran (dry run, or applied); 1 refused here: no control store, or it cannot be read; with --include-artifacts --apply, no panel running (nothing removed); 2 --include-artifacts --apply: the panel refused (nothing removed).
 
 ```
 orca gc
 orca gc --older-than 7 --keep-last 3
 orca gc --apply --group my-group
 orca gc --apply --include-uncleaned --older-than 30
+orca gc --include-artifacts
+orca gc --include-artifacts --apply
 orca gc --json
 ```
 

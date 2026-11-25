@@ -11,20 +11,23 @@ export const META_ROWS: CommandDef[] = [
     exitCodes: { 0: "every check ok (warnings allowed)", 1: "a check failed" },
     examples: ["orca status", "orca status --json", "orca status --disk"], format: () => "",
   },
-  // Issue #366: the retention/GC half. Dry run by default; only the two per-run roots are ever touched.
+  // Issue #366: the retention/GC half. Dry run by default; only the two per-run roots are touched, and artifacts only with
+  // --include-artifacts (tester #468), deleted by the panel.
   {
     domain: "gc", action: null,
-    summary: "reclaim disk from settled runs in archived groups: <stateDir>.runs/<runId> and <stateDir>.workspaces/<runId> only; dry run by default",
+    summary: "reclaim disk from settled runs in archived groups: <stateDir>.runs/<runId> and <stateDir>.workspaces/<runId>, and with --include-artifacts the stored artifacts only they name; dry run by default",
     positionals: [], flags: [
       { name: "apply", type: "boolean", summary: "actually delete (default: print what would be removed and how much it would free)" },
       { name: "older-than", type: "integer", summary: "keep runs touched within this many days (default 30)" },
       { name: "keep-last", type: "integer", summary: "keep the newest N runs regardless of age" },
-      { name: "include-uncleaned", type: "boolean", summary: "also reclaim runs whose driver never finished its cleanup (marked in the plan; every other guard still holds)" },
+      { name: "include-uncleaned", type: "boolean", summary: "also reclaim runs whose driver never finished its cleanup (marked in the plan; every other guard still holds). Run trees only: it does not touch artifacts" },
+      // Tester #468: off by default. The dry run reads the store here (read-only); --apply asks the running panel to delete.
+      { name: "include-artifacts", type: "boolean", summary: "also plan the stored artifacts (<stateDir>/artifacts) that only retired runs and archived groups name, and say what holds the rest, by reason and bytes. With --apply the panel deletes them (it must be running)" },
       { name: "group", type: "string", summary: "limit to one group's runs" },
     ], access: "panel-local",
     mapsTo: { kind: "local", load: async () => (await import("../local/gc.js")).runGc },
-    exitCodes: { 0: "the plan ran (dry run, or applied)", 1: "refused here: no control store, or it cannot be read" },
-    examples: ["orca gc", "orca gc --older-than 7 --keep-last 3", "orca gc --apply --group my-group", "orca gc --apply --include-uncleaned --older-than 30", "orca gc --json"], format: () => "",
+    exitCodes: { 0: "the plan ran (dry run, or applied)", 1: "refused here: no control store, or it cannot be read; with --include-artifacts --apply, no panel running (nothing removed)", 2: "--include-artifacts --apply: the panel refused (nothing removed)" },
+    examples: ["orca gc", "orca gc --older-than 7 --keep-last 3", "orca gc --apply --group my-group", "orca gc --apply --include-uncleaned --older-than 30", "orca gc --include-artifacts", "orca gc --include-artifacts --apply", "orca gc --json"], format: () => "",
   },
   {
     domain: "doctor", action: null, summary: "status's checks plus slower ones (agent CLIs on the service PATH, ~/.orca modes, stale sockets), with one fix line per failure (read-only)",

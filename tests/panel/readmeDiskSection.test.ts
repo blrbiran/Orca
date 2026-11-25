@@ -32,9 +32,16 @@ describe("README documents disk use and gc's real scope (#443)", () => {
     expect(row).toContain("artifacts");
   });
 
-  it("gc's own header still says artifacts is out of scope, which the README quotes", () => {
-    // If gc ever takes artifacts in, this pair must be updated together rather than leaving the README lying.
+  // Ruling (tester #468, session 5d3d0c09): gc took artifacts in behind --include-artifacts, which this criterion foresaw
+  // ("this pair must be updated together"). The pair is now: gc's run pass still leaves artifacts alone and points at the
+  // separate pass, and the README says artifacts are touched only with the flag -- never "out of gc's scope" any more.
+  it("gc's run pass leaves artifacts to --include-artifacts, and the README says so", () => {
+    // mutation: drop the pointer from gc.ts, or keep the old README sentence -> red.
     expect(gcSource).toMatch(/`artifacts`[^\n]*out of scope/);
-    expect(README).toMatch(/artifacts[^\n]*out of `gc`'s scope/);
+    expect(gcSource).toMatch(/`orca gc --include-artifacts` is a separate pass/);
+    expect(README).toContain("`gc` touches it only with `--include-artifacts`");
+    expect(README).not.toMatch(/artifacts[^\n]*out of `gc`'s scope/);
+    // Tester #468 (issue's third ask): --include-uncleaned is the run trees' flag; a person must not read it as reclaiming artifacts.
+    expect(README).toContain("`--include-uncleaned` widens the run trees only; it never touches artifacts.");
   });
 });

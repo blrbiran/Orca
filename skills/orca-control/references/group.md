@@ -24,7 +24,7 @@ one group's full view (large; poll with group brief, and read runs with --runs s
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
 - `<group>`: a group id or a unique prefix
-- `--runs <runs>`: full or summary: full (default) prints each run's whole entry; summary prints one compact entry per run (runId, taskId, phase, state, outcome, blockedReason, used)
+- `--runs <runs>`: full or summary: full (default) prints each run's whole entry; summary prints one compact entry per run (runId, taskId, phase, state, outcome, blockedReason, used, closure, evidenceMissing)
 
 ```
 orca group show g1

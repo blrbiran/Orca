@@ -629,6 +629,21 @@ export class WebControlService {
   constructor(readonly deps: WebServiceDeps) { this.store = deps.store; }
   private mutate<T>(action: () => T): T { const release = this.deps.admissionGate?.enter(); try { return action(); } finally { release?.(); } }
   /**
+   * Tester #468 (human ruling 2026-11-25, session 5d3d0c09): artifact reclamation is the panel's. Every artifact's contents
+   * are read first without blocking; then, in one synchronous step inside the admission gate, the plan is made again from
+   * the store as it is and carried out (artifactReclaim.ts applyArtifactReclaim), skipping every id this process published.
+   */
+  async reclaimArtifacts(options: import("./artifactReclaim.js").ArtifactReclaimOptions): Promise<import("./artifactReclaim.js").ArtifactReclaimResult> {
+    const { applyArtifactReclaim, prescanArtifactContents } = await import("./artifactReclaim.js");
+    const { publishedArtifactIds } = await import("./archive.js");
+    const { runDirectories } = await import("./diskUsage.js");
+    const contents = await prescanArtifactContents(this.store);
+    const runTouched = new Map<string, number>();
+    // gc's own roots, read without creating them (controlWorkspaceRoots would).
+    for (const root of [`${this.store.stateDir}.runs`, `${this.store.stateDir}.workspaces`]) for (const dir of await runDirectories(root)) runTouched.set(dir.name, Math.max(runTouched.get(dir.name) ?? 0, dir.mtimeMs));
+    return this.mutate(() => applyArtifactReclaim(this.store, { ...options, contents, pinned: publishedArtifactIds(), runTouched }));
+  }
+  /**
    * Final review I3: approve and reject of a group's pending decisions run one at a time, prepare and apply together.
    * Unserialized, a reject could find no line while an approve is between its check and its commit, mark the item
    * rejected, and leave the approve's commit on orca/<groupId> to integrate. One panel process holds the service.

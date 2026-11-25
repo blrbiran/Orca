@@ -679,7 +679,8 @@ commands for that project. Archiving is refused while a schedule uses the entry.
 - Flows ship with the templates under `flows/builtin/`; there is no UI to publish a new one.
 - No Orca command writes the profile snapshot; you write it by hand.
 - Paid acceptance runs against real agents so far are **n=1** each: they show the path works, not how reliably.
-- The control store only shrinks through `orca gc`'s two per-run roots. `artifacts/` is never reclaimed (see
+- The control store only shrinks through `orca gc`. `artifacts/` is reclaimed only with `--include-artifacts`, only for
+  what retired runs and archived groups alone name, and most of it is usually held by groups still open (see
   [Disk use](#disk-use-and-what-orca-gc-does-not-reclaim)), so a long-lived install grows by every run's evidence.
 
 ## Safety: what Orca will and will not do
@@ -721,14 +722,16 @@ commands for that project. Archiving is refused while a schedule uses the entry.
 
 ## Disk use, and what `orca gc` does not reclaim
 
-The control store grows with every run, and the largest part of it is not something `orca gc` removes today.
+The control store grows with every run, and the largest part of it is removed only when you ask for it.
 `orca status --disk` reports the sizes (runs, workspaces, artifacts, staging) and, after it, a `disk-top` line naming
-the five largest run directories:
+the five largest run directories; it reads the file system only. What `gc` could reclaim is the dry run's answer:
 
 ```bash
 orca status --disk
-orca gc --json            # what would be removed, and why each skipped entry was skipped
+orca gc --json                       # what would be removed, and why each skipped entry was skipped
 orca gc --apply
+orca gc --include-artifacts          # also artifacts: what would go, and what holds the rest, by reason and bytes
+orca gc --include-artifacts --apply  # the running panel deletes them
 ```
 
 `orca gc` reclaims two per-run trees -- `<state dir>.runs/<runId>` (ccloop's materialised result repository) and
@@ -738,13 +741,25 @@ than `--older-than-days` (unless it is among the newest `--keep-last`). `--json`
 (`too-recent`, `group-not-archived`, `not-cleaned-up`, `run-not-found`, ...); nothing is force-removed, and a dirty or
 no-checkout workspace is skipped rather than passed to `git worktree remove --force`.
 
-**`artifacts` is deliberately out of `gc`'s scope, and it is usually the biggest directory.** Every run's evidence and
-sha256-addressed blobs live in `<state dir>artifacts/` (tens of thousands of directories on a long-lived install, and
-several GB), and the `artifacts` table is never pruned. There is no automatic reclamation of it yet -- deleting evidence
-that decisions and reviews cite is a product decision that needs its own design, with a dry run and a guard against
-removing an artifact a live group still references. Until then `orca status --disk` shows the size, and the two roots
-`orca gc` does own are reported beside it, so the gap is visible rather than guessed. Archiving groups is what makes
-their runs reclaimable at all.
+`--include-uncleaned` widens the run trees only; it never touches artifacts.
+
+**`artifacts` is usually the biggest directory, and `gc` touches it only with `--include-artifacts`.** Every run's
+evidence and sha256-addressed blobs live in `<state dir>artifacts/` (tens of thousands of directories on a long-lived
+install, and several GB). With `--include-artifacts` an artifact is planned only when something retired names it and
+nothing live does: a retired run is one `gc` would reclaim (same guards, `--older-than`, `--keep-last`), in a group
+archived or closed longer ago than `--older-than`; a retired group is one whose every run is retired. Everything else
+that names an artifact keeps it -- any row of any table in the control store (an open group's decisions, the outbox
+until it is delivered, settings), and any artifact that is itself kept, because artifacts name other artifacts. A kept
+artifact that cannot be read stops the plan: nothing is planned rather than a guess. The dry run reads the store and
+plans; `--apply` asks the running panel, which plans again at the moment it deletes and never deletes an artifact it
+has written or reused since it started (it is refused with `panel-not-running`, and nothing is removed, when no panel
+is running).
+
+**Expect a small result.** On a typical install most of `artifacts/` is named by groups that are still open, so the dry
+run says how much each reason holds -- for example `group-not-archived 41210 (4.6G, 12 groups)` with the next step
+(archive them). Evidence of an archived group goes with the group once it is reclaimed: its run views then show that
+evidence as missing. Artifacts nothing names at all are kept (`unreferenced`). Same-content copies are not merged.
+Never delete under `artifacts/` by hand: other records still name those files.
 
 Point these variables at a scratch directory when you are trying Orca out.
 
@@ -774,7 +789,7 @@ Chains have a soft cost limit checked after each session.
 | Activity says `null` or reports no history for an invalid body | A valid empty run answers `{ "schema": "orca-run-activity-v1", "runId": "…", "entries": [] }`. A missing run or damaged row is an error. Re-read the run and inspect the named refusal; do not treat `null` as an empty feed. |
 | A command response was lost | Check its retained result with the original command id. If the group no longer exists, the outcome cannot be confirmed; use **Check again** for one lookup or **Dismiss** the attention item. A refresh does not resend the command. |
 | Unknown usage blocks admission | An owner can inspect and explicitly conservatively settle the remaining work and handoff grants in the Web UI. This charges remaining allowances as used; it is not a measured provider report and does not itself retry or clear a stop. |
-| Disk is filling up | Run `orca status --disk` and `orca gc --json`. `orca gc` only reclaims runs whose group is archived or closed, so archive the groups you are done with first; every skipped entry states its reason. `artifacts/` is never reclaimed by `gc` -- see [Disk use](#disk-use-and-what-orca-gc-does-not-reclaim). |
+| Disk is filling up | Run `orca status --disk` and `orca gc --json`. `orca gc` only reclaims runs whose group is archived or closed, so archive the groups you are done with first; every skipped entry states its reason. `artifacts/` is reclaimed only with `orca gc --include-artifacts` (its dry run says what holds the rest, by reason and bytes) -- see [Disk use](#disk-use-and-what-orca-gc-does-not-reclaim). |
 | `recovery-blocked` | Read the named blocker and inspect evidence. If a database was manually edited, preserve a backup and diagnose the damaged record separately; refreshing cookies does not repair store data. |
 | `evidence missing` on a run, or `artifact-data-missing` | Files under `artifacts/` were deleted while their records stayed (by hand, a script, a restored backup or a disk error). The bytes cannot be restored by Orca. Views still render and name the missing ids; `orca doctor` counts every record whose file is gone (`artifact-integrity`). Retry, close-run, settle-usage and accept-attempt refuse on missing evidence, by name. A closed run that lost its evidence is put away by archiving its group (`orca group archive <group>`); an open failed run is retried as a task. Never delete under `artifacts/` by hand: other records still name those files. |
 | Started, but no task runs | Check the group stop banner, global recovery/admission blockers, budget/caps, dependencies, agent preview and execution-port configuration. Open the task activity and evidence before retrying. |
