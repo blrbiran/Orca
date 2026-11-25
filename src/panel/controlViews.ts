@@ -1695,7 +1695,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       ...(run.probeVerdict === undefined ? {} : { probeVerdict: run.probeVerdict }),
       claimOrdinal: run.claimOrdinal, providerAttemptOrdinal: run.providerAttemptOrdinal,
       // Tester #483: the checkpoint the run records, which `task continue` (checkpointOf) resumes from; null when none.
-      checkpointId: run.checkpointId ?? null, profile, ...runAgentView(run),
+      checkpointId: run.checkpointId, profile, ...runAgentView(run),
       ...(run.tokenPolicy?{tokenRemainingStatus:tokenRemainingStatus(run.grant[bucket].tokens,run.unknown[bucket])}:{}),
       used: run.cumulative[bucket], remaining: run.remaining[bucket], failureCode: run.failureCode,
       // Tester round 2 spec §4.2.2: the dimensions over the grant (an unlimited grant is never over).

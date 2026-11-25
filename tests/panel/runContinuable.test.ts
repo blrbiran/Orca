@@ -81,9 +81,21 @@ describe("RunViewV1.continuable (handoff delivery C-4)", () => {
       expect(run.checkpointId).toBe(`cp-${runId}`);
       // What checkpointOf then looks up: a non-unknown checkpoint of this run under that id.
       expect(view.checkpoints.filter((cp) => cp.checkpointId === run.checkpointId && cp.runId === runId && cp.state !== "unknown")).toHaveLength(1);
+      // Documents the wire shape only: readControlGroup validates every run line against this schema first, so this
+      // line cannot go red on its own (the red-producing assertions are the toBe and toBeNull ones).
       expect(() => runViewSchema.parse(run)).not.toThrow();
     } finally { await h.dispose(); }
   });
+
+  // Review C1: a run that records no checkpoint reports null, not undefined. The schema's field is optional, and an
+  // undefined disappears from the JSON, so only this direct read tells `null` from "the view never sent it".
+  it("a run that records no checkpoint reports checkpointId null (#483)", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const runId = await t.claim();
+      expect(persisted(t.h.store, runId).checkpointId ?? null).toBeNull();
+      expect(viewOf(t.h.store, runId).checkpointId).toBeNull();
+    } finally { await t.h.dispose(); }
+  }, 30000);
 
   it("is false for a handoff-settled run whose checkpoint says the task completed", async () => {
     const { h, runId } = await handedOff("complete"); try {
