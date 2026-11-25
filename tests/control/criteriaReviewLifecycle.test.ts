@@ -151,14 +151,25 @@ describe("criteria-review lifecycle (issue #419)", () => {
     try {
       put(h.store, "g", { status: "done" });
       put(h.store, "sysdebug-criteria-review-flag", { status: "running", ...JUDGE("g") });
-      h.store.transaction(() => flagDecision(h.store, { decisionId: "run-flagged/orca-criteria", groupId: "g", runId: "run-flagged", source: "test-change", reason: "fewer assertions", evidence: [], by: "orca-auto", at: "2026-11-25T00:00:00.000Z" }));
-      expect(groupCardFlaggedCount(h.store, "g")).toBe(1);
+      // Tester #419/#485 second round: a judge already archived (the tester's local state) still owns its flag.
+      put(h.store, "sysdebug-criteria-review-old", { status: "done", archived: { at: 1, actor: "user" },
+        systemDebug: { ...JUDGE("g").systemDebug, source: { kind: "criteria-review", groupId: "g", taskId: "a", runId: "run-old" } } });
+      h.store.transaction(() => {
+        flagDecision(h.store, { decisionId: "run-flagged/orca-criteria", groupId: "g", runId: "run-flagged", source: "test-change", reason: "fewer assertions", evidence: [], by: "orca-auto", at: "2026-11-25T00:00:00.000Z" });
+        flagDecision(h.store, { decisionId: "run-old/orca-criteria", groupId: "g", runId: "run-old", source: "test-change", reason: "fewer assertions", evidence: [], by: "orca-auto", at: "2026-11-25T00:00:00.000Z" });
+      });
+      expect(groupCardFlaggedCount(h.store, "g")).toBe(2);
       h.store.transaction(() => convergeDerivedCriteriaReviewGroups(h.store, undefined, { actor: "orca-auto" }));
-      // mutation: archive the judge without ratifying its flag -> still flagged, the card counts 1 forever, red
+      // mutation: archive the judge without ratifying its flag -> still flagged, the card counts it forever, red
       expect(readFlaggedDecision(h.store, "run-flagged/orca-criteria")).toMatchObject({
         state: "ratified", ratifiedBy: "orca-auto", ratifiedVia: "criteria-review",
         note: expect.stringContaining("parent group ended"),
       });
+      // mutation: skip an already-archived judge -> this one stays flagged, red
+      expect(readFlaggedDecision(h.store, "run-old/orca-criteria")?.state).toBe("ratified");
+      expect(groupCardFlaggedCount(h.store, "g")).toBe(0);
+      // Idempotent: a second pass ratifies nothing again and writes no new flag rows.
+      h.store.transaction(() => convergeDerivedCriteriaReviewGroups(h.store, undefined, { actor: "orca-auto" }));
       expect(groupCardFlaggedCount(h.store, "g")).toBe(0);
     } finally { await h.dispose(); }
   });

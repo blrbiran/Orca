@@ -146,8 +146,8 @@ function pauseJudge(store: ControlStore, row: GroupRow & { parentId: string }): 
 
 /**
  * Converge the criteria-review judges of one terminal parent (`parentGroupId`) or of every terminal parent (undefined).
- * Idempotent: a judge already archived, closed or done is skipped, and one already paused is not paused again. Runs in
- * its own transaction when the caller has none.
+ * Idempotent: a judge already archived, closed or done is not archived again (its flag is still converged, #419/#485),
+ * and one already paused is not paused again. Runs in its own transaction when the caller has none.
  */
 export function convergeDerivedCriteriaReviewGroups(
   store: ControlStore, parentGroupId: string | undefined, options: DerivedConvergenceOptions,
@@ -156,7 +156,13 @@ export function convergeDerivedCriteriaReviewGroups(
     const out: DerivedConvergence = { archived: [], paused: [] };
     for (const row of derivedJudges(store, parentGroupId)) {
       if (!parentGroupTerminal(store, row.parentId)) continue;
-      if (terminalKindOf(row.body) !== null || row.body.status === "done") continue;
+      if (terminalKindOf(row.body) !== null || row.body.status === "done") {
+        // Tester #419/#485: a judge archived before this rule (or by a person) still ends the flag it could not conclude;
+        // the pass is idempotent -- a flag a verdict cleared, or a person ratified, is left alone -- so an old store
+        // converges on its next pass instead of keeping `card.pendingDecisions` at 1 forever.
+        convergeFlag(store, row, options);
+        continue;
+      }
       // A judge whose verdict (or failure) the settle pass has not recorded yet is the settle pass's: archiving it first
       // would hide it (`systemDebugPass` skips archived groups) and lose the verdict the flagged decision needs.
       if (!row.settled && (criteriaReviewVerdict(store, row.id) !== null || anyTaskFailed(store, row.id))) continue;
