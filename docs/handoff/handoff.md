@@ -64,7 +64,16 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
-### 3.最新（2026-11-25，会话 `5d3d0c09`）—— 测试者台账新一批：#478 撞 ceiling 保留工作（ccloop＋Orca，已 repin）、#469 证据缺失降级、#468 artifact 回收、#470 `project remove`、#476 #479 #432 #466；syncskill #456 #477 #474；ccmem #475 #464 #452 #453 开关、FTS OR 开关；四仓已推
+### 3.最新（2026-11-25 晚，会话 `dee8a34f`）—— 测试者台账 Batch 69
+
+- 人确认上一轮 #478 同 attempt、#479 拒绝算术矛盾、syncskill #474 status 只读、#477 dry-run `pushed` 列计划。上一轮清理命令人已执行。三个待审建议：#445 保留三次非额度失败的诊断阈值，抽取健康单独计量；基线 #466 只复跑逐字匹配的已确认 required check；syncskill 共享 `agents` 默认目标另审，别混入 #488 的隔离边界。
+- **Orca**：#483 给真实 group view 的 run 发 `checkpointId`（旧 wire reader 兼容缺键）；#505 artifact GC 只看 QUEUE 的 `delivered`，RECORD 照归属判定、未分类 kind 拒绝清理；#499 `set-limit` 短缺按维度给差额、card 补其余预算维度；#500 brief 单列 failure 和完整的 next。#505 未在测试者的大库 `--apply`，既往 `handoff-request` 门仍按原判据。
+- **ccloop / #478**：第一次现场组 `ceiling-acceptance-1` 在 plan 的 catalog 探针失败，group view 记 0 token。`codex debug models` 现测 1,450,999 B，超过原 1 MiB。ccloop 已推 16 MiB 有界修复，Orca 已通过 repin 脚本（含默认解析 E2E、typecheck、`npm ci`）；按主题 `chore(deps): repin ccloop to d226bd1 for the catalog-probe bound` 找。**付费隔离验收通过**（代码观测点 `b4755521`，ccloop pin 同上述）：`ceiling-acceptance-isolated` 用 `gpt-6-sol`，组上限 60,000，扣除 review/handoff 后 live ceiling 58,000。`orca run show` 显示 plan 43,319，execute 观测 18,572，合计 61,891 时在 execute 被停。`orca group set-limit ceiling-acceptance-isolated --limit '{"tokens":1200000}' --as-person --if-revision 7` 后续跑只报 execute 139,190 tokens，组 `done` 1/1，落地分支独立 `npm test` 7/7。两段均为 attempt 1，后继 `resumesAttemptOf` 指向前任，任务谱系扣除重复；`group brief --json` 的组账仍按两笔 run 记 `usedAttempts:2`。总记账 201,081 tokens，工具未报金额。隔离面板已停。证据根 `/private/tmp/orca478.wsPL3z`，含临时面板私有数据，仅本机查阅。
+- **syncskill**：#484 `--plan` 走只读路径，未支持则具名拒绝；#486 认旧 local source 并在读不全时保留未知来源的 link；#480 没 include 且 link 矩阵为空时，push preview 和真实 receiver 都保留远端技能，显式矩阵的回退仍在；#489 config 和本地 server manifest 原子发布且留备份，坏 JSON 报损坏；#490 保留未知键；#481 push/pull/sync JSON stdout；#488 自定义 sync-dir 的默认 agent 根落在其内部 `.agent-home`，扫描迁移需显式 flag。`ssh_defaults`／`directions` 执行语义、manifest history／跨进程锁另留。
+- **ccmem**：#496 无路径不入队、旧坏 payload 记跳过，状态读数带 24 h 计数；#492 用合成语料示例和 `expected_substring`，不匹配报 `E_CORPUS_STALE`，用户可传本库语料。生产 daemon 未重启。详见姊妹仓 handoff。
+- 本轮计划 `docs/superpowers/plans/2026-11-25-tester-ledger-batch-69.md`，过程 `.superpowers/sdd/2026-11-25-tester-ledger-batch-69/progress.md`。未排定的余项按实际落地记录：#487、#491、#503、#504，以及需要单独设计的 #498、#501。测试者台账由人转发更新。
+
+### 3.上一轮（2026-11-25，会话 `5d3d0c09`）—— 测试者台账新一批：#478 撞 ceiling 保留工作（ccloop＋Orca，已 repin）、#469 证据缺失降级、#468 artifact 回收、#470 `project remove`、#476 #479 #432 #466；syncskill #456 #477 #474；ccmem #475 #464 #452 #453 开关、FTS OR 开关；四仓已推
 
 - **人的话**：开头裁了五件（删除 artifact 由面板执行＋CLI；#470 有未归档组就拒、`--archive-groups` 先归档；FTS 先开关后默认 AND；帮我重启 ccmem daemon；残留给命令）；台账分析后人定：#479「你看下怎么做整体最优，允许重开以前的裁定」、#466「同意（只注销自己的）」、#453「如果你觉得合适，那我同意」、#475「同意（Stop 约 30 s、cron run 立刻）」、#474「整体最优」、#478「做 brainstorm＋spec」→「你不要想着偷懒…必要的话允许改 ccloop」→「同意这个方案，写 spec、独立 review、修复后写 plan 并实现」；随后 `allow-push`、「尽量完整做完」「忽略 context」「批准改写所有必要的判据」「允许必要的付费真跑」「卡住先按建议做，最后报审」。
 - **Orca（主题行，均已合入 main 并推）**：
@@ -465,10 +474,10 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
-### 4.0 接手顺序（2026-11-25 会话 `5d3d0c09` 滚动；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
+### 4.0 接手顺序（2026-11-25 会话 `dee8a34f` 滚动；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
 
-1. **#478 付费验收（人本轮已允许「必要的付费真跑」；下一轮先问一句再跑）**：scratch 项目 `a3-scratch-20261120`（`/Users/biran/code/skills/orca/a3-scratch-20261120`）里写一份 `orca-plan-v1` 计划（schema `src/scheduler/planFile.ts` 的 `planFileSchema`／`taskContractSchema`；一个小 task，`requiredChecks: ["npm test"]`），`orca project register-plan` → `group import` → `proposal set-agent` 选 codex → `group set-limit`（让 plan 能跑完、execute 撞 ceiling；`confirm` 若因 #479 拒绝就加 `--accept-shortfall`）→ start。撞 ceiling 后 `run show` 应写「continues at <phase> with the paid …」；`group set-limit` 加额后，续跑 run 的 usage **没有 plan 阶段**、task 完成。记命令与 token 数。
-2. **人审**：§八 第 8 条「会话 `5d3d0c09` 的可逆决定」；`6add92a5` 那条三项（#445 阈值、#466 逐字核实、syncskill agents 目标）人尚未答。
+1. **#478 付费验收已通过**。用量和接手入口在 §3.最新。后续真跑另取当轮授权。#505 优先请测试者测大库 dry run，保留按原因分桶的计数与时间。
+2. **人审**：会话 `5d3d0c09` 的前四条已获确认。#445 阈值、基线 #466 逐字核实、syncskill `agents` 目标的建议见 §3.最新。
 3. **登记的余项**（不急）：#478 的 A2 拦截 lineage 与 `task continue` 扣减；#468 大 store 上的阻塞时长（请测试者在其 5 GB store 上给 dry run 计时、看 `--apply` 时面板卡多久）；#469 handoff 停止 run 的降级；#470 spec §2.2（被删项目的组在 `group show` 里标 `project.removed`）；syncskill `npm ci` 的 lock 不同步；ccmem `daemon status | head` 的 EPIPE。
 4. **残留（归人，命令见本会话最终汇报）**：`.wt-repin-465`（worktree，需 `--force`）、`.wt-466-mut`、`.wt-launchd-mut`、`.wt-ss-462-mut`、`.wt-ccloop-f8d368e`、`.wt-final-ccloop-pin`、`.wt-ccloop-276114a`（**已被 `.wt-ccloop-305dad1` 取代，可删**）、本会话的 `.wt-470-mut`、`.wt-batchA-mut`、`.wt-469-mut`、`.wt-478o-mut`、`.wt-478o-orig`、`.wt-478-ab-main`、`.wt-478-ab-br`，以及 `.wt-*.log`。**`.wt-ccloop-305dad1` 是现在跑门用的 ccloop 构建，下次 repin 前保留。**
 5. **沿用的结论**：跑门前 `launchctl bootout gui/501/dev.orca.panel`，跑完 `launchctl bootstrap gui/501 ~/Library/LaunchAgents/dev.orca.panel.plist`＋`orca panel restart`；`TMPDIR=/tmp`；`ORCA_CCLOOP_BIN=/Users/biran/code/skills/orca/.wt-ccloop-305dad1/dist/cli.js`；load 高时超时红先单跑三次、再和未改动 main 对照；本机 `cp`/`rm` 是 `-i` 别名；**子 agent 用 node_modules 软链时，ccmem／ccloop／syncskill 的 `.gitignore` 只写了 `node_modules/`（syncskill 已补裸名），提交前必须看 `git status`**；session scratchpad 由多个子 agent 共用，日志要放各自子目录；repin 用 §3.最新「repin 的坑」那组环境变量。
