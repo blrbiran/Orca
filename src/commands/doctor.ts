@@ -140,7 +140,53 @@ export async function agentWarningsCheck(ctx: CheckContext): Promise<StatusCheck
   } finally { db.close(); }
 }
 
-export const DOCTOR_CHECKS: readonly Check[] = [...STATUS_CHECKS, agentPathCheck, orcaModesCheck, staleSocketsCheck, ccloopBinCheck, agentWarningsCheck];
+/** Tester #469: the most artifact rows one doctor run stats (one lstat each, no hashing), so the check stays bounded. */
+export const ARTIFACT_INTEGRITY_ROW_CAP = 500_000;
+
+/**
+ * Tester #469 (spec 2026-11-24-artifact-integrity-design.md, revision): artifact rows whose `data` file is gone, counted
+ * before a view has to show one as missing. Read-only: the store is opened read-only with gc's busy timeout, each row is
+ * one lstat (no hashing), at most ARTIFACT_INTEGRITY_ROW_CAP rows. It repairs nothing -- the bytes are gone.
+ */
+export async function artifactIntegrityCheck(ctx: CheckContext): Promise<StatusCheck> {
+  const { discoverSocketPath } = await import("../entry/discovery.js");
+  let stateDir: string;
+  try { stateDir = dirname(discoverSocketPath({ stateDirFlag: ctx.stateDirFlag, env: envOf(ctx) })); }
+  catch { return { level: "ok", subject: "artifact-integrity", fact: "no control state directory found; nothing stored to check" }; }
+  const file = join(stateDir, "control.sqlite");
+  if (!existsSync(file)) return { level: "ok", subject: "artifact-integrity", fact: `no control store at ${file} yet` };
+  const { DatabaseSync } = await import("node:sqlite");
+  const db = new DatabaseSync(file, { readOnly: true });
+  try {
+    db.exec("PRAGMA busy_timeout=5000");
+    let rows: Array<{ id: unknown }>;
+    try { rows = db.prepare("SELECT id FROM artifacts ORDER BY rowid LIMIT ?").all(ARTIFACT_INTEGRITY_ROW_CAP + 1) as typeof rows; }
+    catch { return { level: "ok", subject: "artifact-integrity", fact: `no readable artifacts table in ${file}` }; }
+    const capped = rows.length > ARTIFACT_INTEGRITY_ROW_CAP;
+    const missing: string[] = [];
+    for (const row of rows.slice(0, ARTIFACT_INTEGRITY_ROW_CAP)) {
+      const id = String(row.id);
+      // An id that is not one path segment is not a stored artifact's; it is not stat'ed outside artifacts/.
+      if (id.length === 0 || id.includes("/") || id === "." || id === "..") continue;
+      try { lstatSync(join(stateDir, "artifacts", id, "data")); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") missing.push(id); }
+    }
+    const checked = `${Math.min(rows.length, ARTIFACT_INTEGRITY_ROW_CAP)} artifact rows${capped ? ` (the first ${ARTIFACT_INTEGRITY_ROW_CAP}; more exist)` : ""}`;
+    if (missing.length === 0) return { level: "ok", subject: "artifact-integrity", fact: `${checked}, each with its data file (${file})` };
+    const gone = new Set(missing);
+    let reports = 0;
+    try {
+      for (const row of db.prepare("SELECT body FROM outbox WHERE kind='report'").all() as Array<{ body: unknown }>) {
+        try { if (gone.has(String((JSON.parse(String(row.body)) as { source?: { artifactId?: unknown } }).source?.artifactId))) reports += 1; } catch { /* named by the run views */ }
+      }
+    } catch { /* an older store without an outbox counts no reports */ }
+    return { level: "warn", subject: "artifact-integrity",
+      fact: `${checked}: ${missing.length} without their data file (${reports} of them a run's report), e.g. ${missing.slice(0, 5).join(", ")}`,
+      fix: "the bytes are gone and Orca cannot restore them; group show and run show mark those runs \"evidence missing\" and retry and close-run refuse on them. Archive a group whose closed runs miss evidence (orca group archive <group>). Never delete under artifacts/ by hand (README: Troubleshooting)" };
+  } finally { db.close(); }
+}
+
+export const DOCTOR_CHECKS: readonly Check[] = [...STATUS_CHECKS, agentPathCheck, orcaModesCheck, staleSocketsCheck, ccloopBinCheck, agentWarningsCheck, artifactIntegrityCheck];
 
 export async function runDoctor(args: ParsedArgs, io: CommandIo, checks: readonly Check[] = DOCTOR_CHECKS): Promise<number> {
   return report(await runChecks(checks, await contextOf(args, io)), args, io, "orca-doctor-v1", true);
