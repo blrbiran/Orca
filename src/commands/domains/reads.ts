@@ -3,7 +3,7 @@
  * composed row (spec §14 R6 run show, proposal/task/project show) builds its body from the reads it names.
  */
 import { EntryRejection } from "../../entry/envelope.js";
-import { resolveId } from "../resolve.js";
+import { ProjectNotMounted, resolveId } from "../resolve.js";
 import type { CommandDef, FlagDef, PositionalDef, ReadMapping, WriteContext } from "../types.js";
 import { compact, field, text } from "./format.js";
 import { acceptanceLines, contextHandoffLines, deliveryQuestionLines, emptyResultLines, keptLines, type KeptSummary, workingTreeLines, type WorkingTreeView, sessionCleanupLines, workerLostLines, formatWithUnestimated, fundingLines, groupInstructionLines, historyLines, noChangeLines, proposalDocument, reviewLines, softCeilingLines, unestimatedLines, withFunding, criteriaReviewLines, type EmptyResultRun, type EstimateHistory, type NoChangeItem } from "./verbs.js";
@@ -27,6 +27,7 @@ const read = (row: Row): CommandDef => ({
   domain: row.domain, action: row.action, summary: row.summary, positionals: row.positionals ?? [], flags: row.flags ?? [], access: "open",
   mapsTo: { kind: "read", paths: row.paths, ...(row.compose === undefined ? {} : { compose: row.compose }) },
   examples: row.examples ?? [], format: row.format ?? ((body) => text(body)),
+  ...(row.answersUnmounted === true ? { answersUnmounted: true } : {}),
 });
 const GROUP: PositionalDef = { name: "group", summary: "a group id or a unique prefix", required: true };
 const TASK: PositionalDef = { name: "task", summary: "a task id or a unique prefix", required: true };
@@ -314,14 +315,29 @@ interface ProjectRow { projectKey: string; controlRepoId: string | null; path: s
  * Issue 146: each row names its kind; a multi lists its members instead of the primary's path it carries for display.
  * Issue 148: a projects file the panel could not apply, and edits waiting for a restart, are said after the rows.
  */
+/** Spec 2026-11-25 §6.2 b: the project, or the facts of a registered project that is not mounted. */
+async function unmountedOr(context: WriteContext): Promise<Awaited<ReturnType<WriteContext["project"]>> | { unmounted: ProjectNotMounted["facts"] }> {
+  try { return await context.project(); }
+  catch (error) { if (error instanceof ProjectNotMounted) return { unmounted: error.facts }; throw error; }
+}
+
+/** `orca project show`: the settings as text, or the not-mounted line and its next step. */
+const projectShow = (body: unknown): string => {
+  if (field(body, "mounted") !== false) return text(body);
+  const next = (field(body, "next") as string[] | undefined) ?? [];
+  return [`${String(field(body, "projectKey"))}: registered, not mounted: ${String(field(body, "reason"))}: ${String(field(body, "path"))}`, ...next.map((line) => `next: ${line}`)].join("\n");
+};
+
 const projectList = (body: unknown): string => {
   const rows = (field(body, "projects") as ProjectRow[] | undefined) ?? [];
-  const lines = rows.map((p) => `${p.projectKey}  ${p.kind ?? "repo"}  ${p.controlRepoId ?? "(no control)"}  ${p.kind === "multi" ? `members ${(p.dirs ?? []).map((d) => d.projectKey).join(", ")}` : p.path}`);
+  // Project remove spec 2026-11-25 §6.2 b (tester #470): a row whose folder is gone says so, not "(no control)".
+  const missingKeys = new Set(((field(body, "missingPaths") as string[] | undefined) ?? []).map((line) => line.slice(0, line.indexOf(": "))));
+  const lines = rows.map((p) => `${p.projectKey}  ${p.kind ?? "repo"}  ${p.controlRepoId ?? (missingKeys.has(p.projectKey) ? "(not mounted)" : "(no control)")}  ${p.kind === "multi" ? `members ${(p.dirs ?? []).map((d) => d.projectKey).join(", ")}` : p.path}`);
   if (lines.length === 0) lines.push("no projects");
   const fileError = field(body, "fileError");
   if (typeof fileError === "string") lines.push(`error: the projects file is not in effect (the list above is the last good one): ${fileError}`);
   const missing = field(body, "missingPaths");
-  if (Array.isArray(missing) && missing.length > 0) lines.push(`warning: folder not found, not mounted: ${missing.join("; ")} (restore the folder, or delete the entry from the projects file)`);
+  if (Array.isArray(missing) && missing.length > 0) lines.push(`warning: folder not found, not mounted: ${missing.join("; ")} (restore the folder, or orca project remove <id> --as-person)`);
   const pending = field(body, "pendingRestart");
   if (Array.isArray(pending) && pending.length > 0) lines.push(`restart needed for: ${pending.join(", ")} (orca panel restart)`);
   return lines.join("\n");
@@ -556,11 +572,20 @@ function decisionList(body: unknown): string {
 export const READ_ROWS: CommandDef[] = [
   read({ domain: "project", action: "list", summary: "the registered projects: key, kind, control repository id, and root (a multi's member projects)", paths: () => ["projects"],
     format: projectList }),
-  read({ domain: "project", action: "show", summary: "the project's workspace mode and integration settings (and their revision)",
+  read({ domain: "project", action: "show", summary: "the project's workspace mode and integration settings (and their revision); a registered project that is not mounted says so",
     positionals: [{ name: "project", required: false, isProject: true, summary: "the project (id or path), as --project; default: the registered repository holding cwd" }],
-    paths: async (context) => { const { repoId } = await context.project(); return [`repositories/${repoId}/workspace`, `repositories/${repoId}/integration`]; },
+    answersUnmounted: true, format: projectShow,
+    paths: async (context) => {
+      const p = await unmountedOr(context);
+      return "unmounted" in p ? [] : [`repositories/${p.repoId}/workspace`, `repositories/${p.repoId}/integration`];
+    },
     compose: async (bodies, context) => {
-      const p = await context.project();
+      const p = await unmountedOr(context);
+      // Project remove spec 2026-11-25 §6.2 b (tester #470): what `project list` lists, `show` answers -- registered, not mounted.
+      if ("unmounted" in p) {
+        const { projectKey, path, reason } = p.unmounted;
+        return { schema: "orca-project-show-v1", repoId: null, projectKey, path, mounted: false, reason, next: [`orca project remove ${projectKey} --as-person`] };
+      }
       // Issue 146: a dir or multi project says so (a multi with its members); a repository's body keeps its shape.
       return {
         schema: "orca-project-show-v1", repoId: p.repoId, projectKey: p.projectKey, path: p.path,

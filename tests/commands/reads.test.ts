@@ -340,7 +340,8 @@ describe("the human project list says a broken projects file and pending restart
     // mutation: drop the missingPaths line -> only the row, red
     expect(await listed({ source: "file", projects: ROWS, fileError: null, pendingRestart: [], missingPaths: ["gone: /tmp/x"] })).toEqual([
       "proj  repo  repo-1  /repos/proj",
-      "warning: folder not found, not mounted: gone: /tmp/x (restore the folder, or delete the entry from the projects file)",
+      // Ruling (tester #470, session 5d3d0c09): `orca project remove` now exists, so the next step names it, not a hand edit.
+      "warning: folder not found, not mounted: gone: /tmp/x (restore the folder, or orca project remove <id> --as-person)",
     ]);
   });
 

@@ -132,6 +132,15 @@ export const SETTINGS_ROWS: CommandDef[] = [
     mapsTo: { kind: "local", load: async () => (await import("../local/addProject.js")).runAddProject },
     examples: ["orca project add Web --path ~/code/web --as-person", "orca project add Shop --dirs web,api --as-person"], format: () => "",
   },
+  // Project remove spec 2026-11-25 §6 (tester #470): unregister one, mounted or not; an owner's act, as add is.
+  {
+    domain: "project", action: "remove", summary: "unregister a project (its folder may be gone): refused while it has groups not archived, unless --archive-groups archives them first; nothing on disk is deleted; an owner's act",
+    positionals: [{ name: "project", summary: "the project's id (as orca project list prints it) or its exact name", required: true }],
+    flags: [{ name: "archive-groups", type: "boolean", summary: "archive the project's groups that are not archived first (stops at the first one archive refuses)" }],
+    access: "token",
+    mapsTo: { kind: "local", load: async () => (await import("../local/removeProject.js")).runRemoveProject },
+    examples: ["orca project remove old-lab --as-person", "orca project remove old-lab --archive-groups --as-person"], format: () => "",
+  },
 
   // --- decision (group scope)
   verb({ domain: "decision", action: "approve", summary: "approve a decision a landing refused, with an executable undo.how", verb: "approve-pending-decision", positionals: [GROUP, ID],

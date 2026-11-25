@@ -265,7 +265,7 @@ export async function projectsCheck(ctx: CheckContext): Promise<StatusCheck> {
   }
   // Tester #470: a registered folder that is gone is a warning; the file is in effect, and `status` must not exit 1 for it.
   if (Array.isArray(body.missingPaths) && body.missingPaths.length > 0) {
-    return { level: "warn", subject: "projects", fact: `folder not found, not mounted: ${body.missingPaths.join("; ")}`, fix: "restore the folder, or delete the entry from the projects file (there is no remove command yet)" };
+    return { level: "warn", subject: "projects", fact: `folder not found, not mounted: ${body.missingPaths.join("; ")}`, fix: "restore the folder, or orca project remove <id> --as-person (--archive-groups if it still has groups)" };
   }
   if (Array.isArray(body.pendingRestart) && body.pendingRestart.length > 0) {
     return { level: "warn", subject: "projects", fact: `restart needed for: ${body.pendingRestart.join(", ")}`, fix: "orca panel restart" };

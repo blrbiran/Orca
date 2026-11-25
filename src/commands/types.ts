@@ -134,6 +134,11 @@ export interface CommandDef {
   mapsTo: VerbMapping | ReadMapping | LocalMapping;
   /** The handler parses its own argv (`orca control`, which keeps its own grammar). */
   raw?: boolean;
+  /**
+   * Project remove spec 2026-11-25 §6.2 b (tester #470): the row answers a registered project that is not mounted itself
+   * (`project show`), so the --project check lets `project-not-mounted` through to it; every other row is refused by it.
+   */
+  answersUnmounted?: boolean;
   /** Per-command exit codes beyond 0 ok / 1 refused here / 2 panel error / 3 crash (spec §7, §14 R8). */
   exitCodes?: Record<number, string>;
   examples: string[];

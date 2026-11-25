@@ -409,6 +409,13 @@ describe("projects check (issue 148)", () => {
     expect(await answering({ projects: ROWS, fileError: null, pendingRestart: [], missingPaths: ["gone: /tmp/x"] })).toMatchObject({ level: "warn", subject: "projects", fact: expect.stringContaining("gone: /tmp/x") });
   });
 
+  // Tester #470 (spec 2026-11-25 §6.2 d): the fix said "there is no remove command yet"; it names the command now.
+  it("the missing-folder warning's fix names orca project remove", async () => {
+    // mutation: restore the old fix text -> red
+    expect((await answering({ projects: ROWS, fileError: null, pendingRestart: [], missingPaths: ["gone: /tmp/x"] })).fix)
+      .toBe("restore the folder, or orca project remove <id> --as-person (--archive-groups if it still has groups)");
+  });
+
   it("a healthy file is ok", async () => {
     expect(await answering({ projects: ROWS, fileError: null, pendingRestart: [] })).toMatchObject({ level: "ok", subject: "projects" });
   });

@@ -8,7 +8,7 @@ import { EntryRejection, exitCodeFor, localError, type CliResponseV1 } from "../
 import { controlGet, controlUpload } from "../entry/operations.js";
 import { errorOf, printResponse } from "./output.js";
 import { personTokenHeaders } from "./person.js";
-import { resolveId, resolveProject, type ProjectRef } from "./resolve.js";
+import { ProjectNotMounted, resolveId, resolveProject, type ProjectRef } from "./resolve.js";
 import type { CommandDef, CommandIo, ParsedArgs, ReadMapping, WriteContext } from "./types.js";
 
 /** A read the panel answered with an error; printed as the panel's answer (exit 2). */
@@ -86,7 +86,7 @@ export async function resolveIds(args: ParsedArgs, session: PanelSession): Promi
   return ids;
 }
 
-interface ProjectsBody { projects: Array<{ projectKey: string; path: string; controlRepoId: string | null; kind?: "dir" | "multi"; dirs?: Array<{ projectKey: string }> }> }
+interface ProjectsBody { projects: Array<{ projectKey: string; path: string; controlRepoId: string | null; kind?: "dir" | "multi"; dirs?: Array<{ projectKey: string }> }>; missingPaths?: string[] }
 
 export function contextFor(args: ParsedArgs, io: CommandIo, session: PanelSession, ids: Record<string, string>): WriteContext {
   let project: Promise<ProjectRef> | null = null;
@@ -94,7 +94,16 @@ export function contextFor(args: ParsedArgs, io: CommandIo, session: PanelSessio
     args, ids, io, read: (path) => session.read(path), upload: (path, bytes) => session.upload(path, bytes),
     project() {
       project ??= session.read("projects").then((body) => {
-        const refs = (body as ProjectsBody).projects
+        const flag = args.global.project;
+        // Project remove spec 2026-11-25 §6.2 b (tester #470): a listed project the control plane does not hold is named as
+        // such, with its facts -- not `project-not-found` -- unless the flag also names a held one.
+        const listed = body as ProjectsBody;
+        const unheld = flag === undefined ? undefined : listed.projects.find((p) => p.controlRepoId === null && p.projectKey === flag);
+        if (unheld !== undefined && !listed.projects.some((p) => p.controlRepoId === flag)) {
+          const missing = (listed.missingPaths ?? []).some((line) => line.startsWith(`${unheld.projectKey}: `));
+          throw new ProjectNotMounted({ projectKey: unheld.projectKey, path: unheld.path, reason: missing ? "folder not found" : "not held by the control plane" });
+        }
+        const refs = listed.projects
           .filter((p) => p.controlRepoId !== null)
           .map((p) => ({
             repoId: p.controlRepoId!, projectKey: p.projectKey, path: p.path,
@@ -145,7 +154,10 @@ export async function runPanelCommand(def: CommandDef, args: ParsedArgs, io: Com
     const session = openSession(args, io);
     context = contextFor(args, io, session, await resolveIds(args, session));
     // Issue 152: a --project the row never reads is still checked, so a misspelt one is refused, not silently ignored.
-    if (args.global.project !== undefined) await context.project();
+    if (args.global.project !== undefined) {
+      try { await context.project(); }
+      catch (error) { if (!(error instanceof ProjectNotMounted && def.answersUnmounted === true)) throw error; }
+    }
     const mapping = def.mapsTo;
     if (mapping.kind === "read") return print(await runRead(def, mapping, context));
     if (mapping.kind === "verb") {

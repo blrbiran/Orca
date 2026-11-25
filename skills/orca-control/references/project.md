@@ -13,7 +13,7 @@ the registered projects: key, kind, control repository id, and root (a multi's m
 
 ## `orca project show [<project>]`
 
-the project's workspace mode and integration settings (and their revision)
+the project's workspace mode and integration settings (and their revision); a registered project that is not mounted says so
 
 - What it does: reads from the panel (no write).
 - Who may: open over the socket (a flag marked human-only still needs a person token).
@@ -75,4 +75,18 @@ register a project: a git repository's root (--path) or a multi project of regis
 ```
 orca project add Web --path ~/code/web --as-person
 orca project add Shop --dirs web,api --as-person
+```
+
+## `orca project remove <project> [--archive-groups]`
+
+unregister a project (its folder may be gone): refused while it has groups not archived, unless --archive-groups archives them first; nothing on disk is deleted; an owner's act
+
+- What it does: runs locally.
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
+- `<project>`: the project's id (as orca project list prints it) or its exact name
+- `--archive-groups`: archive the project's groups that are not archived first (stops at the first one archive refuses)
+
+```
+orca project remove old-lab --as-person
+orca project remove old-lab --archive-groups --as-person
 ```

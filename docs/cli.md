@@ -46,12 +46,13 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 ### `orca project`
 
 - `orca project list` — the registered projects: key, kind, control repository id, and root (a multi's member projects)
-- `orca project show [<project>]` — the project's workspace mode and integration settings (and their revision)
+- `orca project show [<project>]` — the project's workspace mode and integration settings (and their revision); a registered project that is not mounted says so
 - `orca project set-workspace-mode --mode <mode>` — worktree or clone for the project's runs
 - `orca project set-integration --delivery <delivery> [--trigger <trigger>] [--method <method>] [--target <target>] [--remote <remote>] [--history-source <history-source>] [--history-artifact <history-artifact>]` — where the project's finished work goes by default
 - `orca project set-criteria-review [--on] [--off]` — whether Orca's reviewer judges a flagged test change before a person sees it
 - `orca project register-plan <path>` — register (or re-trust) a git-tracked plan file of the project so it can be imported
 - `orca project add <name> [--path <path>] [--dirs <dirs>]` — register a project: a git repository's root (--path) or a multi project of registered ones (--dirs); an owner's act (person token)
+- `orca project remove <project> [--archive-groups]` — unregister a project (its folder may be gone): refused while it has groups not archived, unless --archive-groups archives them first; nothing on disk is deleted; an owner's act (person token)
 
 ### `orca group`
 

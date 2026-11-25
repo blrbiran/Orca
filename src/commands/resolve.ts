@@ -8,6 +8,17 @@ import { EntryRejection } from "../entry/envelope.js";
  */
 export interface ProjectRef { repoId: string; projectKey: string; path: string; kind?: "dir" | "multi"; dirs?: string[] }
 
+/**
+ * Project remove spec 2026-11-25 §6.2 b (tester #470): a project the panel lists but does not hold -- its folder was gone
+ * at boot, or the control plane does not hold it. Named with its facts, never `project-not-found`, so `project list` and
+ * every verb that names the project agree that it is registered.
+ */
+export class ProjectNotMounted extends EntryRejection {
+  constructor(readonly facts: { projectKey: string; path: string; reason: "folder not found" | "not held by the control plane" }) {
+    super("project-not-mounted", `${facts.projectKey} is registered, not mounted: ${facts.reason}: ${facts.path} (restore the folder, or orca project remove ${facts.projectKey} --as-person)`);
+  }
+}
+
 const real = (path: string): string => { try { return realpathSync(path); } catch { return resolvePath(path); } };
 const holds = (root: string, path: string): boolean => {
   const rel = relative(root, path);
