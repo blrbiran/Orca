@@ -228,6 +228,20 @@ describe("the group decisions view (control run decisions Task 8)", { timeout: 6
     } finally { await w.dispose(); }
   });
 
+  // Tester #469: a report whose data file is gone (now artifact-data-missing, not a raw ENOENT) is unreadable too.
+  // Mutation: drop artifact-data-missing from ARTIFACT_UNREADABLE -> the view answers 500, red.
+  it("keeps answering when one run's saved report is gone from disk, and says so for that run", async () => {
+    const w = await world({ behaviour: () => "failed", decisions: () => [good()] }); try {
+      const runId = await w.claim();
+      await w.until(w.driver(), () => w.body(runId).state === "blocked");
+      const outbox = JSON.parse(String(w.h.store.db.prepare("SELECT body FROM outbox WHERE id=?").get(`report:${runId}`)!.body));
+      await rm(join(w.h.store.stateDir, "artifacts", outbox.source.artifactId, "data"));
+      const answer = await w.get();
+      expect(answer.status).toBe(200);
+      expect(runOf(answer.body as View, runId)).toEqual({ runId, settled: true, reported: "unreadable", decisions: [], pending: [], unlanded: [] });
+    } finally { await w.dispose(); }
+  });
+
   it("does not name a store failure an unreadable report", async () => {
     // Final review T8: only an artifact that cannot be read is "unreadable"; a database or programming error is not hidden.
     const w = await world({ behaviour: () => "failed", decisions: () => [good()] }); try {

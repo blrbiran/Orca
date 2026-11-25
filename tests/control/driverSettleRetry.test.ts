@@ -109,9 +109,12 @@ describe("E: a transient failure is retried before the run stays blocked (#229, 
       ["EBUSY", errno("EBUSY")], ["EAGAIN", errno("EAGAIN")], ["ENOENT", errno("ENOENT")],
       ["EACCES", errno("EACCES")], ["ENOSPC", errno("ENOSPC")], ["plain", new Error("boom")],
       ["control-path-not-directory", new ControlError("control-path-not-directory")], ["recovery-blocked", new ControlError("recovery-blocked", "x")],
+      // Ruling (tester #469, session 5d3d0c09): readArtifact now names the ENOENT of a vanished artifact
+      // artifact-data-missing; it keeps the transient verdict the raw ENOENT had. Mutation: drop it -> false, red.
+      ["artifact-data-missing", new ControlError("artifact-data-missing", "x")],
     ].map(([name, error]) => [name as string, transientSettleError(error)]));
     expect(verdicts).toEqual({
-      "artifact-id-conflict": true, EBUSY: true, EAGAIN: true, ENOENT: true,
+      "artifact-id-conflict": true, EBUSY: true, EAGAIN: true, ENOENT: true, "artifact-data-missing": true,
       EACCES: false, ENOSPC: false, plain: false, "control-path-not-directory": false, "recovery-blocked": false,
     });
   });
