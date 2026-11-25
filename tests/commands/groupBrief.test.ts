@@ -64,4 +64,30 @@ describe("group brief (issue 199)", () => {
       await x.dispose();
     }
   });
+
+  // Tester #500: the brief printed `card` through compact()'s 160-character cut, so a first failure's `next` command
+  // arrived truncated and could not be pasted. The failure block carries the cause and the whole command on its own line.
+  it("prints a first failure's cause and a next command longer than 160 characters in full (#500)", async () => {
+    const groupId = "sprint-3layer-20261125-1";
+    const next = `orca group set-limit ${groupId} --limit <a higher limit>  or  orca task accept-stopped-attempt ${groupId} task-with-a-rather-long-identifier-0001 --run run-0123456789abcdef`;
+    expect(next.length).toBeGreaterThan(160);
+    const card = { budget: { usedTokens: 1, limitTokens: null, reservedTokens: 0 }, firstFailure: { taskId: "t-7", cause: "group-cap-reached", next } };
+    const summary = { status: 200, body: { schema: "orca-control-summary-v1", epoch: "e", changeSeq: 11, resetRequired: false, groups: [{ groupId, repoId: "repo-1", state: "running", commandRevision: 7 }] } };
+    const p = await fakePanel({ "GET summary": summary, [`GET groups/${groupId}/brief`]: { status: 200, body: { schema: "orca-group-brief-v1", ...VIEW.summary, groupId, card } } });
+    const out = await cli(["group", "brief", groupId], p.dir);
+    expect(out.code, out.stderr).toBe(0);
+    expect(out.stdout).toContain("failure: group-cap-reached — task t-7");
+    expect(out.stdout).toContain(`  next: ${next}`);
+    // `card` stays in the output for whoever greps it.
+    expect(out.stdout).toContain("card: ");
+  });
+
+  it("prints a first failure without a next command as its cause alone, never an empty next line (#500)", async () => {
+    const card = { firstFailure: { taskId: "t-2", cause: "task-blocked" } };
+    const p = await fakePanel({ ...routes, "GET groups/g-alpha/brief": { status: 200, body: { schema: "orca-group-brief-v1", ...VIEW.summary, card } } });
+    const out = await cli(["group", "brief", "g-alpha"], p.dir);
+    expect(out.code, out.stderr).toBe(0);
+    expect(out.stdout).toContain("failure: task-blocked — task t-2");
+    expect(out.stdout).not.toContain("next:");
+  });
 });

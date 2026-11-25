@@ -97,6 +97,15 @@ export function budgetHeadroomLines(body: unknown): string[] {
   const figures = budget === undefined ? "" : ` (limit ${budget.limitTokens ?? "none"}, used ${budget.usedTokens}, reserved ${budget.reservedTokens} by running lanes and allocations)`;
   return [`warning: ${warning}: ${n} ready task${n === 1 ? "" : "s"} wait${n === 1 ? "s" : ""} for budget -- the group's headroom is 0${figures}; claimed when a running lane ends, or raise the limit: orca group set-limit ${typeof groupId === "string" ? groupId : "<group>"} --limit <higher> --as-person`];
 }
+/**
+ * Tester #500: `card` is printed through compact()'s 160-character cut, which truncated a first failure's `next`
+ * command. Its cause and whole command get their own lines; with no `next`, the cause alone (never an empty `next:`).
+ */
+export function firstFailureLines(body: unknown): string[] {
+  const failure = (field(body, "card") as { firstFailure?: { taskId: string; cause: string; next?: string } | null } | undefined)?.firstFailure;
+  if (failure === undefined || failure === null) return [];
+  return [`failure: ${failure.cause} — task ${failure.taskId}`, ...(typeof failure.next === "string" && failure.next !== "" ? [`  next: ${failure.next}`] : [])];
+}
 function unreadableRunLines(entries: unknown): string[] {
   if (!Array.isArray(entries)) return [];
   return (entries as UnreadableRunEntry[]).map(({ runId, taskId, reason }) =>
@@ -665,7 +674,7 @@ export const READ_ROWS: CommandDef[] = [
     format: (body) => { const note = field(body, "phaseEndUsage") as { runIds: string[]; asOf: number | null } | undefined;
       const groupId = field(body, "groupId"), acceptance = field(body, "acceptance") as Parameters<typeof acceptanceLines>[1];
       const costs = (field(body, "costOutliers") as TaskCost[] | undefined) ?? [];
-      return [text(body), ...budgetHeadroomLines(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf)),
+      return [...firstFailureLines(body), text(body), ...budgetHeadroomLines(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf)),
         // Tester follow-up K, item 2: the acceptance line show prints, with its full-suite warning.
         ...(typeof groupId === "string" ? acceptanceLines(groupId, acceptance) : []),
         // Tester #359: a review that did not pass, with what answers it, as group show prints it.
