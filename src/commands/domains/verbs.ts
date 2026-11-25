@@ -438,15 +438,17 @@ export function workingTreeLines(groupId: string, s: KeptSummary | undefined, in
 }
 
 /**
- * Working-tree delivery spec §4.2 item 3: the first-use question, before the #365(a) kept lines, for a done keep group
- * whose read says the project's delivery was never chosen (`projectDeliveryChosen === false`; absent, an older panel or
- * a chosen project, asks nothing). The same folder / multi exclusions as the kept lines.
+ * Working-tree delivery spec §4.2 item 3, tester #503: optional help before the #365(a) kept lines, for a done keep
+ * group whose read says the project saved no delivery default (`projectDeliveryChosen === false`; absent, an older
+ * panel or a chosen project, says nothing). The same folder / multi exclusions as the kept lines. It is not a second
+ * delivery conclusion: it says this project saved no default (the `delivery: keep` line says where this
+ * group's files are), so it does not share the `delivery:` prefix and never says the group's delivery is "not chosen".
  */
-export const DELIVERY_NOT_CHOSEN = "delivery: not chosen for this project yet (a person's choice; needs a person token)";
+export const DELIVERY_NOT_CHOSEN = "optional delivery choice: this project has no saved delivery default (a person's choice; needs a person token)";
 export const DELIVERY_FOR_LATER = "  and for later groups: orca project set-integration --delivery working-tree   (or --delivery keep)";
 export function deliveryQuestionLines(groupId: string, s: KeptSummary | undefined, delivery: string | undefined, chosen: unknown): string[] {
   if (chosen !== false || keptLines(groupId, s, delivery).length === 0) return [];
-  return [DELIVERY_NOT_CHOSEN, `  put this group's files in your working tree (uncommitted): orca group set-integration ${groupId} --delivery working-tree`, DELIVERY_FOR_LATER];
+  return [DELIVERY_NOT_CHOSEN, `  put this group's files in your working tree instead (uncommitted): orca group set-integration ${groupId} --delivery working-tree`, DELIVERY_FOR_LATER];
 }
 
 export interface CriteriaReviewView { taskId: string; debugGroupId: string; state: string; reason: string | null }

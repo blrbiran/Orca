@@ -47,10 +47,11 @@ describe("the waiting row (spec §4.6)", () => {
   });
 });
 
-// spec §4.2 item 3: the first-use question, only for a done keep group of a project nobody chose a delivery for.
+// spec §4.2 item 3: the first-use help, only for a done keep group of a project nobody chose a delivery for. Tester #503:
+// it is an optional choice beside the group's authoritative `keep` fact, so it does not share the `delivery:` prefix.
 const QUESTION = [
-  "delivery: not chosen for this project yet (a person's choice; needs a person token)",
-  "  put this group's files in your working tree (uncommitted): orca group set-integration g-alpha --delivery working-tree",
+  "optional delivery choice: this project has no saved delivery default (a person's choice; needs a person token)",
+  "  put this group's files in your working tree instead (uncommitted): orca group set-integration g-alpha --delivery working-tree",
   "  and for later groups: orca project set-integration --delivery working-tree   (or --delivery keep)",
 ];
 const KEPT_FIRST = "delivery: keep -- the files are on orca/g-alpha (tip aaaaaaaaaaaa), not in your working tree";
@@ -62,9 +63,19 @@ describe("the first-use question in the CLI (spec §4.2 item 3)", () => {
     // mutation: drop the question from the show formatter -> red
     expect(out.slice(out.indexOf(QUESTION[0]!), out.indexOf(QUESTION[0]!) + 4)).toEqual([...QUESTION, KEPT_FIRST]);
     // An older panel (absent field) and a chosen project print nothing new.
-    expect(formatWithUnestimated(doneKeep({}))).not.toContain("not chosen for this project");
+    expect(formatWithUnestimated(doneKeep({}))).not.toContain("optional delivery choice");
     // mutation: test the field for falsiness instead of === false -> undefined asks, red above; a running group never asks
-    expect(formatWithUnestimated({ ...doneKeep({ projectDeliveryChosen: false }), summary: { groupId: "g-alpha", state: "running" } })).not.toContain("not chosen for this project");
+    expect(formatWithUnestimated({ ...doneKeep({ projectDeliveryChosen: false }), summary: { groupId: "g-alpha", state: "running" } })).not.toContain("optional delivery choice");
+  });
+
+  it("a done keep group prints one delivery conclusion; the first-use help is labelled optional (#503)", () => {
+    const out = formatWithUnestimated(doneKeep({ projectDeliveryChosen: false }));
+    // The authoritative fact is the group's own `keep` delivery: exactly one line in the `delivery:` namespace.
+    expect(out.split("\n").filter((line) => line.startsWith("delivery"))).toEqual([KEPT_FIRST]);
+    // The help stays, as an optional choice, and never contradicts the `keep` fact above it.
+    expect(out).toContain(QUESTION[0]);
+    expect(out).toContain(QUESTION[1]);
+    expect(out).not.toContain("not chosen for this project yet");
   });
 
   it("group brief asks it too, and prints a working-tree group's lines from the brief's own record", async () => {
@@ -75,7 +86,7 @@ describe("the first-use question in the CLI (spec §4.2 item 3)", () => {
     const asked = (await cli(["group", "brief", "g-alpha"], (await brief({ delivery: "keep", projectDeliveryChosen: false })).dir)).stdout.split("\n");
     // mutation: drop the question from the brief formatter -> red
     expect(asked.slice(asked.indexOf(QUESTION[0]!), asked.indexOf(QUESTION[0]!) + 4)).toEqual([...QUESTION, KEPT_FIRST]);
-    expect((await cli(["group", "brief", "g-alpha"], (await brief({ delivery: "keep" })).dir)).stdout).not.toContain("not chosen for this project");
+    expect((await cli(["group", "brief", "g-alpha"], (await brief({ delivery: "keep" })).dir)).stdout).not.toContain("optional delivery choice");
     const written = await cli(["group", "brief", "g-alpha"], (await brief({ delivery: "working-tree", integration: { ...WT, lastIntegrated: TIP } })).dir);
     // mutation: drop workingTreeLines from the brief formatter -> red
     expect(written.stdout.split("\n")).toContain("delivery: working-tree -- written into your working tree (uncommitted, tip aaaaaaaaaaaa), including Orca's decision records under .decisions/");
@@ -100,10 +111,10 @@ describe("the first-use question in the CLI (spec §4.2 item 3)", () => {
     expect(out).toContain(QUESTION[0]);
     expect(out).toContain(QUESTION[2]);
     expect(out.filter((line) => line === QUESTION[0])).toHaveLength(1);
-    for (const chosen of [true, undefined]) expect((await cli(["group", "confirm", "g-alpha"], (await world({}, read(chosen))).dir)).stdout).not.toContain("not chosen for this project");
+    for (const chosen of [true, undefined]) expect((await cli(["group", "confirm", "g-alpha"], (await world({}, read(chosen))).dir)).stdout).not.toContain("optional delivery choice");
     // A panel without the read still confirms, saying nothing.
     const missing = await cli(["group", "confirm", "g-alpha"], (await world()).dir);
     expect(missing.code).toBe(0);
-    expect(missing.stdout).not.toContain("not chosen for this project");
+    expect(missing.stdout).not.toContain("optional delivery choice");
   });
 });

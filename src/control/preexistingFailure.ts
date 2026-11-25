@@ -14,6 +14,7 @@
  */
 import { recordActivity } from "./activity.js";
 import { answeredBaseChecksAt, baseCheckScopeOf, readBaseCheck, requestReportedBaseCheck } from "./baseCheckRecord.js";
+import { terminalKindOf } from "./archivedMark.js";
 import { applyWebCommand } from "./commandLedger.js";
 import { dirWorkspaceOf } from "./dirGroup.js";
 import { multiDirOf } from "./multiGroup.js";
@@ -56,6 +57,11 @@ export interface PreexistingFailureRow {
   answered?: { by: string; at: number };
   /** Task 2 review I-1: whether an answer can reach anyone -- the group has a requirement review that runs (answerableGroup). */
   answerable: boolean;
+  /**
+   * Tester #504: the group is finished (done, archived or closed), so nothing waits for an answer now; the answer is
+   * recorded, and only a review rerun would read it. Absent otherwise, so every running group's row is what it was.
+   */
+  onlyRerunUsesIt?: boolean;
 }
 
 /**
@@ -70,6 +76,15 @@ export function answerableGroup(store: ControlStore, groupId: string, body: unkn
 
 const field = (value: unknown, key: string): unknown =>
   typeof value === "object" && value !== null && !Array.isArray(value) ? (value as Record<string, unknown>)[key] : undefined;
+
+/**
+ * Tester #504: a finished group -- done, archived or closed -- has no current review to hear an answer. Its row is
+ * recorded, and only a review rerun would read it. The answer command itself stays reachable (answerableGroup): a done
+ * group's person may still record an answer for that rerun.
+ */
+function finishedGroup(body: unknown): boolean {
+  return field(body, "status") === "done" || terminalKindOf(body) !== null;
+}
 
 /**
  * Spec L2: the reported decisions that carry the marker -- major ones only (an absent grade reads as major, as every
@@ -175,8 +190,12 @@ export function preexistingFailureRows(store: ControlStore, groupId: string, bod
     row.answer = answer.answer; row.answered = { by: answer.by, at: answer.at };
   }
   if (rows.size === 0) return [];
-  const answerable = answerableGroup(store, groupId, body);
-  for (const row of rows.values()) row.answerable = answerable;
+  const answerable = answerableGroup(store, groupId, body), finished = finishedGroup(body);
+  for (const row of rows.values()) {
+    row.answerable = answerable && !finished;
+    // Tester #504: a finished group's row is recorded for a review rerun; it does not wait for an answer now.
+    if (answerable && finished) row.onlyRerunUsesIt = true;
+  }
   return [...rows.values()].sort((a, b) => compareText(a.command, b.command));
 }
 
@@ -242,11 +261,10 @@ export function matchPreexistingCommand<T extends { command: string }>(rows: rea
 }
 
 /** Tester #402: the rows the group brief names -- reported and not yet answered, with whether an answer would do anything. */
-export function preexistingFailureWaiting(store: ControlStore, groupId: string, body: unknown): Array<{ command: string; answerable: boolean; reportedBy: number }> {
-  const answerable = answerableGroup(store, groupId, body);
+export function preexistingFailureWaiting(store: ControlStore, groupId: string, body: unknown): Array<{ command: string; answerable: boolean; onlyRerunUsesIt?: boolean; reportedBy: number }> {
   return readPreexistingFailures(store, groupId, body)
     .filter((row) => row.answer === null && row.notConfirmedAtBase === undefined)
-    .map((row) => ({ command: row.command, answerable, reportedBy: row.reportedBy.length }))
+    .map((row) => ({ command: row.command, answerable: row.answerable, ...(row.onlyRerunUsesIt === true ? { onlyRerunUsesIt: true as const } : {}), reportedBy: row.reportedBy.length }))
     .sort((left, right) => compareText(left.command, right.command));
 }
 
@@ -285,6 +303,8 @@ export function applyAnswerPreexistingFailure(deps: { store: ControlStore }, com
       if (match.kind === "ambiguous") throw new ControlError("preexisting-failure-command-ambiguous", match.candidates.join(" | "));
       const recorded = match.row.command;
       // Task 2 review I-1: with no requirement review to tell, an answer would do nothing; the rows are information only.
+      // Tester #504: this stays answerableGroup, not the row's current-review `answerable` -- a done group may still record
+      // an answer for a review rerun.
       if (!answerableGroup(deps.store, groupId, body)) throw new ControlError("preexisting-failure-not-answerable");
       const by = settlingPersonFor(command.commandId);
       if (by === null) throw new ControlError("preexisting-failure-person-required");

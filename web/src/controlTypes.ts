@@ -694,6 +694,8 @@ export interface PreexistingFailureV1 {
   answered?: { by: string; at: number };
   /** Task 2 review I-1: false for a group whose requirement review does not run; the row is information only. */
   answerable: boolean;
+  /** Tester #504: the group is finished; the row is recorded and only a review rerun would use an answer. */
+  onlyRerunUsesIt?: true;
 }
 
 /** src/control/estimateHistory.ts EstimateHistoryView. */

@@ -751,6 +751,7 @@ export const zh: Translation<typeof en> = {
       notConfirmed: "未证实：Orca 在组的基线上运行了 {{command}}，结果是绿的，说明本组开工前它并没有失败。不需要你回答。",
       keepsRunning: "组会继续运行。你的回答会记录下来，交给需求复核。",
       notAnswerable: "这个组没有需求复核可以告知，所以无需回答：这里只是告知。",
+      onlyRerun: "这个组已经完成。这条记录会保留；重新复核时会用到这个回答。",
       answered: "已回答：{{answer}}（{{by}}）。",
       answer: { "allow-fix": "允许修复", relative: "相对基线判定", "edit-requirement": "修改需求" },
       answerExplain: {

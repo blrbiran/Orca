@@ -341,6 +341,37 @@ describe("fix round 1: who can answer, and an answer outlives its pruned report 
     } finally { await t.h.dispose(); }
   }, 60_000);
 
+  it("a finished group's row is recorded for a review rerun, not as an answer that waits (#504)", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      withRequirement(t);
+      write(t.deps, () => recordPreexistingFailures(t.h.store, { groupId: "g", taskId: "a", runId: "run-a1" }, { decisions: [marker("npm test", "x")] }));
+      const baseBody = groupBody(t);
+      const setBody = (extra: Record<string, unknown>): Record<string, unknown> => {
+        const body = { ...baseBody, ...extra };
+        t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(body));
+        return body;
+      };
+      // done, archived and closed are all finished: the row is recorded, and only a review rerun would use an answer.
+      for (const extra of [{ status: "done" }, { status: "done", archived: { at: 1, actor: "user:owner" } },
+        { status: "done", archived: { at: 1, actor: "user:owner", kind: "closed" } }]) {
+        const body = setBody(extra);
+        // mutation: drop the terminal clause from the rows' answerable assignment -> answerable true, red
+        expect(preexistingFailureRows(t.h.store, "g", body, null, [])[0]).toMatchObject({ answerable: false, onlyRerunUsesIt: true });
+        // mutation: drop onlyRerunUsesIt from preexistingFailureWaiting -> red
+        expect(preexistingFailureWaiting(t.h.store, "g", body)).toEqual([{ command: "npm test", answerable: false, onlyRerunUsesIt: true, reportedBy: 1 }]);
+      }
+      // A non-terminal group keeps the old meaning: the answer reaches the current review, nothing about a rerun.
+      const open = setBody({ status: "review" });
+      expect(preexistingFailureRows(t.h.store, "g", open, null, [])[0]).toMatchObject({ answerable: true });
+      expect(preexistingFailureRows(t.h.store, "g", open, null, [])[0]).not.toHaveProperty("onlyRerunUsesIt");
+      // The manual answer operation is deliberately kept: a done group's row can still be answered (a review rerun reads it).
+      // mutation: require !terminal in the answer command's guard -> preexisting-failure-not-answerable, red
+      setBody({ status: "done" });
+      expect(answerAs(t, "npm test", "relative")).toMatchObject({ result: { kind: "preexisting-failure-answered" } });
+      expect(groupBody(t).preexistingFailureAnswers).toMatchObject({ "npm test": { answer: "relative", by: "user:owner" } });
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+
   it("an answer whose report was pruned (activity retention) still yields its row and its review line", async () => {
     const { t } = await landed(true); try {
       answerAs(t, "npm test", "allow-fix");
@@ -384,7 +415,8 @@ describe("an agent-only report is checked at the group's base before anyone is a
       // mutation: drop the notConfirmedAtBase filter from preexistingFailureWaiting -> one waiting row, red
       expect(preexistingFailureWaiting(w.t.h.store, "g", body)).toEqual([]);
       // mutation: drop the green loop in preexistingFailureRows -> no notConfirmedAtBase, red
-      expect(readControlGroup(w.t.h.store, "epoch-test", "g").preexistingFailures).toEqual([expect.objectContaining({ command: "true", sources: ["agent"], notConfirmedAtBase: { at: expect.any(Number) }, answer: null, answerable: true })]);
+      // Tester #504: the review passed and the group is done, so no answer waits now; only a review rerun would read it.
+      expect(readControlGroup(w.t.h.store, "epoch-test", "g").preexistingFailures).toEqual([expect.objectContaining({ command: "true", sources: ["agent"], notConfirmedAtBase: { at: expect.any(Number) }, answer: null, answerable: false, onlyRerunUsesIt: true })]);
       // mutation: keep the old fact line for a not-confirmed row -> "not answered by the person", red
       const prompt = w.calls[0]!.prompt;
       expect(prompt).toContain("Reported pre-existing failure `true` is not confirmed: reported by a (chose: baseline run before edits reported # tests 598, # fail 1), but Orca ran it at the group's base and it passed there");

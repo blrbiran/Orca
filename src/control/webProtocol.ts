@@ -2603,6 +2603,9 @@ export const groupViewSchema = z
       answered: z.object({ by: nonemptyString, at: safeInteger }).strict().optional(),
       // Task 2 review I-1: false for a group whose requirement review does not run; its rows are information only.
       answerable: z.boolean(),
+      // Tester #504: a finished group (done, archived or closed) -- recorded, and only a review rerun would read an
+      // answer; absent otherwise, so every running group's row is what it was.
+      onlyRerunUsesIt: z.literal(true).optional(),
     }).strict()).min(1).optional(),
   })
   .strict()

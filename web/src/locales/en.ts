@@ -907,6 +907,7 @@ export const en = {
       notConfirmed: "Not confirmed: Orca ran {{command}} at the group's base and it passed there, so it was not failing before this group's work began. Nothing waits for your answer.",
       keepsRunning: "The group keeps running. Your answer is recorded for the requirement review.",
       notAnswerable: "This group has no requirement review to tell, so there is nothing to answer: this is shown for information.",
+      onlyRerun: "This group is done. The row is recorded; a review-rerun would use this answer.",
       answered: "Answered: {{answer}} (by {{by}}).",
       answer: { "allow-fix": "Allow the fix", relative: "Judge it relative to the base", "edit-requirement": "Edit the requirement" },
       answerExplain: {

@@ -79,6 +79,17 @@ describe("a pre-existing failure in Problems (spec L2)", () => {
     expect(row().textContent).not.toContain("recorded for the requirement review");
   });
 
+  it("a finished group's row is recorded for a review rerun, and the answer stays available (#504)", () => {
+    show(["owner"], [{ ...ROW, answerable: false, onlyRerunUsesIt: true }]);
+    // mutation: keep the not-answerable wording for a finished group -> red
+    expect(row().textContent).toContain("This group is done. The row is recorded; a review-rerun would use this answer.");
+    expect(row().textContent).not.toContain("there is nothing to answer");
+    // The manual answer operation stays: an owner still sees its three answers.
+    expect(within(row()).getAllByRole("button")).toHaveLength(3);
+    // Nothing waits: an unanswered recorded row does not count as a problem.
+    expect(screen.getByRole("tab", { name: /Problems/ }).textContent).not.toMatch(/\d/);
+  });
+
   it("an answered row says the answer and who gave it, and no longer counts on the Problems tab", () => {
     show(["owner"], [{ ...ROW, answer: "allow-fix", answered: { by: "user:owner", at: 9 } }]);
     expect(row().textContent).toContain("Answered: Allow the fix (by user:owner).");

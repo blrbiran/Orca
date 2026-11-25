@@ -12,7 +12,9 @@ const ANSWERS: readonly PreexistingFailureAnswerV1[] = ["allow-fix", "relative",
  * (an owner's act, as a waiver), recorded for the requirement review. "Edit the requirement" is recorded like the others
  * and, once the panel accepted it, opens the group's requirement; Orca cannot change an accepted requirement yet (Task 2
  * review I-3). A group with no requirement review (`answerable` false: plan file, flow child, debug, multi-directory,
- * dir) shows its rows for information only (I-1). The group keeps running whatever the answer.
+ * dir) shows its rows for information only (I-1). Tester #504: a finished group's row (`onlyRerunUsesIt`) is recorded
+ * rather than answered now -- only a review rerun would read the answer -- and its answers stay available. The group
+ * keeps running whatever the answer.
  */
 export function PreexistingFailureProblem(props: {
   groupId: string; rows: readonly PreexistingFailureV1[] | undefined; roles?: readonly Role[]; archived: boolean; revision: number;
@@ -38,9 +40,9 @@ export function PreexistingFailureProblem(props: {
             {row.baseCheck !== undefined && <li>{t("control.preexistingFailure.baseCheck", { command: row.command, task: row.baseCheck.taskId })}</li>}
             {row.notConfirmedAtBase !== undefined && <li data-preexisting-not-confirmed="">{t("control.preexistingFailure.notConfirmed", { command: row.command })}</li>}
           </ul>
-          <p>{t(row.answerable ? "control.preexistingFailure.keepsRunning" : "control.preexistingFailure.notAnswerable")}</p>
+          <p>{t(row.answerable ? "control.preexistingFailure.keepsRunning" : row.onlyRerunUsesIt === true ? "control.preexistingFailure.onlyRerun" : "control.preexistingFailure.notAnswerable")}</p>
           {row.answer !== null && <p>{t("control.preexistingFailure.answered", { answer: t(`control.preexistingFailure.answer.${row.answer}`), by: row.answered?.by ?? "" })}</p>}
-          {!props.archived && owner && row.answerable && (
+          {!props.archived && owner && (row.answerable || row.onlyRerunUsesIt === true) && (
             <div role="group" aria-label={t("control.preexistingFailure.title", { command: row.command })}>
               {ANSWERS.map((chosen) => (
                 <button key={chosen} type="button" aria-pressed={row.answer === chosen} title={t(`control.preexistingFailure.answerExplain.${chosen}`)}
