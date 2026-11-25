@@ -508,7 +508,7 @@ export function reviewLines(groupId: string, review: ReviewView | undefined): st
   ];
 }
 
-interface LandingWatchView { supersededBy?: "acceptance"; regressions: Array<{ command: string; landedTaskIds: string[]; tip: string; exit: string; tail?: string; problem: string }> }
+interface LandingWatchView { tip?: string; supersededBy?: "acceptance"; regressions: Array<{ command: string; landedTaskIds: string[]; tip: string; exit: string; tail?: string; problem: string }> }
 
 /**
  * Tester follow-up G §6.2 (#269): a check that turned red on the group branch after a landing, one problem per regression,
@@ -516,7 +516,13 @@ interface LandingWatchView { supersededBy?: "acceptance"; regressions: Array<{ c
  */
 export function landingWatchLines(groupId: string, w: LandingWatchView | undefined): string[] {
   // Tester #371: the watch stopped and the group acceptance decides the final tip; no landing will run it again.
-  if (w?.supersededBy === "acceptance") return w.regressions.length === 0 ? [] : [`landing watch: taken over by the group acceptance (its last record had ${w.regressions.length} regression${w.regressions.length === 1 ? "" : "s"}: ${w.regressions.map((r) => r.command).join(", ")}; the acceptance on the final tip decides)`];
+  // Tester #494: the human output names that tip, so the record's last states (which the acceptance supersedes, and which
+  // an earlier red may still sit in) are not read as current problems; the JSON's `supersededBy` and `tip` say the same.
+  if (w?.supersededBy === "acceptance") {
+    const superseded = `landing watch superseded by acceptance (tip ${(w.tip ?? "").slice(0, 12) || "?"})`;
+    return w.regressions.length === 0 ? [superseded]
+      : [superseded, `  its last record had ${w.regressions.length} regression${w.regressions.length === 1 ? "" : "s"}: ${w.regressions.map((r) => r.command).join(", ")}; the acceptance on the final tip decides`];
+  }
   return (w?.regressions ?? []).flatMap((r) => [
     `problem: ${r.problem} (after ${r.landedTaskIds.join(", ")} landed; exited ${r.exit} on orca/${groupId} at ${r.tip.slice(0, 12)})`,
     ...(r.tail ?? "").split("\n").filter((line) => line !== "").map((line) => `  ${line}`),

@@ -28,9 +28,19 @@ export function landingWatchOf(body: unknown): LandingWatch | null {
   return value === undefined || value === null || typeof value !== "object" ? null : value as LandingWatch;
 }
 
+/**
+ * Tester #494: a check that failed because the file it names does not exist on this tip (a later task creates it) did not
+ * run; it is `not-run`, not `red`, so it does not read as a current failure beside a green acceptance. A file a previously
+ * green check can no longer find is still red (a regression): the check did run before, and the file is gone now.
+ */
+const missingFile = (checkTail: string | undefined): boolean => checkTail !== undefined && /Could not find|\bENOENT\b/.test(checkTail);
+
 export function nextLandingWatch(previous: LandingWatch | null, run: { tip: string; at: number; coveredRunIds: string[]; landedTaskIds: string[]; outcome: EveryCheckOutcome }): { record: LandingWatch; turnedRed: LandingRegression[]; turnedGreen: string[] } {
   const states: Record<string, CheckState> = { ...(previous?.states ?? {}) };
-  for (const command of run.outcome.commands) states[command.command] = command.exit === "0" ? "green" : "red";
+  for (const command of run.outcome.commands) {
+    states[command.command] = command.exit === "0" ? "green"
+      : missingFile(command.tail) && previous?.states[command.command] !== "green" ? "not-run" : "red";
+  }
   const turnedRed: LandingRegression[] = [];
   const turnedGreen: string[] = [];
   const regressions: LandingRegression[] = [];

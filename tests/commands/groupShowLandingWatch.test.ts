@@ -44,4 +44,16 @@ describe("group show names a landing regression (tester follow-up G §6.2)", () 
     expect(lines.filter((line) => line.startsWith("problem: landing-regression:npm test"))).toHaveLength(1);
     expect(lines.filter((line) => line.startsWith("next: add a task that fixes it"))).toHaveLength(1);
   });
+
+  // Tester #494: once the acceptance has taken over, the watch's last states are stale; the human output says which tip
+  // decided and never shows them as current problems.
+  it("a watch superseded by acceptance names the acceptance tip, with or without regressions", () => {
+    expect(landingWatchLines("g", { tip: TIP, supersededBy: "acceptance", regressions: [] })).toEqual([
+      "landing watch superseded by acceptance (tip cccccccccccc)",
+    ]);
+    expect(landingWatchLines("g", { tip: TIP, supersededBy: "acceptance", regressions: [REGRESSION] })).toEqual([
+      "landing watch superseded by acceptance (tip cccccccccccc)",
+      "  its last record had 1 regression: npm test; the acceptance on the final tip decides",
+    ]);
+  });
 });
