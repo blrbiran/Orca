@@ -2123,6 +2123,8 @@ export const workItemViewSchema = z
       usagePause: z.object({ line: safeInteger, multiple: positiveSafeInteger, usedTokens: safeInteger, expectationTokens: safeInteger.nullable(), runId: idSchema, at: safeInteger, restartsFresh: z.literal(true).optional() }).strict().nullable(),
       usageStopped: z.object({ at: safeInteger, principal: nonemptyString, note: z.string().optional() }).strict().nullable(),
       groupCapStop: z.object({ runId: idSchema, at: safeInteger, observedTokens: safeInteger }).strict().nullable(),
+      // Tester #432: beside a stop only, whether any task of the group is claimable now; absent otherwise.
+      groupHasClaimableTask: z.boolean().optional(),
     }).strict().optional(),
     // Tester #348: this task's runs whose stored body the run read schema does not decode, and why (the group's other
     // tasks read and act as before). Absent when every run of the task reads.

@@ -22,6 +22,7 @@ import { descriptorProvenance, frozenSlotOf, resolveSelection, slotLayers } from
 import { readAgentPreferences } from "../control/agentPreferences.js";
 import { liveUsageSchema, peerCode, sessionCleanupSchema } from "../control/ccloopPort.js";
 import { groupExecutionPending } from "../control/executionPending.js";
+import { nextClaimableTask } from "../control/webDispatch.js";
 import { readDebugMark } from "../control/debugGroup.js";
 import { dirWorkspaceOf, groupRepoId, readPlacement } from "../control/dirGroup.js";
 import { multiDirOf } from "../control/multiGroup.js";
@@ -1377,7 +1378,7 @@ function workViews(
       ...topUpsView(topUps, task.taskId),
       // Tester follow-up G spec §1.2: the task's no-change record (who decided, the ordinal); omitted when it has none.
       ...noChangeView((body as { noChangeCompletion?: unknown }).noChangeCompletion),
-      ...budgetStateView(store, body),
+      ...budgetStateView(store, groupId, body),
       // Tester #348: this task's runs that do not decode, and why; absent when every one reads.
       ...((mine) => mine.length === 0 ? {} : { unreadableRuns: mine.map(({ runId, reason }) => ({ runId, reason })) })(unreadable.filter(entry => entry.taskId === task.taskId)),
     };
@@ -1398,7 +1399,7 @@ function noChangeView(value: unknown): { noChangeCompletion?: z.infer<typeof noC
 }
 
 /** Tester follow-up G spec §2.3-§2.5: the task's budget state; absent when the work item has none of it. */
-function budgetStateView(store: ControlStore, body: Record<string, unknown>): { budgetState?: NonNullable<WorkItemViewV1["budgetState"]> } {
+function budgetStateView(store: ControlStore, groupId: string, body: Record<string, unknown>): { budgetState?: NonNullable<WorkItemViewV1["budgetState"]> } {
   const keys = ["tokenIntent", "overExpectation", "usagePause", "usageStopped", "groupCapStop"];
   if (!keys.some(key => body[key] !== undefined)) return {};
   return { budgetState: {
@@ -1407,6 +1408,9 @@ function budgetStateView(store: ControlStore, body: Record<string, unknown>): { 
     // Tester #295 residue (follow-up K): `restartsFresh` when continue would start the task afresh; absent otherwise.
     usagePause: (body.usagePause === undefined ? null : continueRestartsFresh(store, body) ? { ...(body.usagePause as object), restartsFresh: true } : body.usagePause) as never,
     usageStopped: (body.usageStopped ?? null) as never, groupCapStop: (body.groupCapStop ?? null) as never,
+    // Tester #432: whether any task of the group is claimable now (the driver's own test), beside a stop only -- the stop's
+    // "continue the group's ready tasks" exit is named only when there is one.
+    ...(body.usageStopped === undefined ? {} : { groupHasClaimableTask: nextClaimableTask(store, groupId) !== null }),
   } };
 }
 

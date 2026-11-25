@@ -27,7 +27,12 @@ describe("group show's budget lines (spec §2.2-§2.5)", () => {
       "task c: stopped over its expectation by agent:claude",
       // Ruling: human 2026-11-23 (「这次批准改写所有必要的判据」, tester #432) -- a stopped task now names its two exits,
       // because a group can read `state: running` with no run and no next while it waits on the person.
-      "  next: orca task retry g1 c --as-person  (give it a fresh claim)  or  continue the group's ready tasks",
+      // Ruling (tester #432, session 5d3d0c09): the second exit is printed only when the view says a task is claimable
+      // (budgetState.groupHasClaimableTask); without it -- as here -- the line names the retry alone.
+      "  next: orca task retry g1 c --as-person  (give it a fresh claim)",
     ]);
+    expect(budgetStateLines("g1", { workItems: [{ taskId: "e", budgetState: { ...NONE, usageStopped: { principal: "agent:cli" }, groupHasClaimableTask: true } }] }))
+      .toEqual(["task e: stopped over its expectation by agent:cli",
+        "  next: orca task retry g1 e --as-person  (give it a fresh claim)  or  continue the group's ready tasks"]);
   });
 });

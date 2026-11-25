@@ -452,6 +452,8 @@ export type WorkItemViewV1 = {
     usagePause: { line: number; multiple: number; usedTokens: number; expectationTokens: number | null; runId: string; at: number; restartsFresh?: true } | null;
     usageStopped: { at: number; principal: string; note?: string } | null;
     groupCapStop: { runId: string; at: number; observedTokens: number } | null;
+    /** Tester #432: beside a stop only, whether any task of the group is claimable now. */
+    groupHasClaimableTask?: boolean;
   };
   /** Tester #348: this task's runs the server could not decode, and why; absent when every one reads. */
   unreadableRuns?: Array<{ runId: string; reason: string }>;

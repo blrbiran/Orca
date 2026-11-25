@@ -14,14 +14,15 @@ import type { StartEnvelope } from "../../src/control/executionPort.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { readControlGroup, readControlSummary, readGroupSummary } from "../../src/panel/controlViews.js";
+import { formatWithUnestimated } from "../../src/commands/domains/verbs.js";
 
 type Harness = Awaited<ReturnType<typeof driverHarness>>;
 const M = 1_000_000;
 const NOTE = { text: "finish the parser; skip the docs", scope: "next-attempt" as const };
 
-async function paused(tasks: string[], limit: number, usedTokens = 10 * M): Promise<{ t: Harness; driver: ReturnType<Harness["driver"]>; first: string; knobs: { exhausted: boolean } }> {
+async function paused(tasks: string[], limit: number, usedTokens = 10 * M, dependsOn: Record<string, string[]> = {}): Promise<{ t: Harness; driver: ReturnType<Harness["driver"]>; first: string; knobs: { exhausted: boolean } }> {
   const knobs = { exhausted: true };
-  const t = await driverHarness(tasks.map(taskId => ({ taskId })), {
+  const t = await driverHarness(tasks.map(taskId => ({ taskId, ...(dependsOn[taskId] ? { dependsOn: dependsOn[taskId] } : {}) })), {
     tokenPolicy: "optional-v1", modelVersion: "followup-g",
     behaviour: (id) => knobs.exhausted && id === "a" ? "exhausted" : "stoppable",
     workTokens: (id) => id === "a" && knobs.exhausted ? usedTokens : 10,
@@ -183,6 +184,29 @@ describe("deciding on a paused task (spec §2.5)", { timeout: 300_000 }, () => {
       expect(readGroupSummary(t.h.store, "g").card!.firstFailure).toEqual({ taskId: "a", cause: "usage-stopped", next: "orca task retry g a --as-person" });
       await driver.stop();
     } finally { await t.h.dispose(); }
+  });
+
+  // Tester #432 (follow-up): `group show`'s next line offered "continue the group's ready tasks" while every other task
+  // waited on the stopped one (nothing claimable). The view now says whether a task is claimable (the driver's own test,
+  // nextClaimableTask), and the line names that exit only when one is.
+  it("a stop's next line offers the group's ready tasks only when one is claimable", async () => {
+    const show = (t: Harness) => formatWithUnestimated(readControlGroup(t.h.store, "epoch-test", "g")).split("\n");
+    const waiting = await paused(["a", "b"], 40 * M, 10 * M, { b: ["a"] });
+    try {
+      expect(decide(waiting.t, { decision: "stop" })).toMatchObject({ result: { decision: "stop" } });
+      // mutation: always answer true in budgetStateView -> the "or continue" line, red
+      expect(readControlGroup(waiting.t.h.store, "epoch-test", "g").workItems.find(w => w.taskId === "a")!.budgetState!.groupHasClaimableTask).toBe(false);
+      expect(show(waiting.t)).toContain("  next: orca task retry g a --as-person  (give it a fresh claim)");
+      await waiting.driver.stop();
+    } finally { await waiting.t.h.dispose(); }
+    const free = await paused(["a", "b"], 40 * M);
+    try {
+      expect(readWork(free.t.h.store, "g", "b").status).toBe("ready");
+      expect(decide(free.t, { decision: "stop" })).toMatchObject({ result: { decision: "stop" } });
+      // mutation: always answer false in budgetStateView (or drop the clause in budgetStateLines) -> the exit is missing, red
+      expect(show(free.t)).toContain("  next: orca task retry g a --as-person  (give it a fresh claim)  or  continue the group's ready tasks");
+      await free.driver.stop();
+    } finally { await free.t.h.dispose(); }
   });
 
   // Tester #300 (follow-up J), human: 「无限制组不要暂停线」. A task with an expectation in a group with no token limit got a
