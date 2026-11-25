@@ -250,8 +250,12 @@ takes one copy `control.sqlite.bak.<epoch ms>` (mode 0600) beside the database; 
   `$HOME/.orca/projects.json` (`$ORCA_PROJECTS_FILE` overrides the path):
   `{ "version": 1, "projects": [{ "id", "name", "path", "kind"?: "repo" | "dir", "plans"?: [...] }], "multiDirProjects"?: [{ "id", "name", "dirs": [...] }] }`.
   A missing file is an empty list. In the UI you can **add** a project (a name and the absolute path of a git repository's
-  top-level directory), **rename** one, and **Group several projects** into a multi-directory project. Removing a
-  project, changing its path, or adding a member's new path needs a restart; the panel names such pending changes. A
+  top-level directory), **rename** one, and **Group several projects** into a multi-directory project. **Remove
+  project** (or `orca project remove <id> --as-person`, an owner's act) takes a project out of the file, also one whose
+  folder is gone: it is refused (`project-has-groups`, with the counts) while the project has groups that are not
+  archived, and `--archive-groups` (on the Web, the second confirmation) archives them first. Nothing on disk is deleted
+  and archived groups stay readable; re-adding the project under the same name reattaches them. Removing a mounted
+  project, changing a path by hand, or adding a member's new path needs a restart; the panel names such pending changes. A
   hand edit that adds a project or changes a name applies without a restart; a file broken while the panel runs keeps
   the last good list, and one broken at start is refused (`projects-file-invalid`). In file mode the control state
   defaults to `$ORCA_CONTROL_DIR/panel` (or the file's `controlStateDir`), so `--control-state-dir` is not needed.
@@ -708,7 +712,7 @@ commands for that project. Archiving is refused while a schedule uses the entry.
 | Path | Written by |
 |---|---|
 | `$ORCA_AGENTS_TABLE` (default `$HOME/.orca/agents.json`) | `orca agent init`; its `version` fields (and `<table>.bak-auto`) also `orca agent refresh`, the Agents page and the control plane on a version drift |
-| `$ORCA_PROJECTS_FILE` (default `$HOME/.orca/projects.json`) | the panel, when you add, rename or group projects in the UI |
+| `$ORCA_PROJECTS_FILE` (default `$HOME/.orca/projects.json`) | the panel, when you add, rename, group or remove projects in the UI, or `orca project add` / `orca project remove` |
 | `$ORCA_CONTROL_DIR/<repo key>` and its `.runs` / `.workspaces` / `artifacts` siblings, or `--control-state-dir` | the panel's control plane |
 | `$ORCA_CORRECTIONS_DIR` (default `$HOME/.orca`) | reviews and corrections from the panel or `orca dev correct` |
 | `$ORCA_VAULT_DIR` (default `$HOME/.orca/vault`) | the flow kernel and control plane: one private bare repository per folder project or flow folder |
