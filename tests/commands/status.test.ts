@@ -209,6 +209,8 @@ describe("orca status reads the installed service's environment (D4)", () => {
 
   // Tester #417 follow-up (#418): runs now carry an Orca-produced ccmem bundle, so an executable ccmem reads ok and
 // says what it serves; the agents' own hooks still do not load into a phase.
+// Tester #493: the codex isolation is the private CODEX_HOME (no hooks.json), not a `features.hooks=false` flag, which
+// codex-cli 0.172.0 ignores. The fact argues from the home and never cites the flag as a boundary.
   it("an executable ccmem reads ok and names the per-run memory bundle", async () => {
     const { home, env } = sandbox();
     const bin = join(home, "ccmem");
@@ -216,6 +218,9 @@ describe("orca status reads the installed service's environment (D4)", () => {
     const io = capture({ ...env, ORCA_CCMEM_BIN: bin });
     expect(await runStatus(args(), io.io, [ccmemCheck])).toBe(0);
     expect(io.out()).toMatch(/^ok ccmem: .* is executable; it serves the panel's memory page, correction export, and each run's bounded memory bundle \(work\.memory\)/m);
+    // mutation: the isolation must be argued from the private CODEX_HOME's missing hooks.json, never from the no-op flag.
+    expect(io.out()).toContain("no hooks.json");
+    expect(io.out()).not.toContain("features.hooks=false");
     // mutation: drop the per-run bundle from the fact -> the line no longer says work.memory, red.
     expect(io.out()).not.toContain("warn ccmem");
   });

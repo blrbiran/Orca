@@ -198,9 +198,11 @@ export async function ccloopPinCheck(ctx: CheckContext): Promise<StatusCheck> {
 /**
  * ORCA_CCMEM_BIN: unset is a warning (memory off); set, it must be an absolute executable file.
  * Tester #417 (human ruling 2026-11-20): the binary powers the panel's memory page and correction export only. The agents
- * Orca launches run isolated (codex phases carry `features.hooks=false` in a private CODEX_HOME; omp phases pass
- * `--no-extensions` and ccmem's extension skips print mode), so a run never loads memory. Saying `ok` here made people
- * believe the agents had memory; the line now names what the binary is for, and that runs do not use it.
+ * Orca launches never load their own ccmem hooks -- a codex phase runs in a private CODEX_HOME that holds only the
+ * symlinked auth.json and config.toml and no hooks.json (tester #493: the `features.hooks=false` flag is a no-op on
+ * codex-cli, not a boundary), an omp phase passes `--no-extensions`, and a claude phase loads only project/local settings.
+ * Saying `ok` here made people believe the agents had memory; the line now names what the binary is for, and that runs
+ * do not use it.
  */
 export async function ccmemCheck(ctx: CheckContext): Promise<StatusCheck> {
   const bin = envOf(ctx).ORCA_CCMEM_BIN;
@@ -211,7 +213,7 @@ export async function ccmemCheck(ctx: CheckContext): Promise<StatusCheck> {
   return {
     level: "ok",
     subject: "ccmem",
-    fact: `${bin} is executable; it serves the panel's memory page, correction export, and each run's bounded memory bundle (work.memory) with outcome writeback — not the agents' own ccmem hooks (codex and omp phases exclude them; a target repository's own project/local settings still load in a claude phase)`,
+    fact: `${bin} is executable; it serves the panel's memory page, correction export, and each run's bounded memory bundle (work.memory) with outcome writeback — not the agents' own ccmem hooks (a codex phase runs in a private CODEX_HOME with no hooks.json, an omp phase passes --no-extensions, and a target repository's own project/local settings still load in a claude phase)`,
     fix: "nothing to set up for runs; see the README's Memory section for what memory does and does not reach",
   };
 }
