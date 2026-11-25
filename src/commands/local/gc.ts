@@ -60,8 +60,13 @@ export function formatGc(result: GcResult): string {
   for (const skip of result.skipped) {
     lines.push(`  skipped ${skip.runId}${skip.path === null ? "" : ` ${skip.path}`}: ${skip.reason}${skip.detail === undefined ? "" : ` (${skip.detail})`}`);
   }
+  // Tester #466: attempt worktrees registered in a target repository under the runs root.
+  for (const entry of result.dryRun ? result.unregisterPlanned : result.unregistered) {
+    lines.push(`  ${result.dryRun ? "would unregister" : "unregistered"} worktree ${entry.path} in ${entry.repo}${entry.orphan ? " (its run directory was already gone)" : ""}`);
+  }
   const verb = result.dryRun ? "would free" : "freed";
-  lines.push(`${result.planned.length} planned, ${result.removed.length} removed, ${result.skipped.length} skipped; ${verb} ${formatBytes(result.bytes)}`);
+  const worktrees = result.dryRun ? `${result.unregisterPlanned.length} worktree registrations to unregister` : `${result.unregistered.length} worktree registrations unregistered`;
+  lines.push(`${result.planned.length} planned, ${result.removed.length} removed, ${result.skipped.length} skipped; ${verb} ${formatBytes(result.bytes)}; ${worktrees}`);
   return `${lines.join("\n")}\n`;
 }
 

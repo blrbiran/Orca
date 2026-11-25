@@ -56,6 +56,12 @@ export interface GcOptions {
 }
 
 export interface GcItem { runId: string; kind: "runs" | "workspaces"; path: string; bytes: number; worktree: boolean; uncleaned?: boolean }
+/**
+ * Tester #466 (narrowed, human-approved): a git worktree registration in a target repository whose path lies under
+ * `<stateDir>.runs` -- ccloop's attempt worktrees (`run-*` / run / worktrees / attempt-*). `orphan`: its run directory was
+ * already gone before this gc (an earlier gc, or anything else, deleted it without unregistering).
+ */
+export interface GcWorktreeEntry { runId: string; repo: string; path: string; orphan: boolean }
 export interface GcSkip { runId: string; groupId?: string; path: string | null; reason: string; detail?: string }
 /** One line of the skip summary: how many runs a guard held back, and across how many groups. */
 export interface GcSkipReason { reason: string; count: number; groups: number }
@@ -71,6 +77,10 @@ export interface GcResult {
   skippedByReason: GcSkipReason[];
   /** Bytes freed by `removed` (with --apply), or that the plan would free (dry run). */
   bytes: number;
+  /** Tester #466: the registrations under `<stateDir>.runs` this gc unregisters (dry run: would unregister). */
+  unregisterPlanned: GcWorktreeEntry[];
+  /** Tester #466: those it did unregister (`git worktree remove` without --force, on a path that no longer exists). */
+  unregistered: GcWorktreeEntry[];
 }
 
 interface RunRow { groupId: string; active: boolean; body: Record<string, unknown> }
@@ -163,6 +173,39 @@ async function commonDirRepo(workspacePath: string): Promise<string | null> {
 }
 
 interface Plan { item: GcItem; worktreeRepo: string | null }
+
+/** `path` canonicalised through its longest existing ancestor, so a registration whose directory is gone still compares. */
+async function canonLoose(path: string): Promise<string> {
+  const tail: string[] = [];
+  let head = path;
+  for (;;) {
+    const real = await canon(head);
+    if (real !== null) return tail.length === 0 ? real : join(real, ...tail.reverse());
+    const parent = dirname(head);
+    if (parent === head) return path;
+    tail.push(head.slice(parent.length).replace(/^[\\/]/, ""));
+    head = parent;
+  }
+}
+
+/**
+ * Tester #466: every worktree `repo` registers whose path lies under `runsRoot`, with the run directory it is in. Only
+ * such entries are ever touched: a user's own worktrees (stale or not) are never listed here, and `git worktree prune`
+ * -- which would drop every stale entry of the repository -- is never run.
+ */
+async function registrationsUnder(repo: string, runsRoot: string): Promise<Array<{ path: string; runId: string }>> {
+  const list = await git(repo, [...QUIET_GIT, "worktree", "list", "--porcelain"]);
+  const found: Array<{ path: string; runId: string }> = [];
+  for (const line of list.split("\n")) {
+    if (!line.startsWith("worktree ")) continue;
+    const listed = line.slice("worktree ".length);
+    const canonical = await canonLoose(listed);
+    if (!canonical.startsWith(`${runsRoot}/`)) continue;
+    const runId = canonical.slice(runsRoot.length + 1).split("/")[0]!;
+    if (runId.startsWith("run-")) found.push({ path: listed, runId });
+  }
+  return found;
+}
 
 /** The reason git gave for refusing to remove a worktree, classified (a dirty tree is named, never forced). */
 function worktreeRefusal(error: unknown): { reason: string; detail: string } {
@@ -284,8 +327,36 @@ export async function gcControl(options: GcOptions): Promise<GcResult> {
     }
   }
 
+  // Tester #466 (narrowed): ccloop's attempt worktrees live inside a run's `runs` directory and are registered in the
+  // target repository; deleting the directory alone left each registration behind as `prunable`. The registrations
+  // under a runs directory this gc removes are unregistered after it, and those whose run directory is already gone
+  // (orphans) are swept. Only registrations under `<stateDir>.runs` are read; the repositories are those any run in
+  // scope names (repoCandidates).
+  const plannedRuns = new Set(planned.filter((plan) => plan.item.kind === "runs").map((plan) => plan.item.runId));
+  const repos: string[] = [];
+  for (const run of runs.values()) {
+    if (options.groupId !== undefined && run.groupId !== options.groupId) continue;
+    for (const repo of repoCandidates(run, groups.get(run.groupId), options.repoResolver)) if (!repos.includes(repo)) repos.push(repo);
+  }
+  const unregisterPlanned: GcWorktreeEntry[] = [];
+  for (const repo of repos) {
+    if (!existsSync(repo)) continue; // a removed project registers nothing any more
+    let entries: Array<{ path: string; runId: string }>;
+    try { entries = await registrationsUnder(repo, runsRoot); }
+    catch (error) { skipped.push({ runId: "(worktree sweep)", path: repo, reason: "repository-unreadable", detail: (error as Error).message.slice(0, 300) }); continue; }
+    for (const entry of entries) {
+      if (unregisterPlanned.some((planned) => planned.path === entry.path)) continue;
+      if (plannedRuns.has(entry.runId)) { unregisterPlanned.push({ runId: entry.runId, repo, path: entry.path, orphan: false }); continue; }
+      // An orphan: its run directory is gone (one still on disk is a run gc has not reclaimed; its worktree is live).
+      if (byName.has(entry.runId) || existsSync(entry.path)) continue;
+      if (options.groupId !== undefined && runs.get(entry.runId)?.groupId !== options.groupId) continue;
+      unregisterPlanned.push({ runId: entry.runId, repo, path: entry.path, orphan: true });
+    }
+  }
+
   const apply = options.apply === true;
   const removed: GcItem[] = [];
+  const unregistered: GcWorktreeEntry[] = [];
   if (apply) {
     for (const plan of planned) {
       try {
@@ -301,10 +372,23 @@ export async function gcControl(options: GcOptions): Promise<GcResult> {
         else skipped.push({ runId: plan.item.runId, path: plan.item.path, ...groupIdOf(plan.item.runId), reason: "remove-failed", detail: (error as Error).message });
       }
     }
+    const removedRuns = new Set(removed.filter((item) => item.kind === "runs").map((item) => item.runId));
+    for (const entry of unregisterPlanned) {
+      // A runs directory that was not removed keeps its worktrees registered (they are still on disk).
+      if (!entry.orphan && !removedRuns.has(entry.runId)) continue;
+      // Without --force, `git worktree remove` deletes a worktree that still exists; only a missing one is unregistered.
+      if (existsSync(entry.path)) { skipped.push({ runId: entry.runId, path: entry.path, ...groupIdOf(entry.runId), reason: "worktree-still-present" }); continue; }
+      try {
+        await git(entry.repo, [...QUIET_GIT, "worktree", "remove", entry.path]);
+        unregistered.push(entry);
+      } catch (error) {
+        skipped.push({ runId: entry.runId, path: entry.path, ...groupIdOf(entry.runId), reason: "worktree-unregister-failed", detail: worktreeRefusal(error).detail });
+      }
+    }
   }
 
   const bytes = (apply ? removed : planned.map((plan) => plan.item)).reduce((sum, item) => sum + item.bytes, 0);
-  return { dryRun: !apply, planned: planned.map((plan) => plan.item), removed, skipped, skippedByReason: summarizeSkips(skipped), bytes };
+  return { dryRun: !apply, planned: planned.map((plan) => plan.item), removed, skipped, skippedByReason: summarizeSkips(skipped), bytes, unregisterPlanned, unregistered };
 }
 
 /** `skipped` grouped by reason, most frequent first (ties by reason) — the text output's summary and `--json`'s field. */

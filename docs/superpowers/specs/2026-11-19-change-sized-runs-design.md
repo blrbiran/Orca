@@ -1184,3 +1184,31 @@ removes it when it exists, so every settle and cleanup path does; a v1 run never
 `acceptAttemptDriver.ts`) and the read-only commands (`rev-parse`, `cat-file`, `merge-base`, `diff`, `ls-tree`) carry no
 such flags. None of them starts an automatic gc or maintenance; the commands that can (`fetch` -- the trace above shows
 `git maintenance run --auto` after it -- and the check `worktree add`, `bundle create`/`verify`) carry them.
+
+## Correction (2026-11-25, tester #466, session 5d3d0c09)
+
+Author: session `5d3d0c09` (Orca controller), 2026-11-25, on `fddffd41`; branch `fix/tester-batch-a-5d3d0c09`. No
+dedicated `orca gc` spec exists (#366's retention half shipped as `14384d53` with no spec of its own); this spec carries
+#366 in its title, so the correction is recorded here. The text above is unchanged.
+
+**What was wrong.** `orca gc` (`src/control/gc.ts`) deleted `<runsRoot>/<runId>` with a plain recursive `rm`
+(`worktreeRepo: null`). ccloop's attempt worktrees live inside it (`<runsRoot>/<runId>/run/worktrees/attempt-<n>`) and are
+registered in the target repository, so each one stayed listed as `prunable` in `git worktree list` there.
+
+**What gc does now (human-approved narrowed fix).**
+- After a runs directory it planned is removed, every worktree registration in the repositories its runs name
+  (`drive.targetRepo`, `drive.dirs[].targetRepo`, the group's registered project) whose path lies under that directory is
+  unregistered with `git worktree remove <path>` **without `--force`**, only once the path no longer exists (git 2.50.1:
+  this unregisters just that entry; on an existing worktree it would delete it, which gc never asks for).
+- Registrations under `<runsRoot>` whose run directory is already gone (orphans from earlier gcs) are swept the same way;
+  with `--group`, only those of that group's runs.
+- Nothing else is touched: no `git worktree prune` (it would drop the user's own stale entries; Rule 15 treats it as a
+  force form), and no registration outside `<runsRoot>`.
+- The dry run lists what it would unregister; `--json` adds `unregisterPlanned` and `unregistered`
+  (`{ runId, repo, path, orphan }`); a refusal is a skip `worktree-unregister-failed`, a path still on disk is a skip
+  `worktree-still-present`, an unreadable repository is a skip `repository-unreadable`.
+
+**Rule 17 table addition.** Orca **(git metadata delete)**: `<targetRepo>/.git/worktrees/<attempt-n>` for a registration
+under `<runsRoot>`; trigger `orca gc --apply`; residue on failure: the registration stays listed, reported by name.
+Criterion: `tests/commands/gc.test.ts` "unregisters the attempt worktrees under a removed runs directory and sweeps
+orphans; the user's stale one stays" (a real temporary repository).

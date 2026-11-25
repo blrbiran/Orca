@@ -348,6 +348,54 @@ function capture(): { io: CommandIo; out: () => string; err: () => string } {
 }
 
 describe("orca gc --json (#366)", () => {
+  // Tester #466 (narrowed, human-approved): ccloop's attempt worktrees under `<stateDir>.runs/run-*/run/worktrees/` stayed
+  // registered (`prunable`) in the target repository after gc deleted the run directory. gc now unregisters each one under
+  // a runs directory it removes, sweeps those whose run directory was already gone, and touches no other registration --
+  // the user's own stale worktree stays listed (no `git worktree prune`, which would drop it).
+  it("unregisters the attempt worktrees under a removed runs directory and sweeps orphans; the user's stale one stays", async () => {
+    const { root, h, stateDir, runsRoot } = await caseDir();
+    try {
+      const repo = await repoWithCommit(root);
+      seedGroup(h, "g-archived");
+      seedGroup(h, "g-live", false);
+      const attempt = (runId: string, n: number) => join(runsRoot, runId, "run", "worktrees", `attempt-${n}`);
+      await mkdir(join(runsRoot, "run-old", "run", "worktrees"), { recursive: true });
+      await mkdir(join(runsRoot, "run-gone", "run", "worktrees"), { recursive: true });
+      await mkdir(join(runsRoot, "run-live", "run", "worktrees"), { recursive: true });
+      for (const path of [attempt("run-old", 1), attempt("run-old", 2), attempt("run-gone", 1), attempt("run-live", 1)]) git(repo, "worktree", "add", "-q", "--detach", path, "HEAD");
+      const userStale = join(root, "user-stale");
+      git(repo, "worktree", "add", "-q", "--detach", userStale, "HEAD");
+      await rm(userStale, { recursive: true, force: true });
+      await rm(join(runsRoot, "run-gone"), { recursive: true, force: true }); // deleted before this gc: an orphan
+      await utimes(join(runsRoot, "run-old"), OLD / 1000, OLD / 1000);
+      seedRun(h, "g-archived", "run-old", { endedAt: OLD, drive: { cleanedUp: true, targetRepo: repo } });
+      seedRun(h, "g-archived", "run-gone", { endedAt: OLD, drive: { cleanedUp: true, targetRepo: repo } });
+      seedRun(h, "g-live", "run-live", { endedAt: OLD, drive: { cleanedUp: true, targetRepo: repo } });
+      const listed = () => git(repo, "worktree", "list", "--porcelain");
+
+      const dry = await gcControl({ stateDir, now: NOW });
+      // mutation: drop the sweep (no unregisterPlanned) -> [], red
+      expect(dry.unregisterPlanned.map((entry) => [entry.runId, entry.orphan]).sort()).toEqual([["run-gone", true], ["run-old", false], ["run-old", false]]);
+      expect(formatGc(dry)).toContain(`would unregister worktree ${attempt("run-gone", 1)} in ${repo} (its run directory was already gone)`);
+      expect(listed()).toContain(`worktree ${attempt("run-old", 1)}\n`);
+
+      const applied = await gcControl({ stateDir, now: NOW, apply: true });
+      expect(existsSync(join(runsRoot, "run-old"))).toBe(false);
+      // mutation: unregister nothing after the runs directory is removed -> run-old's entries stay listed (prunable), red
+      expect(applied.unregistered.map((entry) => entry.path).sort()).toEqual([attempt("run-gone", 1), attempt("run-old", 1), attempt("run-old", 2)].sort());
+      const after = listed();
+      for (const path of [attempt("run-old", 1), attempt("run-old", 2), attempt("run-gone", 1)]) expect(after).not.toContain(`worktree ${path}\n`);
+      // mutation: `git worktree prune` instead -> the user's stale entry is dropped too, red
+      expect(after).toContain(`worktree ${userStale}\n`);
+      // A run gc keeps (its group is not archived) keeps its live worktree, registered and on disk.
+      expect(after).toContain(`worktree ${attempt("run-live", 1)}\n`);
+      expect(existsSync(attempt("run-live", 1))).toBe(true);
+      expect(formatGc(applied)).toContain("3 worktree registrations unregistered");
+      // Idempotent: nothing left to unregister.
+      expect((await gcControl({ stateDir, now: NOW, apply: true })).unregistered).toEqual([]);
+    } finally { await h.dispose(); }
+  });
+
   it("prints one body with planned, removed, skipped and bytes, and removes nothing without --apply", async () => {
     const { h, stateDir, runsRoot } = await caseDir();
     try {
