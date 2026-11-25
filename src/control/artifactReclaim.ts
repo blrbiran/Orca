@@ -7,6 +7,7 @@ import { createRequire } from "node:module";
 import { existsSync, realpathSync } from "node:fs";
 import { runDirectories } from "./diskUsage.js";
 import { basicSkip, GcRefusal, type GroupRow, type RunRow } from "./gc.js";
+import { OUTBOX_QUEUE_KINDS, OUTBOX_RECORD_KINDS } from "./outboxKinds.js";
 import { idSchema } from "./schema.js";
 import type { ControlStore } from "./store.js";
 
@@ -20,7 +21,9 @@ import type { ControlStore } from "./store.js";
  *    an artifact counts -- the id, the row hash, a 64-hex piece of the id (`checkpoint-<hash>` is built from a hash at
  *    read time), and a run or group id the artifact id embeds (`acceptance-<runId>` is built from the run id). A holder
  *    is retired only when its owner (a run, a group, a flow's group: ARTIFACT_HOLDER_TABLES) is; a table the map does not
- *    know, an owner that does not resolve, an undelivered outbox row and every global table hold for good.
+ *    know, an owner that does not resolve, an outbox row still pending on its queue kind and every global table hold for
+ *    good. `delivered` is read only for a QUEUE kind; a RECORD kind has no consumer, so it goes straight to its owner
+ *    (tester #505), and a kind in neither list refuses the plan.
  *  - transitive: artifacts name artifacts (snapshot trees, capsules, packets, manifests). The contents of every held
  *    artifact are read and tokenized the same way -- no parse, so content that is not JSON still holds what it names. A
  *    held artifact whose contents cannot be read (anything but "the bytes are gone") stops the whole plan:
@@ -513,11 +516,19 @@ function ownedHold(spec: Extract<HolderTable, { kind: "owned" }>, row: Record<st
 }
 
 /**
- * An outbox row holds until delivered; then its owner is the run or group its body names, else the run or group its
- * `kind:<id>:…` key names (a report row's body is only `{source}`), else nobody -- held for good.
+ * An outbox row of a QUEUE kind holds until delivered; one of a RECORD kind has no consumer, so its `delivered` says
+ * nothing (outboxKinds.ts) and it goes straight to its owner. Then the owner is the run or group its body names, else the
+ * run or group its `kind:<id>:…` key names (a report row's body is only `{source}`), else nobody -- held for good. Tester
+ * #505: reading `delivered` for a RECORD kind held 92 artifacts on this machine for good. A kind in neither list is a
+ * refusal: it must be classified in outboxKinds.ts rather than inherit "held forever".
  */
 function outboxHold(row: Record<string, unknown>, u: Universe, ofRun: (runId: string) => Hold | null, ofGroup: (groupId: string) => Hold | null): Hold | null {
-  if (Number(row.delivered) !== 1) return { reason: "outbox-undelivered" };
+  const kind = String(row.kind);
+  if (OUTBOX_QUEUE_KINDS.includes(kind)) {
+    if (Number(row.delivered) !== 1) return { reason: "outbox-undelivered" };
+  } else if (!OUTBOX_RECORD_KINDS.includes(kind)) {
+    throw new GcRefusal("outbox-kind-unclassified", `outbox row ${String(row.id)} has kind "${kind}", which is neither a queue kind nor a record kind (src/control/outboxKinds.ts)`);
+  }
   const body = parseBody(row.body);
   if (typeof body?.runId === "string") return ofRun(body.runId);
   if (typeof body?.groupId === "string") return ofGroup(body.groupId);

@@ -75,7 +75,9 @@ const HOLDERS: Array<{ kind: string; reason: string; name(store: ControlStore, x
   { kind: "a command result of a live group", reason: "group-not-archived", name: (s, x) => s.db.prepare("INSERT INTO commands(group_id,id,payload_hash,result) VALUES (?,?,?,?)").run("g-live", "c1", sha("c"), JSON.stringify({ evidence: x })) },
   { kind: "a command's response bytes (BLOB) of a live group", reason: "group-not-archived", name: (s, x) => s.db.prepare("INSERT INTO commands(group_id,id,payload_hash,result,response_bytes) VALUES (?,?,?,?,?)").run("g-live", "c2", sha("c2"), "{}", Buffer.from(`{"ref":"${x.artifactId}"}`)) },
   { kind: "a live group's body", reason: "group-not-archived", name: (s, x) => s.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ status: "running", requirement: { attachment: x } }), "g-live") },
-  { kind: "an undelivered outbox row, whoever it is for", reason: "outbox-undelivered", name: (s, x) => s.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,0)").run(`archive:${x.artifactId}`, "archive", JSON.stringify({ runId: "run-old", artifacts: [x] })) },
+  // Ruling: tester #505. The old row wrote kind:"archive" + delivered=0 and asserted a hold -- that IS the defect: a
+  // RECORD kind has no consumer, so its `delivered` bit says nothing. The row must pin a QUEUE kind instead.
+  { kind: "an undelivered cleanup row", reason: "outbox-undelivered", name: (s, x) => s.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,0)").run("cleanup:run-old", "cleanup", JSON.stringify({ runId: "run-old", artifacts: [x] })) },
   { kind: "a delivered report row keyed by a live run (body names no run)", reason: "group-not-archived", name: (s, x) => s.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,1)").run("report:run-live", "report", JSON.stringify({ source: x })) },
   { kind: "a delivered acceptance row of a live run", reason: "group-not-archived", name: (s, x) => s.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,1)").run("acceptance:run-live", "acceptance", JSON.stringify({ runId: "run-live", accepted: true, source: x })) },
   { kind: "a flow step of a live group (owner through flow_runs)", reason: "group-not-archived", name: (s, x) => {
@@ -97,6 +99,32 @@ describe("orca gc --include-artifacts: every holder kind keeps what it names (#4
       const result = plan();
       expect(planned(result)).toEqual([control.artifactId]);
       expect(skipOf(result, x.artifactId)?.reason).toBe(reason);
+    } finally { await h.dispose(); }
+  });
+
+  it("an undelivered RECORD row owned by a retired run does not hold its artifacts (#505)", async () => {
+    const { h, store, control, plan } = await world();
+    try {
+      const x = blob(store, "named by both");
+      setRunBody(store, "run-old", { artifacts: [control, x] });
+      // A RECORD kind has no consumer: nobody ever sets its `delivered`, so 0 here means "not applicable", not "pending".
+      store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,0)").run(`archive:${x.artifactId}`, "archive", JSON.stringify({ runId: "run-old", artifacts: [x] }));
+      const result = plan();
+      // mutation (hold on delivered !== 1 whatever the kind) -> x is skipped as outbox-undelivered, red.
+      expect(planned(result).sort()).toEqual([control.artifactId, x.artifactId].sort());
+      expect(skipOf(result, x.artifactId)).toBeUndefined();
+    } finally { await h.dispose(); }
+  });
+
+  it("an outbox kind in neither list stops the plan instead of holding forever (#505)", async () => {
+    const { h, store, control, plan } = await world();
+    try {
+      const x = blob(store, "named by both");
+      setRunBody(store, "run-old", { artifacts: [control, x] });
+      store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,0)").run("mystery:1", "mystery-kind", JSON.stringify({ artifacts: [x] }));
+      // A new kind must be classified in outboxKinds.ts, not inherit "held for good".
+      // mutation (treat an unknown kind as a record) -> the plan returns, red.
+      expect(() => plan()).toThrowError(expect.objectContaining({ code: "outbox-kind-unclassified" }));
     } finally { await h.dispose(); }
   });
 
