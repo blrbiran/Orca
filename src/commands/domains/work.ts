@@ -408,6 +408,21 @@ export function mergedLimit(raw: string, current: LimitAmount): LimitAmount {
 }
 
 /**
+ * Tester #499: a set-limit the group cannot hold is refused with each short dimension and its gap
+ * (`group-budget-unavailable:attempts:+20`). The next line names those dimensions and carries the limit the person asked
+ * for with each of them raised by its gap -- the smallest limit that holds what is already used and reserved.
+ */
+async function setLimitNext(error: { code: string; message: string }, c: WriteContext): Promise<string[] | undefined> {
+  if (error.code !== "group-budget-unavailable") return undefined;
+  const short = [...refusalDetail(error).matchAll(/(tokens|activeMs|attempts|sessions):\+(\d+)/g)]
+    .map((match) => ({ dimension: match[1] as keyof LimitAmount, missing: Number(match[2]) }));
+  if (short.length === 0) return undefined;
+  const raised: LimitAmount = { ...mergedLimit(str(c, "limit")!, (await groupView(c)).ledger.groupLimit) };
+  for (const { dimension, missing } of short) if (raised[dimension] !== null) raised[dimension] = raised[dimension]! + missing;
+  return [`orca group set-limit ${group(c)} --limit '${JSON.stringify(raised)}' --as-person  (short: ${short.map(({ dimension, missing }) => `${dimension} by ${missing}`).join(", ")})`];
+}
+
+/**
  * Tester follow-up K (#272 rest): `task decide-usage`'s refusals. No room for the next line names the set-limit the refusal
  * already carries; a task not waiting is read in the group's brief; with no expectation stop is the decision left; a paused
  * or stopped group is read, and resumed if it was paused.
@@ -828,6 +843,7 @@ export const WORK_ROWS: CommandDef[] = [
     // Tester #386 (b): the panel's budgetAmountSchema stays strict; a partial --limit is merged here with the group's
     // current limit, so the wire always carries the complete four-field object.
     payload: async (c) => ({ limit: mergedLimit(str(c, "limit")!, (await groupView(c)).ledger.groupLimit) }),
+    next: setLimitNext,
     examples: ["orca group set-limit g1 --limit 24000000", "orca group set-limit g1 --limit '{\"tokens\":24000000}'", "orca group set-limit g1 --limit '{\"tokens\":24000000,\"activeMs\":3600000,\"attempts\":6,\"sessions\":6}'"] }),
   verb({ domain: "group", action: "cap", summary: "lower a draft group's token ceiling; raising or removing it requires a person", verb: "proposal-edit", positionals: [GROUP],
     flags: [{ name: "tokens", type: "string", required: true, summary: "finite token ceiling below the current one" }],

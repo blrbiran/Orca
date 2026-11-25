@@ -7,7 +7,7 @@ import type { FlowDeps } from "../flow/kernel.js";
 import { peerCode, peerErrorCode, peerFailure } from "./ccloopPort.js";
 import {portFor,readStartEnvelope,retainSavedInterruption,readDriverRun,describeError,groupStopped} from "./executionDriver.js";
 import { readSavedResultEligibility,applyVerifySavedResult,type VerifySavedResultCommand } from "./savedResultRecovery.js";
-import { allocationCommitment, finiteCommitment, budgetFits, type BudgetAmount } from "./tokenPolicy.js";
+import { allocationCommitment, finiteCommitment, budgetFits, budgetShortfall, budgetShortfallDetail, type BudgetAmount } from "./tokenPolicy.js";
 import { appliedWorkAttempts } from "./budgetSuggestions.js";
 import { EXPECTATION_FLOOR_TOKENS, expectationModelApplies, writeTokenIntent } from "./expectationModel.js";
 import { repoTaskHistory } from "./estimateHistory.js";
@@ -2700,6 +2700,10 @@ export class WebControlService {
         // Tester follow-up G spec §2.1: in an expectation-model group a run may pass the cap by what it had in flight, so a
         // top-up is checked against the limit it installs (its deficit must close), not against the one it replaces.
         if (decreasing || !group.ledger.usageUnknown) assertKnownConservation(this.store, group, proposal, toppedUp && expectationModelApplies(group) ? limit : undefined);
+        // Tester #499: `residual` below refuses a limit under used+reserved with a bare code; the shortfall names each
+        // such dimension and the gap, in the refusal's message and (details.shortfall) on the wire body.
+        const shortfall = budgetShortfall(group.used, group.reserved, limit);
+        if (Object.keys(shortfall).length > 0) throw new ControlError("group-budget-unavailable", budgetShortfallDetail(shortfall), { shortfall });
         proposal.groupLimit = limit;
         setReserve(proposal, residual(limit, group.used, group.reserved));
         // §3.2: the status the block is lifted to is set by rule (overGrantBlock.ts), not restored from memory.

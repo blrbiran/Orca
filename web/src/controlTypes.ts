@@ -123,7 +123,11 @@ export type GroupSummaryV1 = {
   };
   /** Kanban spec 2026-10-20 §4: a board card's facts; the server gives them for every group with a plan. */
   card?: {
-    budget: { usedTokens: number; limitTokens: number | null; reservedTokens: number; headroomTokens: number | null; waitingForBudget?: number }; pendingDecisions: number; firstFailure: { taskId: string; cause: string; next?: string; note?: string } | null;
+    // Tester #499: the three finite dimensions ride beside tokens (only tokens may be unbounded). Optional on the Web side
+    // only, so the literal card fixtures written before them need no edit (D7); webParity normalises an absent one to 0.
+    budget: { usedTokens: number; limitTokens: number | null; reservedTokens: number; headroomTokens: number | null;
+      usedActiveMs?: number; limitActiveMs?: number; usedAttempts?: number; limitAttempts?: number; usedSessions?: number; limitSessions?: number;
+      waitingForBudget?: number }; pendingDecisions: number; firstFailure: { taskId: string; cause: string; next?: string; note?: string } | null;
     /** Checks spec 2026-10-22 §6.6, §7: model-review findings waiting on this group that a review group owns; absent when none. */
     reviewFindings?: { major: number; minor: number };
     /** Budget defaults spec 2026-11-11 §7 item 4: a group with no token limit -- its tasks' summed expectation and use (null: unknown). */

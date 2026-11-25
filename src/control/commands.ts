@@ -1,6 +1,6 @@
 import { assertNoActiveUnbounded } from "./spendCaps.js";
 import { hasTokenPolicy, saveTokenPolicy } from "./fundedAllowance.js";
-import { budgetFits, type BudgetAmount } from "./tokenPolicy.js";
+import { budgetFits, budgetShortfall, budgetShortfallDetail, type BudgetAmount } from "./tokenPolicy.js";
 import { createHash } from "node:crypto";
 import type { ControlStore } from "./store.js";
 import type { Amount, CommandMeta, GroupInput, GroupView, WorkInput } from "./types.js";
@@ -86,7 +86,9 @@ export function setGroupLimit(store:ControlStore,groupId:string,limit:BudgetAmou
   return applyCommand(store,groupId,meta,{verb:"limit",body:limit},()=>{
     const group=readGroup(store,groupId);
     if(limit.tokens!==null)assertNoActiveUnbounded(store,"all",groupId);
-    if(!fits(group.used,group.reserved,limit)) throw new ControlError("group-budget-unavailable");
+    // Tester #499: the refusal names each dimension used+reserved does not fit, with have/need, so a person can raise it.
+    const shortfall=budgetShortfall(group.used,group.reserved,limit);
+    if(Object.keys(shortfall).length>0)throw new ControlError("group-budget-unavailable",budgetShortfallDetail(shortfall),{shortfall});
     group.limit=limit;saveTokenPolicy(store,groupId,"",limit.tokens,String(store.db.prepare("SELECT mode FROM token_policies WHERE group_id=? AND work_item_id=''").get(groupId)?.mode)==="optional-v1"?"optional-v1":"finite-legacy");group.revision++;saveGroup(store,group);store.db.prepare("INSERT INTO outbox VALUES (?, 'group-handoff', ?, 0) ON CONFLICT(id) DO NOTHING").run(`group-handoff:${groupId}:state:${group.revision}:${group.budgetVersion}`,JSON.stringify({groupId,revision:group.revision,budgetVersion:group.budgetVersion}));return getGroup(store,groupId);
   });
 }

@@ -42,6 +42,7 @@ import type {
   ControlSummaryV1 as ServerControlSummaryV1,
   EvidenceManifestV1 as ServerEvidenceManifestV1,
   GroupDecisionsViewV1 as ServerGroupDecisionsViewV1,
+  GroupSummaryV1 as ServerGroupSummaryV1,
   GroupViewV1 as ServerGroupViewV1,
   HandoffStopPayload as ServerHandoffStopPayload,
   ImportPlanPayload as ServerImportPlanPayload,
@@ -81,6 +82,7 @@ import type {
   EstimatePayloadV1 as WebEstimatePayloadV1,
   EvidenceManifestV1 as WebEvidenceManifestV1,
   GroupDecisionsViewV1 as WebGroupDecisionsViewV1,
+  GroupSummaryV1 as WebGroupSummaryV1,
   GroupViewV1 as WebGroupViewV1,
   HandoffStopPayloadV1 as WebHandoffStopPayloadV1,
   ImportPlanPayloadV1 as WebImportPlanPayloadV1,
@@ -226,8 +228,18 @@ function decisionKindServerToWeb(x: ServerDecisionKind): WebDecisionKind { retur
 function decisionKindWebToServer(x: WebDecisionKind): ServerDecisionKind { return x; }
 function controlConfigServerToWeb(x: ServerControlConfigV1): WebControlConfigV1 { return x; }
 function controlConfigWebToServer(x: WebControlConfigV1): ServerControlConfigV1 { return x; }
+// Tester #499: the server always sends a card budget's three finite dimensions beside tokens; the Web's literal card
+// fixtures predate them, so an absent one reads as 0 here (the D7 zero-rewrite pattern above) and both directions stay
+// checked. Everything else on the summary is still compared as before.
+function groupSummaryWebToServer(x: WebGroupSummaryV1): ServerGroupSummaryV1 {
+  const { card, ...rest } = x;
+  return { ...rest, ...(card === undefined ? {} : { card: { ...card, budget: { ...card.budget,
+    usedActiveMs: card.budget.usedActiveMs ?? 0, limitActiveMs: card.budget.limitActiveMs ?? 0,
+    usedAttempts: card.budget.usedAttempts ?? 0, limitAttempts: card.budget.limitAttempts ?? 0,
+    usedSessions: card.budget.usedSessions ?? 0, limitSessions: card.budget.limitSessions ?? 0 } } }) };
+}
 function controlSummaryServerToWeb(x: ServerControlSummaryV1): WebControlSummaryV1 { return x; }
-function controlSummaryWebToServer(x: WebControlSummaryV1): ServerControlSummaryV1 { return x; }
+function controlSummaryWebToServer(x: WebControlSummaryV1): ServerControlSummaryV1 { return { ...x, groups: x.groups.map(groupSummaryWebToServer) }; }
 function controlGroupServerToWeb(x: ServerGroupViewV1): WebGroupViewV1 { return x; }
 // Execution driver spec §7.4: `blockedReason` is optional on the Web side only so the existing
 // literal run fixtures in evidenceLink/controlPanel/controlCommandRecovery need no edit (D7's
@@ -243,7 +255,7 @@ function controlGroupServerToWeb(x: ServerGroupViewV1): WebGroupViewV1 { return 
 // Loop plans spec §16 (C4): `loopPlan.documentChecks` is optional on the Web side for the same reason, and an absent
 // flag reads as false (a plan that runs no document checks), which is what every pre-C4 literal fixture means.
 function controlGroupWebToServer(x: WebGroupViewV1): ServerGroupViewV1 {
-  return { ...x,
+  return { ...x, summary: groupSummaryWebToServer(x.summary),
     agents: x.agents ?? { reconcile: null },
     runs: x.runs.map((run) => ({ ...run, blockedReason: run.blockedReason ?? null, continuable: run.continuable ?? false })),
     workItems: x.workItems.map((item) => ({ ...item, agent: item.agent ?? null, agentProvenance: item.agentProvenance ?? null,
@@ -326,7 +338,7 @@ function setTaskLoopWebToServer(x: WebSetTaskLoopPayloadV1): ServerSetTaskLoopPa
 // requirement command payloads (spec §11.1, Task 9) are checked both ways like every other wire type; the run view's
 // `single-call` phase and `purpose` ride the group view's pair above.
 function requirementViewServerToWeb(x: ServerRequirementViewV1): WebRequirementViewV1 { return x; }
-function requirementViewWebToServer(x: WebRequirementViewV1): ServerRequirementViewV1 { return x; }
+function requirementViewWebToServer(x: WebRequirementViewV1): ServerRequirementViewV1 { return { ...x, summary: groupSummaryWebToServer(x.summary) }; }
 function requirementOpenServerToWeb(x: ServerRequirementOpenPayload): WebRequirementOpenPayloadV1 { return x; }
 function requirementOpenWebToServer(x: WebRequirementOpenPayloadV1): ServerRequirementOpenPayload { return x; }
 function requirementAnswerServerToWeb(x: ServerRequirementAnswerPayload): WebRequirementAnswerPayloadV1 { return x; }
@@ -427,7 +439,7 @@ export const __webParityAssignabilityChecks__ = [
 
 // Overview schema mirrors must remain mutually assignable in the root typecheck.
 function overviewServerToWeb(x: import("../../src/control/webProtocol.js").OverviewV1): import("../../web/src/controlTypes.js").OverviewV1 { return x; }
-function overviewWebToServer(x: import("../../web/src/controlTypes.js").OverviewV1): import("../../src/control/webProtocol.js").OverviewV1 { return x; }
+function overviewWebToServer(x: import("../../web/src/controlTypes.js").OverviewV1): import("../../src/control/webProtocol.js").OverviewV1 { return { ...x, groups: x.groups.map(groupSummaryWebToServer) }; }
 export const __overviewParityAssignabilityChecks__ = [overviewServerToWeb, overviewWebToServer];
 
 function resultRunServerToWeb(x: import('../../src/control/webProtocol.js').RunResultsV1): import('../../web/src/controlTypes.js').RunResultsV1 { return x; }

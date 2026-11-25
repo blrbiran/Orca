@@ -7,11 +7,14 @@ import { profileSnapshot, webFixture } from "../control/fixtures/web.js";
 describe("a board card's facts (kanban spec §4)", () => {
   it("budget, decisions waiting for a person, and the first failed task with its cause", async () => {
     const h = await webFixture(profileSnapshot(), [{ taskId: "a" }, { taskId: "b" }]); try {
-      const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as { used: { tokens: number }; limit: { tokens: number | null }; reserved: { tokens: number } };
+      const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as { used: { tokens: number; activeMs: number; attempts: number; sessions: number }; limit: { tokens: number | null; activeMs: number; attempts: number; sessions: number }; reserved: { tokens: number } };
       // Ruling: human 2026-11-23 (「这次批准改写所有必要的判据」, tester #438) -- the card names the reserve and the headroom a
       // claim sees beside used/limit. Without that, "3.1M of 6M" read as free budget while the headroom was already 0.
+      // Tester #499: the same card carries the three finite dimensions beside tokens; the shape is the server's, strict.
       expect(readGroupSummary(h.store, "g").card).toEqual({ budget: { usedTokens: body.used.tokens, limitTokens: body.limit.tokens,
-        reservedTokens: body.reserved.tokens, headroomTokens: body.limit.tokens === null ? null : Math.max(0, body.limit.tokens - body.used.tokens - body.reserved.tokens) },
+        reservedTokens: body.reserved.tokens, headroomTokens: body.limit.tokens === null ? null : Math.max(0, body.limit.tokens - body.used.tokens - body.reserved.tokens),
+        usedActiveMs: body.used.activeMs, limitActiveMs: body.limit.activeMs, usedAttempts: body.used.attempts, limitAttempts: body.limit.attempts,
+        usedSessions: body.used.sessions, limitSessions: body.limit.sessions },
         pendingDecisions: 0, firstFailure: null });
       h.store.transaction(() => flagDecision(h.store, { decisionId: "r/agent-0", groupId: "g", runId: null, source: "reconcile", reason: "r", evidence: [], by: "orca-auto", at: "t" }));
       // mutation: drop the flagged count -> 0, red

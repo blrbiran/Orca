@@ -233,7 +233,9 @@ function domainErrorOutcome(error: ControlError, commandRevision: number | null)
     status,
     body: { error: { code: error.code, message: error.message, commandRevision, evidenceIds: [], retryable: false,
       // Tester #292: the runs that refused an archive, each with its state and next step.
-      ...(error instanceof ArchiveRunActiveError ? { activeRuns: error.activeRuns } : {}) } },
+      ...(error instanceof ArchiveRunActiveError ? { activeRuns: error.activeRuns } : {}),
+      // Tester #499: which budget dimensions a set-limit cannot hold; absent on every other refusal (byte-identical).
+      ...(error.details?.shortfall === undefined ? {} : { shortfall: error.details.shortfall }) } },
   };
 }
 

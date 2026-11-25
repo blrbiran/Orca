@@ -1758,8 +1758,11 @@ export const groupSummarySchema = z
     // Kanban spec §4: a board card's facts; given for every group with a plan (optional so older fixtures parse).
     card: z.object({
       // Tester #479: `waitingForBudget`, the ready tasks (dependencies met, no run) left unclaimed while the headroom is 0;
-      // absent otherwise.
-      budget: z.object({ usedTokens: safeInteger, limitTokens: safeInteger.nullable(), reservedTokens: safeInteger, headroomTokens: safeInteger.nullable(), waitingForBudget: positiveSafeInteger.optional() }).strict(),
+      // absent otherwise. Tester #499: the three finite dimensions ride beside tokens (only tokens may be unbounded), so a
+      // card never reads a budget as tokens alone.
+      budget: z.object({ usedTokens: safeInteger, limitTokens: safeInteger.nullable(), reservedTokens: safeInteger, headroomTokens: safeInteger.nullable(),
+        usedActiveMs: safeInteger, limitActiveMs: safeInteger, usedAttempts: safeInteger, limitAttempts: safeInteger, usedSessions: safeInteger, limitSessions: safeInteger,
+        waitingForBudget: positiveSafeInteger.optional() }).strict(),
       pendingDecisions: safeInteger,
       // Tester #229 (plan 2026-11-10 follow-up B, T1): `next`, the command that resumes the failed task's run in place --
       // only when it is blocked at a step other than C.
@@ -2703,10 +2706,18 @@ export const runActivitySchema = z
   .object({ schema: z.literal("orca-run-activity-v1"), runId: idSchema, entries: z.array(activityEntrySchema) })
   .strict();
 
+// Tester #499: on a group-budget-unavailable from set-limit, each dimension the ceiling cannot hold, with what it already
+// carries (used + reserved) and what the ceiling allows. Absent on every other error, so their bytes do not move.
+const budgetShortfallEntrySchema = z.object({ have: safeInteger.nullable(), need: safeInteger }).strict();
+export const budgetShortfallSchema = z.object({
+  tokens: budgetShortfallEntrySchema.optional(), activeMs: budgetShortfallEntrySchema.optional(),
+  attempts: budgetShortfallEntrySchema.optional(), sessions: budgetShortfallEntrySchema.optional(),
+}).strict();
 export const commandErrorSchema = z
   .object({ code: nonemptyString, message: nonemptyString, commandRevision: safeInteger.nullable(), evidenceIds: sortedIdArraySchema, retryable: z.boolean(),
     // Tester #292 (follow-up J): on archive-run-active only, the active runs and what moves each. Absent on every other error.
-    activeRuns: z.array(z.object({ runId: idSchema, state: nonemptyString, blockedAt: nonemptyString.nullable(), next: nonemptyString.optional() }).strict()).optional() })
+    activeRuns: z.array(z.object({ runId: idSchema, state: nonemptyString, blockedAt: nonemptyString.nullable(), next: nonemptyString.optional() }).strict()).optional(),
+    shortfall: budgetShortfallSchema.optional() })
   .strict();
 export const commandErrorBodySchema = z.object({ error: commandErrorSchema }).strict();
 

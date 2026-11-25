@@ -1,5 +1,6 @@
 import type { CapabilityViewV1 } from "./webProtocol.js";
 import type { Amount } from "./types.js";
+import type { BudgetShortfall } from "./errors.js";
 import { amountSchema, budgetAmountSchema, safeInteger, tokenPolicySchema } from "./schema.js";
 import { z } from "zod";
 
@@ -16,9 +17,29 @@ export function remainingBudget(ceiling:BudgetAmount,used:Amount):BudgetAmount {
   budgetAmountSchema.parse(ceiling);amountSchema.parse(used);
   return {tokens:ceiling.tokens===null?null:Math.max(0,ceiling.tokens-used.tokens),activeMs:Math.max(0,ceiling.activeMs-used.activeMs),attempts:Math.max(0,ceiling.attempts-used.attempts),sessions:Math.max(0,ceiling.sessions-used.sessions)};
 }
+/**
+ * Tester #499: every dimension `used + reserved` does not fit under `ceiling`, with what it holds and what the ceiling
+ * allows. An unbounded token ceiling can never be short, so it never appears. THE one rule: `budgetFits` is this answer
+ * being empty (the writers that refuse -- commands.ts setGroupLimit, webService.ts setLimit -- throw it with the gap).
+ */
+const budgetDimensions=["tokens","activeMs","attempts","sessions"] as const;
+export function budgetShortfall(used:Amount,reserved:Amount,ceiling:BudgetAmount):BudgetShortfall {
+  amountSchema.parse(used);amountSchema.parse(reserved);budgetAmountSchema.parse(ceiling);
+  const shortfall:BudgetShortfall={};
+  for(const dimension of budgetDimensions){
+    const need=ceiling[dimension];
+    if(need===null)continue;
+    const have=used[dimension]+reserved[dimension];
+    if(have>need)shortfall[dimension]={have,need};
+  }
+  return shortfall;
+}
+/** `attempts:+20,tokens:+5`: each short dimension and how much more it needs (the #311 refusal detail form). */
+export function budgetShortfallDetail(shortfall:BudgetShortfall):string {
+  return Object.entries(shortfall).map(([dimension,{have,need}])=>`${dimension}:+${(have??0)-need}`).join(",");
+}
 export function budgetFits(used:Amount,ceiling:BudgetAmount):boolean {
-  amountSchema.parse(used);budgetAmountSchema.parse(ceiling);
-  return (ceiling.tokens===null||used.tokens<=ceiling.tokens)&&used.activeMs<=ceiling.activeMs&&used.attempts<=ceiling.attempts&&used.sessions<=ceiling.sessions;
+  return Object.keys(budgetShortfall(used,{tokens:0,activeMs:0,attempts:0,sessions:0},ceiling)).length===0;
 }
 export function tokenRemainingStatus(ceiling:number|null,usageUnknown:boolean):"known"|"unlimited"|"unknown" {
   return usageUnknown?"unknown":ceiling===null?"unlimited":"known";

@@ -662,6 +662,11 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
     const n = (value as { tokens?: unknown } | undefined)?.tokens;
     return typeof n === "number" ? n : null;
   };
+  /** Tester #499: one of the finite dimensions a budget carries beside tokens (only tokens may be unbounded). */
+  const figure = (value: unknown, dimension: "activeMs" | "attempts" | "sessions"): number => {
+    const n = (value as Record<string, unknown> | undefined)?.[dimension];
+    return typeof n === "number" ? n : 0;
+  };
   const pendingRows = store.db.prepare("SELECT run_id,body FROM pending_decisions WHERE group_id=? AND state='pending'").all(groupId)
     .map((row) => ({ runId: String(row.run_id), body: JSON.parse(String(row.body)) as { reason?: unknown; entry?: { importance?: unknown } } }));
   const pending = pendingRows.filter((row) => row.body.entry?.importance !== "minor").length;
@@ -729,7 +734,12 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
     // live ceilings hold group.reserved. reservedTokens and headroomTokens come from the same groupHeadroom() the stop
     // uses (liveCeiling.ts), so the card and the decision cannot disagree.
     budget: { usedTokens: tokens(body.used) ?? 0, limitTokens: tokens(body.limit), reservedTokens: tokens(body.reserved) ?? 0,
-      headroomTokens, ...(waitingForBudget === 0 ? {} : { waitingForBudget }) }, pendingDecisions: pending + flagged, firstFailure,
+      headroomTokens,
+      // Tester #499: the three finite dimensions beside tokens, used and limit, so a card never reduces a budget to tokens.
+      usedActiveMs: figure(body.used, "activeMs"), limitActiveMs: figure(body.limit, "activeMs"),
+      usedAttempts: figure(body.used, "attempts"), limitAttempts: figure(body.limit, "attempts"),
+      usedSessions: figure(body.used, "sessions"), limitSessions: figure(body.limit, "sessions"),
+      ...(waitingForBudget === 0 ? {} : { waitingForBudget }) }, pendingDecisions: pending + flagged, firstFailure,
     ...(findings.length === 0 ? {} : { reviewFindings: { major, minor: findings.length - major } }),
     ...(expectation === null ? {} : { expectation }),
     ...(alerts === null ? {} : { budgetAlerts: alerts }),

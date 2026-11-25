@@ -690,8 +690,17 @@ export function durableCommandErrorStatus(code: string): DurableCommandErrorStat
   return durableCommandErrorStatuses[code as keyof typeof durableCommandErrorStatuses];
 }
 
+/**
+ * Tester #499: one budget dimension a ceiling cannot hold -- what it already carries (used + reserved) and what the
+ * ceiling allows. Only tokens may be unbounded (`have: null`), and an unbounded ceiling never appears at all.
+ */
+export type BudgetShortfall = Partial<Record<"tokens" | "activeMs" | "attempts" | "sessions", { have: number | null; need: number }>>;
+
+/** Refusal facts a verb attaches beside its code and detail; absent on every error that carries none. */
+export interface ControlErrorDetails { shortfall?: BudgetShortfall }
+
 export class ControlError extends Error {
-  constructor(public readonly code: KnownControlErrorCode, public readonly detail?: string) {
+  constructor(public readonly code: KnownControlErrorCode, public readonly detail?: string, public readonly details?: ControlErrorDetails) {
     super(detail === undefined ? code : `${code}:${detail}`);
     this.name = "ControlError";
   }

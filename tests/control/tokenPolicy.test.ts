@@ -185,6 +185,40 @@ it("rechecks the current cap period after an awaited probe crosses rollover",asy
 });
 
 
+// Tester #499: `group set-limit` answered a bare `group-budget-unavailable` and said neither which dimension a limit
+// cannot hold nor by how much. One rule answers both questions: `budgetShortfall` names each dimension used+reserved
+// exceeds, with what it holds and what the ceiling allows; `budgetFits` is that answer being empty.
+describe("a ceiling that does not fit (#499)", () => {
+  const zero = { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 };
+  const ceiling = { tokens: 100, activeMs: 144_000_000, attempts: 60, sessions: 60 };
+  const inside = { tokens: 10, activeMs: 50_000_000, attempts: 40, sessions: 40 };
+
+  it("names only the dimensions that do not fit", () => {
+    const s = policy.budgetShortfall({ ...inside, attempts: 70 }, zero, ceiling);
+    expect(Object.keys(s)).toEqual(["attempts"]);
+    expect(s.attempts).toEqual({ have: 70, need: 60 });
+    expect(policy.budgetShortfall({ ...inside, tokens: 101, sessions: 61 }, zero, ceiling)).toEqual({ tokens: { have: 101, need: 100 }, sessions: { have: 61, need: 60 } });
+  });
+
+  // One case per loop branch: deleting a dimension from the loop reds exactly its case, nothing else.
+  it.each([
+    ["tokens", { ...inside, tokens: 101 }, { tokens: { have: 101, need: 100 } }],
+    ["activeMs", { ...inside, activeMs: 144_000_001 }, { activeMs: { have: 144_000_001, need: 144_000_000 } }],
+    ["attempts", { ...inside, attempts: 61 }, { attempts: { have: 61, need: 60 } }],
+    ["sessions", { ...inside, sessions: 61 }, { sessions: { have: 61, need: 60 } }],
+  ] as const)("names a short %s on its own", (dimension, used, expected) => {
+    const s = policy.budgetShortfall(used, zero, ceiling);
+    expect(Object.keys(s)).toEqual([dimension]);
+    expect(s).toEqual(expected);
+  });
+
+  it("counts the reserve as occupied, and never names an unbounded token ceiling", () => {
+    expect(policy.budgetShortfall({ ...inside, attempts: 30 }, { ...zero, attempts: 35 }, ceiling)).toEqual({ attempts: { have: 65, need: 60 } });
+    expect(policy.budgetShortfall({ ...inside, tokens: Number.MAX_SAFE_INTEGER }, zero, { ...ceiling, tokens: null })).toEqual({});
+    expect(policy.budgetShortfall(inside, zero, ceiling)).toEqual({});
+  });
+});
+
 it("rejects a stale optional policy ceiling while preserving authoritative legal legacy limit edits",async()=>{
  const h=await webFixture(undefined,[{taskId:"a",tokenBudget:99_000}],{tokenPolicy:"optional-v1"});try{
   const service=new WebControlService(h.deps);await service.confirm(h.command("confirm",{...await h.confirmPayload(),budgetMode:"soft"}));await service.start(h.command("start",{}));
