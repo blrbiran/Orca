@@ -10,7 +10,7 @@ useFakePanels();
 const MIN = 60_000;
 const T8: TaskCost = { taskId: "T8", runs: 3, tokens: 14_503_083, ms: 55.4 * MIN, underWay: false, comparable: 5, medianTokens: 3_000_000, medianMs: 10 * MIN,
   tokensMultiple: 14_503_083 / 3_000_000, timeMultiple: 5.54, reasons: ["tokens-multiple", "time-multiple"] };
-const T8_LINE = "cost: task T8: 3 runs, 55 min, 14,503,083 tokens; group median over 5 finished tasks: 3,000,000 tokens, 10 min; flagged: 4.8x the median tokens, 5.5x the median time (a notice: nothing was paused or stopped)";
+const T8_LINE = "cost: task T8: 3 runs, 55 min, 14,503,083 tokens; group median excluding this task, over 5 finished tasks: 3,000,000 tokens, 10 min; flagged: 4.8x the median tokens, 5.5x the median time (a notice: nothing was paused or stopped)";
 
 describe("the cost line (#321 C)", () => {
   it("says what the task cost, against what, and why it is flagged", () => {
@@ -30,7 +30,7 @@ describe("the cost line (#321 C)", () => {
   it("says unknown usage is unknown, never a number of tokens (review ruling 2026-11-18)", () => {
     // mutation: drop the `cost.tokens === null` branch -> "null tokens" -> red
     expect(taskCostLine({ ...T8, tokens: null, tokensMultiple: null, reasons: ["time-multiple"] }))
-      .toBe("cost: task T8: 3 runs, 55 min, tokens unknown; group median over 5 finished tasks: 3,000,000 tokens, 10 min; flagged: 5.5x the median time (a notice: nothing was paused or stopped)");
+      .toBe("cost: task T8: 3 runs, 55 min, tokens unknown; group median excluding this task, over 5 finished tasks: 3,000,000 tokens, 10 min; flagged: 5.5x the median time (a notice: nothing was paused or stopped)");
   });
 });
 
@@ -65,6 +65,6 @@ describe("task show (#321 C)", () => {
     expect(json.json().body.cost).toMatchObject({ taskId: "x", runs: 2, tokens: 4_000_000, comparable: 3, medianTokens: 1_000_000, reasons: ["tokens-multiple"] });
     const human = await cli(["task", "show", "g-alpha", "x"], p.dir);
     // mutation: drop the cost line from the format -> red
-    expect(human.stdout.split("\n")).toContain("cost: task x: 2 runs, 10 min, 4,000,000 tokens; group median over 3 finished tasks: 1,000,000 tokens, 5 min; flagged: 4.0x the median tokens (a notice: nothing was paused or stopped)");
+    expect(human.stdout.split("\n")).toContain("cost: task x: 2 runs, 10 min, 4,000,000 tokens; group median excluding this task, over 3 finished tasks: 1,000,000 tokens, 5 min; flagged: 4.0x the median tokens (a notice: nothing was paused or stopped)");
   });
 });

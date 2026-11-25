@@ -118,6 +118,8 @@ export interface UnestimatedSource {
   proposal?: { state?: string; proposalVersion?: number; budgetMode?: "strict" | "soft" | null };
   summary?: { state?: string; archived?: boolean };
   estimates?: SuggestionView["estimates"];
+  /** Tester #495: the tasks' derived expectations; a person's amount (`estimateId: null`) makes a task not a default. */
+  workItems?: Array<{ taskId: string; expected?: { tokens: number; estimateId: string | null; stale: boolean; usedTokens: number | null } }>;
   ledger?: { groupLimit: { tokens: number | null } };
   /** Tester follow-up G §11: present (true) on a group of the expectation model, where task tokens are expectations. */
   expectationModel?: true;
@@ -138,8 +140,11 @@ export function softCeilingLines(source: UnestimatedSource): string[] {
  * only a confirmed one (`afterConfirm`: confirm's own lines, read from the view before the confirm it reports) is.
  */
 export function unestimatedLines(groupId: string, source: UnestimatedSource, opts: { afterConfirm?: boolean } = {}): string[] {
+  // Tester #495: a task a person gave an expectation to (`expected.estimateId === null`) is not an unlimited default; it
+  // reads in the usage lines. An estimate-derived expectation stays here, with the same value and floor wording.
+  const items = new Map((source.workItems ?? []).map((item) => [item.taskId, item]));
   const tasks = (source.allocations ?? []).filter((a) => a.ownerKind === "task" && a.bucket === "work" && a.amount.tokens === null
-    && a.fieldProvenance?.tokens?.provenance === "complex-1m-default");
+    && a.fieldProvenance?.tokens?.provenance === "complex-1m-default" && items.get(a.ownerId)?.expected?.estimateId !== null);
   if (tasks.length === 0) return [];
   // adviceOf answers only for an editable proposal; a confirmed one keeps its ready estimate for after a reopen.
   const ready = source.plan === undefined || source.estimates === undefined ? null
@@ -154,8 +159,14 @@ export function unestimatedLines(groupId: string, source: UnestimatedSource, opt
       ? `in this group a task's tokens are an expectation and the group's token limit (${limitTokens}) is the only ceiling, so an estimate is advisory: each task's expected tokens`
       : "in a group with no token limit an estimate is advisory: each task's expected tokens, not a ceiling";
     if (ready !== null) {
-      const expected = (taskId: string) => ready.output.tasks.find((t) => t.taskId === taskId)?.work.tokens;
-      const lines = tasks.map((a) => `task ${a.ownerId}: tokens: unlimited (${expected(a.ownerId) === undefined ? "default, not estimated" : `default; expected ${expected(a.ownerId)} tokens from estimate ${ready.estimateId}`})`);
+      const lines = tasks.map((a) => {
+        const expected = items.get(a.ownerId)?.expected;
+        const suggestion = ready.output.tasks.find((t) => t.taskId === a.ownerId)?.work.tokens;
+        const tokens = expected?.tokens ?? suggestion;
+        if (tokens === undefined) return `task ${a.ownerId}: tokens: unlimited (default, not estimated)`;
+        const estimateId = expected?.estimateId ?? ready.estimateId;
+        return `task ${a.ownerId}: tokens: unlimited (default; ${expectationProvenance(tokens, estimateId, suggestion)})`;
+      });
       if (source.summary?.state === "done" || source.summary?.archived === true) return lines;
       return [...lines, `${advisory}; to cap a task, set its tokens (orca proposal replace ${groupId} --file <ops.json> --if-revision <n>)`];
     }
@@ -178,17 +189,31 @@ export function unestimatedLines(groupId: string, source: UnestimatedSource, opt
   return [...tasks.map((a) => `task ${a.ownerId}: tokens: unlimited (${state})`), path];
 }
 /**
+ * Tester #495: one wording for where an expectation came from, used by both the default lines and the usage lines. A
+ * person's amount has no estimate; an estimate raised to the expectation floor names both numbers, so the value printed
+ * beside the ratio is never mistaken for the estimate's suggestion.
+ */
+function expectationProvenance(tokens: number, estimateId: string | null, suggestion?: number, stale = false): string {
+  if (estimateId === null) return `expected ${tokens} tokens from the amount a person set`;
+  if (suggestion !== undefined && suggestion !== tokens) return `expected ${tokens} tokens from the expectation floor (estimate ${estimateId} suggested ${suggestion})`;
+  return `expected ${tokens} tokens from estimate ${estimateId}${stale ? " (stale)" : ""}`;
+}
+
+/**
  * Budget defaults spec 2026-11-11 §7 item 4: per task that has an expectation (the view derives one only in a group with no
  * token limit) and has run, what it used against what was expected -- "×3.2" -- or "unknown" when its usage is unknown.
  */
-export function expectationLines(source: { workItems?: Array<{ taskId: string; lineageRunIds?: string[]; expected?: { tokens: number; estimateId: string | null; stale: boolean; usedTokens: number | null } }> }): string[] {
+export function expectationLines(source: { workItems?: Array<{ taskId: string; lineageRunIds?: string[]; expected?: { tokens: number; estimateId: string | null; stale: boolean; usedTokens: number | null } }>; estimates?: SuggestionView["estimates"] }): string[] {
   return (source.workItems ?? []).flatMap((item) => {
     const e = item.expected;
     if (e === undefined || (item.lineageRunIds?.length ?? 0) === 0) return [];
     const ratio = usedRatio(e);
-    const used = e.usedTokens === null ? "unknown" : `${e.usedTokens} tokens${ratio === null ? "" : ` (×${ratio} its estimate)`}`;
-    // Tester follow-up G spec §2.2: a person's amount in an expectation-model group has no estimate.
-    return [`task ${item.taskId}: used ${used}; expected ${e.tokens} tokens from ${e.estimateId === null ? "the amount a person set" : `estimate ${e.estimateId}`}${e.stale ? " (stale)" : ""}`];
+    const used = e.usedTokens === null ? "unknown" : `${e.usedTokens} tokens${ratio === null ? "" : ` (×${ratio} its expectation)`}`;
+    // Tester follow-up G spec §2.2: a person's amount in an expectation-model group has no estimate. #495: the ratio's
+    // denominator is the expectation printed on this line, never the estimate's unfloored suggestion.
+    const suggestion = e.estimateId === null ? undefined
+      : (source.estimates ?? []).find((estimate) => estimate.estimateId === e.estimateId)?.output?.tasks.find((task) => task.taskId === item.taskId)?.work.tokens;
+    return [`task ${item.taskId}: used ${used}; ${expectationProvenance(e.tokens, e.estimateId, suggestion, e.stale)}`];
   });
 }
 

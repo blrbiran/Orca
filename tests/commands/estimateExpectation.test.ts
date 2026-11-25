@@ -19,7 +19,8 @@ async function unlimited() {
 }
 const ready = (w: Awaited<ReturnType<typeof unlimited>>) => {
   (w.state.view as Record<string, unknown>).estimates = [{ estimateId: "est-9", estimateVersion: 1, state: "ready", stale: false,
-    output: { schema: "budget-estimate-v1", planHash: w.state.view.plan.planHash, tasks: [{ taskId: "t1", work: { tokens: 1000, activeMs: 1, attempts: 1, sessions: 1 } }], goalReviewReserve: null } }];
+    output: { schema: "budget-estimate-v1", planHash: w.state.view.plan.planHash, tasks: [{ taskId: "t1", work: { tokens: 180_000, activeMs: 1, attempts: 1, sessions: 1 } }], goalReviewReserve: null } }];
+  Object.assign(w.state.view.workItems[0]!, { expected: { tokens: 180_000, estimateId: "est-9", stale: false, usedTokens: 0 } });
 };
 const SHOWS = [["group", "show", "g-alpha"], ["proposal", "show", "g-alpha"]];
 
@@ -30,7 +31,7 @@ describe("an unlimited group names the expectation (§7 item 5; criterion 9)", (
     for (const args of SHOWS) {
       const out = (await cli(args, w.dir)).stdout;
       // mutation: drop the unlimited branch of unestimatedLines -> "ready but not applied", red
-      expect(out, args.join(" ")).toContain("task t1: tokens: unlimited (default; expected 1000 tokens from estimate est-9)");
+      expect(out, args.join(" ")).toContain("task t1: tokens: unlimited (default; expected 180000 tokens from estimate est-9)");
       expect(out, args.join(" ")).not.toContain("ready but not applied");
       expect(out, args.join(" ")).not.toContain("to apply it:");
       expect(out, args.join(" ")).toContain("in a group with no token limit an estimate is advisory: each task's expected tokens, not a ceiling");
@@ -57,10 +58,43 @@ describe("group show puts usage beside the expectation (§7 item 4; criterion 7,
   };
   it("3.2x when the task used 3.2 times its expectation", async () => {
     // mutation: drop expectationLines from formatWithUnestimated -> red
-    expect(await withExpectation(3200)).toContain("task t1: used 3200 tokens (×3.2 its estimate); expected 1000 tokens from estimate est-9");
+    expect(await withExpectation(3200)).toContain("task t1: used 3200 tokens (×3.2 its expectation); expected 1000 tokens from estimate est-9");
   });
   it("unknown when its usage is unknown", async () => {
     // mutation: print 0 for unknown usage -> red
     expect(await withExpectation(null)).toContain("task t1: used unknown; expected 1000 tokens from estimate est-9");
+  });
+});
+
+
+describe("group show uses one expectation per task (#495)", () => {
+  const shown = async (tokens: number, estimateId: string | null) => {
+    const w = await unlimited();
+    ready(w);
+    // The estimate recommends 180000; the expectation printed (a person's amount, or the 1M floor) is what the ratio uses.
+    ((w.state.view as Record<string, unknown>).estimates as Array<{ output: { tasks: Array<{ work: { tokens: number } }> } }>)[0]!.output.tasks[0]!.work.tokens = 180_000;
+    Object.assign(w.state.view, { expectationModel: true });
+    Object.assign(w.state.view.ledger.groupLimit, { tokens: 6_000_000 });
+    Object.assign(w.state.view.workItems[0]!, {
+      lineageRunIds: ["run-1"], expected: { tokens, estimateId, stale: false, usedTokens: 1_200_000 },
+    });
+    const out = await cli(["group", "show", "g-alpha"], w.dir);
+    expect(out.code).toBe(0);
+    return out.stdout.split("\n").filter((line) => line.startsWith("task t1:"));
+  };
+
+  it("names a person's 1200000 once even when the estimate recommends 180000", async () => {
+    // mutation: keep a person's task in the unlimited-default list -> a second expected line (180000), red
+    expect(await shown(1_200_000, null)).toEqual([
+      "task t1: used 1200000 tokens (×1 its expectation); expected 1200000 tokens from the amount a person set",
+    ]);
+  });
+
+  it("labels a floored expectation and uses it as the ratio's denominator", async () => {
+    // mutation: print the estimate's raw suggestion beside the floored value -> 180000, red
+    expect(await shown(1_000_000, "est-9")).toEqual([
+      "task t1: tokens: unlimited (default; expected 1000000 tokens from the expectation floor (estimate est-9 suggested 180000))",
+      "task t1: used 1200000 tokens (×1.2 its expectation); expected 1000000 tokens from the expectation floor (estimate est-9 suggested 180000)",
+    ]);
   });
 });

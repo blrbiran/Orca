@@ -62,7 +62,7 @@ export function taskCostLine(cost: TaskCost): string {
   const own = `${cost.runs} run${cost.runs === 1 ? "" : "s"}, ${minutes(cost.ms)}, ${cost.tokens === null ? "tokens unknown" : `${count(cost.tokens)} tokens`}${cost.underWay ? " so far" : ""}`;
   const against = cost.medianTokens === null || cost.medianMs === null
     ? `${cost.comparable} finished task${cost.comparable === 1 ? "" : "s"} to compare with, ${COST_MIN_COMPARABLE_TASKS} needed for a median`
-    : `group median over ${cost.comparable} finished tasks: ${count(Math.round(cost.medianTokens))} tokens, ${minutes(cost.medianMs)}`;
+    : `group median excluding this task, over ${cost.comparable} finished tasks: ${count(Math.round(cost.medianTokens))} tokens, ${minutes(cost.medianMs)}`;
   const flagged = cost.reasons.map((reason) => COST_REASON_WORDS[reason](cost));
   return `cost: task ${cost.taskId}: ${own}; ${against}${flagged.length === 0 ? "" : `; flagged: ${flagged.join(", ")} (a notice: nothing was paused or stopped)`}`;
 }

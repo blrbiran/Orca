@@ -10,7 +10,7 @@ const NONE = { hardCapTokens: null, usagePause: null, usageStopped: null, groupC
 describe("group show's budget lines (spec §2.2-§2.5)", () => {
   it("names the expectation, the ratio and the decision command", () => {
     expect(expectationLines({ workItems: [{ taskId: "a", lineageRunIds: ["r"], expected: { tokens: 1_000_000, estimateId: null, stale: false, usedTokens: 3_200_000 } }] }))
-      .toEqual(["task a: used 3200000 tokens (×3.2 its estimate); expected 1000000 tokens from the amount a person set"]);
+      .toEqual(["task a: used 3200000 tokens (×3.2 its expectation); expected 1000000 tokens from the amount a person set"]);
     expect(budgetStateLines("g1", { workItems: [
       { taskId: "a", budgetState: { ...NONE, usagePause: { usedTokens: 10_400_000, expectationTokens: 1_000_000, line: 10_000_000 } } },
       { taskId: "b", budgetState: { ...NONE, groupCapStop: { observedTokens: 2_900_000 } } },
