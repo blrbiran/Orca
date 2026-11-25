@@ -1,6 +1,6 @@
 # `orca project remove`: unregistering a project, and what happens to its groups (#470 P1) — design
 
-Status: **draft for the human's review; no code.** Author: Orca session `6add92a5` (Claude Opus 5.5), 2026-11-25, on main
+Status: **draft for the human's review; no code.** (Ruled and built in session `5d3d0c09`: see §6.) Author: Orca session `6add92a5` (Claude Opus 5.5), 2026-11-25, on main
 after `chore(deps): repin ccloop to 276114a…`. Human, 2026-11-24: #470's `project remove` and its groups' ownership are
 「以后单独设计」 (agreed). #470's P0 (a gone folder is a warning, `missingPaths`) already landed:
 `fix(panel,cli): a registered project whose folder is gone is a warning, not a broken projects file (#470)`.
@@ -65,10 +65,10 @@ data; un-registering from the Web while the panel serves that project's live run
 ## 5. Open questions (recommended answers)
 
 1. Default: refuse while groups remain (recommended) vs archive automatically. Refusing keeps a person's choice explicit;
-   the flag makes it one command.
+   the flag makes it one command. **Answered (§6.1): refuse; `--archive-groups` archives then removes.**
 2. Should `remove` of a never-mounted (gone-folder) project skip the group check? Recommended **no**: the 13 groups are
-   exactly the ownership question the tester raised; `--archive-groups` handles them.
-3. A `repath` verb now or later? Recommended later.
+   exactly the ownership question the tester raised; `--archive-groups` handles them. **Answered (§6.1): no exemption.**
+3. A `repath` verb now or later? Recommended later. **Not ruled; out of scope (§6.1).**
 
 ## 6. Human rulings and revisions (session 5d3d0c09, 2026-11-25)
 
