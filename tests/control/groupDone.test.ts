@@ -152,6 +152,32 @@ describe("a system verdict group settled before it reached review (#467)", () =>
   });
 });
 
+// Tester #476: the #467 move happens only at settle time, so a ladder settled before it is still `ready` with its verdict
+// on record (12 such groups in the tester's store). The pass itself closes it; a `ready` group without a verdict is work
+// not yet started and stays; an archived one is not touched (human ruling #419: no auto-archive, no rewrite of history).
+describe("a system verdict group settled before the #467 settle-time move (#476)", () => {
+  const ladderMark = (settled: unknown) => ({ systemDebug: { source: { kind: "ladder", groupId: "o", taskId: "t0", runId: "run-o" }, stackOn: null, inputHash: "a".repeat(64), settled } });
+  it("a ready ladder with debug-failed recorded is done after one pass; ready groups without a verdict stay ready", async () => {
+    const h = await openTestStore(); try {
+      group(h.store, "old-ladder", { ...ladderMark({ state: "debug-failed", at: 1, detail: null }), status: "ready" }, ["blocked"]);
+      group(h.store, "unsettled", { ...ladderMark(null), status: "ready" }, ["ready"]);
+      group(h.store, "plain", { status: "ready" }, ["done"]);
+      group(h.store, "archived-ladder", { ...ladderMark({ state: "debug-failed", at: 1, detail: null }), status: "ready", archived: { at: 1, actor: "person" } }, ["blocked"]);
+      // mutation: keep the pass to review/running only -> [] and old-ladder stays ready, red
+      expect(pass(h.store)).toEqual(["old-ladder"]);
+      expect(status(h.store, "old-ladder")).toBe("done");
+      expect(doneRows(h.store, "old-ladder")).toEqual([{ from: "ready", cause: "verdict" }]);
+      // mutation: admit every ready group -> plain (all tasks done) is moved too, red at the first assertion
+      expect(status(h.store, "unsettled")).toBe("ready");
+      expect(status(h.store, "plain")).toBe("ready");
+      expect(status(h.store, "archived-ladder")).toBe("ready");
+      // Idempotent: a second pass moves nothing and writes no second activity row.
+      expect(pass(h.store)).toEqual([]);
+      expect(doneRows(h.store, "old-ladder")).toHaveLength(1);
+    } finally { await h.dispose(); }
+  });
+});
+
 describe("the done pass runs every driver round (criterion 3)", () => {
   it("an all-done review group from before the change reaches done without a new checkpoint", async () => {
     const harness = await driverHarness([{ taskId: "a" }]);

@@ -16,6 +16,7 @@ import type { ControlStore } from "./store.js";
  * Tester follow-up E §5 (#241) overrides D1: `delivered` also needs the group accepted on its final tip (prerequisiteDone
  * reads groupAcceptance.ts's record: passed, not-needed, not-run or waived); a failed or not-yet-run acceptance keeps it
  * out of done.
+ * A `ready` group is moved only by a recorded verdict (tester #476: groups settled before the #467 settle-time move).
  * A `blocked` group is never touched (Final review I1: the block is its brake). The status change and its activity row are
  * one savepoint per group, so one group's failure is its own. Answers the groups it moved.
  */
@@ -25,7 +26,10 @@ export function markGroupsDone(store: ControlStore): string[] {
     const groupId = String(row.id);
     let body: Record<string, unknown>;
     try { body = JSON.parse(String(row.body)) as Record<string, unknown>; } catch { continue; } // its own reads name it
-    if (body.planHash === undefined || (body.status !== "review" && body.status !== "running")) continue;
+    if (body.planHash === undefined) continue;
+    // Tester #476: a ladder or judge settled before #467 (bae697fa) kept `ready`, and a settle never replays; a recorded
+    // verdict closes it from `ready` too. A `ready` group without one is work not yet started and is not touched.
+    if (body.status !== "review" && body.status !== "running" && !(body.status === "ready" && verdictRecorded(body))) continue;
     let open = true;
     store.db.exec("SAVEPOINT group_done");
     try {
