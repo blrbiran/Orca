@@ -11,7 +11,8 @@ import { compareText } from "../control/webProtocol.js";
 import { discoverRepos } from "../metrics/discover.js";
 import { controlRepoKey } from "./controlOptions.js";
 import { sendControlError } from "./controlErrors.js";
-import { projectAddRefusal, type Principal } from "./permissions.js";
+import { PROJECT_REMOVE_SOCKET, principalLabel, projectAddRefusal, type Principal } from "./permissions.js";
+import type { ProjectGroupsPort } from "./projectGroups.js";
 import { PANEL_BAD_REQUEST } from "./rejection.js";
 import { ProjectRegistryError, type ProjectRegistry } from "./projectRegistry.js";
 import { projectKindOf, type MultiDirProjectEntryV1, type ProjectEntryV1 } from "./projectsFile.js";
@@ -26,6 +27,8 @@ export interface ProjectsDeps {
    * (a multi has no path and never joins `opts.repos`). Absent while the control plane is off.
    */
   multiControlRepoId?: (projectKey: string) => string | null;
+  /** Project remove spec 2026-11-25 §6: a project's groups and their archive; absent while the control plane is off. */
+  groups?: ProjectGroupsPort;
   /** Project registry spec §5: present in file mode; absent or null means command-line mode. */
   registry?: ProjectRegistry | null;
 }
@@ -36,9 +39,10 @@ export function projectsDepsOf(
   multiControlRepoId?: (projectKey: string) => string | null,
   /** Issue #201: the control plane's own answer, so a project whose folder moved lists as unheld rather than as a target it cannot act on. */
   holds?: (repoId: string) => boolean,
+  groups?: ProjectGroupsPort,
 ): ProjectsDeps {
   return {
-    opts, registry,
+    opts, registry, ...(groups === undefined ? {} : { groups }),
     controlRepoId: (key) => (controlOn && (holds === undefined ? opts.repos.some((repo) => repo.projectKey === key) : holds(controlRepoKey(key))) ? controlRepoKey(key) : null),
     ...(multiControlRepoId === undefined || !controlOn ? {} : { multiControlRepoId }),
   };
@@ -130,6 +134,67 @@ export function addProject(deps: ProjectsDeps, raw: unknown): { status: number; 
   }
 }
 
+/**
+ * Project remove spec 2026-11-25 §6 (tester #470, session 5d3d0c09): unregister a project, file mode only. One handler for
+ * `DELETE /api/projects/:id` and the socket's `orca project remove`; who may call it is the route's (projectAddRefusal).
+ * `id` is resolved against the projects file's own entries, mounted or not (§6.2 a). Refused while the project has a group
+ * without the terminal mark (human ruling 1), unless `archiveGroups` (ruling 2): then each is archived through
+ * `archive-group` first, and the first refusal stops the walk with the file unchanged. Nothing is written before the
+ * last refusal passes.
+ */
+export function removeProject(deps: ProjectsDeps, id: string, raw: unknown, by: { client: string; principal: string }): { status: number; body: unknown } {
+  if (!deps.registry) return { status: 409, body: FROM_COMMAND_LINE };
+  const body = (raw ?? {}) as { archiveGroups?: unknown };
+  if (typeof body !== "object" || (body.archiveGroups !== undefined && typeof body.archiveGroups !== "boolean"))
+    return { status: 400, body: { code: PANEL_BAD_REQUEST, message: "removing a project takes { archiveGroups?: boolean }" } };
+  const archiveGroups = body.archiveGroups === true;
+  try {
+    const project = deps.registry.removable(id);
+    if (deps.groups === undefined)
+      return { status: 409, body: { code: "project-remove-needs-control", message: `the task control plane is off, so ${project.id}'s groups cannot be counted; start the panel with it on to remove a project` } };
+    const groups = deps.groups.of(controlRepoKey(project.id));
+    const open = groups.filter((g) => !g.archived);
+    const archivedBefore = groups.length - open.length;
+    if (open.length > 0 && !archiveGroups) {
+      const byStatus: Record<string, number> = {};
+      for (const g of open) byStatus[g.status] = (byStatus[g.status] ?? 0) + 1;
+      const counts = Object.keys(byStatus).sort(compareText).map((status) => `${byStatus[status]} ${status}`).join(", ");
+      return { status: 409, body: {
+        code: "project-has-groups",
+        message: `${project.id} has ${open.length} group${open.length === 1 ? "" : "s"} not archived (${counts}): archive them first, or pass --archive-groups`,
+        groups: { notArchived: open.length, byStatus, groupIds: open.map((g) => g.groupId) },
+        next: [`orca project remove ${project.id} --archive-groups --as-person`],
+      } };
+    }
+    const archived: string[] = [];
+    const stamp = Date.now();
+    for (const g of open) {
+      const outcome = deps.groups.archive(g.groupId, { ...by, commandId: `project-remove-${project.id}-${stamp}` });
+      if (!outcome.ok) {
+        return { status: 409, body: {
+          code: "project-group-archive-refused",
+          message: `group ${g.groupId} was not archived (${outcome.code}: ${outcome.message}); ${project.id} stays registered${archived.length === 0 ? "" : `; archived before it: ${archived.join(", ")}`}`,
+          groupId: g.groupId, refusal: { code: outcome.code, message: outcome.message }, archivedGroups: archived,
+        } };
+      }
+      archived.push(g.groupId);
+    }
+    const { project: removed, restartNeeded } = deps.registry.remove(project.id);
+    const kept = archivedBefore + archived.length;
+    const next = [
+      ...(restartNeeded ? ["orca panel restart (the running panel holds the repository until then)"] : []),
+      ...(kept === 0 ? [] : [`re-add it with the same name to reattach its ${kept} archived group${kept === 1 ? "" : "s"}`]),
+    ];
+    return { status: 200, body: {
+      removed: { projectKey: removed.id, name: removed.name, kind: removed.kind, ...(removed.path === undefined ? {} : { path: removed.path }), ...(removed.dirs === undefined ? {} : { dirs: removed.dirs }) },
+      archivedGroups: archived, archivedBefore, restartNeeded, next,
+    } };
+  } catch (error) {
+    if (!(error instanceof ProjectRegistryError)) throw error;
+    return { status: error.status, body: { code: error.code, message: error.message } };
+  }
+}
+
 /** CLI v2 spec §14 R4: the plan registration (and the project list it needs to resolve cwd) on the control socket. */
 export function registerSocketProjectRoutes(app: Express, deps: ProjectsDeps): void {
   app.get("/api/control/projects", (_req, res, next) => { void listProjects(deps).then((body) => res.json(body), next); });
@@ -143,6 +208,15 @@ export function registerSocketProjectRoutes(app: Express, deps: ProjectsDeps): v
   });
   app.post("/api/control/projects/:id/plans", (req, res) => {
     const answer = registerPlan(deps, String(req.params.id), req.body);
+    res.status(answer.status).json(answer.body);
+  });
+  // Project remove spec 2026-11-25 §6.3 (tester #470): `orca project remove`, the add's gate.
+  app.post("/api/control/projects/:id/remove", (req, res) => {
+    const principal = res.locals.orcaPrincipal as Principal;
+    const refusal = projectAddRefusal(principal, "only an owner removes a project", PROJECT_REMOVE_SOCKET);
+    if (refusal !== null) { sendControlError(res, 403, refusal.code, refusal.message); return; }
+    const client = principal.kind === "agent" ? principal.client : "web";
+    const answer = removeProject(deps, String(req.params.id), req.body, { client, principal: principalLabel(principal) });
     res.status(answer.status).json(answer.body);
   });
 }
@@ -202,5 +276,14 @@ export function registerProjectRoutes(app: Express, deps: ProjectsDeps): void {
       }
       res.json({ project: rowFor(deps, id) });
     } catch (error) { refused(res, error); }
+  });
+
+  // Project remove spec 2026-11-25 §6.3 (tester #470): owner only, as add and rename are.
+  app.delete("/api/projects/:id", (req, res) => {
+    const principal = res.locals.orcaPrincipal as Principal | undefined;
+    const refusal = principal === undefined ? null : projectAddRefusal(principal, "only an owner removes a project", PROJECT_REMOVE_SOCKET);
+    if (refusal !== null) { res.status(403).json({ code: refusal.code, message: refusal.message }); return; }
+    const answer = removeProject(deps, String(req.params.id), req.body, { client: "web", principal: principal === undefined ? "web" : principalLabel(principal) });
+    res.status(answer.status).json(answer.body);
   });
 }

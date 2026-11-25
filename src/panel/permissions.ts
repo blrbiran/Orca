@@ -59,6 +59,10 @@ export const hasPersonAuthority = (p: Principal): boolean =>
 export const hasPauseAuthority = (p: Principal): boolean =>
   p.kind === "user" ? true : p.dispatchedRun === undefined && p.person !== undefined;
 
+/** How the socket's refusals below name the command (project remove spec 2026-11-25 §6.3, tester #470). */
+const PROJECT_ADD_SOCKET = { command: "orca project add", act: "registers a project", inWeb: "add the project" };
+export const PROJECT_REMOVE_SOCKET = { command: "orca project remove", act: "removes a project", inWeb: "remove the project" };
+
 /**
  * Tester follow-up E §9 (D21): who may register a project -- `POST /api/projects` on the Web, `orca project add` on the
  * socket. Registering one lets Orca and its agents write in a new directory, so agents must not widen that set themselves:
@@ -67,15 +71,17 @@ export const hasPauseAuthority = (p: Principal): boolean =>
  * panel's projects file, outside the command ledger, as the plan registration beside it is.
  * Tester follow-up F §3 (D21): `PATCH /api/projects/:id` (rename, a multi project's folder order) takes the same gate;
  * `ownerMessage` names what a member was refused.
+ * Project remove spec 2026-11-25 §6.3 (tester #470): `orca project remove` and `DELETE /api/projects/:id` take it too;
+ * `socket` names the command in the socket's refusals.
  */
-export function projectAddRefusal(p: Principal, ownerMessage = "only an owner registers a project"):
+export function projectAddRefusal(p: Principal, ownerMessage = "only an owner registers a project", socket: { command: string; act: string; inWeb: string } = PROJECT_ADD_SOCKET):
   { code: "owner-required" | "control-dispatched-run-refused" | "control-person-token-required"; message: string } | null {
   const ownerRequired = { code: "owner-required" as const, message: ownerMessage };
   if (p.kind === "user") return mayDoHumanOnly(p) ? null : ownerRequired;
   if (p.dispatchedRun !== undefined)
-    return { code: "control-dispatched-run-refused", message: `orca project add is not done by a run Orca dispatched (${p.dispatchedRun}); a person registers a project, from the Web UI or an attended session.` };
+    return { code: "control-dispatched-run-refused", message: `${socket.command} is not done by a run Orca dispatched (${p.dispatchedRun}); a person ${socket.act}, from the Web UI or an attended session.` };
   if (p.person === undefined)
-    return { code: "control-person-token-required", message: "orca project add wants a person: log in with `orca auth login` and resend it with --as-person, or add the project in the Web UI." };
+    return { code: "control-person-token-required", message: `${socket.command} wants a person: log in with \`orca auth login\` and resend it with --as-person, or ${socket.inWeb} in the Web UI.` };
   return mayDoHumanOnly({ kind: "user", ...p.person }) ? null : ownerRequired;
 }
 

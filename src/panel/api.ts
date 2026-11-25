@@ -30,6 +30,7 @@ import { registerChainRoutes } from "./chains.js";
 import { registerMemoryRoutes } from "./memoryApi.js";
 import { controlRepoKey } from "./controlOptions.js";
 import { projectsDepsOf, registerProjectRoutes } from "./projects.js";
+import { projectGroupsPort } from "./projectGroups.js";
 import type { ProjectRegistry } from "./projectRegistry.js";
 import { computePanelCoverage, majorOutsideHighTier, reviewFlags, reviewedKeys, unreviewedHighTier } from "./coverage.js";
 import { loadDecisionRow, loadQuestionsOrEmpty } from "./decisionSource.js";
@@ -819,7 +820,9 @@ export function buildApi(app: Express, deps: ApiDeps): void {
   registerChainRoutes(app, deps.opts, objectBody);
   // Project switcher spec D1 (§8), project registry §12 C2: the control plane holds exactly the projects in
   // opts.repos (given with --repo, or added to the registry since boot), so the join is computed per request.
-  registerProjectRoutes(app, projectsDepsOf(deps.opts, deps.projects ?? null, deps.control !== undefined, deps.multiControlRepoId, deps.holdsRepository));
+  // Project remove spec 2026-11-25 §6 (tester #470): the groups a remove counts and archives, while the control plane is on.
+  registerProjectRoutes(app, projectsDepsOf(deps.opts, deps.projects ?? null, deps.control !== undefined, deps.multiControlRepoId, deps.holdsRepository,
+    deps.control?.service === undefined ? undefined : projectGroupsPort(deps.control.store, deps.control.service)));
 
   // Errors last. A gate refusal is a first-class error page, never partial
   // data: relaxing here would void E2's gate entirely.

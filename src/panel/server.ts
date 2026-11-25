@@ -13,6 +13,7 @@ import { createCliLoginRequests } from "./cliLogin.js";
 import { bindControlSocket, buildControlSocketApp, controlSocketPath, panelUrlFor, type ControlSocketHandle } from "./controlSocket.js";
 import { CONTROL_SOCKET_MAX_BYTES, CONTROL_SOCKET_NAME } from "./controlSocketPath.js";
 import { projectsDepsOf } from "./projects.js";
+import { projectGroupsPort } from "./projectGroups.js";
 import { randomUUID } from "node:crypto";
 import { migrateAgentTimeouts } from "../agents/timeoutMigration.js";
 import { assembleControlRuntime, type ControlRuntime } from "./controlAssembly.js";
@@ -403,7 +404,7 @@ export async function createPanelServer(opts: PanelOptions, env: NodeJS.ProcessE
     const cliLoginDeps = listening === null || typeof listening === "string" ? undefined : { requests: cliLogin, panelUrl: panelUrlFor(opts.bind, listening.port) };
     const bound = await bindControlSocket(
       buildControlSocketApp({ store: control.store, epoch, config: control.config, service: control.service, port: control.port }, projectsDepsOf(opts, projects, true, multiControlRepoId,
-        (repoId) => control!.config.hasRepository(repoId)), auth, cliLoginDeps),
+        (repoId) => control!.config.hasRepository(repoId), projectGroupsPort(control.store, control.service)), auth, cliLoginDeps),
       controlSocketPath(control.store.stateDir),
     );
     if ("code" in bound) {

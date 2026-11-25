@@ -10,6 +10,8 @@
  *   only inside that narrow window (spec §3).
  * - New projects are appended to `repos` -- the very `opts.repos` array every consumer reads per request (C2) --
  *   and nothing is ever removed from it at runtime.
+ * - Project remove spec 2026-11-25 §6 (tester #470): `remove` drops an entry from the file and from the listed projects;
+ *   a mounted one stays in `repos` and the control plane, named `removed:<id>` in `pendingRestart` until the restart.
  */
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
@@ -69,7 +71,17 @@ export interface ProjectRegistry {
   setDirs(id: string, dirs: string[]): MultiDirProjectEntryV1;
   /** In-repo plan path spec 2026-10-21 §2.2: register (or re-trust) a plan file of a project. */
   addPlan(projectId: string, path: string): ProjectPlanV1;
+  /**
+   * Project remove spec 2026-11-25 §6.2 a (tester #470): the filed entry `idOrName` names -- its exact id, else the one
+   * entry with exactly that name -- mounted or not; refused as `remove` would refuse it. Writes nothing.
+   */
+  removable(idOrName: string): RemovableProject;
+  /** Spec §6.3: drop the entry from the file through the base-hash check; `restartNeeded` for a mounted single project. */
+  remove(id: string): { project: RemovableProject; restartNeeded: boolean };
 }
+
+/** Project remove spec 2026-11-25 §6.3: the entry a remove names, as its answer reports it. */
+export interface RemovableProject { id: string; name: string; kind: ProjectKind | "multi"; path?: string; dirs?: string[] }
 
 /** Spec 2026-10-21 §2.2: whether `rel` (relative to `repo`) is in git's index. */
 function gitTracked(repo: string, rel: string): boolean {
@@ -117,6 +129,8 @@ export function createProjectRegistry(input: {
   let pendingRestart: string[] = [];
   let fileError: string | null = null;
   let missingPaths: string[] = [];
+  /** Spec 2026-11-25 §6.3: mounted single projects removed in this panel's life; their repository is held until a restart. */
+  const removedMounted = new Set<string>();
 
   const fail = (code: string, status: number, message: string): never => { throw new ProjectRegistryError(code, status, message); };
 
@@ -264,7 +278,7 @@ export function createProjectRegistry(input: {
 
   /** Diff a valid file against the running list and apply what may apply (spec §5). */
   const applyFrom = (config: ProjectsFileV1): void => {
-    const pending: string[] = [];
+    const pending: string[] = [...removedMounted].map((id) => `removed:${id}`);
     const errors: string[] = [];
     if ((config.controlStateDir ?? null) !== bootStateDir) pending.push("controlStateDir");
     for (const r of running) {
@@ -277,6 +291,8 @@ export function createProjectRegistry(input: {
     }
     for (const f of config.projects) {
       if (running.some((r) => r.id === f.id)) continue;
+      // Spec 2026-11-25 §6.3: a project removed while mounted joins again only at the next start (pendingRestart names it).
+      if (removedMounted.has(f.id)) continue;
       try {
         const real = checkedPath(f.path, projectKindOf(f));
         const holder = running.find((r) => realOf(r.path) === real);
@@ -409,8 +425,60 @@ export function createProjectRegistry(input: {
   const containingName = (id: string | null, name: string): boolean =>
     [...lastGood.projects, ...(lastGood.multiDirProjects ?? [])].some((p) => p.id !== id && p.name === name);
 
+  /** Spec 2026-11-25 §6.2 a, §6.3: the filed entry, by id then by exact name, with the refusals a remove has. */
+  const removableEntry = (idOrName: string): RemovableProject => {
+    const singles = lastGood.projects;
+    const multis = lastGood.multiDirProjects ?? [];
+    const all = [...singles, ...multis];
+    let found = all.find((p) => p.id === idOrName);
+    if (found === undefined) {
+      const named = all.filter((p) => p.name === idOrName);
+      if (named.length === 1) found = named[0];
+    }
+    if (found === undefined) return fail("project-unknown", 404, `no registered project is ${JSON.stringify(idOrName)}; registered: ${all.map((p) => p.id).sort(compareText).join(", ") || "none"}`);
+    const id = found.id;
+    if ("dirs" in found) return { id, name: found.name, kind: "multi", dirs: [...found.dirs] };
+    const holder = multis.find((m) => m.dirs.includes(id));
+    if (holder !== undefined) fail("project-in-multi", 409, `${id} is a member of the multi-directory project ${holder.id}; remove ${holder.id} or change its folders first`);
+    return { id, name: found.name, kind: projectKindOf(found), path: found.path };
+  };
+
   return {
     list() { refresh(); return view(); },
+    removable(idOrName: string) {
+      refresh();
+      writable();
+      return removableEntry(idOrName);
+    },
+    remove(id: string) {
+      refresh();
+      writable();
+      const project = removableEntry(id);
+      if (project.id !== id) fail("project-unknown", 404, `no registered project has the id ${JSON.stringify(id)}`);
+      let restartNeeded = false;
+      if (project.kind === "multi") {
+        write({ ...lastGood, multiDirProjects: (lastGood.multiDirProjects ?? []).filter((m) => m.id !== id) });
+        const index = runningMulti.findIndex((m) => m.id === id);
+        if (index !== -1) {
+          runningMulti.splice(index, 1);
+          multiPaths.delete(id);
+          control?.removeMulti?.(controlRepoKey(id));
+        }
+      } else {
+        write({ ...lastGood, projects: lastGood.projects.filter((p) => p.id !== id) });
+        const index = running.findIndex((p) => p.id === id);
+        // A folder gone at boot was never mounted (missingPaths names it), so nothing waits for a restart.
+        const mounted = index !== -1 && !missingPaths.some((line) => line.startsWith(`${id}: `)) && repos.some((r) => r.projectKey === id);
+        if (index !== -1) running.splice(index, 1);
+        missingPaths = missingPaths.filter((line) => !line.startsWith(`${id}: `));
+        if (mounted) {
+          removedMounted.add(id);
+          pendingRestart = [...new Set([...pendingRestart, `removed:${id}`])].sort(compareText);
+          restartNeeded = true;
+        }
+      }
+      return { project, restartNeeded };
+    },
     add(name: string, path: string) {
       refresh();
       writable();
@@ -422,6 +490,7 @@ export function createProjectRegistry(input: {
       // A multi project's id is taken too, so a single derived from the same name suffixes rather than clashing.
       const taken = new Set([...lastGood.projects, ...(lastGood.multiDirProjects ?? []), ...running, ...runningMulti].map((p) => p.id));
       const entry: ProjectEntryV1 = { id: deriveProjectId(trimmed, real, taken), name: trimmed, path: real };
+      if (removedMounted.has(entry.id)) fail("project-removed-pending-restart", 409, `${entry.id} was removed while mounted; the control plane holds it until the panel restarts (orca panel restart), then add it again`);
       precheck(entry);
       write({ ...lastGood, projects: [...lastGood.projects, entry] });
       join(entry);
