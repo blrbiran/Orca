@@ -1282,6 +1282,8 @@ export const zh: Translation<typeof en> = {
     confirm: "确认任务方案",
     confirmStartsNote: "确认后，一有空位这个组就会自动开跑。",
     confirmHold: "只确认，先不跑",
+    limitBelowAllocations: "任务组上限（{{limit}}）低于目标复核与交接的分配之和（{{allocations}}）——上限先付这两项，剩下的才分给各条并行线，所以照现在确认会被拒绝。",
+    acceptShortfall: "接受不足，仍然确认",
     provenanceModel: "模型 {{estimateId}}",
   },
   loopPlan: {
@@ -2651,6 +2653,7 @@ export const zhErrors: Record<string, string> = {
   "hard-cap-needs-tokens": "硬上限需要给任务工作填一个 token 数。",
   "usage-pause-not-waiting": "这个任务没有在暂停线等待决定。",
   "usage-pause-no-headroom": "这个任务没有预期用量，无法据此移动暂停线。",
+  "limit-below-allocations": "任务组的 token 上限低于目标复核与交接的分配之和（上限先付这两项）。请提高上限，或接受不足后再次确认（orca group confirm --accept-shortfall）。",
   "usage-pause-group-headroom": "任务组剩余太少，无法把这个任务的暂停线抬到已用量之上。请先提高任务组的 token 上限（orca group set-limit）。",
   "estimate-advisory-in-expectation-group": "这个任务组里，估算的任务工作量只是预期，不作为上限。要给任务设上限，请自己填写 token 数并打开「硬上限」。",
   "estimate-in-flight": "有一份估算正在进行。",

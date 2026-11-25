@@ -1463,6 +1463,8 @@ export const en = {
     confirm: "Confirm task plan",
     confirmStartsNote: "Confirming starts this group on its own as soon as a slot is free.",
     confirmHold: "Confirm only, don't run yet",
+    limitBelowAllocations: "The group limit ({{limit}}) is below its goal-review and handoff allocations ({{allocations}}), which it pays first; the lanes share what is left, so confirming as is is refused.",
+    acceptShortfall: "Accept the shortfall and confirm anyway",
     provenanceModel: "model {{estimateId}}",
   },
   loopPlan: {
@@ -2780,6 +2782,7 @@ export const enErrors: Record<string, string> = {
   "hard-cap-needs-tokens": "A hard cap needs a token amount for the task's work.",
   "usage-pause-not-waiting": "This task is not waiting for a decision at its pause line.",
   "usage-pause-no-headroom": "This task has no expectation to move its pause line from.",
+  "limit-below-allocations": "The group's token limit is below its goal-review and handoff allocations, which it pays first. Raise the limit, or confirm again accepting the shortfall (orca group confirm --accept-shortfall).",
   "usage-pause-group-headroom": "The group has too little left to move this task's pause line above what it has used. Raise the group's token limit (orca group set-limit) first.",
   "estimate-advisory-in-expectation-group": "In this group an estimate's task work is its expectation, not a ceiling. To cap a task, enter its tokens yourself and turn on Hard cap.",
   "estimate-in-flight": "An estimate is already running for this group. Wait for it to finish, then try again.",

@@ -6,7 +6,7 @@ import { readResultOutputBytes } from './taskResultOutputs.js';
 import { readControlOverview, withNeedsYouFromOverview } from "./controlOverview.js";
 import { readGroupDecisionsView } from "./groupDecisions.js";
 import { groupRepoId } from "../control/executionDriver.js";
-import { fundingPreview } from "../control/fundedAllowance.js";
+import { fundingPreview, limitCheck } from "../control/fundedAllowance.js";
 import { retryFundingPreview } from "../control/retryTask.js";
 import { multiDirOf, multiPrimaryRepoIdOf } from "../control/multiGroup.js";
 import { readGroup } from "../control/queries.js";
@@ -374,7 +374,10 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       // Tester #434: a delivery the record says was refused belongs in this list too — `state=done` beside no warning read
       // as delivered while the working-tree write had been refused.
       const refusedDelivery = refusedDeliveryWarning(deps.store, groupId);
-      const warnings = [...(summary.acceptance?.warning === undefined ? [] : [summary.acceptance.warning]), ...(refusedDelivery === null ? [] : [refusedDelivery])];
+      // Tester #479: ready tasks waiting for budget while the group's headroom is 0 -- a JSON field alone was not seen.
+      const waitingForBudget = summary.card?.budget.waitingForBudget;
+      const warnings = [...(summary.acceptance?.warning === undefined ? [] : [summary.acceptance.warning]), ...(refusedDelivery === null ? [] : [refusedDelivery]),
+        ...(waitingForBudget === undefined ? [] : [`budget-headroom-zero:${waitingForBudget}`])];
       // Tester #321 part C: the tasks costing a multiple of the group median, or running long (absent when none); display only.
       const costOutliers = costOutliersOf(deps.store, groupId, deps.store.now());
       // Tester #348: the runs whose stored body does not decode, each with its task (or null) and why; absent when none.
@@ -773,7 +776,9 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
       // Issue #202: `?retry=<task>&tokens=<n>` also answers what retrying that task with that top-up funds (task retry --work).
       const retry = retryPreviewQuery(req);
       const rows = fundingPreview(deps.store, groupId, deps.store.now());
-      res.json({ schema: "orca-funding-preview-v1", groupId, rows, ...(retry === null ? {} : { retry: retryFundingPreview(deps.store, groupId, retry.taskId, retry.tokens) }) });
+      // Tester #479: the limit's arithmetic beside the rows (only-add; absent with no finite limit).
+      const check = limitCheck(deps.store, groupId, rows);
+      res.json({ schema: "orca-funding-preview-v1", groupId, rows, ...(check === null ? {} : { limitCheck: check }), ...(retry === null ? {} : { retry: retryFundingPreview(deps.store, groupId, retry.taskId, retry.tokens) }) });
     }
     catch (error) {
       if (error instanceof ControlError && error.code === "group-not-found") { sendControlError(res, 404, error.code, "No control group was found."); return; }

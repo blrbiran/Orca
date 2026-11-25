@@ -9,7 +9,7 @@
  * person is about to type over it.
  */
 import { ConfirmFullSuiteNote, ConfirmKnownRedNote } from "./GroupFullSuiteWarning.js";
-import { useContext, useEffect } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useRegionDraft } from "./regionDraft.js";
 import type { JSX } from "react";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
@@ -159,6 +159,21 @@ export function confirmBlockers(view: GroupViewV1, config: ControlConfigV1, sele
 /** A reason sentence placed inside another sentence: its own closing full stop dropped. */
 const clause = (text: string): string => text.replace(/[.。]$/u, "");
 
+/**
+ * Tester #479: the goal-review and task handoff token allocations above a finite group limit (the server's
+ * authoredAllocationTokens, fundedAllowance.ts, from the same rows); null when there is no finite limit or they fit.
+ */
+export function limitShortfall(view: GroupViewV1): { limitTokens: number; allocationTokens: number } | null {
+  const limitTokens = view.ledger.groupLimit.tokens;
+  if (limitTokens === null) return null;
+  let allocationTokens = 0;
+  for (const a of view.allocations) {
+    if (typeof a.amount.tokens !== "number") continue;
+    if (a.ownerKind === "goal-review" || (a.ownerKind === "task" && a.bucket === "handoff")) allocationTokens += a.amount.tokens;
+  }
+  return allocationTokens > limitTokens ? { limitTokens, allocationTokens } : null;
+}
+
 export interface BudgetEditorProps {
   view: GroupViewV1;
   config: ControlConfigV1;
@@ -285,6 +300,11 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
     if (hasBadDraft(drafts)) return;
     onCommand({ verb: "set-limit", groupId, expectedRevision: view.summary.commandRevision, payload: { limit: limitAmount(view, drafts) } });
   };
+  // Tester #479: a finite limit below the goal-review and handoff allocations it pays first is refused on confirm unless the
+  // person accepts the shortfall; said here, with the explicit choice, so Web can still confirm.
+  const shortfall = limitShortfall(view);
+  const [acceptShortfall, setAcceptShortfall] = useState(false);
+  const shortfallHeld = editable && shortfall !== null && !acceptShortfall;
   /** Kanban spec 2026-10-20 §3.1: the default confirm also starts the group; `hold` is "Confirm only, don't run yet". */
   const submitConfirm = (hold = false): void => {
     if (blockers.length > 0 || shownSelectionsHash === null || mode === null) return;
@@ -311,6 +331,7 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         // The hash of the scheme on screen binds the approval to it; a keep group adds no key, so its hash is unchanged.
         ...(view.integration === undefined ? {} : { integrationHash: view.integration.schemeHash }),
         ...(hold ? { hold: true as const } : {}),
+        ...(shortfall !== null && acceptShortfall ? { acceptShortfall: true as const } : {}),
       },
     });
   };
@@ -552,8 +573,10 @@ export function BudgetEditor(props: BudgetEditorProps): JSX.Element {
         ? <p role="note" data-testid="auto-confirm-pending">{t("budget.autoConfirm.pending")}</p>
         : <p role="note" data-testid="confirm-starts-note">{t("budget.confirmStartsNote")}</p>)}
       {/* DESIGN.md: one primary per view -- while the proposal is open, confirming it is the group's main action. */}
-      {!archived && <button type="button" className={editable ? "btn-primary" : undefined} disabled={blockers.length > 0} onClick={() => submitConfirm()}>{t("budget.confirm")}</button>}
-      {!archived && editable && <button type="button" disabled={blockers.length > 0} onClick={() => submitConfirm(true)}>{t("budget.confirmHold")}</button>}
+      {!archived && editable && shortfall !== null && <p role="alert" data-testid="limit-below-allocations">{t("budget.limitBelowAllocations", { limit: shortfall.limitTokens.toLocaleString("en-US"), allocations: shortfall.allocationTokens.toLocaleString("en-US") })}</p>}
+      {!archived && editable && shortfall !== null && <label data-testid="accept-shortfall"><input type="checkbox" checked={acceptShortfall} onChange={(event) => setAcceptShortfall(event.target.checked)} /> {t("budget.acceptShortfall")}</label>}
+      {!archived && <button type="button" className={editable ? "btn-primary" : undefined} disabled={blockers.length > 0 || shortfallHeld} onClick={() => submitConfirm()}>{t("budget.confirm")}</button>}
+      {!archived && editable && <button type="button" disabled={blockers.length > 0 || shortfallHeld} onClick={() => submitConfirm(true)}>{t("budget.confirmHold")}</button>}
     </section>
   );
 }

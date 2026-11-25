@@ -85,7 +85,7 @@ import { git } from "../scheduler/gitExec.js";
 import { applySetCriteriaReview, criteriaDecisionIdOf, criteriaReviewCandidates, criteriaReviewFacts, criteriaReviewVerdict, type SetCriteriaReviewCommand } from "./criteriaReview.js";
 import { flagDecision, ratifyFlag, readFlaggedDecision } from "./flaggedDecisions.js";
 import { join as joinPath } from "node:path";
-import { decideFundedAllowance } from "./fundedAllowance.js";
+import { authoredAllocationTokens, decideFundedAllowance } from "./fundedAllowance.js";
 import { failedRunDetail, groupWorkerAgent, MODEL_REVIEW_ADMIT_MS, newestConfirmedGroup, rangeDenylist, reviewAgentOf, reviewInputsOf, reviewPathDenied, type ReviewRunFacts } from "./modelReview/run.js";
 import { writeReviewInputs } from "./modelReview/inputs.js";
 import { FINDINGS_PATH, validatorCommand } from "./modelReview/plan.js";
@@ -2530,6 +2530,14 @@ export class WebControlService {
           refuseUnnamedDebugChecks(this.store, id, group);
           if (proposal.state === "confirmed") throw new ControlError("no-op-command");
           assertKnownConservation(this.store, group, proposal);
+          // Tester #479 (controller decision): a finite limit below the authored goal-review and handoff allocations, which
+          // it pays first, is an arithmetic contradiction; a person's confirm is refused unless they accept the shortfall.
+          // Orca's own confirms (system debug groups, flow children, auto-confirm) are not changed by this.
+          const limitTokens = (group.limit as { tokens: number | null }).tokens;
+          if (limitTokens !== null && command.actorId !== ORCHESTRATION_ACTOR && payload.acceptShortfall !== true) {
+            const { allocationTokens } = authoredAllocationTokens(proposal);
+            if (allocationTokens > limitTokens) throw new ControlError("limit-below-allocations", `${allocationTokens}>${limitTokens}`);
+          }
           if(featureError)throw featureError;
           if(!optionalSupported)throw new ControlError("control-token-policy-unsupported");
           if ((payload.profileIds.estimator === null) !== (payload.profileHashes.estimator === null)) throw new ControlError("control-estimator-unconfigured");

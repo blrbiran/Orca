@@ -34,6 +34,8 @@ const MAPPINGS: Array<[string[], string, number, unknown]> = [
   [["group", "estimate", "g-alpha"], "groups/g-alpha/estimates", 5, { proposalVersion: 3, estimatorProfileId: "est-1", estimatorProfileHash: H.est, estimateMode: "soft" }],
   [["group", "confirm", "g-alpha"], "groups/g-alpha/confirm", 5, CONFIRM],
   [["group", "confirm", "g-alpha", "--hold"], "groups/g-alpha/confirm", 5, { ...CONFIRM, hold: true }],
+  // Tester #479: a person accepts a limit below the goal-review and handoff allocations.
+  [["group", "confirm", "g-alpha", "--accept-shortfall"], "groups/g-alpha/confirm", 5, { ...CONFIRM, acceptShortfall: true }],
   [["group", "confirm", "g-alpha", "--worker-profile", "work-1", "--handoff-at-context-tokens", "90000"], "groups/g-alpha/confirm", 5,
     { ...CONFIRM, profileIds: { ...PROFILES, worker: "work-1" }, profileHashes: { ...HASHES, worker: H.work }, contextPolicy: { handoffAtContextTokens: 90000 } }],
   [["group", "set-limit", "g-alpha", "--limit", "{\"tokens\":9,\"activeMs\":1,\"attempts\":1,\"sessions\":1}"], "groups/g-alpha/set-limit", 5, { limit: { tokens: 9, activeMs: 1, attempts: 1, sessions: 1 } }],

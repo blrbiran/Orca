@@ -67,7 +67,7 @@ ask the estimator for budgets at the current proposal version
 - `--estimator-profile <estimator-profile>`: default: the panel's estimator
 - `--mode <mode>`: strict|soft; default: the panel's
 
-## `orca group confirm <group> [--hold] [--budget-mode <budget-mode>] [--worker-profile <worker-profile>] [--handoff-profile <handoff-profile>] [--goal-review-profile <goal-review-profile>] [--handoff-at-context-tokens <handoff-at-context-tokens>]`
+## `orca group confirm <group> [--hold] [--budget-mode <budget-mode>] [--worker-profile <worker-profile>] [--handoff-profile <handoff-profile>] [--goal-review-profile <goal-review-profile>] [--handoff-at-context-tokens <handoff-at-context-tokens>] [--accept-shortfall]`
 
 confirm the task plan as shown now; it starts when a slot is free unless --hold
 
@@ -80,6 +80,7 @@ confirm the task plan as shown now; it starts when a slot is free unless --hold
 - `--handoff-profile <handoff-profile>`: bind the handoff profile
 - `--goal-review-profile <goal-review-profile>`: bind the goal-review profile
 - `--handoff-at-context-tokens <n>`: optional: hand off at this many context tokens (not active: no installed agent reports context usage)
+- `--accept-shortfall`: confirm although the group's token limit is below its goal-review and handoff allocations (refused limit-below-allocations otherwise)
 
 ## `orca group start <group>`
 

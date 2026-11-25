@@ -672,3 +672,26 @@ group does. A review of theirs that does not pass after those rounds -- and a wo
 retry changes, an unfunded or unprepared call -- ends in the new satisfied state `noted`: shown (a `review-note` row, a
 note in `group show`, a warn tone on the Web) but not "needs you", and the group reaches done. An existing `not-run`
 record stays satisfied (no backfill).
+
+## Correction (tester #479, session 5d3d0c09, 2026-11-25): confirm refuses a limit below the authored allocations
+
+Author: session `5d3d0c09` (Orca controller), 2026-11-25, on `fddffd41`; branch `fix/tester-batch-a-5d3d0c09`. The human
+delegated #479 to the controller and allowed reopening ruling #212 (handoff §五 "#212 (2026-11-09)": the claim-time even
+split stays and the funding preview is display only). The text above is unchanged; this section records what changes.
+
+- **Unchanged:** the even per-claim split in `fundedAllowance.ts` (`decideFundedAllowance`): the group limit pays the
+  goal-review allocation and the handoff allocations first, and the remainder is shared evenly by the concurrent
+  candidates.
+- **New, display:** the funding preview answers `limitCheck` (only-add): the limit, Σ goal-review + handoff allocations,
+  the lanes a claim funds now and the largest share, the largest task expectation, and named warnings with the arithmetic
+  — `limit-below-allocations` (Σ allocations > limit) and `lane-below-expected` (the largest task expectation > the share a
+  claim gets now). `proposal show` and `group confirm` print them; `--json` carries `limitCheck` after `funding`. A preview
+  row the headroom leaves nothing for carries `warning: "budget-slice-zero"`. `group brief` carries the warning
+  `budget-headroom-zero:<n>` (and a line in words) when the headroom is 0 and `n` ready tasks wait for budget.
+- **New, refusal (this reopens #212's "display only" for case (a) alone):** a person's `group confirm` of a finite limit
+  below Σ goal-review + handoff allocations is refused `limit-below-allocations` (`<allocations>><limit>`) unless the
+  payload carries `acceptShortfall: true` (`orca group confirm --accept-shortfall`; Web: an explicit "Accept the
+  shortfall" checkbox beside the named note). Equal is not below; no finite limit, no check. `lane-below-expected` stays
+  a warning. Orca's own confirms (system debug groups, flow children, auto-confirm of unlimited groups) are not refused.
+- Criteria: `tests/control/limitBelowAllocations.test.ts`, `tests/commands/fundingPreview.test.ts` (#479 cases),
+  `tests/commands/write.test.ts` (`--accept-shortfall`), `web/tests/confirmSelection.test.tsx` (#479 block).

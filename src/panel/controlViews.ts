@@ -23,6 +23,7 @@ import { readAgentPreferences } from "../control/agentPreferences.js";
 import { liveUsageSchema, peerCode, sessionCleanupSchema } from "../control/ccloopPort.js";
 import { groupExecutionPending } from "../control/executionPending.js";
 import { nextClaimableTask } from "../control/webDispatch.js";
+import { dependencyReady } from "../control/dependencyReady.js";
 import { readDebugMark } from "../control/debugGroup.js";
 import { dirWorkspaceOf, groupRepoId, readPlacement } from "../control/dirGroup.js";
 import { multiDirOf } from "../control/multiGroup.js";
@@ -710,12 +711,15 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
   const expectation = tokens(body.limit) === null || expectationModelApplies(body) ? cardExpectation(store, groupId, planHash, taskIds, snapshot) : null;
   // Tester follow-up G spec §2.4/§2.5: how many tasks are over their expectation, wait for a decision, or wait at the cap.
   const alerts = expectationModelApplies(body) ? budgetAlerts(snapshot, taskIds) : null;
+  const headroomTokens = groupHeadroom(body as unknown as Parameters<typeof groupHeadroom>[0]);
+  // Tester #479: with no headroom, the ready tasks whose dependencies are met and that no run holds wait for budget.
+  const waitingForBudget = headroomTokens !== null && headroomTokens <= 0 ? readyUnclaimedTasks(store, groupId) : 0;
   return {
     // Tester #438: used/limit alone read as "55% left" while the headroom a claim sees was 0, because the in-flight runs'
     // live ceilings hold group.reserved. reservedTokens and headroomTokens come from the same groupHeadroom() the stop
     // uses (liveCeiling.ts), so the card and the decision cannot disagree.
     budget: { usedTokens: tokens(body.used) ?? 0, limitTokens: tokens(body.limit), reservedTokens: tokens(body.reserved) ?? 0,
-      headroomTokens: groupHeadroom(body as unknown as Parameters<typeof groupHeadroom>[0]) }, pendingDecisions: pending + flagged, firstFailure,
+      headroomTokens, ...(waitingForBudget === 0 ? {} : { waitingForBudget }) }, pendingDecisions: pending + flagged, firstFailure,
     ...(findings.length === 0 ? {} : { reviewFindings: { major, minor: findings.length - major } }),
     ...(expectation === null ? {} : { expectation }),
     ...(alerts === null ? {} : { budgetAlerts: alerts }),
@@ -1389,6 +1393,18 @@ function workViews(
     if (view.status === "active" && view.category === "blocked") view.status = "blocked";
     return view;
   });
+}
+
+/** Tester #479: ready tasks of the group whose dependencies are met and that no active run holds (claimable but for budget). */
+function readyUnclaimedTasks(store: ControlStore, groupId: string): number {
+  let count = 0;
+  for (const row of store.db.prepare("SELECT id,body FROM work_items WHERE group_id=?").all(groupId)) {
+    const work = JSON.parse(String(row.body)) as { kind?: string; status?: string; dependsOn?: string[] };
+    if (work.kind !== "task" || work.status !== "ready") continue;
+    if (store.db.prepare("SELECT 1 FROM runs WHERE group_id=? AND work_item_id=? AND active=1").get(groupId, String(row.id)) !== undefined) continue;
+    if ((work.dependsOn ?? []).every((id) => dependencyReady(store, groupId, id))) count++;
+  }
+  return count;
 }
 
 const noChangeCompletionSchema = z.object({ runId: idSchema, ordinal: safeInteger.positive(), decidedBy: z.string().min(1), at: safeInteger, why: z.string().nullable() }).strict();

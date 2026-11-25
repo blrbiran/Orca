@@ -76,3 +76,31 @@ describe("start on confirm (kanban spec §3.1)", () => {
     expect(onCommand.mock.calls[1]![0]).toMatchObject({ verb: "confirm", payload: { hold: true, selectionsHash: "9".repeat(64) } });
   });
 });
+
+// Tester #479 (controller decision, session 5d3d0c09): a limit below the goal-review and handoff allocations it pays first
+// is refused on confirm unless the person accepts the shortfall; Web says so and offers that choice explicitly.
+describe("a limit below the goal-review and handoff allocations (#479)", () => {
+  const short: GroupViewV1 = { ...view, allocations: [...view.allocations,
+    { ownerKind: "goal-review", ownerId: "g:goal-review", bucket: "review", state: "draft-encumbered", amount: amount(6_000), fieldProvenance: provenance },
+    { ownerKind: "task", ownerId: "a", bucket: "handoff", state: "draft-encumbered", amount: amount(3_001), fieldProvenance: provenance }] };
+  it("names the shortfall, holds Confirm until it is accepted, then sends acceptShortfall", () => {
+    const onCommand = vi.fn();
+    render(<BudgetEditor view={short} config={config} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} selectionsHash={"9".repeat(64)} />);
+    // mutation: drop the shortfall note -> not found, red
+    expect(screen.getByTestId("limit-below-allocations").textContent).toContain("The group limit (9,000) is below its goal-review and handoff allocations (9,001)");
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
+    expect(onCommand).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Accept the shortfall/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
+    // mutation: drop acceptShortfall from the payload -> the server refuses it, red here
+    expect(onCommand.mock.calls[0]![0]).toMatchObject({ verb: "confirm", payload: { acceptShortfall: true } });
+  });
+  it("at exactly the limit there is no note and the confirm carries no acceptShortfall", () => {
+    const onCommand = vi.fn();
+    const equal: GroupViewV1 = { ...short, allocations: short.allocations.map((a) => a.bucket === "handoff" ? { ...a, amount: amount(3_000) } : a) };
+    render(<BudgetEditor view={equal} config={config} drafts={{}} onDraft={vi.fn()} onCommand={onCommand} selectionsHash={"9".repeat(64)} />);
+    expect(screen.queryByTestId("limit-below-allocations")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm task plan" }));
+    expect(onCommand.mock.calls[0]![0].payload).not.toHaveProperty("acceptShortfall");
+  });
+});

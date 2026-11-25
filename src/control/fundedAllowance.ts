@@ -1,5 +1,5 @@
 import { dependencyReady } from "./dependencyReady.js";
-import { expectationModelApplies, hardCapOf } from "./expectationModel.js";
+import { expectationModelApplies, hardCapOf, taskExpectation } from "./expectationModel.js";
 import { reconcileWaitTokens } from "./liveCeiling.js";
 import {readCanonicalRecord} from "./snapshot.js";
 import {savedRecoverySchema,savedResultAdmissionSchema,recoveryPolicyAuthoritySchema} from "./savedResultProtocol.js";
@@ -124,7 +124,7 @@ export function decideFundedAllowance(store:ControlStore,groupId:string,workId:s
  return chosen?{allowance:chosen.allowance,workItemId:chosen.workId,reason:"funded"}:blocked;
 }
 /** Display-only: what a claim would fund each task at the current group limit. */
-export interface FundingPreviewRow { taskId:string; authoredTokens:number|null; fundableTokens:number|null; reason:string|null; minimumTokens?:number; expectation?:boolean; taskCapTokens?:number }
+export interface FundingPreviewRow { taskId:string; authoredTokens:number|null; fundableTokens:number|null; reason:string|null; minimumTokens?:number; expectation?:boolean; taskCapTokens?:number; warning?:"budget-slice-zero" }
 /**
  * Issue #212: the authored work allocation is a request, not a grant. For an editable proposal the goal-review allocation
  * is pre-subtracted (confirmation will reserve it); for a confirmed proposal the stored reservation already says so, and
@@ -157,8 +157,56 @@ export function fundingPreview(store:ControlStore,groupId:string,at:number):Fund
   const decision=decideFundedAllowance(store,groupId,work.workItemId,at,{previewGroupId:groupId,extraReserved});
   // The claim's generic skip reason still names the task's real state where the preview can see it (#291).
   const reason=decision.allowance===null&&decision.reason==="task-budget-unavailable"?previewSkipReason(store,groupId,work):decision.allowance===null?decision.reason:null;
-  return [{taskId:work.taskId,authoredTokens:authored.tokens,fundableTokens:decision.allowance?.grant.work.tokens??null,reason,...(expectation?{expectation}:{}),...cap,...(decision.minimumTokens===undefined?{}:{minimumTokens:decision.minimumTokens})}];
+  const fundable=decision.allowance?.grant.work.tokens??null;
+  // Tester #479: a candidate the group's headroom leaves nothing for -- refused for group budget, or funded only its
+  // 1-token minimum (no share) -- is named, as a dependency wait is; only-add, the reason is unchanged.
+  const sliceZero=reason==="group-budget-unavailable"||(reason===null&&fundable!==null&&fundable<=1&&hasOptionalTaskPolicy(store,groupId,work.workItemId));
+  return [{taskId:work.taskId,authoredTokens:authored.tokens,fundableTokens:fundable,reason,...(expectation?{expectation}:{}),...cap,...(decision.minimumTokens===undefined?{}:{minimumTokens:decision.minimumTokens}),...(sliceZero?{warning:"budget-slice-zero" as const}:{})}];
  });
+}
+
+/**
+ * Tester #479 (controller decision; reopens ruling #212 only for this): the group limit pays the goal-review allocation and
+ * every task's handoff allocation first; what is left is split evenly across the concurrent candidates (the split above is
+ * unchanged). Σ of those authored allocations above a finite limit is a pure arithmetic contradiction: `group confirm`
+ * refuses it as `limit-below-allocations` unless a person accepts the shortfall. Null: no finite limit, so nothing to check.
+ * Equal is not above.
+ */
+export function authoredAllocationTokens(proposal:{allocations:ReadonlyArray<{ownerKind:string;bucket:string;amount:{tokens:number|null}}>}):{goalReviewTokens:number;handoffTokens:number;allocationTokens:number} {
+ let goalReviewTokens=0,handoffTokens=0;
+ for(const a of proposal.allocations){
+  if(typeof a.amount.tokens!=="number")continue;
+  if(a.ownerKind==="goal-review")goalReviewTokens+=a.amount.tokens;
+  else if(a.ownerKind==="task"&&a.bucket==="handoff")handoffTokens+=a.amount.tokens;
+ }
+ return {goalReviewTokens,handoffTokens,allocationTokens:goalReviewTokens+handoffTokens};
+}
+export interface LimitWarning { code:"limit-below-allocations"|"lane-below-expected"; message:string }
+export interface LimitCheck { limitTokens:number; goalReviewTokens:number; handoffTokens:number; allocationTokens:number; lanes:number; laneTokens:number|null; largestExpected:{taskId:string;tokens:number}|null; warnings:LimitWarning[] }
+const thousands=(n:number):string=>n.toLocaleString("en-US");
+/**
+ * Tester #479: the arithmetic `proposal show` and `group confirm` (CLI and Web) print beside the funding preview -- (a) the
+ * authored allocations above the limit, (b) the largest task expectation above the lane share a claim would get now (the
+ * preview's own funded rows: `lanes` candidates, the largest share). Display only, like the preview (ruling #212).
+ */
+export function limitCheck(store:ControlStore,groupId:string,rows:readonly FundingPreviewRow[]):LimitCheck|null {
+ const limitTokens=(readGroup(store,groupId).limit as {tokens:number|null}).tokens;
+ if(limitTokens===null||!store.db.prepare("SELECT group_id FROM budget_proposals WHERE group_id=?").get(groupId))return null;
+ const sums=authoredAllocationTokens(readBudgetProposal(store,groupId));
+ const funded=rows.filter(r=>r.reason===null&&r.fundableTokens!==null);
+ const laneTokens=funded.length===0?null:Math.max(...funded.map(r=>r.fundableTokens!));
+ let largestExpected:{taskId:string;tokens:number}|null=null;
+ for(const work of allWork(store,groupId)){
+  if(work.kind!=="task"||work.taskId===null||["done","completed"].includes(work.status))continue;
+  const expected=taskExpectation(store,groupId,work)?.tokens;
+  if(expected!==undefined&&(largestExpected===null||expected>largestExpected.tokens))largestExpected={taskId:work.taskId,tokens:expected};
+ }
+ const first=`the limit ${thousands(limitTokens)} pays goal-review (${thousands(sums.goalReviewTokens)}) and handoffs (${thousands(sums.handoffTokens)}) first; the lane share = remainder / concurrent candidates`;
+ const lane=laneTokens===null?"no lane can be funded now":`each lane ≈ ${thousands(laneTokens)} (${funded.length} concurrent candidate${funded.length===1?"":"s"})`;
+ const warnings:LimitWarning[]=[];
+ if(sums.allocationTokens>limitTokens)warnings.push({code:"limit-below-allocations",message:`allocations ${thousands(sums.allocationTokens)} > limit ${thousands(limitTokens)}; ${first}; ${lane}`});
+ if(largestExpected!==null&&laneTokens!==null&&largestExpected.tokens>laneTokens)warnings.push({code:"lane-below-expected",message:`task ${largestExpected.taskId} expects ${thousands(largestExpected.tokens)} tokens > the ${thousands(laneTokens)} a claim gets now; ${first}; ${lane}`});
+ return {limitTokens,...sums,lanes:funded.length,laneTokens,largestExpected,warnings};
 }
 
 /** #291 display-only: the reason a ready task's claim would still be skipped, named from the same facts the claim reads. */

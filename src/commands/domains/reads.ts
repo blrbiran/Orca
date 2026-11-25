@@ -75,6 +75,19 @@ function recoveryList(body: unknown): string {
  * entries name their task (`taskId` null: the run is on no task); a task's own entries leave it out.
  */
 type UnreadableRunEntry = { runId: string; taskId?: string | null; reason: string };
+/**
+ * Tester #479: the brief's `budget-headroom-zero:<n>` warning (controlApi.ts) as a line with the arithmetic and the way on;
+ * the headroom stayed a JSON field nobody read while a "parallel" pair ran one at a time.
+ */
+export function budgetHeadroomLines(body: unknown): string[] {
+  const warning = ((field(body, "warnings") as unknown[] | undefined) ?? []).find((w): w is string => typeof w === "string" && w.startsWith("budget-headroom-zero:"));
+  if (warning === undefined) return [];
+  const n = Number(warning.slice("budget-headroom-zero:".length));
+  const budget = (field(body, "card") as { budget?: { usedTokens: number; limitTokens: number | null; reservedTokens: number } } | undefined)?.budget;
+  const groupId = field(body, "groupId");
+  const figures = budget === undefined ? "" : ` (limit ${budget.limitTokens ?? "none"}, used ${budget.usedTokens}, reserved ${budget.reservedTokens} by running lanes and allocations)`;
+  return [`warning: ${warning}: ${n} ready task${n === 1 ? "" : "s"} wait${n === 1 ? "s" : ""} for budget -- the group's headroom is 0${figures}; claimed when a running lane ends, or raise the limit: orca group set-limit ${typeof groupId === "string" ? groupId : "<group>"} --limit <higher> --as-person`];
+}
 function unreadableRunLines(entries: unknown): string[] {
   if (!Array.isArray(entries)) return [];
   return (entries as UnreadableRunEntry[]).map(({ runId, taskId, reason }) =>
@@ -622,7 +635,7 @@ export const READ_ROWS: CommandDef[] = [
     format: (body) => { const note = field(body, "phaseEndUsage") as { runIds: string[]; asOf: number | null } | undefined;
       const groupId = field(body, "groupId"), acceptance = field(body, "acceptance") as Parameters<typeof acceptanceLines>[1];
       const costs = (field(body, "costOutliers") as TaskCost[] | undefined) ?? [];
-      return [text(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf)),
+      return [text(body), ...budgetHeadroomLines(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf)),
         // Tester follow-up K, item 2: the acceptance line show prints, with its full-suite warning.
         ...(typeof groupId === "string" ? acceptanceLines(groupId, acceptance) : []),
         // Tester #359: a review that did not pass, with what answers it, as group show prints it.

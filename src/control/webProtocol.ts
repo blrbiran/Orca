@@ -997,6 +997,9 @@ export const confirmPayloadSchema = z
     // Kanban spec 2026-10-20 §3.1: "Confirm only, don't run yet". Absent (the default, "Confirm and run") adds no bytes,
     // so a confirm that does not hold hashes as before.
     hold: z.literal(true).optional(),
+    // Tester #479: the person accepts a group limit below its authored goal-review and handoff allocations (otherwise
+    // refused limit-below-allocations). Absent adds no bytes, so every other confirm hashes as before.
+    acceptShortfall: z.literal(true).optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -1754,7 +1757,9 @@ export const groupSummarySchema = z
     // marks a start refused PERSISTENT_REFUSALS times in a row (needs-you for this group only).
     // Kanban spec §4: a board card's facts; given for every group with a plan (optional so older fixtures parse).
     card: z.object({
-      budget: z.object({ usedTokens: safeInteger, limitTokens: safeInteger.nullable(), reservedTokens: safeInteger, headroomTokens: safeInteger.nullable() }).strict(),
+      // Tester #479: `waitingForBudget`, the ready tasks (dependencies met, no run) left unclaimed while the headroom is 0;
+      // absent otherwise.
+      budget: z.object({ usedTokens: safeInteger, limitTokens: safeInteger.nullable(), reservedTokens: safeInteger, headroomTokens: safeInteger.nullable(), waitingForBudget: positiveSafeInteger.optional() }).strict(),
       pendingDecisions: safeInteger,
       // Tester #229 (plan 2026-11-10 follow-up B, T1): `next`, the command that resumes the failed task's run in place --
       // only when it is blocked at a step other than C.

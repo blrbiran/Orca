@@ -34,6 +34,35 @@ describe("the grant a claim would fund is shown (#212)", () => {
     expect(confirmed.stdout).toContain(LINE);
   });
 
+  // Tester #479: the panel's limitCheck warnings are printed before the rows, named by code, in proposal show and group
+  // confirm; --json carries `limitCheck` after `funding` (only-add); a row the headroom leaves nothing is named; a refused
+  // confirm names both ways past it.
+  it("prints the limit's arithmetic warnings and budget-slice-zero, and --json carries limitCheck", async () => {
+    const message = "allocations 3,400,000 > limit 3,000,000; the limit 3,000,000 pays goal-review (1,000,000) and handoffs (2,400,000) first; the lane share = remainder / concurrent candidates; each lane ≈ 607,979 (2 concurrent candidates)";
+    const limitCheck = { limitTokens: 3_000_000, goalReviewTokens: 1_000_000, handoffTokens: 2_400_000, allocationTokens: 3_400_000, lanes: 2, laneTokens: 607_979, largestExpected: null, warnings: [{ code: "limit-below-allocations", message }] };
+    const w = await world({}, { "GET groups/g-alpha/funding-preview": { status: 200, body: { schema: "orca-funding-preview-v1", groupId: "g-alpha", limitCheck, rows: [
+      { taskId: "t1", authoredTokens: null, fundableTokens: 607_979, reason: null, expectation: true },
+      { taskId: "t2", authoredTokens: null, fundableTokens: null, reason: "group-budget-unavailable", expectation: true, warning: "budget-slice-zero" },
+    ] } } });
+    for (const args of [["proposal", "show", "g-alpha"], ["group", "confirm", "g-alpha"]]) {
+      const out = (await cli(args, w.dir)).stdout;
+      // mutation: drop the warnings from fundingLines -> red
+      expect(out).toContain(`warning: limit-below-allocations: ${message}`);
+      expect(out).toContain("task t2: authored token expectation unset; claim unavailable (group-budget-unavailable) [budget-slice-zero: the group's headroom leaves this lane nothing now]");
+    }
+    const body = JSON.parse((await cli(["proposal", "show", "g-alpha", "--json"], w.dir)).stdout).body as Record<string, unknown>;
+    expect(Object.keys(body).slice(-2)).toEqual(["funding", "limitCheck"]);
+    expect(body.limitCheck).toEqual(limitCheck);
+  });
+
+  it("a confirm refused limit-below-allocations names set-limit and --accept-shortfall", async () => {
+    const w = await world({}, { "POST groups/g-alpha/confirm": { status: 422, body: { error: { code: "limit-below-allocations", message: "limit-below-allocations:3400000>3000000", retryable: false } } } });
+    const out = await cli(["group", "confirm", "g-alpha"], w.dir);
+    expect(out.code).toBe(2);
+    expect(out.stderr).toContain("orca: next: orca group set-limit g-alpha --limit <at least the allocations> --as-person");
+    expect(out.stderr).toContain("orca: next: orca group confirm g-alpha --accept-shortfall");
+  });
+
   it("a task with nothing fundable is named with its reason", async () => {
     const w = await world({}, { "GET groups/g-alpha/funding-preview": { status: 200, body: { schema: "orca-funding-preview-v1", groupId: "g-alpha", rows: [
       { taskId: "t1", authoredTokens: 600000, fundableTokens: null, reason: "group-budget-unavailable", minimumTokens: 300001 },

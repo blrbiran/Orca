@@ -335,6 +335,8 @@ export const durableCommandErrorStatuses = {
   // Tester #305 (follow-up J): a continue whose next line half the group's remainder cannot lift above what the task used;
   // the detail names `orca group set-limit`.
   "usage-pause-group-headroom": 422,
+  // Tester #479: a person's confirm with a finite group limit below the authored goal-review + handoff allocations.
+  "limit-below-allocations": 422,
   "hard-cap-needs-tokens": 422,
   "continuation-budget-unavailable": 422,
   "continuation-predecessor-unrecoverable": 422,

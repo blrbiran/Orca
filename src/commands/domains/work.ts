@@ -749,8 +749,12 @@ export const WORK_ROWS: CommandDef[] = [
       { name: "worker-profile", type: "string", summary: "bind the worker profile" }, { name: "handoff-profile", type: "string", summary: "bind the handoff profile" },
       { name: "goal-review-profile", type: "string", summary: "bind the goal-review profile" },
       { name: "handoff-at-context-tokens", type: "integer", summary: "optional: hand off at this many context tokens (not active: no installed agent reports context usage)" },
+      { name: "accept-shortfall", type: "boolean", summary: "confirm although the group's token limit is below its goal-review and handoff allocations (refused limit-below-allocations otherwise)" },
     ],
-    route: (c) => `groups/${group(c)}/confirm`, payload: (c) => confirmPayload(c) }),
+    route: (c) => `groups/${group(c)}/confirm`, payload: (c) => confirmPayload(c),
+    // Tester #479: the two ways past a limit below the allocations it pays first.
+    next: (error, c) => error.code === "limit-below-allocations"
+      ? [`orca group set-limit ${group(c)} --limit <at least the allocations> --as-person`, `orca group confirm ${group(c)} --accept-shortfall`] : undefined }),
     // Session 3cfc2e73 D3: the confirm result carries no allocations; the lines come from the view the payload read.
     format: (body: unknown) => { const lines = confirmNote; confirmNote = []; return lines.length === 0 ? text(body) : `${text(body)}\n${lines.join("\n")}`; } }),
   queuedFormat(empty("group", "start", "start a confirmed group (one confirmed with --hold); at the running-group cap it is queued", "start", "start")),
@@ -1193,5 +1197,6 @@ async function confirmPayload(c: WriteContext): Promise<unknown> {
     selectionsHash: preview.selectionsHash ?? "0".repeat(64),
     ...(view.integration === undefined ? {} : { integrationHash: view.integration.schemeHash }),
     ...(c.args.flags.hold === true ? { hold: true } : {}),
+    ...(c.args.flags["accept-shortfall"] === true ? { acceptShortfall: true } : {}),
   };
 }

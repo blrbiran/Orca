@@ -230,13 +230,19 @@ export const ceilingStopNext = (detail: string): string | undefined =>
 const withLines = (base: string, lines: string[]): string =>(lines.length === 0 ? base : `${base}\n${lines.join("\n")}`);
 /** Issue #212: the authored work allocation is a request; a claim funds what the group limit leaves after handoffs. */
 export function fundingLines(preview: unknown): string[] {
-  const rows = (preview as { rows?: Array<{ taskId: string; authoredTokens: number | null; fundableTokens: number | null; reason: string | null; expectation?: boolean; taskCapTokens?: number }> } | null)?.rows ?? [];
+  const rows = (preview as { rows?: Array<{ taskId: string; authoredTokens: number | null; fundableTokens: number | null; reason: string | null; expectation?: boolean; taskCapTokens?: number; warning?: string }> } | null)?.rows ?? [];
   if (rows.length === 0) return [];
   const tokens = (n: number | null): string => n === null ? "unlimited" : String(n);
-  return ["funding at the current group limit (the authored allocations are requests, not grants):",
+  // Tester #479: the limit's arithmetic (the panel's limitCheck), each warning named by its code, before the rows; and a
+  // candidate the group's headroom leaves nothing for named after its row.
+  const warnings = (preview as { limitCheck?: { warnings?: Array<{ code: string; message: string }> } } | null)?.limitCheck?.warnings ?? [];
+  const slice = (row: { warning?: string }): string => row.warning === "budget-slice-zero" ? " [budget-slice-zero: the group's headroom leaves this lane nothing now]" : "";
+  return [...warnings.map((w) => `warning: ${w.code}: ${w.message}`), "funding at the current group limit (the authored allocations are requests, not grants):",
     // Tester follow-up I (seat K): a funded claim with no token amount (no group token limit) is funded unlimited, not
     // "nothing"; a task waiting for its dependencies is named so, not as a missing budget.
-    ...rows.map((row) => {
+    ...rows.map((row) => `${fundingRowLine(row, tokens)}${slice(row)}`)];
+}
+function fundingRowLine(row: { taskId: string; authoredTokens: number | null; fundableTokens: number | null; reason: string | null; expectation?: boolean; taskCapTokens?: number }, tokens: (n: number | null) => string): string {
       if (row.reason === "task-active") return `  task ${row.taskId}: already running (claim not applicable)`;
       if (row.reason === "task-done") return `  task ${row.taskId}: already done (claim not applicable)`;
       if (row.taskCapTokens !== undefined) return row.reason === null
@@ -251,7 +257,6 @@ export function fundingLines(preview: unknown): string[] {
       }
       return `  task ${row.taskId}: authored ${tokens(row.authoredTokens)}; a claim now funds ${row.reason === "dependencies-pending" ? "nothing yet (it waits for its dependencies)"
         : row.reason !== null ? `nothing (${row.reason})` : tokens(row.fundableTokens)}`;
-    })];
 }
 /** The group view's `estimateHistory` (src/control/estimateHistory.ts), absent on a confirmed proposal or an older panel. */
 export interface EstimateHistory { medianTokens: number | null; sampleCount: number; minimumSample: number; tasks: Array<{ taskId: string; estimateTokens: number | null; ratio: number | null }> }
@@ -274,7 +279,9 @@ export function historyLines(history: EstimateHistory | undefined): string[] {
  */
 export function withFunding(body: unknown, preview: unknown): unknown {
   const rows = (preview as { rows?: unknown[] } | null)?.rows ?? [];
-  return rows.length === 0 || typeof body !== "object" || body === null || "error" in body ? body : { ...body, funding: rows };
+  // Tester #479, only-add: the limit's arithmetic follows `funding` when the panel answers one (a finite limit).
+  const check = (preview as { limitCheck?: unknown } | null)?.limitCheck;
+  return rows.length === 0 || typeof body !== "object" || body === null || "error" in body ? body : { ...body, funding: rows, ...(check === undefined ? {} : { limitCheck: check }) };
 }
 /**
  * Tester follow-up F §1 (#195, human ruling 「要改」): the context hand-off threshold does nothing today -- no installed agent

@@ -123,7 +123,7 @@ export type GroupSummaryV1 = {
   };
   /** Kanban spec 2026-10-20 §4: a board card's facts; the server gives them for every group with a plan. */
   card?: {
-    budget: { usedTokens: number; limitTokens: number | null; reservedTokens: number; headroomTokens: number | null }; pendingDecisions: number; firstFailure: { taskId: string; cause: string; next?: string; note?: string } | null;
+    budget: { usedTokens: number; limitTokens: number | null; reservedTokens: number; headroomTokens: number | null; waitingForBudget?: number }; pendingDecisions: number; firstFailure: { taskId: string; cause: string; next?: string; note?: string } | null;
     /** Checks spec 2026-10-22 §6.6, §7: model-review findings waiting on this group that a review group owns; absent when none. */
     reviewFindings?: { major: number; minor: number };
     /** Budget defaults spec 2026-11-11 §7 item 4: a group with no token limit -- its tasks' summed expectation and use (null: unknown). */
@@ -888,6 +888,8 @@ export type ConfirmPayloadV1 = {
   integrationHash?: string;
   /** Kanban spec §3.1: "Confirm only, don't run yet"; absent is "Confirm and run". */
   hold?: true;
+  /** Tester #479: the person accepts a group limit below its goal-review and handoff allocations. */
+  acceptShortfall?: true;
 };
 export type SetLimitPayloadV1 = { limit: BudgetAmount };
 export type ImportPlanPayloadV1 = {
