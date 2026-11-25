@@ -409,8 +409,9 @@ export function mergedLimit(raw: string, current: LimitAmount): LimitAmount {
 
 /**
  * Tester #499: a set-limit the group cannot hold is refused with each short dimension and its gap
- * (`group-budget-unavailable:attempts:+20`). The next line names those dimensions and carries the limit the person asked
- * for with each of them raised by its gap -- the smallest limit that holds what is already used and reserved.
+ * (`group-budget-unavailable:attempts:+20`) -- that refusal's message carries the detail. The next line stays a whole
+ * command a person can paste: the limit they asked for with each short dimension raised by its gap, the smallest limit
+ * that holds what is already used and reserved.
  */
 async function setLimitNext(error: { code: string; message: string }, c: WriteContext): Promise<string[] | undefined> {
   if (error.code !== "group-budget-unavailable") return undefined;
@@ -419,7 +420,7 @@ async function setLimitNext(error: { code: string; message: string }, c: WriteCo
   if (short.length === 0) return undefined;
   const raised: LimitAmount = { ...mergedLimit(str(c, "limit")!, (await groupView(c)).ledger.groupLimit) };
   for (const { dimension, missing } of short) if (raised[dimension] !== null) raised[dimension] = raised[dimension]! + missing;
-  return [`orca group set-limit ${group(c)} --limit '${JSON.stringify(raised)}' --as-person  (short: ${short.map(({ dimension, missing }) => `${dimension} by ${missing}`).join(", ")})`];
+  return [`orca group set-limit ${group(c)} --limit '${JSON.stringify(raised)}' --as-person`];
 }
 
 /**

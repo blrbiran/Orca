@@ -1,4 +1,4 @@
-import { budgetAmountSchema, type BudgetAmount } from "./tokenPolicy.js";
+import { budgetAmountSchema, budgetShortfall, budgetShortfallDetail, type BudgetAmount } from "./tokenPolicy.js";
 import { saveTokenPolicy } from "./fundedAllowance.js";
 import { z } from "zod";
 import { budgetBalance } from "./budget.js";
@@ -134,7 +134,10 @@ export function setRequirementLimit(store: ControlStore, groupId: string, limit:
   if (canonicalBytes(limit).equals(canonicalBytes(group.limit))) throw new ControlError("no-op-command");
   if (group.ledger.usageUnknown && dimensions.some((d) => limit[d]!==null&&(group.limit[d]===null||limit[d]! < group.limit[d]!))) throw new ControlError("recovery-blocked", "requirement-usage-unknown");
   const ledger = clarifyingLedger(limit, group.used, group.reserved, group.ledger.usageUnknown);
-  if (dimensions.some((d) => ledger.budgetDeficit[d] > 0)) throw new ControlError("group-budget-unavailable");
+  // Tester #499: the same rule a plan group's set-limit uses (tokenPolicy.budgetShortfall), so a clarifying group names the
+  // dimension and its gap instead of answering the bare code.
+  const shortfall = budgetShortfall(group.used, group.reserved, limit);
+  if (Object.keys(shortfall).length > 0) throw new ControlError("group-budget-unavailable", budgetShortfallDetail(shortfall), { shortfall });
   budgetAmountSchema.parse(limit);
   group.limit = limit;
   saveTokenPolicy(store,groupId,"",limit.tokens);

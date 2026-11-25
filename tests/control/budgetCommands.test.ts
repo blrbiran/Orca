@@ -4,10 +4,13 @@
 // and the CLI's next line names the dimensions that were short.
 import { describe, expect, it } from "vitest";
 import { createGroup, setGroupLimit } from "../../src/control/commands.js";
+import { updateRevision } from "../../src/control/commandLedger.js";
 import { ControlError } from "../../src/control/errors.js";
+import { insertClarifyingGroup } from "../../src/control/requirementRecords.js";
 import { WebControlService } from "../../src/control/webService.js";
 import { readControlGroup, readGroupSummary } from "../../src/panel/controlViews.js";
 import { cli, fakePanel, useFakePanels } from "../commands/fixtures/fakePanel.js";
+import { clarifyingInput } from "./fixtures/requirement.js";
 import { openTestStore } from "./fixtures/store.js";
 import { profileSnapshot, webFixture } from "./fixtures/web.js";
 
@@ -75,6 +78,70 @@ it("the store-level writer (commands.setGroupLimit) carries the same shortfall",
   });
 });
 
+// Tester #499 review: set-limit has two more refusal paths that must say the same thing -- a clarifying group's reduced
+// ledger (requirementRecords.setRequirementLimit) and the expectation-model top-up, whose proposed-limit conservation
+// check used to answer recovery-blocked before the shortfall was seen.
+describe("the same shortfall on set-limit's other paths (#499 review)", () => {
+  it("a clarifying group's reduced ledger refuses with the same dimension and gap", async () => {
+    const h = await webFixture();
+    try {
+      h.store.transaction(() => {
+        insertClarifyingGroup(h.store, clarifyingInput("r"));
+        updateRevision(h.store, "r", 1);
+        h.store.db.prepare("UPDATE groups SET projection_seq=1 WHERE id='r'").run();
+      });
+      const service = new WebControlService({ ...h.deps, knownRepository: (id: string) => id === "repo" });
+      const group = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='r'").get()!.body)) as {
+        limit: { tokens: number | null; activeMs: number; attempts: number; sessions: number };
+        used: { tokens: number }; ledger: { used: { tokens: number } } };
+      group.used.tokens = 5; group.ledger.used.tokens = 5;
+      h.store.db.prepare("UPDATE groups SET body=? WHERE id='r'").run(JSON.stringify(group));
+      const refused = service.setLimit({ schema: "orca-raw-command-v1", commandId: "c-lower-r", actorId: "human", expectedRevision: 1,
+        verb: "set-limit", target: { kind: "group", groupId: "r" }, payload: { limit: { ...group.limit, tokens: 4 } } } as never);
+      expect(refused).toMatchObject({ error: { code: "group-budget-unavailable", shortfall: { tokens: { have: 5, need: 4 } } } });
+      expect((refused as { error: { message: string } }).error.message).toBe("group-budget-unavailable:tokens:+1");
+      // Refused atomically: the clarifying group keeps the limit it had.
+      expect((JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='r'").get()!.body)) as { limit: { tokens: number | null } }).limit.tokens).toBe(10_000_000);
+    } finally { await h.dispose(); }
+  });
+
+  it("an expectation-model top-up that still does not fit says which dimension is short, not recovery-blocked", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }], { modelVersion: "followup-g" });
+    try {
+      const service = new WebControlService(h.deps);
+      expect(await service.confirm(h.command("confirm", { ...await h.confirmPayload(), budgetMode: "soft" }))).not.toHaveProperty("error");
+      const body = groupBody(h), occupied = body.used.attempts + body.reserved.attempts;
+      expect(occupied).toBeGreaterThan(1);
+      const limit = { ...readControlGroup(h.store, "epoch", "g").ledger.groupLimit };
+      expect(limit.tokens).not.toBeNull();
+      // A real raise (tokens up, so the proposed-limit check runs) that still leaves attempts under what is held.
+      const refused = service.setLimit(h.command("set-limit", { limit: { ...limit, tokens: (limit.tokens ?? 0) + 1_000, attempts: occupied - 1 } }));
+      expect(refused).toMatchObject({ error: { code: "group-budget-unavailable", shortfall: { attempts: { have: occupied, need: occupied - 1 } } } });
+      expect((refused as { error: { message: string } }).error.message).toBe("group-budget-unavailable:attempts:+1");
+    } finally { await h.dispose(); }
+  });
+
+  it("a corrupt ledger still refuses recovery-blocked, even when the proposed limit is short", async () => {
+    const h = await webFixture(profileSnapshot(), [{ taskId: "a" }], { modelVersion: "followup-g" });
+    try {
+      const service = new WebControlService(h.deps);
+      expect(await service.confirm(h.command("confirm", { ...await h.confirmPayload(), budgetMode: "soft" }))).not.toHaveProperty("error");
+      const limit = { ...readControlGroup(h.store, "epoch", "g").ledger.groupLimit };
+      expect(limit.tokens).not.toBeNull();
+      const body = JSON.parse(String(h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as {
+        used: { attempts: number }; reserved: { attempts: number }; ledger: { explicitUnallocatedReserve: { tokens: number | null } } };
+      const occupied = body.used.attempts + body.reserved.attempts;
+      expect(occupied).toBeGreaterThan(1);
+      // The group's ledger no longer mirrors its proposal's reserve: that corruption must win over the shortfall.
+      body.ledger.explicitUnallocatedReserve.tokens = (body.ledger.explicitUnallocatedReserve.tokens ?? 0) + 12_345;
+      h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(body));
+      const refused = service.setLimit(h.command("set-limit", { limit: { ...limit, tokens: (limit.tokens ?? 0) + 1_000, attempts: occupied - 1 } }));
+      expect(refused).toMatchObject({ error: { code: "recovery-blocked" } });
+      expect((refused as { error: { shortfall?: unknown } }).error.shortfall).toBeUndefined();
+    } finally { await h.dispose(); }
+  });
+});
+
 useFakePanels();
 
 describe("group set-limit's refusal names the dimension that was short (#499)", () => {
@@ -94,8 +161,10 @@ describe("group set-limit's refusal names the dimension that was short (#499)", 
     const p = await fakePanel(routes);
     const human = await cli(ARGS, p.dir);
     expect(human.code).toBe(2);
-    expect(human.stderr).toContain("orca: next: orca group set-limit g-alpha --limit '{\"tokens\":6000000,\"activeMs\":14400000,\"attempts\":80,\"sessions\":60}' --as-person");
-    expect(human.stderr).toContain("(short: attempts by 20)");
+    // The detail (which dimension, how much) is the refusal's message; the next line is a command a person can paste.
+    expect(human.stderr).toContain("orca: group-budget-unavailable: attempts:+20");
+    expect(human.stderr).toContain("orca: next: orca group set-limit g-alpha --limit '{\"tokens\":6000000,\"activeMs\":14400000,\"attempts\":80,\"sessions\":60}' --as-person\n");
+    expect(human.stderr).not.toContain("(short: ");
   });
 
   it("the --json body keeps the panel's shortfall and gains the same next command", async () => {
@@ -104,6 +173,6 @@ describe("group set-limit's refusal names the dimension that was short (#499)", 
     expect(json.code).toBe(2);
     const body = json.json().body as { error: { shortfall: { attempts: { have: number; need: number } } }; next?: string[] };
     expect(body.error.shortfall.attempts).toEqual({ have: 80, need: 60 });
-    expect(body.next).toEqual(["orca group set-limit g-alpha --limit '{\"tokens\":6000000,\"activeMs\":14400000,\"attempts\":80,\"sessions\":60}' --as-person  (short: attempts by 20)"]);
+    expect(body.next).toEqual(["orca group set-limit g-alpha --limit '{\"tokens\":6000000,\"activeMs\":14400000,\"attempts\":80,\"sessions\":60}' --as-person"]);
   });
 });

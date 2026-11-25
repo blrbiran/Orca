@@ -2697,12 +2697,29 @@ export class WebControlService {
         // binds every later claim, so `close-run` is no longer required first. A spend cap (spendCommands.ts) and the agent
         // group-cap path (commands.ts) still refuse: there the write itself claims to bind a grant the provider already has.
         const decreasing = dimensions.some(d => limit[d]!==null&&(group.limit[d]===null||limit[d]! < group.limit[d]!));
+        // Tester #499: `residual` below refuses a limit under used+reserved with a bare code; the shortfall names each such
+        // dimension and the gap, in the refusal's message and (details.shortfall) on the wire body.
+        const shortfall = budgetShortfall(group.used, group.reserved, limit);
+        const proposedLimit = toppedUp && expectationModelApplies(group) ? limit : undefined;
         // Tester follow-up G spec §2.1: in an expectation-model group a run may pass the cap by what it had in flight, so a
         // top-up is checked against the limit it installs (its deficit must close), not against the one it replaces.
-        if (decreasing || !group.ledger.usageUnknown) assertKnownConservation(this.store, group, proposal, toppedUp && expectationModelApplies(group) ? limit : undefined);
-        // Tester #499: `residual` below refuses a limit under used+reserved with a bare code; the shortfall names each
-        // such dimension and the gap, in the refusal's message and (details.shortfall) on the wire body.
-        const shortfall = budgetShortfall(group.used, group.reserved, limit);
+        if (decreasing || !group.ledger.usageUnknown) {
+          try { assertKnownConservation(this.store, group, proposal, proposedLimit); }
+          catch (error) {
+            // Tester #499 review: with a proposed limit the conservation check answers an ordinary raise that is still too
+            // small with recovery-blocked (its own deficit) before the shortfall is seen. Re-run the same check with the
+            // deficit removed -- a limit that covers what the group already holds -- so every other invariant (the ledger
+            // mirror, the commitments, the reserve) still refuses a corrupt ledger, and only then is the limit the answer.
+            if (!(error instanceof ControlError) || error.code !== "recovery-blocked" || proposedLimit === undefined || Object.keys(shortfall).length === 0) throw error;
+            assertKnownConservation(this.store, group, proposal, {
+              tokens: limit.tokens === null ? null : Math.max(limit.tokens, group.used.tokens + group.reserved.tokens),
+              activeMs: Math.max(limit.activeMs, group.used.activeMs + group.reserved.activeMs),
+              attempts: Math.max(limit.attempts, group.used.attempts + group.reserved.attempts),
+              sessions: Math.max(limit.sessions, group.used.sessions + group.reserved.sessions),
+            });
+            throw new ControlError("group-budget-unavailable", budgetShortfallDetail(shortfall), { shortfall });
+          }
+        }
         if (Object.keys(shortfall).length > 0) throw new ControlError("group-budget-unavailable", budgetShortfallDetail(shortfall), { shortfall });
         proposal.groupLimit = limit;
         setReserve(proposal, residual(limit, group.used, group.reserved));
