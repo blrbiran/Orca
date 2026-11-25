@@ -43,6 +43,16 @@ describe("the run detail's live ceiling and the codex note (#297)", () => {
       .toBe("This ceiling is checked after each observed response: the request already in flight can pass the ceiling, and the group limit, before the run stops.");
   });
 
+  // #478 §5.2: where a resumable stop's next run resumes; a stop with no continuation says so.
+  // mutation: drop the run-ceiling-continuation line in RunLiveCeiling -> red here
+  it("says where a resumable stop continues, and that another has no continuation", () => {
+    const resumable = ceilinged("my-claude");
+    resumable.runs[0] = { ...resumable.runs[0]!, ceilingContinuation: { nextPhase: "verify", resumesAttempt: true } };
+    expect(openRun(resumable).querySelector("[data-testid=run-ceiling-continuation]")?.textContent).toBe("Continues at verify with the paid plan and execution, in the same attempt");
+    cleanup();
+    expect(openRun(ceilinged("my-claude")).querySelector("[data-testid=run-ceiling-continuation]")?.textContent).toBe("No continuation: the stop carried none, so the next run starts the task at plan");
+  });
+
   it("gives no note for an agent that is not codex", () => {
     const box = openRun(ceilinged("my-claude"));
     expect(box.textContent).toContain("Live ceiling: 10,000,000 tokens");

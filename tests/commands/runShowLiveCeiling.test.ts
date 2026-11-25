@@ -36,6 +36,14 @@ describe("run show names the live ceiling (#290, #297)", () => {
     expect(text).toContain("note: codex runs one turn per phase, so its live ceiling is checked only after the whole phase ends; a single execute can go past the ceiling (and the group limit)");
     expect(text).not.toContain("between turns");
   });
+  // #478 §5.2: a resumable stop says where its next run resumes, with the paid evidence; any other says why it does not.
+  // mutation: drop the ceilingContinuationLine entry in liveCeilingLines -> red here
+  it("says where a resumable stop continues, and why another does not", async () => {
+    const resumable = await show({ ...RUN, liveCeiling: CEILING, liveCeilingStop: STOP, ceilingContinuation: { nextPhase: "execute", resumesAttempt: true } }, "claude");
+    expect(resumable).toContain("continues at execute with the paid plan, in the same attempt");
+    expect(await show({ ...RUN, liveCeiling: CEILING, liveCeilingStop: STOP }, "claude")).toContain("no continuation: the stop carried none, so the next run starts the task at plan");
+    expect(await show({ ...RUN, liveCeiling: CEILING, liveCeilingStop: { ...STOP, cause: "task-cap" } }, "claude")).toContain("no continuation: a person's hard cap ends the task");
+  });
   it("prints no codex note for another agent, nor when the agents read fails; nothing for a run without a ceiling", async () => {
     expect(await show({ ...RUN, liveCeiling: CEILING }, "claude")).not.toContain("codex runs one turn");
     const unread = await show({ ...RUN, liveCeiling: CEILING }, null);

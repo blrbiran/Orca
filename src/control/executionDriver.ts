@@ -11,7 +11,7 @@ import {assertCurrentSavedRecovery,savedRecoveryAccounting} from "./savedResultR
 import {materializeRecoveryPackage,publishRecoveryFence,persistRecoveryArtifact,recoveryClosure} from "./savedResultRecoveryPackage.js";
 import {savedDispatchSchema,savedRecoverySchema,savedResultAdmissionSchema,recoveryOfSchema,executionFormatFailureSchema,exhaustedCompletionSchema,ompWithoutFinalCompletionSchema,savedExecutionSnapshotSchema,savedResultCollectionSchema,savedResultSettlementSchema,interruptedSavedResultSchema} from "./savedResultProtocol.js";
 import { readWork as allowanceWork, saveWork as saveAllowanceWork, readGroup as allowanceGroup, saveGroup as saveAllowanceGroup } from "./queries.js";
-import { hasOptionalTaskPolicy, validateAllowanceCheckpoint } from "./fundedAllowance.js";
+import { hasOptionalTaskPolicy, validateAllowanceCheckpoint, type CeilingContinuationMark } from "./fundedAllowance.js";
 import { topUpSum } from "./workTopUp.js";
 import { minTokenCeiling } from "./tokenPolicy.js";
 import { boundingCeilingOf, liveCeilingOf, refreshCeilingReserves } from "./liveCeiling.js";
@@ -2738,6 +2738,16 @@ async function settleCeilingStop(deps:ExecutionDriverDeps,runId:string,report:Ex
  pending.set(runId, settlement);
  try { return await settlement; } finally { if (pending.get(runId) === settlement) pending.delete(runId); }
 }
+/**
+ * #478 §5.2: null when the stop's packet carries no continuation (a stop ccloop judged not resumable, or a ccloop before
+ * #478); else the validated continuation's mark (fundedAllowance.ts CeilingContinuationMark). Throws when it is invalid.
+ */
+async function ceilingContinuationMark(store:ControlStore,run:DriverRun,candidate:Candidate,stop:NonNullable<ExecutionReport["liveCeilingStop"]>):Promise<CeilingContinuationMark|null> {
+ const packet=JSON.parse((await readArtifact(store,candidate.handoff)).toString()) as {allowanceContinuation?:{nextPhase?:CeilingContinuationMark["nextPhase"]}}|null;
+ if(packet===null||typeof packet!=="object"||packet.allowanceContinuation===undefined)return null;
+ await validateAllowanceCheckpoint(store,candidate,readStartEnvelope(store,run),stop);
+ return {nextPhase:packet.allowanceContinuation.nextPhase!,resumesAttempt:!(stop.phase==="plan"&&stop.at==="boundary")};
+}
 async function settleCeilingStopOnce(deps:ExecutionDriverDeps,runId:string,report:ExecutionReport):Promise<boolean> {
  const {store}=deps,run=readDriverRun(store,runId),raw=report.candidate!,stop=report.liveCeilingStop!;
  const checkpointId=`ceiling-${runId}`;
@@ -2770,12 +2780,20 @@ async function settleCeilingStopOnce(deps:ExecutionDriverDeps,runId:string,repor
  if(openRequestOf(store,run)!==null)return false;
  const current=readRun(store,runId);
  if(current.unknown.work||current.unknown.handoff){blockRun(deps,runId,"C","usage-unknown");return true;}
+ // #478 (spec 2026-11-25-ceiling-stop-keeps-work-design.md §5.2): a resumable stop's packet carries ccloop's continuation.
+ // It is checked as an allowance park's is, with the ceiling's saved-state rules, before anything is committed; a bad one
+ // blocks the run at C by name. A packet without one settles exactly as before.
+ let mark:CeilingContinuationMark|null;
+ try{mark=await ceilingContinuationMark(store,run,raw,stop);}
+ catch(error){blockRun(deps,runId,"C",`ceiling-continuation:${describeError(error)}`,{outcome:"exhausted",...(report.terminal?.stopReason?{stopReason:report.terminal.stopReason}:{})});return true;}
  const onSettled=()=>{
   const settled=readDriverRun(store,runId);
   if(openRequestOf(store,settled)!==null||settled.state!=="settled")throw new ControlError("handoff-request-conflict","ceiling-yields-to-handoff");
   const work=allowanceWork(store,run.groupId,run.workItemId) as ReturnType<typeof allowanceWork>&{currentRunId?:string|null};
   if(work.currentRunId!==undefined&&work.currentRunId!==runId)throw new ControlError("work-already-active");
-  settled.state="settled-recoverable";settled.drive={...settled.drive!,outcome:report.terminal!.outcome,...(report.terminal!.stopReason?{stopReason:report.terminal!.stopReason}:{})};(settled as {liveCeilingStop?:unknown}).liveCeilingStop=stop;saveDriverRun(store,settled);
+  settled.state="settled-recoverable";settled.drive={...settled.drive!,outcome:report.terminal!.outcome,...(report.terminal!.stopReason?{stopReason:report.terminal!.stopReason}:{})};(settled as {liveCeilingStop?:unknown}).liveCeilingStop=stop;
+  if(mark!==null)(settled as {ceilingContinuation?:CeilingContinuationMark}).ceilingContinuation=mark;
+  saveDriverRun(store,settled);
   classifyCeilingStop(store,{runId,groupId:run.groupId,workItemId:run.workItemId,taskId:run.taskId},stop,(deps.now?.()??new Date()).getTime());
  };
  const orphan=readUncommittedCheckpoint(store,runId,checkpointId);

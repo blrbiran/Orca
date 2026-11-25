@@ -3,7 +3,7 @@ import {hasSavedOrdinaryRetryAuthorization} from "./savedResultNoDispatch.js";
 import { groupRepoIdOf } from "./usageLedger.js";
 import { releaseCommitment } from "./stopIntent.js";
 import { queueStartForSlot, readGroupOrchestration, recordStarted } from "./orchestration.js";
-import { allocateFundedAllowance, decideFundedAllowance, hasTokenPolicy, persistFundedAllowance, type FundedAllowance } from "./fundedAllowance.js";
+import { allocateFundedAllowance, decideFundedAllowance, hasTokenPolicy, pendingResumedAttemptOf, persistFundedAllowance, type FundedAllowance } from "./fundedAllowance.js";
 import { finiteCommitment, tokenProofCovers } from "./tokenPolicy.js";
 import { add, syncWebBudget } from "./budget.js";
 import { validateRetryGrantSource } from "./retryGrant.js";
@@ -428,6 +428,7 @@ export function createStartingRun(
     ? `${continuation.desiredIntentId}:attempt:${claimOrdinal}`
     : `task:${groupId}:${startRevision}:${work.taskId}:attempt:${claimOrdinal}`;
   const grant = structuredClone(recovery?.grant??allowance?.grant??work.grant);
+  const resumedOf = allowance !== undefined && !recovery ? pendingResumedAttemptOf(store, groupId, work.workItemId) : null;
   // Tester follow-up G spec §2.1 (plan Part B, O2): a task run of an expectation-model group has no token grant -- ccloop
   // neither parks it nor applies its 1.2 threshold -- and a live ceiling instead: the group slice the allowance computed,
   // the task's pause line or a person's hard cap, whichever binds. Its outstanding part is reserved below.
@@ -476,6 +477,9 @@ export function createStartingRun(
       : (work as { reopenNote?: OperatorNote }).reopenNote !== undefined ? { operatorNote: (work as { reopenNote?: OperatorNote }).reopenNote }
       : pendingNote !== undefined ? { operatorNote: pendingNote } : {}),
     continuationIntentId: continuation?.continuationIntentId ?? null,
+    // #478 goal 2: the stopped run whose attempt this claim resumes; its allowance inherited that attempt once
+    // (fundedAllowance.ts inheritedWorkUsage), and readFundedAllowance re-derives the same lineage from this mark.
+    ...(allowance !== undefined && !recovery && resumedOf !== null ? { resumesAttemptOf: resumedOf } : {}),
     executionProfile: { workKind: "task", ...binding(snapshot.profiles.worker) }, handoffProfile: { workKind: "handoff", ...binding(snapshot.profiles.handoff) },
     ...(ceiling === null ? {} : { liveCeiling: { revision: 1, tokens: ceiling.tokens, cause: ceiling.cause, deliveredRevision: 0 } }),
     ...(watchOnly ? { liveCeiling: { revision: 1, tokens: WATCH_ONLY_CEILING_TOKENS, cause: "group" as const, deliveredRevision: 0, watchOnly: true as const } } : {}),

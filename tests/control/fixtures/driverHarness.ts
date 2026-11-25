@@ -82,6 +82,8 @@ export interface HarnessOptions {
   liveCeilingStop?: (workItemId: string, envelope: StartEnvelope) => import("../../../src/control/executionPort.js").ExecutionReport["liveCeilingStop"];
   /** Tester follow-up I (seat L): the evidence a terminal candidate names missing (driverPort.ts). */
   candidateMissing?: (workItemId: string) => string[];
+  /** #478: ccloop's continuation of a resumable live-ceiling stop, carried in the terminal's packet (driverPort.ts). */
+  ceilingContinuation?: Parameters<typeof fakeCcloopPort>[0]["ceilingContinuation"];
   /** Test-owned collect behavior must be installed before the router copies the port's methods. */
   wrapPort?: (port: ExecutionPort) => ExecutionPort;
   /** Change-sized runs P2: the synthetic ccloop advertises attemptRef "v1" and records keyed attempts (driverPort.ts). */
@@ -125,6 +127,7 @@ export async function driverHarness(tasks: readonly WebFixtureTask[], options: H
     ...(options.toolRules ? { toolRules: options.toolRules } : {}),
     ...(options.liveCeilingStop ? { liveCeilingStop: options.liveCeilingStop } : {}),
     ...(options.candidateMissing ? { candidateMissing: options.candidateMissing } : {}),
+    ...(options.ceilingContinuation ? { ceilingContinuation: options.ceilingContinuation } : {}),
     ...(options.sealedOwnerProof === true ? { sealedOwnerProof: true } : {}),
     ...(options.attemptRef === true ? { attemptRef: true } : {}),
     ...(options.memory === true ? { memory: true } : {}),

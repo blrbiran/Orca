@@ -19,6 +19,10 @@ export function RunLiveCeiling({ run, agents }: { run: RunViewV1; agents: Agents
     <div data-testid="run-live-ceiling">
       <p className="num">{t("control.group.liveCeiling", { tokens: count(ceiling.tokens), cause: ceiling.cause, revision: ceiling.revision })}</p>
       {stop !== undefined && <p className="num">{t("control.group.liveCeilingStop", { observed: count(stop.observedTokens), tokens: count(stop.tokens), cause: stop.cause, phase: stop.phase, at: stop.at })}</p>}
+      {/* #478 §5.2: where the next run resumes, with the paid evidence -- or why there is no continuation. */}
+      {stop !== undefined && <p data-testid="run-ceiling-continuation">{run.ceilingContinuation !== undefined
+        ? t(`control.group.ceilingContinues_${run.ceilingContinuation.nextPhase}`)
+        : t(stop.cause === "task-cap" ? "control.group.ceilingHardCap" : "control.group.ceilingNoContinuation")}</p>}
       {kind === "codex" && <p role="note" data-tone="warn" data-testid="codex-ceiling-note">{t("control.group.liveCeilingCodex")}</p>}
     </div>
   );

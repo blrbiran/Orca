@@ -1,4 +1,4 @@
-import { allocateFundedAllowance, hasOptionalTaskPolicy, persistFundedAllowance } from "./fundedAllowance.js";
+import { allocateFundedAllowance, hasOptionalTaskPolicy, pendingResumedAttemptOf, persistFundedAllowance } from "./fundedAllowance.js";
 import { budgetAmountSchema, finiteCommitment, tokenProofCovers, type BudgetAmount } from "./tokenPolicy.js";
 import { controlGraph } from "./graph.js";
 import { randomUUID } from "node:crypto";
@@ -144,7 +144,9 @@ export function claimWork(store:ControlStore,input:ClaimInput, preparedWork?:Wor
       group.reserved=reserved;
     }
     const claim:Claim={groupId,workItemId,taskId:work.taskId,runId:"run-"+randomUUID(),generation:1,graphVersion,targetVersion,commandId:meta.commandId,configHash:work.configHash,agent:work.agent,grant,ownerToken:randomUUID()};
-    const run:RunRecord={...claim,...(executionProfile?{executionProfile}:{}),...(handoffProfile?{handoffProfile}:{}),executionId:null,state:"claimed",checkpointId:null,recoverable:false,remaining:structuredClone(grant),cumulative:{work:zero(),handoff:zero()},unknown:{work:true,handoff:true},highWater:0,breaches:[],handoffWorkItemId:null};
+    // #478 goal 2: as webDispatch.ts createStartingRun -- the stopped run whose attempt this claim resumes, counted once.
+    const resumedOf=allocation?pendingResumedAttemptOf(store,groupId,workItemId):null;
+    const run:RunRecord={...claim,...(resumedOf===null?{}:{resumesAttemptOf:resumedOf}),...(executionProfile?{executionProfile}:{}),...(handoffProfile?{handoffProfile}:{}),executionId:null,state:"claimed",checkpointId:null,recoverable:false,remaining:structuredClone(grant),cumulative:{work:zero(),handoff:zero()},unknown:{work:true,handoff:true},highWater:0,breaches:[],handoffWorkItemId:null};
     store.db.prepare("INSERT INTO runs VALUES (?,?,?,?,1,?)").run(claim.runId,groupId,workItemId,1,JSON.stringify(run));
     if(allocation)persistFundedAllowance(store,claim.runId,groupId,workItemId,allocation);
     work.status="running";saveWork(store,groupId,work);

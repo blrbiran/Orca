@@ -28,8 +28,11 @@ export function AcceptAttempt(props: { run: RunViewV1; item: WorkItemViewV1; rol
         : t("control.acceptAttempt.refused", { principal: recorded.principal, reason: recorded.reason ?? "", note: recorded.note })}
     </p>
   );
+  // #478 §5.4: a run stopped at its live ceiling (settled-recoverable, exhausted) is admitted too (acceptAttempt.ts `ceiling`):
+  // the task waits on it, or is ready to continue it, and taking its attempt costs no more tokens.
+  const ceilingStop = run.state === "settled-recoverable" && run.outcome === "exhausted" && run.liveCeilingStop !== undefined && item.status !== "completed";
   const offered = !props.archived && props.roles?.includes("owner") === true && run.phase === "work" && run.recoveryOf === undefined
-    && run.state === "settled-failed" && hasFailureOutcome(run) && run.runId === item.currentRunId && item.status === "blocked"
+    && ((run.state === "settled-failed" && hasFailureOutcome(run) && item.status === "blocked") || ceilingStop) && run.runId === item.currentRunId
     && (recorded === undefined || recorded.state === "refused");
   if (!offered) return state;
   const sendable = note.trim() !== "" && note.length <= NOTE_MAX;

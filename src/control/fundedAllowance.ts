@@ -15,6 +15,7 @@ import { canonicalBytes } from "./canonicalJson.js";
 import { add, groupUsageUnknown, isTerminalRunState, type RunRecord } from "./budget.js";
 import { zero } from "./commands.js";
 import { ControlError } from "./errors.js";
+import { continuableRun } from "./driveRecord.js";
 import { allWork, readBudgetProposal, readGroup, readWork } from "./queries.js";
 import { amountSchema, budgetAmountSchema, safeInteger, grantSchema, tokenPolicySchema } from "./schema.js";
 import { capStatuses, type CapStatus } from "./spendCaps.js";
@@ -40,16 +41,56 @@ export function hasOptionalTaskPolicy(store:ControlStore,groupId:string,workItem
  const row=store.db.prepare("SELECT mode FROM token_policies WHERE group_id=? AND work_item_id=?").get(groupId,workItemId);
  return row===undefined?hasTokenPolicy(store,groupId):row.mode==="optional-v1";
 }
+/**
+ * #478 goal 2 (spec 2026-11-25-ceiling-stop-keeps-work-design.md §5.1 "Attempts"): a live-ceiling stop whose checkpoint
+ * carries ccloop's continuation records here (executionDriver.ts settleCeilingStop) the phase it resumes at and whether
+ * its continuation resumes the attempt it stopped in -- every stop but the boundary before a new attempt (ccloop's reader,
+ * `readAllowanceContinuation`, counts the same way).
+ */
+export interface CeilingContinuationMark { nextPhase:"plan"|"execute"|"verify"; resumesAttempt:boolean }
+export function ceilingContinuationOf(run:unknown):CeilingContinuationMark|null {
+ const mark=(run as {ceilingContinuation?:CeilingContinuationMark}|null)?.ceilingContinuation;
+ return mark===undefined||mark===null?null:mark;
+}
+/**
+ * #478 goal 2: the run a claim of this task now would continue by resuming its stopped attempt -- the task's newest run,
+ * named by its `allowancePredecessorRunId`, continuable (driveRecord.ts continuableRun, the predicate stepA2 continues on)
+ * and marked as resuming its attempt. That attempt is then counted once, in the stopped run: the claim inherits one
+ * attempt fewer, and the new run records `resumesAttemptOf` so every later lineage sum subtracts it the same way.
+ */
+export function pendingResumedAttemptOf(store:ControlStore,groupId:string,workItemId:string):string|null {
+ const work=readWork(store,groupId,workItemId) as unknown as {allowancePredecessorRunId?:unknown};
+ const predecessor=work.allowancePredecessorRunId;
+ if(typeof predecessor!=="string")return null;
+ const newest=store.db.prepare("SELECT id,body FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1").get(groupId,workItemId);
+ if(newest===undefined||String(newest.id)!==predecessor)return null;
+ const run=JSON.parse(String(newest.body)) as Record<string,unknown>;
+ return ceilingContinuationOf(run)?.resumesAttempt===true&&continuableRun(run)?predecessor:null;
+}
+/** #478 goal 2: how many attempts of these runs (rowid order) the run after each resumed -- and so counted again. */
+export function resumedAttempts(runs:readonly unknown[]):number {
+ let resumed=0;
+ for(let i=1;i<runs.length;i++){
+  const previous=runs[i-1] as {runId?:unknown},resumes=(runs[i] as {resumesAttemptOf?:unknown}).resumesAttemptOf;
+  if(resumes!==undefined&&resumes===previous.runId&&ceilingContinuationOf(previous)?.resumesAttempt===true)resumed++;
+ }
+ return resumed;
+}
 /** Every observation is run-local: summing settled work once carries overshoot and every non-token dimension. */
 export function inheritedWorkUsage(store:ControlStore,groupId:string,workItemId:string):Amount|null {
  let total=zero();
+ const runs:RunRecord[]=[];
  for(const row of store.db.prepare("SELECT body,active FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid").all(groupId,workItemId)) {
   const run=JSON.parse(String(row.body)) as RunRecord;
   if(row.active===1||!isTerminalRunState(run.state)||run.unknown.work||run.unknown.handoff)return null;
   if(store.db.prepare("SELECT seq FROM usage_events WHERE run_id=? AND seq>?").get(run.runId,run.highWater))return null;
   total=add(total,amountSchema.parse(lineageWorkUsage(run)));
+  runs.push(run);
  }
- return total;
+ // #478 goal 2: a resumed attempt is counted once -- in the run that stopped in it, not again in its continuation.
+ const pending=pendingResumedAttemptOf(store,groupId,workItemId);
+ const resumed=resumedAttempts(pending===null?runs:[...runs,{resumesAttemptOf:pending}]);
+ return resumed===0?total:{...total,attempts:total.attempts-resumed};
 }
 interface Binder { id:string; cause:"group"|"spend-cap"; remaining:number; candidates:number;cap?:CapStatus }
 interface Demand { groupId:string;workId:string;allowance:FundedAllowance;binders:Binder[];minimum:number;fixed:boolean }
@@ -262,6 +303,9 @@ export function readFundedAllowance(store:ControlStore,run:{runId:string;groupId
   const source=previous as {unknown:{work:boolean;handoff:boolean};cumulative:{work:Amount};usageSettlement?:unknown};if(source.unknown.work||source.unknown.handoff)throw new ControlError("recovery-blocked","funded-unknown-lineage");
   inherited=add(inherited,amountSchema.parse(lineageWorkUsage(source)));
  }
+ // #478 goal 2: the claim counted a resumed attempt once (inheritedWorkUsage); this run's own mark included.
+ const resumed=resumedAttempts([...earlier,run]);
+ if(resumed>0)inherited={...inherited,attempts:inherited.attempts-resumed};
  if(!canonicalBytes(inherited).equals(canonicalBytes(parsed.data.inheritedUsage)))throw new ControlError("recovery-blocked","funded-lineage");
  const remaining=remainingBudget(authored,inherited),actual=parsed.data.grant.work;
  // Tester #307 (follow-up J): an expectation-model group's task run has no work-token grant whatever its authored ceiling --
@@ -275,8 +319,14 @@ export function readFundedAllowance(store:ControlStore,run:{runId:string;groupId
  return parsed.data;
 }
 
-/** Validate complete saved lineage before releasing a stopped allowance for automatic renewal. */
-export async function validateAllowanceCheckpoint(store:ControlStore,candidate:Candidate,envelope:StartEnvelope):Promise<void> {
+/**
+ * Validate complete saved lineage before releasing a stopped allowance for automatic renewal.
+ * `ceiling` (#478, spec 2026-11-25-ceiling-stop-keeps-work-design.md §5.1 "Saved-state rules", §5.2): the live-ceiling stop
+ * whose terminal candidate carries the continuation. Its saved state mirrors ccloop's reader (`savedCeilingStateSchema`):
+ * no waitingCause, `exhausted`, the same stop (cause group or pause-line), the real token remainder (an integer or null,
+ * known or unlimited), any attempts remaining, and a plan with no rejection to carry only for attempt 1's plan cut mid-call.
+ */
+export async function validateAllowanceCheckpoint(store:ControlStore,candidate:Candidate,envelope:StartEnvelope,ceiling?:{cause:string;phase:string;at:string}):Promise<void> {
  const bad=()=>{throw new ControlError("resume-handoff-invalid","allowance-evidence");};
  if(envelope.protocol!==4||!envelope.tokenPolicy||candidate.result!=="partial"||candidate.missing.length||candidate.unresolvedRequestIds.length)bad();
  const packet=packetSchema.parse(JSON.parse((await readArtifact(store,candidate.handoff)).toString()));
@@ -287,8 +337,18 @@ export async function validateAllowanceCheckpoint(store:ControlStore,candidate:C
  for(const ref of refs){if(!packet.artifacts.some(r=>r.artifactId===ref.artifactId&&r.hash===ref.hash)||!candidate.artifacts.some(r=>r.artifactId===ref.artifactId&&r.hash===ref.hash))bad();await readArtifact(store,ref);}
  if(envelope.work.kind!=="loop"||!canonicalBytes(JSON.parse((await readArtifact(store,packet.acceptedContract!)).toString())).equals(canonicalBytes(envelope.work.contract)))bad();
  const saved=JSON.parse((await readArtifact(store,continuation!.state)).toString());
- if(saved.waitingCause!=="token-allowance"||saved.allowanceNextPhase!==continuation!.nextPhase||saved.budgetSnapshot?.tokenRemainingStatus!=="known"||saved.budgetSnapshot?.tokenBudgetRemaining!==0)bad();
- if(continuation!.nextPhase==="execute"&&!continuation!.plan||continuation!.nextPhase==="verify"&&(!continuation!.plan||!continuation!.execution)||continuation!.nextPhase==="plan"&&!continuation!.verification)bad();
+ if(saved.allowanceNextPhase!==continuation!.nextPhase)bad();
+ let planWithoutRejection=false;
+ if(ceiling===undefined){
+  if(saved.waitingCause!=="token-allowance"||saved.budgetSnapshot?.tokenRemainingStatus!=="known"||saved.budgetSnapshot?.tokenBudgetRemaining!==0)bad();
+ }else{
+  const remaining=saved.budgetSnapshot?.tokenBudgetRemaining,stop=saved.liveCeilingStop;
+  if(saved.waitingCause!==undefined||saved.status!=="exhausted"||!["group","pause-line"].includes(ceiling.cause)||stop?.cause!==ceiling.cause||stop?.phase!==ceiling.phase||stop?.at!==ceiling.at
+   ||!["known","unlimited"].includes(saved.budgetSnapshot?.tokenRemainingStatus)||!(remaining===null||Number.isSafeInteger(remaining)&&remaining>=0)
+   ||!(Number.isSafeInteger(saved.budgetSnapshot?.attemptsRemaining)&&saved.budgetSnapshot.attemptsRemaining>=0))bad();
+  planWithoutRejection=stop.phase==="plan"&&stop.at==="mid-call"&&saved.currentAttempt===1;
+ }
+ if(continuation!.nextPhase==="execute"&&!continuation!.plan||continuation!.nextPhase==="verify"&&(!continuation!.plan||!continuation!.execution)||continuation!.nextPhase==="plan"&&!continuation!.verification&&!planWithoutRejection)bad();
  const ledger=JSON.parse((await readArtifact(store,continuation!.usage)).toString());
  if(ledger.protocol!==1||ledger.nextSeq!==candidate.usageHighWater||!Array.isArray(ledger.events)||ledger.events.length!==ledger.nextSeq-1)bad();
  let last:Amount|null=null;

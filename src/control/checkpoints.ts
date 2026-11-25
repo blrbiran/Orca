@@ -204,7 +204,11 @@ export function completeAcceptedAttempt(store:ControlStore,runId:string):void {
  if(Number(row.active)!==0 || run.state!=="settled-failed" || run.taskId===null || accepted?.state!=="landed" || !accepted.landedCommit || !accepted.proof
   || source==null || source.artifactId!==accepted.proof.artifactId || source.hash!==accepted.proof.hash
   || work.currentRunId!==runId || work.status!=="blocked" || work.targetVersion!==run.targetVersion || group.graphVersion!==run.graphVersion) throw new ControlError("recovery-blocked","accepted-attempt-invariant");
- work.status="done";saveWork(store,run.groupId,work as never);
+ work.status="done";
+ // #478 §5.3: a landed acceptance ends whatever the task waited on -- a live-ceiling stop's group-cap or pause-line wait,
+ // and the continuation its next claim would have resumed -- so nothing continues the accepted run afterwards.
+ const waits=work as unknown as Record<string,unknown>;delete waits.groupCapStop;delete waits.usagePause;delete waits.allowancePredecessorRunId;
+ saveWork(store,run.groupId,work as never);
 }
 
 /**

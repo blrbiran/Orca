@@ -42,6 +42,12 @@ export interface OperatorAcceptance {
   reason: string | null; failure: CheckFailure | null;
   staged: StagedAcceptance | null;
   attemptSha: string | null; landedCommit: string | null; proof: ArtifactRef | null;
+  /**
+   * #478 (spec 2026-11-25-ceiling-stop-keeps-work-design.md §5.3): set when the command converted a live-ceiling stop
+   * (settled-recoverable, exhausted) to settled-failed for the driver -- the task's status before. A refusal restores the
+   * run to settled-recoverable and the task to that status, so its continuation and its wait survive a refused acceptance.
+   */
+  ceilingRestore?: { workStatus: string };
 }
 
 type AcceptRun = RunBody & {
@@ -154,6 +160,8 @@ export function applyAcceptAttempt(deps: AcceptAttemptDeps, command: AcceptAttem
         const intent: OperatorAcceptance = {
           commandId: command.commandId, principal, note, at: store.now(), snapshot: prepared.snapshot, state: "pending",
           reason: null, failure: null, staged: null, attemptSha: null, landedCommit: null, proof: null,
+          // #478 §5.3: a ceiling stop is converted for the driver below; a refusal puts it back as it was (acceptAttemptDriver.ts refuse).
+          ...(ceiling && !closed ? { ceilingRestore: { workStatus: work.status } } : {}),
         };
         if (settlement === null) {
           saveRunBody(store, { ...run, operatorAcceptance: intent } as RunBody);

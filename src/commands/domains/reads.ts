@@ -39,7 +39,8 @@ const ids = (context: WriteContext, name: string): string => context.ids[name]!;
  * lines, since its row (two commands) is longer than the generic one-line item, which is cut at 160 characters.
  */
 function recoveryList(body: unknown): string {
-  const { heldTasks, unresolvedRuns, integrationBlocked, finishedHidden, ...rest } = (body ?? {}) as { heldTasks?: Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }>;
+  const { heldTasks, ceilingStops, unresolvedRuns, integrationBlocked, finishedHidden, ...rest } = (body ?? {}) as { heldTasks?: Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }>;
+    ceilingStops?: Array<{ groupId: string; taskId: string; runId: string; cause: string; next: string[] }>;
     unresolvedRuns?: Array<{ groupId: string; taskId: string; runId: string; code: string; next: string[] }>;
     integrationBlocked?: Array<{ groupId: string; delivery: string; reason: string; next: string }>; finishedHidden?: number };
   const lines = [text(rest)];
@@ -57,6 +58,14 @@ function recoveryList(body: unknown): string {
     lines.push("heldTasks:");
     for (const row of heldTasks) {
       lines.push(`  - ${row.groupId} ${row.taskId}: held after run ${row.runId} stopped${row.continuable ? " (its checkpoint can be continued)" : ""}`);
+      for (const command of row.next) lines.push(`    next: ${command}`);
+    }
+  }
+  // #478 §5.4: a task waiting after a live-ceiling stop, with every way on, in whole lines as a held task's.
+  if (ceilingStops !== undefined) {
+    lines.push("ceilingStops:");
+    for (const row of ceilingStops) {
+      lines.push(`  - ${row.groupId} ${row.taskId}: run ${row.runId} stopped at the live ceiling (${row.cause === "group" ? "the group's token limit" : "its pause line"}) and waits`);
       for (const command of row.next) lines.push(`    next: ${command}`);
     }
   }
@@ -532,7 +541,17 @@ function executionCompleteLines(groupId: string, run: CompletedRun | undefined):
  * Tester D19: an installation's model here is the default a run gets when nothing chose another, not what any run ran on
  * (`orca run show` names that); the line says so.
  */
-type LiveCeilingRun = { liveCeiling?: { tokens: number; cause: string; revision: number }; liveCeilingStop?: { tokens: number; cause: string; observedTokens: number; phase: string; at: string } };
+type LiveCeilingRun = { liveCeiling?: { tokens: number; cause: string; revision: number }; liveCeilingStop?: { tokens: number; cause: string; observedTokens: number; phase: string; at: string };
+  ceilingContinuation?: { nextPhase: string; resumesAttempt: boolean } };
+/**
+ * #478 (spec 2026-11-25-ceiling-stop-keeps-work-design.md §5.2): whether a ceiling stop continues where it stopped -- at
+ * which phase, with which paid evidence -- or why it cannot (a person's hard cap; a stop that carried no continuation).
+ */
+export function ceilingContinuationLine(cause: string, continuation: LiveCeilingRun["ceilingContinuation"]): string {
+  if (continuation === undefined) return cause === "task-cap" ? "no continuation: a person's hard cap ends the task" : "no continuation: the stop carried none, so the next run starts the task at plan";
+  const paid = continuation.nextPhase === "verify" ? "the paid plan and execution" : continuation.nextPhase === "execute" ? "the paid plan" : "the previous attempt's verdict";
+  return `continues at ${continuation.nextPhase} with ${paid}${continuation.resumesAttempt ? ", in the same attempt" : ""}`;
+}
 /**
  * Tester #290 / #297 (follow-up J): `run show` names the run's live ceiling and the stop at it. `codex exec` runs one turn
  * per phase, so a codex run's ceiling is checked only once the whole phase ends and a single execute can go past it (the
@@ -546,6 +565,7 @@ export function liveCeilingLines(run: LiveCeilingRun | undefined, agentKind: str
   return [
     `live ceiling: ${count(run.liveCeiling.tokens)} tokens (${run.liveCeiling.cause}, revision ${run.liveCeiling.revision})`,
     ...(stop === undefined ? [] : [`stopped at the live ceiling: ${count(stop.observedTokens)} tokens used against ${count(stop.tokens)} (${stop.cause}, ${stop.phase}, ${stop.at})`]),
+    ...(stop === undefined ? [] : [ceilingContinuationLine(stop.cause, run.ceilingContinuation)]),
     ...(agentKind === "codex" ? ["note: codex runs one turn per phase, so its live ceiling is checked only after the whole phase ends; a single execute can go past the ceiling (and the group limit) before it stops"] : []),
   ];
 }

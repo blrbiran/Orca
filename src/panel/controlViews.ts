@@ -23,6 +23,7 @@ import { readAgentPreferences } from "../control/agentPreferences.js";
 import { liveUsageSchema, peerCode, sessionCleanupSchema } from "../control/ccloopPort.js";
 import { groupExecutionPending } from "../control/executionPending.js";
 import { nextClaimableTask } from "../control/webDispatch.js";
+import { ceilingStopExits } from "../control/usagePause.js";
 import { dependencyReady } from "../control/dependencyReady.js";
 import { readDebugMark } from "../control/debugGroup.js";
 import { dirWorkspaceOf, groupRepoId, readPlacement } from "../control/dirGroup.js";
@@ -300,6 +301,11 @@ const persistedRunSchema = z.object({
   // Tester follow-up G spec §2.1: a task run's live token ceiling (liveCeiling.ts), and the stop ccloop reported at it.
   liveCeiling: liveCeilingRecordSchema.optional(),
   liveCeilingStop: z.object({ revision: safeInteger.positive(), tokens: safeInteger, cause: z.enum(["group", "pause-line", "task-cap"]), observedTokens: safeInteger, phase: z.enum(["plan", "execute", "verify"]), at: z.enum(["mid-call", "boundary"]) }).strict().optional(),
+  // #478: a ceiling stop whose checkpoint carries ccloop's continuation -- the phase it resumes at and whether the resumed
+  // run continues its attempt (executionDriver.ts settleCeilingStop); and, on that continuation, the run whose attempt it
+  // resumed (webDispatch.ts createStartingRun), so the lineage counts that attempt once (fundedAllowance.ts resumedAttempts).
+  ceilingContinuation: z.object({ nextPhase: z.enum(["plan", "execute", "verify"]), resumesAttempt: z.boolean() }).strict().optional(),
+  resumesAttemptOf: idSchema.optional(),
   // Reviewed acceptance (spec 2026-11-11 §7, #227): an owner's accept-attempt intent and its outcome (acceptAttempt.ts
   // OperatorAcceptance). The fields the view shows are checked; the driver's own bookkeeping passes through untouched.
   // Tester #294 (follow-up J): the operator's note a claim copies onto the run (webDispatch.ts createStartingRun: a
@@ -682,10 +688,14 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
     // Issue #153: a blocked task whose run names no cause still shows (the overview's own `task-blocked`), not nothing.
     // Tester follow-up G spec §2.1/§2.5: a task waiting at its pause line or at the group cap says so, with what answers it.
     const waiting = (work as { usagePause?: unknown; usageStopped?: unknown; groupCapStop?: unknown } | undefined);
-    if (work?.status === "blocked" && waiting?.usagePause !== undefined) { firstFailure = { taskId, cause: "usage-paused", next: `orca task decide-usage ${groupId} ${taskId} --decision continue|stop`, ...(continueRestartsFresh(store, work as never) ? { note: USAGE_PAUSE_FRESH_START } : {}) }; break; }
+    // #478 §5.4: a wait after a live-ceiling stop also names taking the stopped run's attempt (usagePause.ts ceilingStopExits).
+    const ceilingAccept = work?.status === "blocked" && (waiting?.usagePause !== undefined || waiting?.groupCapStop !== undefined)
+      ? ceilingStopExits(store, groupId, work as Record<string, unknown>)?.next.at(-1) : undefined;
+    const orAccept = ceilingAccept === undefined ? "" : `  or  ${ceilingAccept}`;
+    if (work?.status === "blocked" && waiting?.usagePause !== undefined) { firstFailure = { taskId, cause: "usage-paused", next: `orca task decide-usage ${groupId} ${taskId} --decision continue|stop${orAccept}`, ...(continueRestartsFresh(store, work as never) ? { note: USAGE_PAUSE_FRESH_START } : {}) }; break; }
     // Tester #432: a task stopped at its pause line named only `task-blocked`; its way out is a fresh claim (group show's line).
     if (work?.status === "blocked" && waiting?.usageStopped !== undefined) { firstFailure = { taskId, cause: "usage-stopped", next: `orca task retry ${groupId} ${taskId} --as-person` }; break; }
-    if (work?.status === "blocked" && waiting?.groupCapStop !== undefined) { firstFailure = { taskId, cause: "group-cap-reached", next: `orca group set-limit ${groupId} --limit <a higher limit>` }; break; }
+    if (work?.status === "blocked" && waiting?.groupCapStop !== undefined) { firstFailure = { taskId, cause: "group-cap-reached", next: `orca group set-limit ${groupId} --limit <a higher limit>${orAccept}` }; break; }
     // Stuck-runs spec 2026-11-17 S4: a task held behind a run a handoff stopped, once the stop is lifted, is the person's;
     // it names the command that moves it (recovery list's heldTasks row has both).
     const heldRow = typeof runId === "string" ? snapshot.runById.get(runId) : undefined;
@@ -1427,6 +1437,8 @@ function budgetStateView(store: ControlStore, groupId: string, body: Record<stri
     // Tester #432: whether any task of the group is claimable now (the driver's own test), beside a stop only -- the stop's
     // "continue the group's ready tasks" exit is named only when there is one.
     ...(body.usageStopped === undefined ? {} : { groupHasClaimableTask: nextClaimableTask(store, groupId) !== null }),
+    // #478 §5.4: beside a wait after a live-ceiling stop, the stopped run and every way on (usagePause.ts ceilingStopExits).
+    ...(() => { const exits = ceilingStopExits(store, groupId, body); return exits === null ? {} : { ceilingStop: { runId: exits.runId, next: exits.next } }; })(),
   } };
 }
 
@@ -1725,6 +1737,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       // Stuck-runs spec S2: a person's abandon request on this run; omitted when none was made.
       ...(run.abandon === undefined ? {} : { abandon: run.abandon }),
       ...(run.liveCeilingStop === undefined ? {} : { liveCeilingStop: run.liveCeilingStop }),
+      ...(run.ceilingContinuation === undefined ? {} : { ceilingContinuation: run.ceilingContinuation }),
       outcome: run.drive?.outcome ?? null,
       ...settlementPreview(store, run, snapshot),
       continuable: continuableRun(store, run, snapshot),
@@ -2138,9 +2151,10 @@ export function readControlRecovery(store: ControlStore, epoch: string, options:
   const handoffOutbox = options.all === true ? outboxRows : outboxRows.filter((row) => row.delivery !== "finished");
   const finishedHidden = outboxRows.length - handoffOutbox.length;
   const heldTasks = heldTaskRows(store);
+  const ceilingStops = ceilingStopRows(store);
   const unresolvedRuns = unresolvedRunRows(store);
   const integrationBlocked = integrationBlockedRows(store);
-  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }), ...(capBlocked.length === 0 ? {} : { capBlocked }), ...(handoffOutbox.length === 0 ? {} : { handoffOutbox }), ...(finishedHidden === 0 ? {} : { finishedHidden }), ...(heldTasks.length === 0 ? {} : { heldTasks }), ...(unresolvedRuns.length === 0 ? {} : { unresolvedRuns }), ...(integrationBlocked.length === 0 ? {} : { integrationBlocked }) };
+  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }), ...(capBlocked.length === 0 ? {} : { capBlocked }), ...(handoffOutbox.length === 0 ? {} : { handoffOutbox }), ...(finishedHidden === 0 ? {} : { finishedHidden }), ...(heldTasks.length === 0 ? {} : { heldTasks }), ...(ceilingStops.length === 0 ? {} : { ceilingStops }), ...(unresolvedRuns.length === 0 ? {} : { unresolvedRuns }), ...(integrationBlocked.length === 0 ? {} : { integrationBlocked }) };
   const parsed = recoveryViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`recovery-view:${parsed.error.issues[0]?.message ?? "invalid"}`);
   return parsed.data;
@@ -2262,6 +2276,24 @@ export function heldTaskOf(groupId: string, taskId: string, run: { state?: unkno
   if (active !== 0 || run.state !== "settled-recoverable") return null;
   const continuable = run.recoverable === true && typeof run.checkpointId === "string";
   return { continuable, next: [...(continuable ? [`orca task continue ${groupId} ${taskId}`] : []), `orca task retry ${groupId} ${taskId}`] };
+}
+
+/**
+ * #478 §5.4: every task waiting after a live-ceiling stop -- at the group cap or at its pause line -- with every way on
+ * (usagePause.ts ceilingStopExits), outside an archived group. Such a run is settled, so no other row of the list names it.
+ */
+function ceilingStopRows(store: ControlStore): Array<{ groupId: string; taskId: string; runId: string; cause: "group" | "pause-line"; next: string[] }> {
+  const out: Array<{ groupId: string; taskId: string; runId: string; cause: "group" | "pause-line"; next: string[] }> = [];
+  const rows = store.db.prepare("SELECT group_id,id,body FROM work_items WHERE json_valid(body) AND json_extract(body,'$.status')='blocked' AND (json_extract(body,'$.groupCapStop') IS NOT NULL OR json_extract(body,'$.usagePause') IS NOT NULL) ORDER BY group_id,id").all();
+  for (const row of rows) {
+    const groupId = String(row.group_id);
+    const group = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
+    if (group === undefined || archivedMarkOf(JSON.parse(String(group.body))) !== null) continue;
+    const work = parseJson(row.body, `work-invalid:${String(row.id)}`) as Record<string, unknown>;
+    const exits = ceilingStopExits(store, groupId, work);
+    if (exits !== null) out.push({ groupId, taskId: String(work.taskId), ...exits });
+  }
+  return out;
 }
 
 function heldTaskRows(store: ControlStore): Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }> {

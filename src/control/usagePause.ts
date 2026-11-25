@@ -99,6 +99,31 @@ export function ceilingStopWait(store: ControlStore, groupId: string, run: { run
 }
 
 /**
+ * #478 (spec 2026-11-25-ceiling-stop-keeps-work-design.md §5.4): every way on for a task waiting after a live-ceiling stop
+ * -- the wait's own (a top-up for the group cap, as ceilingStopWait names it; continue for the pause line) and taking what
+ * the stopped run already made (`task accept-attempt`, which admits that run: acceptAttempt.ts `ceiling`). The task must
+ * wait on its current run, settled-recoverable and exhausted at a live ceiling. Null otherwise. Shared by group show
+ * (budgetState), group brief (firstFailure.next) and recovery list (ceilingStops).
+ */
+export function ceilingStopExits(store: ControlStore, groupId: string, work: Record<string, unknown>): { runId: string; cause: "group" | "pause-line"; next: string[] } | null {
+  if (work.status !== "blocked" || typeof work.taskId !== "string") return null;
+  const cap = work.groupCapStop as { runId?: unknown; observedTokens?: number } | undefined, pause = work.usagePause as { runId?: unknown } | undefined;
+  const runId = typeof cap?.runId === "string" ? cap.runId : typeof pause?.runId === "string" ? pause.runId : null;
+  if (runId === null || work.currentRunId !== runId) return null;
+  const row = store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);
+  if (row === undefined) return null;
+  const run = JSON.parse(String(row.body)) as { state?: unknown; liveCeilingStop?: unknown; drive?: { outcome?: unknown } };
+  if (run.state !== "settled-recoverable" || run.drive?.outcome !== "exhausted" || run.liveCeilingStop === undefined) return null;
+  const taskId = work.taskId, limit = (readGroup(store, groupId).limit as { tokens: number | null }).tokens;
+  const accept = `orca task accept-attempt ${groupId} ${taskId} --run ${runId} --note '<why the attempt is enough>'`;
+  if (cap !== undefined) {
+    const raise = limit === null ? `orca group set-limit ${groupId} --limit <a higher limit> --as-person` : `orca group set-limit ${groupId} --limit ${limit + Math.max(1, cap.observedTokens ?? 0)} --as-person`;
+    return { runId, cause: "group", next: [raise, accept] };
+  }
+  return { runId, cause: "pause-line", next: [`orca task decide-usage ${groupId} ${taskId} --decision continue`, accept] };
+}
+
+/**
  * The pause line a task continues under (spec §2.5): the next multiple, and at least the first one above what the task
  * used, capped by half the group's remainder (pauseLineFor). Refused usage-pause-no-headroom when the task has no
  * expectation and usage-pause-group-headroom (naming set-limit) when the group has too little left. Shared by continue

@@ -6,6 +6,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { ControlError } from "../../../src/control/errors.js";
+import { canonicalBytes } from "../../../src/control/canonicalJson.js";
 import type { ExecutionPort, ExecutionReport, StartEnvelope } from "../../../src/control/executionPort.js";
 import type { ArtifactRef, Candidate, HandoffRequest, UsageEvent } from "../../../src/control/types.js";
 import type { CapabilityViewV1 } from "../../../src/control/webProtocol.js";
@@ -82,6 +83,14 @@ export function fakeCcloopPort(input: {
   liveCeilingStop?: (workItemId: string, envelope: StartEnvelope) => ExecutionReport["liveCeilingStop"];
   /** Tester follow-up I (seat L): the evidence a terminal candidate names missing (ccloop's `missing`), e.g. a run stopped mid-execute. */
   candidateMissing?: (workItemId: string) => string[];
+  /**
+   * #478 (Orca spec 2026-11-25-ceiling-stop-keeps-work-design.md §5.1; ccloop handoff.ts buildHandoffPacket): a terminal
+   * that also reports `liveCeilingStop` carries ccloop's continuation of a resumable stop in its handoff packet --
+   * `allowanceContinuation {nextPhase, plan, execution, verification, state, usage}`, `acceptedContract`, `contractHash`,
+   * `tokenPolicy` -- with the saved state ccloop's reader takes (no waitingCause, `exhausted`, the stop, the real token
+   * remainder). `savedStop` replaces the saved state's stop (a forged continuation). Undefined = no continuation.
+   */
+  ceilingContinuation?: (workItemId: string, envelope: StartEnvelope) => { nextPhase: "plan" | "execute" | "verify"; currentAttempt?: number; attemptsRemaining?: number; savedStop?: unknown } | undefined;
   /**
    * Change-sized runs spec 2026-11-19 §11.1 "fixture change, not a criterion" (P2): advertise features.attemptRef "v1", as
    * ccloop P1 does. A run whose envelope then carries work.attemptDelivery gets ccloop P1's shape: the attempt committed in a
@@ -180,6 +189,27 @@ export function fakeCcloopPort(input: {
     // identity/usageHighWater check against the committed candidate) actually accepts -- the driver's
     // `stepE` carries this bytes-for-bytes into the committed candidate's own `handoff` field.
     const usageHighWater = variant === "stoppable-handoff-usage-unknown" || variant === "failed-after-observed-usage-unknown" ? 3 : 2;
+    const ceilingStop = stop.terminal ? input.liveCeilingStop?.(claim.workItemId, envelope) : undefined;
+    const resumable = ceilingStop === undefined ? undefined : input.ceilingContinuation?.(claim.workItemId, envelope);
+    let continuation: Record<string, unknown> = {};
+    const continuationRefs: ArtifactRef[] = [];
+    if (resumable !== undefined && ceilingStop !== undefined) {
+      const attempt = resumable.currentAttempt ?? 1;
+      const workUsage = events[0]!.cumulative!;
+      const saved = { status: "exhausted", currentAttempt: attempt, attemptsUsed: attempt, lastTransitionAt: "2026-11-25T00:00:00.000Z",
+        budgetSnapshot: { attemptsRemaining: resumable.attemptsRemaining ?? 0, timeRemainingMs: 60_000, tokenBudgetRemaining: null, tokenRemainingStatus: "unlimited" },
+        recentFailures: [], allowanceNextPhase: resumable.nextPhase, liveCeilingStop: resumable.savedStop ?? ceilingStop };
+      const ref = (name: string, value: unknown): ArtifactRef => { const r = put(`${name}-${claim.runId}`, Buffer.from(JSON.stringify(value))); continuationRefs.push(r); return r; };
+      const acceptedContract = put(`accepted-contract-${claim.runId}`, canonicalBytes(work.contract));
+      continuationRefs.push(acceptedContract);
+      const state = ref("saved-state", saved);
+      const usage = ref("allowance-usage", { protocol: 1, nextSeq: usageHighWater, events: [events[0]], totals: { work: workUsage } });
+      const plan = resumable.nextPhase === "plan" ? null : ref("plan", { summary: "the paid plan" });
+      const execution = resumable.nextPhase === "verify" ? ref("execution", { changedFiles: Object.keys(input.files(claim.workItemId)) }) : null;
+      const verification = resumable.nextPhase === "plan" && attempt > 1 ? ref("verify", { approved: false }) : null;
+      continuation = { runState: saved, contractHash: envelope.contractHash, acceptedContract, tokenPolicy: envelope.tokenPolicy,
+        allowanceContinuation: { nextPhase: resumable.nextPhase, plan, execution, verification, state, usage } };
+    }
     const handoffPacket = {
       protocol: 1 as const,
       identity: {
@@ -189,12 +219,13 @@ export function fakeCcloopPort(input: {
       request: stop.request, runState: { status: stop.terminal ? outcome : "executing" },
       completed: [] as string[], unfinished: [] as string[], pendingDecisions: [] as string[],
       awaitingHuman: [] as string[], validationCommands: [] as string[], rawLogs: [] as unknown[],
-      usageHighWater, unresolvedRequestIds, artifacts: [] as unknown[],
+      usageHighWater, unresolvedRequestIds, artifacts: continuationRefs as unknown[],
+      ...continuation,
     };
     const candidate: Candidate = {
       groupId: claim.groupId, workItemId: claim.workItemId, taskId: claim.taskId, runId: claim.runId, generation: claim.generation,
       graphVersion: claim.graphVersion, targetVersion: claim.targetVersion, checkpointId: `candidate-${claim.runId}`, usageHighWater,
-      result: outcome === "succeeded" ? "complete" : "partial", artifacts: [], snapshot: null, missing: variant === "stoppable-missing" ? ["evidence-lost"] : stop.terminal ? input.candidateMissing?.(claim.workItemId) ?? [] : [], unresolvedRequestIds,
+      result: outcome === "succeeded" ? "complete" : "partial", artifacts: [...continuationRefs], snapshot: null, missing: variant === "stoppable-missing" ? ["evidence-lost"] : stop.terminal ? input.candidateMissing?.(claim.workItemId) ?? [] : [], unresolvedRequestIds,
       stopProof: { executionId, generation: claim.generation, isolated: true, source: stopSource(claim.runId, executionId, claim.generation) },
       terminalOutcome: stop.terminal ? outcome : "executing", handoff: put(`handoff-${claim.runId}`, Buffer.from(JSON.stringify(handoffPacket))),
     };
@@ -204,7 +235,7 @@ export function fakeCcloopPort(input: {
     const budgetSnapshot = stop.terminal ? input.budgetSnapshot?.(claim.workItemId) : undefined;
     const toolRules = input.toolRules?.(claim.workItemId);
     const pathPolicyMisses = stop.terminal ? input.pathPolicyMisses?.(claim.workItemId) : undefined;
-    const liveCeilingStop = stop.terminal ? input.liveCeilingStop?.(claim.workItemId, envelope) : undefined;
+    const liveCeilingStop = ceilingStop;
     // Memory in runs spec §3: the echo ccloop answers when the envelope carried `work.memory` (the dispatch proof).
     const memory = work.memory === undefined ? undefined : { sha256: work.memory.sha256, ids: work.memory.ids, tokens: work.memory.tokens };
     return { events, candidate, ...(attempt === undefined ? {} : { attempt }), ...(dirs === undefined ? {} : { dirs }), ...(memory === undefined ? {} : { memory }), terminal: stop.terminal ? { outcome, attemptSha: null, sourceDir: work.sourceDir, repoDir: keyed ? null : repo, ...(stopReason === null ? {} : { stopReason }), ...(failure ?? {}), ...(budgetSnapshot === undefined ? {} : { budgetSnapshot }) } : null, ...(decisions === undefined ? {} : { decisions }), ...(debug === undefined ? {} : { debug }), ...(toolRules === undefined ? {} : { toolRules }), ...(pathPolicyMisses === undefined ? {} : { pathPolicyMisses }), ...(liveCeilingStop === undefined ? {} : { liveCeilingStop }) };

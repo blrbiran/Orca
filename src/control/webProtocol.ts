@@ -2130,6 +2130,9 @@ export const workItemViewSchema = z
       groupCapStop: z.object({ runId: idSchema, at: safeInteger, observedTokens: safeInteger }).strict().nullable(),
       // Tester #432: beside a stop only, whether any task of the group is claimable now; absent otherwise.
       groupHasClaimableTask: z.boolean().optional(),
+      // #478 §5.4: beside a wait after a live-ceiling stop, the stopped run and every way on -- the wait's own command, then
+      // `task accept-attempt` on that run (usagePause.ts ceilingStopExits). Absent otherwise.
+      ceilingStop: z.object({ runId: idSchema, next: z.array(nonemptyString).min(1) }).strict().optional(),
     }).strict().optional(),
     // Tester #348: this task's runs whose stored body the run read schema does not decode, and why (the group's other
     // tasks read and act as before). Absent when every run of the task reads.
@@ -2299,6 +2302,9 @@ export const runViewSchema = z
     liveCeiling: z.object({ revision: positiveSafeInteger, tokens: safeInteger, cause: z.enum(["group", "pause-line", "task-cap"]), deliveredRevision: safeInteger }).strict().optional(),
     liveCeilingStop: z.object({ revision: positiveSafeInteger, tokens: safeInteger, cause: z.enum(["group", "pause-line", "task-cap"]), observedTokens: safeInteger,
       phase: z.enum(["plan", "execute", "verify"]), at: z.enum(["mid-call", "boundary"]) }).strict().optional(),
+    // #478 §5.2: a ceiling stop whose checkpoint carries ccloop's continuation -- the phase its next run resumes at, and
+    // whether that run continues the stopped attempt. Absent on any other run.
+    ceilingContinuation: z.object({ nextPhase: z.enum(["plan", "execute", "verify"]), resumesAttempt: z.boolean() }).strict().optional(),
     // Tester follow-up E §4 (#245): what the clean-merge landing's post-merge check did (driveRecord.ts postMergeCheckRecordSchema);
     // omitted for a run that did not land through it and for a record written before the field.
     postMergeCheck: z.object({
@@ -2655,6 +2661,8 @@ export const recoveryViewSchema = z
     capBlocked: z.array(z.object({ groupId: idSchema, scope: nonemptyString, period: nonemptyString, capTokens: z.number().int().nonnegative(), grantTokens: z.number().int().nonnegative().nullable(), next: nonemptyString }).strict()).optional(),
     // Stuck-runs spec 2026-11-17 S4: a task held behind a run a handoff stopped, outside any stop, with the commands that move it. Absent when none.
     heldTasks: z.array(z.object({ groupId: idSchema, taskId: idSchema, runId: idSchema, continuable: z.boolean(), next: z.array(nonemptyString).min(1) }).strict()).optional(),
+    // #478 §5.4: a task waiting after a live-ceiling stop (group cap or pause line), with every way on. Absent when none.
+    ceilingStops: z.array(z.object({ groupId: idSchema, taskId: idSchema, runId: idSchema, cause: z.enum(["group", "pause-line"]), next: z.array(nonemptyString).min(1) }).strict()).optional(),
     // Stuck-runs spec 2026-11-17 S4 (third bullet): a run a stop could not end -- its handoff request's outcome is unknown
     // (handoff-unresolved) or ccloop did not stop it within the grace after an abandon (abandon-unresolved) -- still active.
     unresolvedRuns: z.array(z.object({ groupId: idSchema, taskId: idSchema, runId: idSchema, code: z.enum(["handoff-unresolved", "abandon-unresolved"]), next: z.array(nonemptyString).min(1) }).strict()).optional(),

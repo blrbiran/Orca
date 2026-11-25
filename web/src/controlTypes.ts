@@ -454,6 +454,8 @@ export type WorkItemViewV1 = {
     groupCapStop: { runId: string; at: number; observedTokens: number } | null;
     /** Tester #432: beside a stop only, whether any task of the group is claimable now. */
     groupHasClaimableTask?: boolean;
+    /** #478: beside a wait after a live-ceiling stop, the stopped run and every way on (accept-attempt last). */
+    ceilingStop?: { runId: string; next: string[] };
   };
   /** Tester #348: this task's runs the server could not decode, and why; absent when every one reads. */
   unreadableRuns?: Array<{ runId: string; reason: string }>;
@@ -560,6 +562,8 @@ export type RunViewV1 = {
   /** Tester #290 (follow-up J): the run's live token ceiling and the stop at it; absent on a run without them. */
   liveCeiling?: { revision: number; tokens: number; cause: "group" | "pause-line" | "task-cap"; deliveredRevision: number };
   liveCeilingStop?: { revision: number; tokens: number; cause: "group" | "pause-line" | "task-cap"; observedTokens: number; phase: "plan" | "execute" | "verify"; at: "mid-call" | "boundary" };
+  /** #478: the phase a resumable ceiling stop's next run resumes at, and whether it continues the stopped attempt. */
+  ceilingContinuation?: { nextPhase: "plan" | "execute" | "verify"; resumesAttempt: boolean };
   /** Feedback #59: creation position in the group (1-based); `runs` stays in id order. Optional so literal fixtures need no edit; the server always sends it. */
   createdOrdinal?: number;
   /** Debug task plan Task 13: a debug run's reproduce-first check, in progress or skipped with the agent's reason. */
@@ -749,6 +753,8 @@ export type RecoveryViewV1 = {
   blockedCalls?: Array<{ groupId: string; runId: string; purpose: string; blockedAt: string; reason: string | null; next: string }>;
   /** Stuck-runs spec 2026-11-17 S4: a task held behind a run a handoff stopped, with the commands that move it. */
   heldTasks?: Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }>;
+  /** #478: a task waiting after a live-ceiling stop, with every way on. */
+  ceilingStops?: Array<{ groupId: string; taskId: string; runId: string; cause: "group" | "pause-line"; next: string[] }>;
   /** Stuck-runs spec 2026-11-17 S4: a run a stop could not end, still running, with the commands that move it. */
   unresolvedRuns?: Array<{ groupId: string; taskId: string; runId: string; code: "handoff-unresolved" | "abandon-unresolved"; next: string[] }>;
   /** Tester follow-up K: a group a spend cap stopped, with the command that raises the cap. */

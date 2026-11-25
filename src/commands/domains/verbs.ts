@@ -192,7 +192,7 @@ export function expectationLines(source: { workItems?: Array<{ taskId: string; l
   });
 }
 
-type BudgetState = { hardCapTokens: number | null; usagePause: { usedTokens: number; expectationTokens: number | null; line: number; restartsFresh?: true } | null; usageStopped: { principal: string } | null; groupCapStop: { observedTokens: number } | null; groupHasClaimableTask?: boolean };
+type BudgetState = { hardCapTokens: number | null; usagePause: { usedTokens: number; expectationTokens: number | null; line: number; restartsFresh?: true } | null; usageStopped: { principal: string } | null; groupCapStop: { observedTokens: number } | null; groupHasClaimableTask?: boolean; ceilingStop?: { runId: string; next: string[] } };
 /**
  * Tester follow-up G spec §2.3-§2.5 (plan O6): what waits on a person or an orchestrating agent in an expectation-model
  * group, with the command that answers it; a hard cap is named so the operator knows the task has no pause line.
@@ -212,6 +212,9 @@ export function budgetStateLines(groupId: string, source: { workItems?: Array<{ 
     }
     if (s.groupCapStop !== null) lines.push(`task ${item.taskId}: group cap reached (the group has used its token limit; this run used ${s.groupCapStop.observedTokens})`,
       `  next: orca group set-limit ${groupId} --limit '{"tokens":<higher>,...}'  (the task continues with its work; a codex task's ceiling is checked only after a whole phase ends, so a single execute can go past the cap)`);
+    // #478 §5.4: a wait after a live-ceiling stop can also end by taking what the stopped run already made.
+    const accept = s.ceilingStop?.next.find((command) => command.startsWith("orca task accept-attempt "));
+    if (accept !== undefined) lines.push(`  or: ${accept}  (lands the stopped run's attempt after Orca re-runs the task's checks on it; no more tokens)`);
     // Tester #432: a stopped task said only why it stopped. A person read `state: running` with 0 runs and no way out;
     // the two supported exits are a retry (a fresh claim) or continuing the group's other ready work.
     // Tester #432 (follow-up): the second exit only when the view says a task is claimable now -- when every other task

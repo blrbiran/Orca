@@ -117,8 +117,10 @@ describe("continue at the pause line when the stopped run has no complete checkp
       expect(USAGE_PAUSE_FRESH_START).toMatch(/from scratch/);
       expect(USAGE_PAUSE_FRESH_START).toMatch(/discard/);
       // The board card's next step.
+      // Ruling (#478, session 5d3d0c09): a wait after a live-ceiling stop also names taking the stopped run's attempt
+      // (spec 2026-11-25-ceiling-stop-keeps-work-design.md §5.4); this paused run is one, so its next step names both.
       expect(readGroupSummary(t.h.store, "g").card!.firstFailure).toEqual({ taskId: "a", cause: "usage-paused",
-        next: "orca task decide-usage g a --decision continue|stop", note: USAGE_PAUSE_FRESH_START });
+        next: `orca task decide-usage g a --decision continue|stop  or  orca task accept-attempt g a --run ${first} --note '<why the attempt is enough>'`, note: USAGE_PAUSE_FRESH_START });
       // The CLI's next-step lines (group show) from the group view.
       const lines = budgetStateLines("g", readControlGroup(t.h.store, "epoch", "g") as never);
       expect(lines.join("\n")).toContain(USAGE_PAUSE_FRESH_START);

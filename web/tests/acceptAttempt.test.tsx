@@ -150,3 +150,20 @@ describe("what the accept form shows from the server's review (#227 residual)", 
     expect(within(form).getByRole("note").textContent).toContain("no-required-checks");
   });
 });
+
+// #478 §5.4 (spec 2026-11-25-ceiling-stop-keeps-work-design.md): a run stopped at its live ceiling is settled recoverable
+// (exhausted) and the server admits it (acceptAttempt.ts `ceiling`); the card offers taking its attempt beside the wait's
+// own way on, whether the task waits on it (blocked) or is ready to continue it.
+// mutation: drop the `ceilingStop` clause of `offered` -> both cases not offered, red
+describe("accept the attempt of a run stopped at its live ceiling (#478)", () => {
+  const STOP = { revision: 1, tokens: 3_000_000, cause: "group" as const, observedTokens: 2_900_000, phase: "execute" as const, at: "mid-call" as const };
+  it.each([["waiting at the cap", "blocked"], ["ready to continue", "ready"]] as const)("an owner is offered it while the task is %s", (_name, status) => {
+    const { task } = show(["owner"], run({ state: "settled-recoverable", outcome: "exhausted", terminalClosed: true, endedAt: 2000, liveCeilingStop: STOP }), blockedOn({ status }));
+    expect(within(task).getByRole("button", { name: OPEN })).toBeTruthy();
+  });
+  it("not for a settled-recoverable run with no ceiling stop (a park), nor once the task is done", () => {
+    expect(within(show(["owner"], run({ state: "settled-recoverable", outcome: "exhausted", terminalClosed: true, endedAt: 2000 }), blockedOn()).task).queryByRole("button", { name: OPEN })).toBeNull();
+    cleanup();
+    expect(within(show(["owner"], run({ state: "settled-recoverable", outcome: "exhausted", terminalClosed: true, endedAt: 2000, liveCeilingStop: STOP }), blockedOn({ status: "completed" })).task).queryByRole("button", { name: OPEN })).toBeNull();
+  });
+});

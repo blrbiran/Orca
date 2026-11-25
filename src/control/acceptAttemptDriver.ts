@@ -17,7 +17,7 @@ import {
   type DriverContext, type DriverRun, type ExecutionDriverDeps,
 } from "./executionDriver.js";
 import { insertPendingDecisions } from "./pendingDecisions.js";
-import { groupHasReconcilingRun, readWork } from "./queries.js";
+import { groupHasReconcilingRun, readWork, saveWork } from "./queries.js";
 import { reportedDecisionsOf } from "./reportedDecisions.js";
 import { ccloopEvidenceString, runEvidence, writeRunLedger, type PendingEntry } from "./runLedger.js";
 import { snapshotSchema } from "./snapshot.js";
@@ -323,6 +323,15 @@ function refuse(deps: ExecutionDriverDeps, runId: string, reason: string, failur
     const current = readDriverRun(store, runId), live = operatorAcceptanceOf(current);
     if (live?.state !== "pending") return null;
     current.operatorAcceptance = { ...live, state: "refused", reason, failure, staged: null };
+    // #478 §5.3: a refused acceptance of a live-ceiling stop gives the run back as it was -- settled-recoverable, its
+    // continuation intact -- and its task the status (ready, or blocked on its wait) it had before the command.
+    const restore = live.ceilingRestore;
+    if (restore !== undefined && current.state === "settled-failed" && (current as { operatorSettlement?: { kind?: string } }).operatorSettlement?.kind === "completed-attempt") {
+      current.state = "settled-recoverable";
+      delete (current as { operatorSettlement?: unknown }).operatorSettlement;
+      const work = readWork(store, current.groupId, current.workItemId) as unknown as { status: string; currentRunId?: string | null };
+      if (work.currentRunId === runId && work.status === "blocked") { work.status = restore.workStatus; saveWork(store, current.groupId, work as never); }
+    }
     saveDriverRun(store, current);
     recordActivity(store, { groupId: current.groupId, taskId: current.taskId, runId, kind: "attempt-accept-refused", body: { commandId: live.commandId, reason, ...(failure === null ? {} : { exit: failure.exit }) } });
     return current;
