@@ -78,6 +78,24 @@ describe("a criteria-review judge that cannot conclude is terminal for the paren
     } finally { await w.done(); }
   });
 
+  it("a failed judge on a passed parent review is advisory, with the debug group's next", async () => {
+    const w = await world();
+    try {
+      insertGroup(w.h, "sysdebug-criteria-review-aaaa", { status: "running", systemDebug: mark("a", null) });
+      insertWork(w.h, "sysdebug-criteria-review-aaaa", "debug", {
+        status: "blocked", groupCapStop: { runId: "run-debug", at: 1, observedTokens: 209_130 }, currentRunId: "run-debug",
+      });
+      const body = JSON.parse(String(w.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as Record<string, unknown>;
+      w.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...body, requirementReview: { state: "passed", autoFixRounds: 0, rounds: [] } }));
+      const brief = await w.brief();
+      expect(brief.requirementReview).toMatchObject({ state: "passed" });
+      // mutation: drop the advisory sentence -> the line is a bare failure beside `review: passed`, red
+      expect(criteriaReviewLines(brief.criteriaReviews as never, (brief.requirementReview as { state?: string } | undefined)?.state === "passed")).toEqual([
+        "criteria-review a: failed (group-cap-reached) — sysdebug-criteria-review-aaaa; the requirement review passed, so this criteria review is advisory and does not affect the main group; next: orca group set-limit sysdebug-criteria-review-aaaa --limit <tokens>; orca group show sysdebug-criteria-review-aaaa",
+      ]);
+    } finally { await w.done(); }
+  });
+
   it("a settled judge keeps its verdict", async () => {
     const w = await world();
     try {

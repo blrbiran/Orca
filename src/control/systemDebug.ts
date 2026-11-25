@@ -36,8 +36,10 @@ export const SYSTEM_DEBUG_TARGET_PATH = "**";
  * Tester #174: a criteria-review judge inherits the flagged task's execution policy, so a task with no authored token
  * ceiling gave the judge an unlimited group -- a hidden, unbounded spend. A judge opened over such a contract gets this
  * finite work grant (and group limit) instead. A contract that states a budget keeps it unchanged.
+ * Tester #419/#485: the built-in default was 200_000, below one measured codex turn (200k-238k), so the judge died at its
+ * group cap without an answer. It is 500_000 now; the orchestration setting `criteriaReviewTokens` still overrides it.
  */
-export const CRITERIA_REVIEW_TOKEN_BUDGET = 200_000;
+export const CRITERIA_REVIEW_TOKEN_BUDGET = 500_000;
 /**
  * The judge's explicit grant when the source contract has no token ceiling; null when its own budget stands. `budget`: the
  * orchestration setting `criteriaReviewTokens` (#174), the built-in default when it was never set.
@@ -251,7 +253,10 @@ export function applySystemDebugOpen(deps: SystemDebugOpenDeps, command: SystemD
         source, stackOn, inputHash, settled: null,
         ...(review === undefined ? {} : { openedAt: deps.store.now(), review: { inputDir: review.inputDir, inputSha256: review.inputSha256, groups: [...review.groups], budgetTokens: review.budgetTokens } }),
       };
-      deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...body, systemDebug: mark }), groupId);
+      deps.store.db.prepare("UPDATE groups SET body=? WHERE id=?").run(JSON.stringify({ ...body, systemDebug: mark,
+        // Tester #419/#485: the effective cap of a criteria-review judge whose source task has no token ceiling, so
+        // `group show` can read it (the ledger limit carries it too, but a reader should not have to infer the rule).
+        ...(criteriaTokens === null ? {} : { criteriaReviewBudget: criteriaTokens }) }), groupId);
       deps.beforeCommit?.();
       return success(context, groupId, true);
     },

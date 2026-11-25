@@ -687,8 +687,10 @@ export const READ_ROWS: CommandDef[] = [
         ...(typeof groupId === "string" ? acceptanceLines(groupId, acceptance) : []),
         // Tester #359: a review that did not pass, with what answers it, as group show prints it.
         ...(typeof groupId === "string" ? reviewLines(groupId, field(body, "requirementReview") as Parameters<typeof reviewLines>[1]) : []),
-        // Tester #419: a criteria-review judge that failed or is blocked at its cap, with the next step.
-        ...criteriaReviewLines(field(body, "criteriaReviews") as Parameters<typeof criteriaReviewLines>[0]),
+        // Tester #419: a criteria-review judge that failed or is blocked at its cap, with the next step; #419/#485: advisory
+        // beside a passed requirement review.
+        ...criteriaReviewLines(field(body, "criteriaReviews") as Parameters<typeof criteriaReviewLines>[0],
+          (field(body, "requirementReview") as { state?: string } | undefined)?.state === "passed"),
         // Tester #321 part C: each task costing a multiple of the group median, or running long, in words.
         ...costs.map(taskCostLine),
         // Tester #348 review: each run the read schema cannot decode, with its task.

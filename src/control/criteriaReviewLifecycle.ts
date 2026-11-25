@@ -1,7 +1,10 @@
 import { recordActivity } from "./activity.js";
 import { terminalKindOf } from "./archivedMark.js";
 import { updateRevision } from "./commandLedger.js";
-import { criteriaReviewVerdict } from "./criteriaReview.js";
+import { criteriaDecisionIdOf, criteriaReviewVerdict } from "./criteriaReview.js";
+import { ControlError } from "./errors.js";
+import { ratifyFlag } from "./flaggedDecisions.js";
+import { ORCHESTRATION_ACTOR } from "./orchestration.js";
 import { inProjectionTransaction } from "./projectionJournal.js";
 import { anyTaskFailed, readSystemDebugMark } from "./systemDebug.js";
 import { readStopIntent, saveStopIntent } from "./stopIntent.js";
@@ -64,7 +67,7 @@ export function parentGroupTerminal(store: ControlStore, parentGroupId: string):
 }
 
 /** Every criteria-review judge whose mark names `parentGroupId`, in creation order. */
-function derivedJudges(store: ControlStore, parentGroupId: string | undefined): Array<GroupRow & { parentId: string; settled: boolean }> {
+function derivedJudges(store: ControlStore, parentGroupId: string | undefined): Array<GroupRow & { parentId: string; sourceRunId: string | null; settled: boolean }> {
   return store.db.prepare("SELECT id, revision, body FROM groups WHERE id LIKE 'sysdebug-criteria-review-%' ORDER BY rowid").all()
     .flatMap((row) => {
       const body = parseBody(row.body);
@@ -73,13 +76,36 @@ function derivedJudges(store: ControlStore, parentGroupId: string | undefined): 
       try { mark = readSystemDebugMark(body); } catch { return []; }
       if (mark === null || mark.source.kind !== "criteria-review" || typeof mark.source.groupId !== "string") return [];
       if (parentGroupId !== undefined && mark.source.groupId !== parentGroupId) return [];
-      return [{ id: String(row.id), revision: Number(row.revision), body, parentId: mark.source.groupId, settled: mark.settled !== null }];
+      return [{ id: String(row.id), revision: Number(row.revision), body, parentId: mark.source.groupId, sourceRunId: mark.source.runId, settled: mark.settled !== null }];
     });
 }
 
+/**
+ * Tester #419/#485: the judge could not conclude, so the flag it was opened for would stay `flagged` on the parent after
+ * the parent ended and count in `card.pendingDecisions` forever. Ratify it as Orca's own convergence, with the note that
+ * records why; a flag a verdict already cleared (or a person ratified) is left as it is.
+ */
+function convergeFlag(store: ControlStore, row: GroupRow & { parentId: string; sourceRunId: string | null }, options: DerivedConvergenceOptions): string | null {
+  if (row.sourceRunId === null) return null;
+  const decisionId = criteriaDecisionIdOf({ kind: "criteria-review", groupId: row.parentId, taskId: null, runId: row.sourceRunId });
+  try {
+    ratifyFlag(store, row.parentId, decisionId, {
+      actorId: ORCHESTRATION_ACTOR, via: "criteria-review", commandId: `orca-auto-criteria-review-converge-${row.id}`,
+      at: new Date(options.at ?? store.now()).toISOString(),
+      note: "the criteria-review judge was archived when its parent group ended, so its verdict cannot change the parent",
+    });
+    return decisionId;
+  } catch (error) {
+    if (error instanceof ControlError) return null; // already ratified, or no such flag: nothing to converge.
+    throw error;
+  }
+}
+
 /** The archive/terminal mark of one judge: the record stays, the body only says it is archived. */
-function archiveJudge(store: ControlStore, row: GroupRow & { parentId: string }, options: DerivedConvergenceOptions): void {
+function archiveJudge(store: ControlStore, row: GroupRow & { parentId: string; sourceRunId: string | null }, options: DerivedConvergenceOptions): void {
   const at = options.at ?? store.now();
+  // Tester #419/#485: the flag the judge was opened for cannot be concluded by it now; converge it with the archive.
+  const decisionId = convergeFlag(store, row, options);
   const body: Record<string, unknown> = {
     ...row.body,
     archived: { at, actor: options.actor },
@@ -90,7 +116,8 @@ function archiveJudge(store: ControlStore, row: GroupRow & { parentId: string },
   // Issue-fixes spec §6.3 / tester #370: as applyArchiveGroup does, retired start-family wakes stay for audit but are
   // delivered, so `recovery list` reports no deferred start for a group archived here.
   store.db.prepare("UPDATE scheduler_wakes SET delivered=1 WHERE group_id=? AND delivered=0 AND kind IN ('start','no-start','resume','continuation')").run(row.id);
-  recordActivity(store, { groupId: row.id, kind: "archived", body: { reason: DERIVED_PARENT_TERMINAL, parentGroupId: row.parentId } });
+  recordActivity(store, { groupId: row.id, kind: "archived", body: { reason: DERIVED_PARENT_TERMINAL, parentGroupId: row.parentId,
+    ...(decisionId === null ? {} : { decisionId }) } });
   updateRevision(store, row.id, row.revision + 1);
 }
 

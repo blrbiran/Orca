@@ -480,16 +480,19 @@ export interface CriteriaReviewView { taskId: string; debugGroupId: string; stat
 /**
  * Tester #419: a judge that will not conclude (failed, or blocked at its group cap) is named on the group whose task was
  * flagged, with what unblocks it -- the parent used to read `debugging` forever with no next step.
+ * Tester #419/#485: when the parent's requirement review passed, the line says the criteria review is advisory (it cannot
+ * change the parent), beside the debug group's next, instead of leaving a bare `failed` next to `review: passed`.
  */
-export function criteriaReviewLines(reviews: CriteriaReviewView[] | undefined): string[] {
+export function criteriaReviewLines(reviews: CriteriaReviewView[] | undefined, reviewPassed = false): string[] {
   if (reviews === undefined) return [];
+  const advisory = reviewPassed ? "the requirement review passed, so this criteria review is advisory and does not affect the main group" : null;
   return reviews.filter((review) => review.state === "failed" || review.state === "debugging").map((review) => {
-    if (review.state === "debugging") return `criteria-review ${review.taskId}: debugging (${review.debugGroupId})`;
+    if (review.state === "debugging") return `criteria-review ${review.taskId}: debugging (${review.debugGroupId})${advisory === null ? "" : `; ${advisory}`}`;
     const why = review.reason === null ? "" : ` (${review.reason})`;
     const next = review.reason === "group-cap-reached"
       ? [`orca group set-limit ${review.debugGroupId} --limit <tokens>`, `orca group show ${review.debugGroupId}`]
       : [`orca group show ${review.debugGroupId}`];
-    return `criteria-review ${review.taskId}: ${review.state}${why} — ${review.debugGroupId}; next: ${next.join("; ")}`;
+    return `criteria-review ${review.taskId}: ${review.state}${why} — ${review.debugGroupId}${advisory === null ? "" : `; ${advisory}`}; next: ${next.join("; ")}`;
   });
 }
 
@@ -680,7 +683,10 @@ export function formatWithUnestimated(body: unknown): string {
     ...(typeof groupId === "string" ? workingTreeLines(groupId, b?.summary as KeptSummary | undefined, (b as { integration?: WorkingTreeView } | null)?.integration, (b as { checkoutPath?: unknown } | null)?.checkoutPath) : []),
     ...(typeof groupId === "string" ? reviewLines(groupId, (b?.summary as { requirementReview?: ReviewView } | undefined)?.requirementReview) : []),
     // Tester #419: a criteria-review judge that failed or is blocked at its cap, with the next step.
-    ...criteriaReviewLines((b?.summary as { criteriaReviews?: CriteriaReviewView[] } | undefined)?.criteriaReviews),
+    ...criteriaReviewLines((b?.summary as { criteriaReviews?: CriteriaReviewView[]; requirementReview?: { state?: string } } | undefined)?.criteriaReviews,
+      (b?.summary as { requirementReview?: { state?: string } } | undefined)?.requirementReview?.state === "passed"),
+    // Tester #419/#485: a criteria-review judge's code-defined work cap, so `group show` never hides the bound it died at.
+    ...((budget) => typeof budget === "number" ? [`criteria review budget: ${budget} tokens (the judge's work grant when its source task has no token ceiling; the orchestration setting criteriaReviewTokens overrides it)`] : [])((b?.summary as { systemDebug?: { criteriaReviewBudget?: number } } | undefined)?.systemDebug?.criteriaReviewBudget),
     ...(typeof groupId === "string" ? landingWatchLines(groupId, b?.summary?.landingWatch) : []),
     ...allowanceLines(b?.summary?.allowances),
     ...((h) => h === undefined ? [] : [`named-source history: ${h.state}${h.targetTip ? `, target ${h.targetTip}` : ""}${h.reason ? ` (${h.reason})` : ""}`,

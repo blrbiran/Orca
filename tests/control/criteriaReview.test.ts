@@ -24,8 +24,9 @@ import { driverHarness, git } from "./fixtures/driverHarness.js";
 const TEST = "import { expect, it } from 'vitest';\nit('adds', () => {\n  expect(1 + 1).toBe(2);\n  expect(2 + 2).toBe(4);\n});\n";
 const WEAKENED = TEST.replace("  expect(2 + 2).toBe(4);\n", "");
 
-async function reviewWorld(judge: "justified" | "restored" | "fails") {
-  const t = await driverHarness([{ taskId: "a", targetPaths: ["tests/**", "a"] }], {
+async function reviewWorld(judge: "justified" | "restored" | "fails", options: { workTokens?: (id: string) => number; expectationModel?: boolean } = {}) {
+  const t = await driverHarness([{ taskId: "a", targetPaths: ["tests/**", "a"], ...(options.expectationModel === true ? { tokenBudget: null } : {}) }], {
+    ...(options.expectationModel === true ? { tokenPolicy: "optional-v1" as const } : {}), ...(options.workTokens === undefined ? {} : { workTokens: options.workTokens }),
     files: (id): Record<string, string> => id === "a" ? { "tests/add.test.ts": WEAKENED } : judge === "restored" ? { "tests/add.test.ts": TEST } : {},
     behaviour: (id) => id === "debug" && judge === "fails" ? "failed" : "succeed",
   });
@@ -82,6 +83,19 @@ describe("the automatic reviewer of a flagged test change (spec §5)", { timeout
       // §7a.5: a flag on the judge's own landing goes to the person -- no judge of a judge.
       t.h.store.transaction(() => flagDecision(t.h.store, { decisionId: `${judgeRun}/orca-criteria`, groupId: w.judgeId, runId: judgeRun, source: "test-change", reason: "x", evidence: [], by: "orca-auto", at: new Date().toISOString() }));
       expect((await w.service.systemDebugPass()).opened).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a judge turn over 200k completes under the 500k budget instead of dying at the group cap (#419/#485)", async () => {
+    // The measured codex turn was 237600 (mini-dogfood-20261125-1); at the old 200000 cap the judge blocked at the cap.
+    const w = await reviewWorld("justified", { expectationModel: true, workTokens: (id) => id === "debug" ? 237_600 : 10 }); const { t } = w; try {
+      await w.service.systemDebugPass();
+      await w.driveJudge();
+      expect((await w.service.systemDebugPass()).settled).toEqual([w.judgeId]);
+      // mutation: leave CRITERIA_REVIEW_TOKEN_BUDGET at 200000 -> the judge is blocked at the cap, this settle is empty, red
+      expect(readBudgetProposal(t.h.store, w.judgeId).allocations.find((a) => a.ownerKind === "task" && a.bucket === "work")?.amount.tokens).toBe(500_000);
+      expect(readGroupSummary(t.h.store, w.judgeId).systemDebug?.criteriaReviewBudget).toBe(500_000);
+      expect(readFlaggedDecision(t.h.store, w.decisionId)?.state).toBe("ratified");
     } finally { await t.h.dispose(); }
   });
 

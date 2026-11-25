@@ -1789,6 +1789,8 @@ export const groupSummarySchema = z
     systemDebug: z.object({
       source: systemDebugSourceSchema, stackOn: idSchema.nullable(),
       settled: z.object({ state: nonemptyString, at: safeInteger, detail: z.string().nullable() }).strict().nullable(),
+      // Tester #419/#485: the criteria-review judge's code-defined work cap, when its source task had no token ceiling.
+      criteriaReviewBudget: positiveSafeInteger.optional(),
     }).strict().optional(),
     // §3.5: a task of this group escalated by the ladder; `exhausted` is level 3 (needs you), the others are Orca's work.
     escalation: z.array(z.object({

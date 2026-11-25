@@ -920,7 +920,9 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     ...(landed ? { landed: true as const } : {}),
     ...(archived === null ? {} : { card: cardFacts(store, groupId, body as Record<string, unknown>, planOrderTasks(archived.plan.tasks).map((task) => task.taskId), readSnapshot!, archived.planHash) }),
     ...(orchestration === null ? {} : { orchestration }),
-    ...(systemDebugMark === null ? {} : { systemDebug: { source: systemDebugMark.source, stackOn: systemDebugMark.stackOn, settled: systemDebugMark.settled } }),
+    ...(systemDebugMark === null ? {} : { systemDebug: { source: systemDebugMark.source, stackOn: systemDebugMark.stackOn, settled: systemDebugMark.settled,
+      // Tester #419/#485: the judge's code-defined work cap, when its source task had no token ceiling; absent otherwise.
+      ...((budget) => typeof budget === "number" && Number.isSafeInteger(budget) && budget > 0 ? { criteriaReviewBudget: budget } : {})(body.criteriaReviewBudget) } }),
     ...(escalation.length === 0 ? {} : { escalation }),
     ...(criteriaReviews.length === 0 ? {} : { criteriaReviews }),
     ...(acceptance === null ? {} : { acceptance: { ...acceptance, ...(acceptanceProblemCode === null ? {} : { problem: acceptanceProblemCode }),

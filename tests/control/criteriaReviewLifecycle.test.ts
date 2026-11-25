@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { applyArchiveGroup } from "../../src/control/archiveGroup.js";
+import { flagDecision, readFlaggedDecision } from "../../src/control/flaggedDecisions.js";
+import { readControlGroup, groupCardFlaggedCount } from "../../src/panel/controlViews.js";
+import { driverHarness } from "./fixtures/driverHarness.js";
 import { terminalKindOf } from "../../src/control/archivedMark.js";
 import { readGroupActivity } from "../../src/control/activity.js";
 import { convergeDerivedCriteriaReviewGroups, parentGroupTerminal } from "../../src/control/criteriaReviewLifecycle.js";
@@ -141,6 +144,36 @@ describe("criteria-review lifecycle (issue #419)", () => {
       expect(["sysdebug-criteria-review-running", "sysdebug-criteria-review-blocked"].map((id) => readGroupActivity(h.store, id, 500).length))
         .toEqual(activityAfterFirst);
     } finally { await h.dispose(); }
+  });
+
+  it("a terminal parent converges the criteria flag its archived judge cannot conclude (#419/#485)", async () => {
+    const h = await openTestStore();
+    try {
+      put(h.store, "g", { status: "done" });
+      put(h.store, "sysdebug-criteria-review-flag", { status: "running", ...JUDGE("g") });
+      h.store.transaction(() => flagDecision(h.store, { decisionId: "run-flagged/orca-criteria", groupId: "g", runId: "run-flagged", source: "test-change", reason: "fewer assertions", evidence: [], by: "orca-auto", at: "2026-11-25T00:00:00.000Z" }));
+      expect(groupCardFlaggedCount(h.store, "g")).toBe(1);
+      h.store.transaction(() => convergeDerivedCriteriaReviewGroups(h.store, undefined, { actor: "orca-auto" }));
+      // mutation: archive the judge without ratifying its flag -> still flagged, the card counts 1 forever, red
+      expect(readFlaggedDecision(h.store, "run-flagged/orca-criteria")).toMatchObject({
+        state: "ratified", ratifiedBy: "orca-auto", ratifiedVia: "criteria-review",
+        note: expect.stringContaining("parent group ended"),
+      });
+      expect(groupCardFlaggedCount(h.store, "g")).toBe(0);
+    } finally { await h.dispose(); }
+  });
+
+  it("a done group's card count equals what group show reads after its judge is archived (#419/#485)", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const body = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)) as Record<string, unknown>;
+      t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...body, status: "done" }));
+      put(t.h.store, "sysdebug-criteria-review-card", { status: "running", ...JUDGE("g") });
+      t.h.store.transaction(() => flagDecision(t.h.store, { decisionId: "run-flagged/orca-criteria", groupId: "g", runId: "run-flagged", source: "test-change", reason: "fewer assertions", evidence: [], by: "orca-auto", at: "2026-11-25T00:00:00.000Z" }));
+      t.h.store.transaction(() => convergeDerivedCriteriaReviewGroups(t.h.store, undefined, { actor: "orca-auto" }));
+      // mutation: keep the archived judge's flag in pendingDecisions -> 1 here while group show reads 0, red
+      expect(readControlGroup(t.h.store, "epoch-test", "g").summary.card?.pendingDecisions).toBe(0);
+      expect(groupCardFlaggedCount(t.h.store, "g")).toBe(0);
+    } finally { await t.h.dispose(); }
   });
 
   it("treats an archived/closed parent as terminal and a blocked parent as not", async () => {
