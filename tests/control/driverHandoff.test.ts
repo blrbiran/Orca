@@ -408,7 +408,13 @@ describe("a blocked run whose collect keeps failing under a stop (tester #289 pa
         for (let i = 0; i < 6; i += 1) await driver.round();
         expect(requestState(t, requestId!)).toBe("collecting");
         // mutation: drop the once-per-message guard -> one line per round, red
-        expect(lines.filter((line) => line.includes(runId)).length).toBe(1);
+        // Ruling (session 5d3d0c09): since #439 blockRun writes its own line, so the later error recorded once after the
+        // original reason ("blocked at C: … | then: …") is a second, distinct line. The intent is unchanged -- nothing
+        // repeats per round: each distinct line at most once, and the collect failure named exactly once.
+        // mutation: drop the reason-changed guard before blockRun -> the "then:" line repeats, red
+        const ours = lines.filter((line) => line.includes(runId));
+        expect(ours.filter((line) => line.includes("handoff collect under stop")).length).toBe(1);
+        expect(new Set(ours).size).toBe(ours.length);
         // This harness's grace is max(5_000, 30_000 + 5_000) + 60_000 (see "nothing arrives" above).
         now = Date.parse(readHandoffRequest(t.h.store, "g", requestId!).request.deadlineAt) + 95_001;
         // mutation: rethrow the collect failure instead of checking the grace -> stays collecting, red
