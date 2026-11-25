@@ -590,6 +590,7 @@ export const zh: Translation<typeof en> = {
       runsOf: "{{taskId}} 的运行",
       retryKey: "快捷键：r",
       runNumber: "这个任务的第 {{n}} 次运行",
+      evidenceMissing: "磁盘上缺失证据：{{ids}}。运行结果仍保留，但无法凭这些证据重试或关闭；归档该组即可收起。",
       offPlanWrites: "计划外改动：{{paths}}",
       offPlanWritesMore: "（另有 {{n}} 个）",
     },
@@ -644,6 +645,7 @@ export const zh: Translation<typeof en> = {
       none: " 没有证据",
       region: "{{runId}} 的证据",
       entry: "{{id}} · {{kind}} · {{bytes}} 字节",
+      missing: "{{id}} · {{kind}} · 磁盘上已缺失（记录保留，无可下载内容）",
       download: "下载 {{id}}",
     },
     decisions: {
@@ -2578,6 +2580,7 @@ export const zhErrors: Record<string, string> = {
   "archive-stop-pending": "停止还没有完成。等交接结束（全部完成或部分完成）后再归档。如果停止状态未解决，请先重试恢复。",
   "artifact-id-conflict": "产物 id 冲突。",
   "artifact-not-found": "找不到这个产物。",
+  "artifact-data-missing": "这次运行的某份证据在磁盘上已缺失（{{detail}}），记录仍保留。视图会把它标成缺失；已关闭运行缺证据的组仍可归档。",
   "budget-overflow": "预算数值溢出：{{message}}",
   "budget-owned-by-loop-plan": "这个 loop 任务的工作预算只能在做法卡片里改。",
   "checkpoint-id-conflict": "检查点 id 冲突。",

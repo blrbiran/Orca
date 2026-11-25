@@ -7,7 +7,7 @@ import { readWork, saveWork } from "./queries.js";
 import { ADOPTABLE_STATES, commandSuccess, groupCommandTarget, latestRequestForRun, readRunBody, releaseCommitment, saveRunBody, setAllocationStates, type RunBody } from "./stopIntent.js";
 import type { ControlStore } from "./store.js";
 import { finiteCommitment } from "./tokenPolicy.js";
-import { hasValidUsageSettlement, settlementArtifact, settlementProof, settlementSame, type SettlementRun } from "./usageSettlement.js";
+import { hasValidUsageSettlement, runEvidenceMissing, settlementArtifact, settlementProof, settlementSame, type SettlementRun } from "./usageSettlement.js";
 import { isWebWorkRun } from "./webDispatch.js";
 import type { AdmissionGate } from "./admissionGate.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
@@ -48,6 +48,30 @@ export function validTerminalClosure(store: ControlStore, run: TerminalRun): boo
 }
 
 /**
+ * Tester #469 (spec 2026-11-24-artifact-integrity-design.md, revision): a view's third closure state. The marker agrees
+ * with the run and its close-run receipt, and the proof could not be checked only because evidence behind it is gone from
+ * disk: the ids missing. [] for a valid closure and for one invalid for any other reason. Decisions keep
+ * validTerminalClosure, which stays false for such a run.
+ */
+export function terminalClosureEvidenceMissing(store: ControlStore, run: TerminalRun): string[] {
+  try {
+    const marker = terminalClosureSchema.parse(run.terminalClosure);
+    if (marker.runId !== run.runId || marker.generation !== run.generation || marker.executionId !== run.executionId || marker.highWater !== run.highWater
+      || marker.commandId !== run.commandId || marker.ownerToken !== run.ownerToken || marker.outcome !== run.drive?.outcome) return [];
+    const row = store.db.prepare("SELECT verb, body_json FROM commands WHERE group_id=? AND id=?").get(run.groupId, marker.closeCommandId) as { verb?: string; body_json?: string } | undefined;
+    const receipt = row === undefined ? null : (JSON.parse(String(row.body_json)) as { result?: { kind?: unknown; runId?: unknown } }).result;
+    if (row?.verb !== "close-run" || receipt?.kind !== "run-closed" || receipt.runId !== run.runId) return [];
+    return runEvidenceMissing(store, run as unknown as SettlementRun);
+  } catch { return []; }
+}
+
+/** Tester #469: a refusal's detail naming the run's missing evidence, or undefined when none of it is missing. */
+function missingEvidenceDetail(store: ControlStore, run: TerminalRun): string | undefined {
+  const missing = runEvidenceMissing(store, run as unknown as SettlementRun);
+  return missing.length === 0 ? undefined : `artifact-data-missing:${missing.join(",")}`;
+}
+
+/**
  * `close-run` (#169): a person or agent ends a proved terminal failure's accounting. It does not accept the work, does not
  * charge unspent tokens and does not retry; it releases the unused reservation so the task can be retried later or its
  * paused group archived. Anonymous, unknown-usage or unsealed runs refuse by name and stay retryable as before.
@@ -62,7 +86,7 @@ export function applyCloseRun(deps: CloseRunDeps, command: CloseRunCommand): Com
         const run = readRunBody(deps.store, runId) as TerminalRun;
         if (run.groupId !== groupId) throw new ControlError("run-not-found");
         if (run.terminalClosure !== undefined) {
-          if (!validTerminalClosure(deps.store, run)) throw new ControlError("run-closure-invalid");
+          if (!validTerminalClosure(deps.store, run)) throw new ControlError("run-closure-invalid", missingEvidenceDetail(deps.store, run));
           return commandSuccess(context, { kind: "run-closed", runId, taskId: String(run.taskId), alreadyClosed: true });
         }
         if (Number(deps.store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)?.active) !== 1) throw new ControlError("run-closure-not-terminal");
@@ -76,9 +100,13 @@ export function applyCloseRun(deps: CloseRunDeps, command: CloseRunCommand): Com
         const request = latestRequestForRun(deps.store, groupId, runId);
         if (request && ADOPTABLE_STATES.includes(request.state)) throw new ControlError("run-closure-request-open", request.requestId);
         if (run.unknown.work || run.unknown.handoff) throw new ControlError("run-closure-evidence", "usage-unknown");
-        if (!workspaceOwnerGone(deps.store, run)) throw new ControlError("run-closure-process-live");
+        // Tester #469: an owner statement that cannot be read because its bytes are gone is missing evidence, not a live process.
+        if (!workspaceOwnerGone(deps.store, run)) {
+          const missing = missingEvidenceDetail(deps.store, run);
+          throw missing === undefined ? new ControlError("run-closure-process-live") : new ControlError("run-closure-evidence", missing);
+        }
         const proof = sealedProof(deps.store, run);
-        if (proof === null) throw new ControlError("run-closure-evidence");
+        if (proof === null) throw new ControlError("run-closure-evidence", missingEvidenceDetail(deps.store, run));
         if (run.executionId === null || run.drive?.outcome === null || run.drive?.outcome === undefined) throw new ControlError("run-closure-evidence");
         run.terminalClosure = terminalClosureSchema.parse({ runId, generation: run.generation, executionId: run.executionId, highWater: run.highWater,
           outcome: run.drive.outcome, commandId: run.commandId, closeCommandId: context.rawCommand.commandId, ownerToken: run.ownerToken, ...proof, at: deps.store.now() });

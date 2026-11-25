@@ -2239,6 +2239,11 @@ export const runViewSchema = z
     blockedReason: nonemptyString.nullable(),
     // Terminal run closure #169: the failed run's accounting is closed and a fresh retry is admissible.
     terminalClosed: z.boolean().optional(),
+    // Tester #469 (spec 2026-11-24 revision): a closed run whose closure proof cannot be checked because its evidence is gone
+    // from disk -- neither closed (terminalClosed) nor refused; decisions on it stay refused. Absent otherwise.
+    closure: z.literal("evidence-missing").optional(),
+    // Tester #469: the ids of the run's settlement or closure evidence whose bytes are gone from disk. Absent when none.
+    evidenceMissing: sortedIdArraySchema.optional(),
     // Spec 2026-10-27 single-call unknown usage §5 O3 (code review m1): ccloop's lower bound on a single call's usage, when kept.
     usageLowerBound: positiveSafeInteger.optional(),
     // Spec 2026-11-03 soft-mode approximate usage §2: the run's usage is the booked floor (null: the tool gave none).
@@ -2672,7 +2677,11 @@ export const evidenceManifestSchema = z
     schema: z.literal("orca-run-evidence-v1"),
     runId: idSchema,
     entries: z.array(
-      z.object({ evidenceId: idSchema, kind: nonemptyString, sha256: hashSchema, byteLength: safeInteger, downloadUrl: nonemptyString }).strict(),
+      z.union([
+        z.object({ evidenceId: idSchema, kind: nonemptyString, sha256: hashSchema, byteLength: safeInteger, downloadUrl: nonemptyString }).strict(),
+        // Tester #469: an entry whose bytes are gone from disk; its download answers artifact-data-missing.
+        z.object({ evidenceId: idSchema, kind: nonemptyString, sha256: hashSchema, byteLength: z.null(), missing: z.literal(true), downloadUrl: nonemptyString }).strict(),
+      ]),
     ),
   })
   .strict()

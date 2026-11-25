@@ -255,7 +255,7 @@ async function commandScope(context: WriteContext): Promise<string> {
  * agent hundreds of KB. `--runs summary` keeps, per run, only what says where it stands (absent fields stay absent).
  */
 const RUNS_MODES = ["full", "summary"] as const;
-const RUN_SUMMARY_FIELDS = ["runId", "taskId", "phase", "state", "outcome", "blockedReason", "used"] as const;
+const RUN_SUMMARY_FIELDS = ["runId", "taskId", "phase", "state", "outcome", "blockedReason", "used", "closure", "evidenceMissing"] as const;
 function runsMode(c: WriteContext): typeof RUNS_MODES[number] {
   const value = c.args.flags.runs;
   if (value === undefined) return "full";
@@ -277,6 +277,16 @@ function largeShowTip(body: unknown): string[] {
   if (groupId === null) return [];
   const bytes = Buffer.byteLength(JSON.stringify(body));
   return bytes <= LARGE_SHOW_BYTES ? [] : [`tip: this full view is ${Math.round(bytes / 1000)} KB; poll with orca group brief ${groupId}, and read runs with orca group show ${groupId} --runs summary`];
+}
+
+/**
+ * Tester #469: a run whose settlement or closure evidence is gone from disk renders; this line names it, and the exit that
+ * works. Retry and close-run re-check that evidence and refuse; archiving the group (no run of it active) does not read it.
+ */
+export function evidenceMissingLines(groupId: string, runs: Array<{ runId?: unknown; closure?: unknown; evidenceMissing?: unknown }>): string[] {
+  return runs.flatMap((run) => !Array.isArray(run.evidenceMissing) || run.evidenceMissing.length === 0 ? [] : [
+    `evidence missing: run ${String(run.runId)}${run.closure === "evidence-missing" ? " (closed; its closure cannot be re-checked)" : ""}: ${run.evidenceMissing.join(", ")}`
+    + ` -- its result is kept, but retry and close-run refuse on it; to put it away: orca group archive ${groupId} (orca doctor counts what is missing)`]);
 }
 
 /**
@@ -626,7 +636,7 @@ export const READ_ROWS: CommandDef[] = [
     examples: ["orca group show g1", "orca group show g1 --runs summary --json"],
     paths: (c) => { runsMode(c); return [`groups/${ids(c, "group")}`]; },
     compose: ([view], c) => { fullShowGroup = runsMode(c) === "full" ? ids(c, "group") : null; return runsMode(c) === "full" ? view : { ...(view as object), runs: (view as { runs: Array<Record<string, unknown>> }).runs.map(runSummary) }; },
-    format: (body) => [formatWithUnestimated(body), ...largeShowTip(body)].join("\n") }),
+    format: (body) => [formatWithUnestimated(body), ...evidenceMissingLines((body as GroupView).summary.groupId, (body as GroupView).runs), ...largeShowTip(body)].join("\n") }),
   // Issue #199: the summary route answers the compact body itself, so a poll ships neither the full view's plan and
   // runs nor a clarifying group's refusal (its full view is refused; its summary is not).
   read({ domain: "group", action: "brief", summary: "one group's state, completion, counts and blockers, without the full view", positionals: [GROUP],
@@ -717,7 +727,7 @@ export const READ_ROWS: CommandDef[] = [
       const located = shownRuns.get(c)!;
       shownRuns.delete(c);
       const entries = (field(activity, "entries") as unknown[] | undefined) ?? [];
-      const manifest = (field(evidence, "entries") as Array<{ evidenceId: string; kind: string; byteLength: number }> | undefined) ?? [];
+      const manifest = (field(evidence, "entries") as Array<{ evidenceId: string; kind: string; byteLength: number | null; missing?: true }> | undefined) ?? [];
       // Tester #285: the transcript's last write, when the listing gives one; a refused or older listing adds nothing.
       const lastTranscriptAt = field(await c.read(`runs/${ids(c, "run")}/transcripts`).catch(() => null), "lastTranscriptAt");
       const run = located.run;
@@ -731,7 +741,7 @@ export const READ_ROWS: CommandDef[] = [
         ...(typeof lastTranscriptAt === "number" ? { lastTranscriptAt } : {}),
         ...(typeof agentKind === "string" ? { agentKind } : {}),
         activity: { entries: entries.slice(0, 10), more: entries.length > 10 },
-        evidence: { count: manifest.length, entries: manifest.map(({ evidenceId, kind, byteLength }) => ({ evidenceId, kind, byteLength })) },
+        evidence: { count: manifest.length, entries: manifest.map(({ evidenceId, kind, byteLength, missing }) => ({ evidenceId, kind, byteLength, ...(missing === true ? { missing } : {}) })) },
       };
     },
     format: (body) => {
@@ -740,6 +750,8 @@ export const READ_ROWS: CommandDef[] = [
       const cause = b.run?.failureCause ?? null;
       const why = [
         ...(b.run?.state === undefined ? [] : [`state: ${b.run.state}`]),
+        // Tester #469: evidence gone from disk, by id, and the exit that works.
+        ...evidenceMissingLines(b.groupId, b.run === undefined ? [] : [b.run as Record<string, unknown>]),
         // Tester #348 review: a quota probe's verdict (the compact line above cuts off before it).
         ...probeVerdictLines(b.run as { purpose?: string; probeVerdict?: ProbeVerdictView } | undefined),
         // Tester D19: the agent and model this run was frozen with, not the installation's default.

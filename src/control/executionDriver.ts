@@ -272,7 +272,9 @@ const TRANSIENT_ERRNO = new Set(["EBUSY", "EAGAIN", "ENOENT"]);
  * it again is safe; anything else blocks at once, as before.
  */
 export function transientSettleError(error: unknown): boolean {
-  if (error instanceof ControlError) return error.code === "artifact-id-conflict";
+  // Tester #469: artifact-data-missing is the ENOENT a read of a vanished artifact used to raise raw (TRANSIENT_ERRNO), now
+  // named; it stays a transient step-E failure (a rewrite of the same content restores the file, archive.ts publishOnce).
+  if (error instanceof ControlError) return error.code === "artifact-id-conflict" || error.code === "artifact-data-missing";
   const code = (error as { code?: unknown } | null)?.code;
   return typeof code === "string" && TRANSIENT_ERRNO.has(code);
 }

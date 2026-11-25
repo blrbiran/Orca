@@ -30,6 +30,9 @@ export const durableCommandErrorStatuses = {
 
   // Resource lookup.
   "artifact-not-found": 404,
+  // Tester #469 (spec 2026-11-24-artifact-integrity-design.md, revision): the artifact's row is present but its `data`
+  // file (or its whole directory) is gone. The detail is the artifact id. Apart from artifact-hash-mismatch (tampering).
+  "artifact-data-missing": 409,
   "checkpoint-not-committed": 404,
   "group-not-found": 404,
   "handoff-work-not-found": 404,

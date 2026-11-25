@@ -115,8 +115,11 @@ export function EvidenceList(props: { runId: string }): JSX.Element {
         <ul aria-label={t("control.evidence.region", { runId: props.runId })}>
           {manifest.entries.map((entry) => (
             <li key={entry.evidenceId}>
-              {t("control.evidence.entry", { id: entry.evidenceId, kind: entry.kind, bytes: entry.byteLength })}{" "}
-              <button type="button" onClick={() => void download(entry)}>{t("control.evidence.download", { id: entry.evidenceId })}</button>
+              {"missing" in entry
+                // Tester #469: bytes gone from disk -- named, warn-toned, nothing to download.
+                ? <span data-tone="warn">{t("control.evidence.missing", { id: entry.evidenceId, kind: entry.kind })}</span>
+                : <>{t("control.evidence.entry", { id: entry.evidenceId, kind: entry.kind, bytes: entry.byteLength })}{" "}
+                  <button type="button" onClick={() => void download(entry)}>{t("control.evidence.download", { id: entry.evidenceId })}</button></>}
             </li>
           ))}
         </ul>
@@ -345,6 +348,8 @@ export function TaskDetail(props: TaskDetailProps): JSX.Element {
           {runs.map((run) => (
             <li key={run.runId}>
               {run.runId} · {enumText("runPhase", run.phase)} · {enumText("runState", run.state)}<RunReason run={run} ladderSkipped={ladderSkip?.runId === run.runId ? ladderSkip.reason ?? undefined : undefined} /> <EvidenceList runId={run.runId} />
+              {/* Tester #469: evidence gone from disk -- the run renders, the ids are named, decisions on it stay refused. */}
+              {run.evidenceMissing !== undefined && <p data-tone="warn" data-testid="run-evidence-missing">{t("control.task.evidenceMissing", { ids: run.evidenceMissing.join(", ") })}</p>}
               <OffPlanWrites run={run} />
               <RunTranscript runId={run.runId} active={props.active !== false} autoOpen={run.runId === item.currentRunId} blocked={run.state === "blocked"} />
               {/* Flow engine spec §13.3 (W-COR): a finished run may be corrected as a whole, in one sentence. */}

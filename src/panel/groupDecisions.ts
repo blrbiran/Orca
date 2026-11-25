@@ -49,7 +49,7 @@ async function reportedOf(store: ControlStore, runId: string): Promise<ReportedD
 }
 
 /** What readArtifact (archive.ts) throws for an artifact whose bytes cannot be read back as recorded. */
-const ARTIFACT_UNREADABLE = new Set<string>(["artifact-not-found", "artifact-hash-mismatch", "control-path-symlink"]);
+const ARTIFACT_UNREADABLE = new Set<string>(["artifact-not-found", "artifact-hash-mismatch", "control-path-symlink", "artifact-data-missing"]);
 
 /**
  * GET /api/control/groups/:groupId/decisions. Per task and run: the landed decisions with the first ref holding each,

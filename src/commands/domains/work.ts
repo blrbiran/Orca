@@ -323,6 +323,8 @@ async function retryNext(error: { code: string; message: string }, c: WriteConte
       : ((await groupView(c)).workItems.find((item) => item.taskId === task(c)) as { agent?: { agent: string } | null } | undefined)?.agent?.agent;
     return installation === undefined ? undefined : [`orca agent models ${installation}`];
   }
+  // Tester #469: the closed run this retry rests on lost evidence on disk; it cannot be re-checked, archiving does not read it.
+  if (error.code === "recovery-blocked" && refusalDetail(error).startsWith("retry-closure-invalid:artifact-data-missing:")) return [`orca group archive ${group(c)}`];
   if (error.code !== "task-not-retryable") return undefined;
   const detail = refusalDetail(error);
   const named = namedRecovery(detail);
@@ -344,6 +346,8 @@ async function retryNext(error: { code: string; message: string }, c: WriteConte
  * resumes names that command; unknown usage is settled first; otherwise the run is read, and its task retried.
  */
 async function closeRunNext(error: { code: string; message: string }, c: WriteContext): Promise<string[] | undefined> {
+  // Tester #469: a closed run whose evidence is gone from disk cannot be re-checked; archiving its group does not read it.
+  if (error.code === "run-closure-invalid" && refusalDetail(error).startsWith("artifact-data-missing:")) return [`orca group archive ${group(c)}`];
   if (error.code !== "run-closure-not-terminal" && error.code !== "run-closure-evidence") return undefined;
   const detail = refusalDetail(error), runId = str(c, "run")!;
   const named = namedRecovery(detail);
@@ -792,7 +796,13 @@ export const WORK_ROWS: CommandDef[] = [
   verb({ domain: "group", action: "close-run", summary: "close a proved terminal failed run's accounting (it stays failed; retry or archive next)", verb: "close-run", positionals: [GROUP],
     flags: [{ name: "run", type: "string", required: true, summary: "the run to close (orca run show <run> names it)" }],
     route: (c) => `groups/${group(c)}/close-run`, payload: (c) => ({ runId: str(c, "run") }),
-    hint: (error) => error.code === "run-closure-evidence" || error.code === "run-closure-not-terminal"
+    // Tester #469: evidence gone from disk is said as such (the refusal's detail names the ids); a closed run's way out is
+    // archiving the group, an open run's is the task's retry.
+    hint: (error) => refusalDetail(error).startsWith("artifact-data-missing:")
+      ? error.code === "run-closure-invalid"
+        ? "this run was closed, and evidence its closure rests on is missing on disk, so it cannot be re-checked; its result is kept. Archive the group to put it away"
+        : "evidence this run's close needs is missing on disk, so it cannot be closed; retry the task instead"
+      : error.code === "run-closure-evidence" || error.code === "run-closure-not-terminal"
       ? "this run has no proved terminal failure; retry the task, or settle unknown usage if the run reports it"
       : undefined,
     next: closeRunNext }),

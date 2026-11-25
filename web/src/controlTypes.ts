@@ -502,6 +502,10 @@ export type RunViewV1 = {
   blockedReason?: string | null;
   /** Terminal run closure #169: the failed run's accounting is closed and a fresh retry is admissible. */
   terminalClosed?: boolean;
+  /** Tester #469: a closed run whose closure proof cannot be checked because its evidence is gone from disk. */
+  closure?: "evidence-missing";
+  /** Tester #469: the ids of the run's settlement or closure evidence gone from disk. */
+  evidenceMissing?: string[];
   /** Spec 2026-10-27 single-call unknown usage O3: ccloop's lower bound on a single call's usage, when kept. */
   usageLowerBound?: number;
   /** Spec 2026-11-03 soft-mode approximate usage: the run's usage is the booked floor, not a reported figure (null: no floor). */
@@ -753,7 +757,9 @@ export type RecoveryViewV1 = {
 export type EvidenceManifestV1 = {
   schema: "orca-run-evidence-v1";
   runId: string;
-  entries: Array<{ evidenceId: string; kind: string; sha256: string; byteLength: number; downloadUrl: string }>;
+  /** Tester #469: an entry whose bytes are gone from disk is `missing: true` with no byte length. */
+  entries: Array<{ evidenceId: string; kind: string; sha256: string; byteLength: number; downloadUrl: string }
+    | { evidenceId: string; kind: string; sha256: string; byteLength: null; missing: true; downloadUrl: string }>;
 };
 /** Tester follow-up E §5 (#241): a group's acceptance on its final tip (src/control/groupAcceptanceRecord.ts). */
 /** Tester follow-up G spec §3.3: a requirement group's review against its acceptance criteria. */

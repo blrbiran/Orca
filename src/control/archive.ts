@@ -1,7 +1,7 @@
 import { TASK_RESULT_SOURCE_EXCLUSIONS } from './taskResultProtocol.js';
 import { createHash, randomUUID } from "node:crypto";
 import { constants, createReadStream, createWriteStream, lstatSync, realpathSync } from "node:fs";
-import { rename, lstat, open, readFile, readdir, readlink, realpath, rm } from "node:fs/promises";
+import { link, rename, lstat, open, readFile, readdir, readlink, realpath, rm, unlink } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 import type { BigIntStats } from "node:fs";
 import { join, relative, isAbsolute, dirname, basename } from "node:path";
@@ -103,7 +103,22 @@ async function publishOnce(store:ControlStore,id:string,temp:string,hash:string,
  try {
   await rename(temp,join(stagedDir,"data"));syncDirectory(stagedDir);syncDirectory(dirname(temp));deps.beforePublish?.();
   for(;;) {
-   const duplicate=await observeDuplicate(artifactsRoot,dir,destination,id,deps);
+   let duplicate:Awaited<ReturnType<typeof observeDuplicate>>;
+   try {duplicate=await observeDuplicate(artifactsRoot,dir,destination,id,deps);}
+   catch(error) {
+    // Tester #469 (spec 2026-11-24 revision, "poisoned write"): a registered row whose `data` file is gone would refuse every
+    // later write of the same content id. The bytes being written carry the row's own hash, so they restore the file. A
+    // directory with no row and no `data` stays the data-missing conflict.
+    if(!(error instanceof ControlError&&error.detail===`${id}:data-missing`)||store.db.prepare("SELECT hash FROM artifacts WHERE id=?").get(id)?.hash!==hash)throw error;
+    const restored=await admit(async()=>{
+     checkedDirectoryIdentity(artifactsRoot,dir);
+     try {await link(join(stagedDir,"data"),destination);}
+     catch(linkError) {if((linkError as NodeJS.ErrnoException).code==="EEXIST")return false;throw linkError;}
+     await unlink(join(stagedDir,"data"));syncDirectory(dir);return true;
+    });
+    if(restored)break;
+    continue;
+   }
    if(duplicate) {
     if(duplicate.hash!==hash)throw idConflict(id,"hash-file");
     await admit(async()=>{
@@ -153,15 +168,23 @@ export async function archiveFile(store:ControlStore,path:string,deps:ArchiveDep
   const value=hash.digest("hex");return publish(store,"sha256-"+value,temp,value,deps);
  });
 }
+/**
+ * Tester #469: the row is present and the bytes are gone -- the id's directory, or its `data` file, does not exist. Named
+ * (`artifact-data-missing:<id>`) so a view can show the evidence as missing; a raw ENOENT read as control-internal-error.
+ */
+function missingData(id:string,error:unknown):never {
+ if((error as NodeJS.ErrnoException|null)?.code==="ENOENT") throw new ControlError("artifact-data-missing",id);
+ throw error;
+}
 export async function readArtifact(store:ControlStore,ref:ArtifactRef):Promise<Buffer> {
  idSchema.parse(ref.artifactId);
  const row=store.db.prepare("SELECT hash FROM artifacts WHERE id=?").get(ref.artifactId);
  if(!row) throw new ControlError("artifact-not-found");
  if(row.hash!==ref.hash) throw new ControlError("artifact-hash-mismatch");
  const dir=join(store.stateDir,"artifacts",ref.artifactId);
- for(const path of [join(store.stateDir,"artifacts"),dir]) if((await lstat(path)).isSymbolicLink()) throw new ControlError("control-path-symlink");
- const path=join(dir,"data");assertRegular(path);
- const fd=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW);let bytes:Buffer;try{bytes=await fd.readFile();}finally{await fd.close();}
+ for(const path of [join(store.stateDir,"artifacts"),dir]) if((await lstat(path).catch(error=>missingData(ref.artifactId,error))).isSymbolicLink()) throw new ControlError("control-path-symlink");
+ const path=join(dir,"data");try{assertRegular(path);}catch(error){missingData(ref.artifactId,error);}
+ const fd=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW).catch(error=>missingData(ref.artifactId,error));let bytes:Buffer;try{bytes=await fd.readFile();}finally{await fd.close();}
  if(createHash("sha256").update(bytes).digest("hex")!==ref.hash) throw new ControlError("artifact-hash-mismatch");return bytes;
 }
 export async function captureTree(store:ControlStore,root:string,prefix:string,missing:string[],deps:ArchiveDependencies={},exclude:string[]=[]):Promise<TreeEntry[]> {

@@ -79,9 +79,16 @@ export function settlementArtifact(store: ControlStore, ref: ArtifactRef): Buffe
   const row = store.db.prepare("SELECT hash FROM artifacts WHERE id=?").get(ref.artifactId);
   if (row?.hash !== ref.hash) throw new Error("artifact-identity");
   const root = join(store.stateDir, "artifacts"), dir = join(root, ref.artifactId), path = join(dir, "data");
-  for (const p of [root, dir]) if (!lstatSync(p).isDirectory() || lstatSync(p).isSymbolicLink()) throw new Error("artifact-path");
-  if (!lstatSync(path).isFile() || lstatSync(path).isSymbolicLink()) throw new Error("artifact-path");
-  const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  // Tester #469: the row is present and the directory or its `data` file is gone -- named, as readArtifact names it.
+  let fd: number;
+  try {
+    for (const p of [root, dir]) if (!lstatSync(p).isDirectory() || lstatSync(p).isSymbolicLink()) throw new Error("artifact-path");
+    if (!lstatSync(path).isFile() || lstatSync(path).isSymbolicLink()) throw new Error("artifact-path");
+    fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new ControlError("artifact-data-missing", ref.artifactId);
+    throw error;
+  }
   let bytes: Buffer; try { bytes = readFileSync(fd); } finally { closeSync(fd); }
   if (createHash("sha256").update(bytes).digest("hex") !== ref.hash) throw new Error("artifact-hash");
   return bytes;
@@ -112,7 +119,37 @@ export function settlementProof(store: ControlStore, run: SettlementRun): { repo
       || report.terminal.sourceDir !== run.drive?.sourceDir || c.terminalOutcome !== report.terminal.outcome || !c.stopProof) throw new Error("report-terminal");
     validateStopProof(store, run, c);
     return { report: source, stopProof: c.stopProof };
-  } catch { throw new ControlError("run-stop-proof-required"); }
+  } catch (error) {
+    // Tester #469: a proof that is gone from disk is still required; the refusal names which artifact is missing.
+    throw new ControlError("run-stop-proof-required", error instanceof ControlError && error.code === "artifact-data-missing" ? `artifact-data-missing:${error.detail}` : undefined);
+  }
+}
+/** Tester #469: the store registers `ref` (same hash) and its directory or `data` file is gone. A stat, no hashing. */
+export function artifactDataMissing(store: ControlStore, ref: ArtifactRef): boolean {
+  if (!idSchema.safeParse(ref.artifactId).success) return false;
+  if (store.db.prepare("SELECT hash FROM artifacts WHERE id=?").get(ref.artifactId)?.hash !== ref.hash) return false;
+  try { lstatSync(join(store.stateDir, "artifacts", ref.artifactId, "data")); return false; }
+  catch (error) { return (error as NodeJS.ErrnoException).code === "ENOENT"; }
+}
+/**
+ * Tester #469 (spec 2026-11-24-artifact-integrity-design.md, revision): the ids of the evidence behind a run's settlement
+ * and closure -- its outbox report, the closure and settlement markers' report and stop proof, its usage events' sources --
+ * whose row is registered and whose bytes are gone. A view asks only after a stricter check failed, to tell "evidence
+ * missing" (shown, the view renders) from "evidence invalid" (refused as before). Decisions never use it.
+ */
+export function runEvidenceMissing(store: ControlStore, run: { runId: string; highWater: number; usageSettlement?: unknown; terminalClosure?: unknown }): string[] {
+  const refs: unknown[] = [];
+  const parsed = (text: unknown): Record<string, unknown> | undefined => { try { return JSON.parse(String(text)) as Record<string, unknown>; } catch { return undefined; } };
+  const report = store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='report'").get(`report:${run.runId}`);
+  if (report) refs.push(parsed(report.body)?.source);
+  const closure = run.terminalClosure as { report?: unknown; stopProof?: unknown } | undefined;
+  const settled = run.usageSettlement as { report?: unknown; stopProof?: { source?: unknown } } | undefined;
+  refs.push(closure?.report, closure?.stopProof, settled?.report, settled?.stopProof?.source);
+  for (const event of store.db.prepare("SELECT body FROM usage_events WHERE run_id=? AND seq<=?").all(run.runId, run.highWater)) refs.push(parsed(event.body)?.source);
+  return [...new Set(refs.flatMap((ref) => {
+    const r = artifactSchema.safeParse(ref);
+    return r.success && artifactDataMissing(store, r.data) ? [r.data.artifactId] : [];
+  }))].sort();
 }
 function validateStopProof(store: ControlStore, run: SettlementRun, c: Candidate): void {
   if (!c.stopProof || c.stopProof.isolated !== true || c.stopProof.executionId !== run.executionId || c.stopProof.generation !== run.generation) throw new Error("stop-proof-identity");

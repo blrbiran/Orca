@@ -738,6 +738,7 @@ export const en = {
       runsOf: "Runs of {{taskId}}",
       retryKey: "Key: r",
       runNumber: "Run {{n}} of this task",
+      evidenceMissing: "Evidence missing on disk: {{ids}}. The run's result is kept, but it cannot be retried or closed on this evidence; archive the group to put it away.",
       offPlanWrites: "Off-plan writes: {{paths}}",
       offPlanWritesMore: " (+{{n}} more)",
     },
@@ -794,6 +795,7 @@ export const en = {
       none: " no evidence",
       region: "Evidence of {{runId}}",
       entry: "{{id}} · {{kind}} · {{bytes}} bytes",
+      missing: "{{id}} · {{kind}} · missing on disk (its record is kept; nothing to download)",
       download: "Download {{id}}",
     },
     // Control run decisions plan Task 11: one run's decisions, its refused ones waiting for a person, and what did not land.
@@ -2707,6 +2709,7 @@ export const enErrors: Record<string, string> = {
   "archive-stop-pending": "A stop is still settling. Archive the group once its handoff has finished, completely or partially. If it is unresolved, retry recovery first.",
   "artifact-id-conflict": "The artifact id conflicts with an existing one.",
   "artifact-not-found": "The artifact was not found.",
+  "artifact-data-missing": "A piece of this run's evidence is missing on disk ({{detail}}); its record is kept. Views show it as missing; a group whose closed runs miss evidence can still be archived.",
   "budget-overflow": "A budget value is too large: {{detail}}",
   "budget-owned-by-loop-plan": "This loop task's work budget belongs to its loop plan. Change it in the task's loop plan instead.",
   "checkpoint-id-conflict": "The checkpoint id conflicts with an existing one.",

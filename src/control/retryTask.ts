@@ -20,7 +20,7 @@ import { appendTopUp, topUpSum, withTopUp } from "./workTopUp.js";
 import { authorizeWorkTopUp } from "./authorizeWorkTopUp.js";
 import { continuationIdentity, registrationOf } from "./continuation.js";
 import { validateRetryGrantSource } from "./retryGrant.js";
-import { validTerminalClosure } from "./terminalRunClosure.js";
+import { terminalClosureEvidenceMissing, validTerminalClosure } from "./terminalRunClosure.js";
 import { abandonedRun } from "./abandonRun.js";
 import { hasValidUsageSettlement, lineageWorkUsage, releasedSettlementCheckpoint, settlementSame } from "./usageSettlement.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
@@ -291,7 +291,8 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           && (run.usageSettlement as { reservationDisposition?: string } | undefined)?.reservationDisposition === "released" && hasValidUsageSettlement(store, run);
         // Terminal-closure spec 2026-11-07: an explicit closure released this run's remainder already. A malformed marker
         // refuses by name instead of falling through to the ordinary live-failure branch.
-        if (run.terminalClosure !== undefined && !validTerminalClosure(store, run as never)) throw new ControlError("recovery-blocked", "retry-closure-invalid");
+        // Tester #469: a closure whose evidence is gone from disk names the missing ids after the code.
+        if (run.terminalClosure !== undefined && !validTerminalClosure(store, run as never)) throw new ControlError("recovery-blocked", ((missing) => missing.length === 0 ? "retry-closure-invalid" : `retry-closure-invalid:artifact-data-missing:${missing.join(",")}`)(terminalClosureEvidenceMissing(store, run as never)));
         // Issue #205: an optional-policy run is funded with a fresh grant (authored + top-ups - inherited usage, within the
         // group's headroom), which differs from the work item's authored grant by construction; its proof is the funded
         // allowance the claim recorded for it. A finite-legacy run is still re-granted in full, so equality stays its check.

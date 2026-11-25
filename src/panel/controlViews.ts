@@ -36,13 +36,13 @@ import type { ExecutionPort } from "../control/executionPort.js";
 import { z } from "zod";
 import { SINGLE_CALL_SETTLE_ACKNOWLEDGE, settleableSingleCallBlock, singleCallPurposeOf } from "../control/singleCall.js";
 import { approximateCommandId } from "../control/softLoopSince.js";
-import { hasValidUsageSettlement, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint, singleCallSettlementSchema, singleCallUsageLowerBoundSchema } from "../control/usageSettlement.js";
+import { hasValidUsageSettlement, runEvidenceMissing, usageSettlementSchema, settlementProof, releasedSettlementCheckpoint, singleCallSettlementSchema, singleCallUsageLowerBoundSchema } from "../control/usageSettlement.js";
 import { workerLostFloor, settlementAcknowledgeFor, settlementAdmission, type SettleAcknowledge } from "../control/settleUnknownUsage.js";
 import { readArtifact } from "../control/archive.js";
 import { canonicalBytes, sha256Canonical } from "../control/canonicalJson.js";
 import { dimensions } from "../control/commands.js";
 import { driveRecordSchema, terminalClosureSchema } from "../control/driveRecord.js";
-import { validTerminalClosure } from "../control/terminalRunClosure.js";
+import { terminalClosureEvidenceMissing, validTerminalClosure } from "../control/terminalRunClosure.js";
 import { ControlError, nonDurableControlErrorClassifications } from "../control/errors.js";
 import { groupStopState, unresolvedStopRetryable } from "../control/stopIntent.js";
 import { readProjectionChanges, readProjectionState } from "../control/projectionJournal.js";
@@ -1568,7 +1568,15 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       || run.workItemId !== String(row.work_item_id) || run.generation !== Number(row.generation)
       || !validAccounting(run)) return blocked(`run-identity:${runId}`);
 
-    if (run.usageSettlement !== undefined && !hasValidUsageSettlement(store, run)) return blocked(`run-usage-settlement:${runId}`);
+    // Tester #469 (spec 2026-11-24 revision): a settlement or closure whose proof cannot be checked only because evidence
+    // is gone from disk renders, naming the missing ids (evidenceMissing; closure "evidence-missing"). Anything else that
+    // fails the check is refused as before. Decisions re-check the stored evidence and stay strict.
+    const missingEvidence = new Set<string>();
+    if (run.usageSettlement !== undefined && !hasValidUsageSettlement(store, run)) {
+      const missing = runEvidenceMissing(store, run);
+      if (missing.length === 0) return blocked(`run-usage-settlement:${runId}`);
+      for (const id of missing) missingEvidence.add(id);
+    }
     const state = displayRunState(run);
     const terminal = ["failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed"].includes(state);
     if ((Number(row.active) === 1) === terminal
@@ -1656,6 +1664,17 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
         if (rest !== undefined) quotaRest = { installation, until: rest.until, source: rest.source };
       }
     }
+    // Terminal run closure #169: a closed failure whose evidence still verifies; a shape-only marker is refused here.
+    let closureView: Pick<RunViewV1, "terminalClosed" | "closure"> = {};
+    if (run.terminalClosure !== undefined) {
+      if (validTerminalClosure(store, run as never)) closureView = { terminalClosed: true };
+      else {
+        const missing = terminalClosureEvidenceMissing(store, run as never);
+        if (missing.length === 0) return blocked(`run-closure-invalid:${run.runId}`);
+        for (const id of missing) missingEvidence.add(id);
+        closureView = { closure: "evidence-missing" };
+      }
+    }
     const bucket = run.phase === "handoff" ? "handoff" : "work";
     return {
       runId,...(run.recoveryOf?{recoveryOf:run.recoveryOf,savedResultOrdinaryRetry:validSavedNoDispatch(store,run)}:{}), taskId: run.taskId, estimateId: run.estimateId, generation: run.generation, state, phase: run.phase,
@@ -1670,8 +1689,9 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       grant: run.grant[bucket],
       diagnosis: readRunDiagnosis(store, run),
       blockedReason: run.drive?.blockedReason ?? null,
-      // Terminal run closure #169: a closed failure whose evidence still verifies; a shape-only marker is refused here.
-      ...(run.terminalClosure === undefined ? {} : validTerminalClosure(store, run as never) ? { terminalClosed: true } : blocked(`run-closure-invalid:${run.runId}`)),
+      // Terminal run closure #169 (closureView above); tester #469: the evidence gone from disk, by id.
+      ...closureView,
+      ...(missingEvidence.size === 0 ? {} : { evidenceMissing: [...missingEvidence].sort(compareText) }),
       ...((run.singleCallUsageLowerBound ?? run.usageLowerBound) === undefined ? {} : { usageLowerBound: (run.singleCallUsageLowerBound ?? run.usageLowerBound)!.tokens }),
       ...(run.usageApproximate === undefined ? {} : { usageApproximate: { floorTokens: run.usageApproximate.floorTokens } }),
       // Tester #349: a standing notice, also after the run settled -- the private rollout stays until someone deletes it.
@@ -2422,6 +2442,8 @@ export async function readRunEvidence(store: ControlStore, runId: string): Promi
     try { bytes = await readArtifact(store, { artifactId: ref.evidenceId, hash: ref.sha256 }); }
     catch (error) {
       if (error instanceof ControlError && ["artifact-not-found", "artifact-hash-mismatch"].includes(error.code)) return blocked("evidence-artifact-invalid");
+      // Tester #469: bytes gone from disk are one entry marked missing; the rest of the manifest is listed.
+      if (error instanceof ControlError && error.code === "artifact-data-missing") return { ...ref, byteLength: null, missing: true as const, downloadUrl: `/api/control/runs/${encodeURIComponent(runId)}/evidence/${encodeURIComponent(ref.evidenceId)}` };
       throw error;
     }
     return { ...ref, byteLength: bytes.byteLength, downloadUrl: `/api/control/runs/${encodeURIComponent(runId)}/evidence/${encodeURIComponent(ref.evidenceId)}` };
