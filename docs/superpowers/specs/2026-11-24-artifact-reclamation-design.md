@@ -85,3 +85,78 @@ reference scan is honest data rather than an invariant we would have to maintain
   `--apply` pass leaves every surviving reader able to `readArtifact` its ids (a criterion that reads back each id a
   surviving row names).
 - Without the flag, every byte of today's `gc` output is unchanged.
+
+## Human rulings and implementation notes (session 5d3d0c09)
+
+Added 2026-11-25 by the implementing agent (Claude Opus 5.5, Orca session `5d3d0c09`, branch `feat/artifact-gc-468` from
+main `b27d71c9`). The text above is unchanged; where the implementation departs from it, this section says so.
+
+### Rulings this implements
+
+- **Approach A, approved** (integrity spec §3.3: run-scoped clock, no hash dedup, an archived group's evidence goes with
+  it, dry run by default and `--apply` like `orca gc`).
+- **Human, 2026-11-25: the panel deletes.** Artifact deletion is executed by the panel process, under its admission gate;
+  the CLI asks it (`POST /api/control/gc/artifacts` on the control socket). The dry run is read-only and runs in the CLI.
+  `orca gc --include-artifacts` is off by default; without it every byte of `orca gc`'s output is unchanged.
+- **Triage notes:** hardlink dedup is out of scope (`assertRegular` and `currentIdentity` require `nlink === 1`). The dry
+  run totals the bytes held by each skip reason with its group count and the next step; `--include-uncleaned`'s help and
+  the README say it does not touch artifacts; `status --disk` stays file-system only.
+
+### Departures from the draft above
+
+- Step 4 ("remove the directory, then `DELETE` in the same transaction that records the run's removal") cannot hold: a
+  file-system delete is not in a sqlite transaction and `gc` reads the store read-only. The panel removes every planned
+  directory first, then deletes their rows in one transaction (below).
+- Eligibility is not "ids referenced by runs this pass removes": the store's rows are never deleted, so every artifact
+  stays named by some row. An artifact is planned when a **retired** holder names it and no **live** holder does:
+  a retired run passes `gc`'s own run guards (`basicSkip`), ended before the cutoff (its `endedAt`, else its run
+  directory's mtime; neither: `run-age-unknown`), is not among `--keep-last` (counted over every run row, since the
+  directories of older runs may already be gone), and its group's terminal mark is older than the cutoff
+  (`group-archived-recently`; an unarchive inside the window keeps everything). A retired group carries a valid mark
+  older than the cutoff and every run of it is retired.
+- Skip reasons are the run pass's plus `group-archived-recently`, `run-age-unknown`, `outbox-undelivered`,
+  `held-by:<table>`, `holder-run-unknown` / `holder-group-unknown` / `holder-flow-unknown`, `published-since-panel-start`,
+  `outside-group` (with `--group`), `unreferenced`, `artifact-path-unsafe`, `reference-scan-incomplete`, `remove-failed`.
+  `unreferenced` (nothing names it at all) is kept, as the draft's `not-a-run-artifact` was.
+
+### How the integrity review's High findings are met
+
+1. **The delete races the panel over a content id.** The panel first reads every artifact's contents without blocking
+   (a cache keyed by id and row hash; contents are immutable per hash). Then, in **one synchronous step inside its
+   admission gate** (`WebControlService.reclaimArtifacts` → `applyArtifactReclaim`), it re-reads every table, re-plans,
+   removes and deletes rows: no write of the panel interleaves with it (Node runs one step at a time; the panel is the
+   control store's single writer). A writer between steps -- one that has published or reused an id and holds the ref only
+   in memory until it persists the row naming it -- is covered by a process-wide set in `archive.ts`: `publish()` notes
+   the id before its first await, and the panel never deletes an id it has published or reused since it started
+   (`published-since-panel-start`; a later gc after a restart may plan it). Such ids are also live roots, so what their
+   contents name is kept. A write after the step finds no directory and publishes afresh.
+   Residual risk, named: an operation that read a ref from a *retired* holder before the step and persists it into a live
+   row after it. Today no live operation copies refs out of an archived group (the terminal gate refuses every verb but
+   unarchive/close), and an unarchive before the step makes the group live in the re-plan.
+2. **The holder scan goes through artifact contents and fails closed.** Holders are every column of every table except the
+   `artifacts` index, read as text (a BLOB as latin1), tokenized at separator boundaries; a token counts when it is an
+   artifact id, a row hash, a 64-hex piece of an id (`checkpoint-<hash>`, `recovery-<hash>` are built from a hash), or a
+   run or group id an artifact id embeds (`acceptance-<runId>`, `handoff-<runId>` are built from the run id). The closure
+   reads the contents of every held artifact the same way -- no JSON parse, so a capsule, a packet, a snapshot tree, a
+   manifest or any unparseable bytes all hold what they name. A held artifact whose contents cannot be read (anything but
+   ENOENT: a symlinked directory, a non-regular file, EACCES) makes the plan empty: every candidate is skipped as
+   `reference-scan-incomplete`. A held artifact whose bytes are gone (#469) names nothing a reader could reach.
+   Over-holding (a hash shared by two ids, a group id that happens to be a piece of an id, any id-shaped text in a source
+   blob) only keeps more.
+3. **Per-table classification and a structural criterion.** `ARTIFACT_HOLDER_TABLES` lists every table of the store and
+   its columns with the owner of a row (run, group, a flow's group, global, the outbox's own rule, or the index). A
+   criterion compares it with a fresh store's `sqlite_master` and `PRAGMA table_info` and goes red on any table or
+   column not classified. At run time an unknown table is scanned as a global holder and an unknown column is still
+   scanned (both listed in `scan.unclassified`): unknown never frees anything.
+4. **Crash ordering: directory first, then rows.** A crash between them leaves rows whose `data` is gone -- the state
+   #469 already handles: views degrade to `evidence missing`, `orca doctor` counts it, a later write of the same content
+   restores the file (the poisoned-write repair), and the next gc plans those rows again (bytes 0, `dataMissing`). The
+   other order would leave directories no row names, which no command ever finds again.
+- **Outbox rows** hold until delivered; a delivered one belongs to the run or group its body names, else the run or group
+  its key names (`report:<runId>`), else it holds for good.
+
+### Access
+
+The socket route refuses a run Orca dispatched (`control-dispatched-run-refused`); the CLI refuses `--apply` over MCP
+(`gc-artifacts-not-over-mcp`). No person token is required, matching `orca gc --apply`. With no panel the CLI answers
+`panel-not-running` before removing anything (the run trees included).
