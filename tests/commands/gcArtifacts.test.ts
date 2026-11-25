@@ -137,7 +137,9 @@ describe("orca gc --include-artifacts (tester #468)", { timeout: 180_000 }, () =
     const body = out.json().body;
     expect(body.artifacts.dryRun).toBe(false);
     expect(body.artifacts.removed.map((item: { artifactId: string }) => item.artifactId)).toEqual([w.retired.artifactId]);
-    expect(w.present(w.retired.artifactId)).toBe(false);
+    // Both halves are gone: mutation (keep the directory, or keep the row) -> red on its own line.
+    expect(existsSync(join(w.state, "artifacts", w.retired.artifactId))).toBe(false);
+    expect(rowOf(w.state, w.retired.artifactId)).toBe(false);
     for (const ref of [w.live, w.nested, w.manifest]) expect(w.present(ref.artifactId)).toBe(true);
     // the run pass ran after the panel answered
     expect(existsSync(w.runDir)).toBe(false);

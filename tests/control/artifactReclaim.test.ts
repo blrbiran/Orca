@@ -103,7 +103,8 @@ describe("orca gc --include-artifacts: every holder kind keeps what it names (#4
   it("an id built from a live run's id (acceptance-<runId>) is kept although no row names it", async () => {
     const { h, store, control, plan } = await world();
     try {
-      // mutation (drop the embedded-id rule) -> acceptance-run-live is named only by the retired run and planned, red.
+      // mutation (do not index the run or group id an artifact id embeds) -> acceptance-run-live is named only by the
+      // retired run and planned, red.
       const x = seedArtifact(store, "acceptance-run-live", "{\"landing\":\"landed\"}");
       const y = seedArtifact(store, "acceptance-run-old", "{\"landing\":\"landed\"}");
       setRunBody(store, "run-old", { artifacts: [control, x] });
@@ -276,7 +277,7 @@ describe("the panel deletes, and a write of the same content id is serialized wi
       // The writer has found the existing directory and is reading it; the panel's whole delete step runs right here.
       const ref = await writeArtifact(store, id, bytes, { beforeDuplicateRead: async () => { during = applyArtifactReclaim(store, { now: NOW, pinned: publishedArtifactIds() }); } });
       // mutation (publish() does not note the id) -> the step deletes it under the writer, whose write then fails with
-      // ENOENT (a live run's write) -- red here, before the assertions.
+      // artifact-id-conflict:<id>:read-changed (measured; a live run's write) -- red here, before the assertions.
       expect(during?.removed).toEqual([]);
       expect(during?.skipped.find((skip) => skip.artifactId === id)?.reason).toBe("published-since-panel-start");
       expect((await readArtifact(store, ref)).equals(bytes)).toBe(true);

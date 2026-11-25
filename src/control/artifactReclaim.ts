@@ -210,10 +210,11 @@ export interface Universe {
   runs: Map<string, RunRow>;
   groups: Map<string, GroupRow>;
   flowGroup: Map<string, string>;
-  /** index key -> the artifact ids it names */
+  /**
+   * index key -> the artifact ids it names: the id, the row hash, a 64-hex piece of the id, and a run or group id the id
+   * embeds (a reader builds `acceptance-<runId>` from the run id; that run's own row names its id, so it holds them).
+   */
   index: Map<string, string[]>;
-  /** artifact id -> the run and group ids its own id embeds (a reader builds the id from them) */
-  embeds: Map<string, string[]>;
 }
 
 function tableNames(db: DatabaseSync): string[] {
@@ -243,19 +244,16 @@ export function readUniverse(db: DatabaseSync): Universe {
     if (list === undefined) index.set(key, [id]);
     else if (!list.includes(id)) list.push(id);
   };
-  const embeds = new Map<string, string[]>();
   for (const [id, { hash }] of artifacts) {
     add(id, id);
     if (hash.length > 0) add(hash, id);
-    const owners: string[] = [];
     boundedPieces(id, (piece) => {
       if (piece === id) return;
       if (HEX64.test(piece)) add(piece, id);
-      if ((runs.has(piece) || groups.has(piece)) && !owners.includes(piece)) { owners.push(piece); add(piece, id); }
+      if (runs.has(piece) || groups.has(piece)) add(piece, id);
     });
-    if (owners.length > 0) embeds.set(id, owners);
   }
-  return { artifacts, runs, groups, flowGroup, index, embeds };
+  return { artifacts, runs, groups, flowGroup, index };
 }
 
 /** Reads one artifact's contents and resolves what they name. Never follows a symbolic link. */
@@ -411,7 +409,7 @@ export function planArtifactReclaim(input: ArtifactPlanInput): ArtifactPlan {
     return groupId === undefined ? { reason: "holder-flow-unknown", detail: value } : ofGroup(groupId);
   };
 
-  // --- roots: every holder row, and the run/group an artifact id embeds --------------------------------------------
+  // --- roots: every holder row ------------------------------------------------------------------------------------
   const live = new Map<string, Hold>();
   const retired = new Set<string>();
   const queue: string[] = [];
@@ -422,13 +420,6 @@ export function planArtifactReclaim(input: ArtifactPlanInput): ArtifactPlan {
     }
   };
   for (const id of input.pinned ?? []) if (u.artifacts.has(id) && !live.has(id)) { live.set(id, { reason: "published-since-panel-start" }); queue.push(id); }
-  for (const [id, owners] of u.embeds) {
-    for (const owner of owners) {
-      const by = u.runs.has(owner) ? ofRun(owner) : ofGroup(owner);
-      if (by === null) retired.add(id);
-      else if (!live.has(id)) { live.set(id, by); queue.push(id); }
-    }
-  }
 
   const unclassified: string[] = [];
   let holderRows = 0;
