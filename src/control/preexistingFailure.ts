@@ -20,6 +20,7 @@ import { dirWorkspaceOf } from "./dirGroup.js";
 import { multiDirOf } from "./multiGroup.js";
 import { reviewRequired } from "./requirementReviewRecord.js";
 import { settlingPersonFor } from "./commandClient.js";
+import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { ControlError } from "./errors.js";
 import { cutUtf8 } from "./noChange.js";
 import { reportedDecisionsOf } from "./reportedDecisions.js";
@@ -52,6 +53,7 @@ export interface PreexistingFailureRow {
    * not confirmed: the row does not wait for the person and the review is told the check passed at the base. Absent otherwise.
    */
   notConfirmedAtBase?: { at: number };
+  verificationNote?: string;
   answer: PreexistingFailureAnswer | null;
   /** Who recorded the answer, and when; absent while unanswered. */
   answered?: { by: string; at: number };
@@ -191,7 +193,19 @@ export function preexistingFailureRows(store: ControlStore, groupId: string, bod
   }
   if (rows.size === 0) return [];
   const answerable = answerableGroup(store, groupId, body), finished = finishedGroup(body);
+  const checksByTask = new Map<string, readonly string[] | null>();
+  const confirmedChecks = (taskId: string): readonly string[] | null => {
+    if (!checksByTask.has(taskId)) {
+      try { checksByTask.set(taskId, readConfirmedTaskExecution(store, groupId, taskId).contract.verification.requiredChecks); }
+      catch { checksByTask.set(taskId, null); } // Unreadable confirmation cannot establish why Orca did not run it.
+    }
+    return checksByTask.get(taskId) ?? null;
+  };
   for (const row of rows.values()) {
+    if (row.baseCheck === undefined && row.notConfirmedAtBase === undefined && row.reportedBy.length > 0
+      && row.reportedBy.every(({ taskId }) => confirmedChecks(taskId)?.includes(row.command) === false)) {
+      row.verificationNote = "unverified: the command is not one of the task's confirmed required checks, so Orca did not re-run it";
+    }
     row.answerable = answerable && !finished;
     // Tester #504: a finished group's row is recorded for a review rerun; it does not wait for an answer now.
     if (answerable && finished) row.onlyRerunUsesIt = true;
@@ -229,7 +243,7 @@ export function preexistingFailureFactLines(store: ControlStore, groupId: string
     if (row.notConfirmedAtBase !== undefined && row.answer === null) {
       return `Reported pre-existing failure \`${cutUtf8(row.command, 300)}\` is not confirmed: ${learned}, but Orca ran it at the group's base and it passed there, so it was not failing before the group's work began. Judge this check as the requirement states it.`;
     }
-    return `Pre-existing failure \`${cutUtf8(row.command, 300)}\` (already failing before a task changed anything): ${learned}. ${answer}.`;
+    return `Pre-existing failure \`${cutUtf8(row.command, 300)}\` (${row.verificationNote ?? "already failing before a task changed anything"}): ${learned}. ${answer}.`;
   });
 }
 
@@ -261,10 +275,10 @@ export function matchPreexistingCommand<T extends { command: string }>(rows: rea
 }
 
 /** Tester #402: the rows the group brief names -- reported and not yet answered, with whether an answer would do anything. */
-export function preexistingFailureWaiting(store: ControlStore, groupId: string, body: unknown): Array<{ command: string; answerable: boolean; onlyRerunUsesIt?: boolean; reportedBy: number }> {
+export function preexistingFailureWaiting(store: ControlStore, groupId: string, body: unknown): Array<{ command: string; answerable: boolean; onlyRerunUsesIt?: boolean; reportedBy: number; verificationNote?: string }> {
   return readPreexistingFailures(store, groupId, body)
     .filter((row) => row.answer === null && row.notConfirmedAtBase === undefined)
-    .map((row) => ({ command: row.command, answerable: row.answerable, ...(row.onlyRerunUsesIt === true ? { onlyRerunUsesIt: true as const } : {}), reportedBy: row.reportedBy.length }))
+    .map((row) => ({ command: row.command, answerable: row.answerable, ...(row.onlyRerunUsesIt === true ? { onlyRerunUsesIt: true as const } : {}), reportedBy: row.reportedBy.length, ...(row.verificationNote === undefined ? {} : { verificationNote: row.verificationNote }) }))
     .sort((left, right) => compareText(left.command, right.command));
 }
 

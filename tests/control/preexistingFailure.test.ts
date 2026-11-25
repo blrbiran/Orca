@@ -112,6 +112,7 @@ describe("a run's report becomes activity and one problem row per command (accep
       expect(rows).toHaveLength(1);
       // Fix round 1 (Task 2 review I-1): every row says whether the group can be answered (a plan-file harness group cannot).
       expect(rows![0]).toEqual({ command: "npm test", sources: ["agent"], answer: null, answerable: false,
+        verificationNote: "unverified: the command is not one of the task's confirmed required checks, so Orca did not re-run it",
         reportedBy: reports(t).map((row) => ({ taskId: row.body.taskId, runId: row.body.runId, chose: row.body.chose })) });
       expect(rows![0]!.reportedBy.map((by) => by.taskId).sort()).toEqual(["a", "b", "c"]);
       // A collect that happens again (a crash replayed) records nothing twice.
@@ -229,7 +230,7 @@ describe("the person's three answers (acceptance 3)", () => {
   it("unanswered, the review is told the report and that the person has not answered", async () => {
     const { t, facts } = await world(); try {
       // mutation: drop the pre-existing failure lines from reviewFacts -> no such line, red
-      expect(await facts()).toContain("Pre-existing failure `npm test` (already failing before a task changed anything): reported by a (chose: edited README to the v3 example). not answered by the person.");
+      expect(await facts()).toContain("Pre-existing failure `npm test` (unverified: the command is not one of the task's confirmed required checks, so Orca did not re-run it): reported by a (chose: edited README to the v3 example). not answered by the person.");
     } finally { await t.h.dispose(); }
   }, 60_000);
 
@@ -244,7 +245,7 @@ describe("the person's three answers (acceptance 3)", () => {
       expect(groupBody(t).preexistingFailureAnswers).toEqual({ "npm test": { answer: chosen, by: "user:owner", at: expect.any(Number) } });
       expect(view(t).preexistingFailures![0]).toMatchObject({ answer: chosen, answered: { by: "user:owner" }, answerable: true });
       expect((await facts()).find((line) => line.startsWith("Pre-existing failure"))).toBe(
-        `Pre-existing failure \`npm test\` (already failing before a task changed anything): reported by a (chose: edited README to the v3 example). answered "${chosen}": ${means}.`);
+        `Pre-existing failure \`npm test\` (unverified: the command is not one of the task's confirmed required checks, so Orca did not re-run it): reported by a (chose: edited README to the v3 example). answered "${chosen}": ${means}.`);
     } finally { await t.h.dispose(); }
   }, 60_000);
 
@@ -295,12 +296,12 @@ it("the brief's waiting list names unanswered rows, and an answered row leaves i
   const send = (command: string) => { const sent = t.h.command("answer-preexisting-failure", { command, answer: "relative" }); return asOwner(sent.commandId, () => t.service.answerPreexistingFailure(sent)); };
   try {
     expect(waiting()).toEqual([
-      { command: "`npm run lint` fails on generated files", answerable: true, reportedBy: 1 },
-      { command: "`npm test` reports unrelated queue flakes", answerable: true, reportedBy: 1 },
+      { command: "`npm run lint` fails on generated files", answerable: true, reportedBy: 1, verificationNote: "unverified: the command is not one of the task's confirmed required checks, so Orca did not re-run it" },
+      { command: "`npm test` reports unrelated queue flakes", answerable: true, reportedBy: 1, verificationNote: "unverified: the command is not one of the task's confirmed required checks, so Orca did not re-run it" },
     ]);
     // mutation: keep answered rows -> two rows after the answer, red
     send("npm test");
-    expect(waiting()).toEqual([{ command: "`npm run lint` fails on generated files", answerable: true, reportedBy: 1 }]);
+    expect(waiting()).toEqual([{ command: "`npm run lint` fails on generated files", answerable: true, reportedBy: 1, verificationNote: "unverified: the command is not one of the task's confirmed required checks, so Orca did not re-run it" }]);
   } finally { await t.h.dispose(); }
 }, 60_000);
 
@@ -358,7 +359,7 @@ describe("fix round 1: who can answer, and an answer outlives its pruned report 
         // mutation: drop the terminal clause from the rows' answerable assignment -> answerable true, red
         expect(preexistingFailureRows(t.h.store, "g", body, null, [])[0]).toMatchObject({ answerable: false, onlyRerunUsesIt: true });
         // mutation: drop onlyRerunUsesIt from preexistingFailureWaiting -> red
-        expect(preexistingFailureWaiting(t.h.store, "g", body)).toEqual([{ command: "npm test", answerable: false, onlyRerunUsesIt: true, reportedBy: 1 }]);
+        expect(preexistingFailureWaiting(t.h.store, "g", body)).toEqual([{ command: "npm test", answerable: false, onlyRerunUsesIt: true, reportedBy: 1, verificationNote: "unverified: the command is not one of the task's confirmed required checks, so Orca did not re-run it" }]);
       }
       // A non-terminal group keeps the old meaning: the answer reaches the current review, nothing about a rerun.
       const open = setBody({ status: "review" });
@@ -421,6 +422,21 @@ describe("an agent-only report is checked at the group's base before anyone is a
       const prompt = w.calls[0]!.prompt;
       expect(prompt).toContain("Reported pre-existing failure `true` is not confirmed: reported by a (chose: baseline run before edits reported # tests 598, # fail 1), but Orca ran it at the group's base and it passed there");
       expect(prompt).not.toContain("not answered by the person");
+    } finally { await w.t.h.dispose(); }
+  }, 240_000);
+
+  it("explains an unverified reported command and re-runs only the exact confirmed check (#466)", async () => {
+    const command = "true && true";
+    const explanation = "unverified: the command is not one of the task's confirmed required checks, so Orca did not re-run it";
+    const w = await reviewWorld({ harness: { decisions: (id) => id === "a" ? [marker(command, "saw it red"), marker("true", "saw it red too")] : [] } });
+    try {
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "passed", 150);
+      const store = w.t.h.store;
+      expect(store.db.prepare("SELECT command, result FROM base_check_results").all()).toEqual([{ command: "true", result: "green" }]);
+      expect(w.calls[0]!.prompt).toContain(explanation);
+      expect(preexistingFailureWaiting(store, "g", groupBody(w.t))).toEqual([expect.objectContaining({ command, verificationNote: explanation })]);
+      expect(readControlGroup(store, "epoch-test", "g").preexistingFailures).toContainEqual(expect.objectContaining({ command: "true", notConfirmedAtBase: { at: expect.any(Number) } }));
     } finally { await w.t.h.dispose(); }
   }, 240_000);
 

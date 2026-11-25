@@ -127,19 +127,21 @@ function knownRedAtBaseLines(entries: unknown): string[] {
 }
 
 /** Tester #402: an unanswered pre-existing failure, as the brief names it, with the command that answers it. */
-type PreexistingWaitingEntry = { command: string; answerable: boolean; onlyRerunUsesIt?: boolean; reportedBy: number };
+type PreexistingWaitingEntry = ReturnType<typeof import("../../control/preexistingFailure.js").preexistingFailureWaiting>[number];
 function preexistingFailureWaitingLines(entries: unknown, groupId: string | undefined): string[] {
   if (!Array.isArray(entries)) return [];
   const naming = (command: string): string => /^`([^`]+)`/.exec(command)?.[1] ?? command;
   const answerCommand = (command: string): string =>
     `orca group preexisting-failure ${groupId ?? "<group>"} --command "${naming(command)}" --answer <allow-fix|relative|edit-requirement>`;
-  return (entries as PreexistingWaitingEntry[]).map(({ command, answerable, onlyRerunUsesIt }) =>
+  return (entries as PreexistingWaitingEntry[]).map(({ command, answerable, onlyRerunUsesIt, verificationNote }) => {
+    const report = verificationNote === undefined ? command : `${command} (${verificationNote})`;
     // Tester #504: a finished group's row is recorded, not waited on; the answer command stays reachable for a rerun.
-    onlyRerunUsesIt === true
-      ? `A pre-existing failure is recorded; a review-rerun would use this answer: ${command}; ${answerCommand(command)}`
+    return onlyRerunUsesIt === true
+      ? `A pre-existing failure is recorded; a review-rerun would use this answer: ${report}; ${answerCommand(command)}`
       : answerable
-        ? `A pre-existing failure waits for your answer: ${command}; ${answerCommand(command)}`
-        : `A pre-existing failure is reported for information only (no requirement review to answer): ${command}`);
+        ? `A pre-existing failure waits for your answer: ${report}; ${answerCommand(command)}`
+        : `A pre-existing failure is reported for information only (no requirement review to answer): ${report}`;
+  });
 }
 
 /** Tester #348 review: a quota probe's verdict on a whole line in `run show`; nothing for any other run. */

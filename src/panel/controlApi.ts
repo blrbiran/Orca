@@ -123,7 +123,7 @@ function knownRedNote(store: ControlStore, groupId: string): KnownRedAtBase[] {
 }
 
 /** Tester #402: the brief's waiting rows; a failed read is no note (the full view still names the group's state). */
-function preexistingFailureWaitingNote(store: ControlStore, groupId: string): Array<{ command: string; answerable: boolean; reportedBy: number }> {
+function preexistingFailureWaitingNote(store: ControlStore, groupId: string): ReturnType<typeof preexistingFailureWaiting> {
   try {
     const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
     return row === undefined ? [] : preexistingFailureWaiting(store, groupId, JSON.parse(String(row.body)));
