@@ -485,6 +485,8 @@ export type RunViewV1 = {
   purpose?: "clarify" | "split" | "quota-probe" | "no-change-judge" | "requirement-review";
   claimOrdinal: number | null;
   providerAttemptOrdinal: number;
+  /** Tester #483: the checkpoint the run records, which `task continue` resumes from; absent from older servers. */
+  checkpointId?: string | null;
   profile: ProfileBindingV1;
   /** Tester D19: the installation and model the run was frozen with; absent from older servers. */
   agent?: { installation: string; model: string | null };

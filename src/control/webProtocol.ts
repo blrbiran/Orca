@@ -2225,6 +2225,9 @@ export const runViewSchema = z
     probeVerdict: probeVerdictSchema.optional(),
     claimOrdinal: positiveSafeInteger.nullable(),
     providerAttemptOrdinal: safeInteger,
+    // Tester #483: the checkpoint the run records (its body's checkpointId), which `task continue` resumes from; null when none.
+    // Optional on the wire like `overGrant` (web fixtures and the results view's run literals need no edit); the server always gives it.
+    checkpointId: idSchema.nullable().optional(),
     profile: profileBindingSchema,
     // Tester D19: the installation and model the run was frozen with when claimed. Optional on the wire so older readers
     // and fixtures are unaffected; omitted for a run that carries no frozen selection.

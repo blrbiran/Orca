@@ -89,7 +89,7 @@ export interface GroupView {
   workItems: Array<{ taskId: string; currentRunId: string | null; labelsVersion?: number; loopPlan?: { loopVersion: number } | null }>;
   // Tester #386: the run's outcome and what it used, for `task continue`'s next command; #389: the newest command ids,
   // which say whether Orca auto-confirmed the group (its confirm row is `orca-auto-confirm-unlimited-v<n>`).
-  runs: Array<{ runId: string; taskId: string | null; checkpointId?: string | null; unknownUsageSettlement?: { generation: number }; outcome?: string | null; used?: { tokens: number } }>;
+  runs: Array<{ runId: string; taskId: string | null; checkpointId: string | null; unknownUsageSettlement?: { generation: number }; outcome?: string | null; used?: { tokens: number } }>;
   recentCommandIds?: string[];
   checkpoints: Array<{ checkpointId: string; runId: string; taskId: string; state: string }>;
   integration?: { schemeHash: string };

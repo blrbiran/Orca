@@ -5,6 +5,7 @@ import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { canonicalBytes, sha256Canonical } from "../../src/control/canonicalJson.js";
 import { writeArtifact } from "../../src/control/archive.js";
 import { readControlGroup } from "../../src/panel/controlViews.js";
+import { runViewSchema } from "../../src/control/webProtocol.js";
 import { driverHarness } from "../control/fixtures/driverHarness.js";
 import { webFixture } from "../control/fixtures/web.js";
 import type { ControlStore } from "../../src/control/store.js";
@@ -68,6 +69,19 @@ describe("RunViewV1.continuable (handoff delivery C-4)", () => {
     const { h, runId } = await handedOff("partial"); try {
       // Final fix wave: every assertion reads the read model's own output, after the call (no read-back of the fixture's writes).
       expect(viewOf(h.store, runId)).toMatchObject({ state: "settled-recoverable", continuable: true });
+    } finally { await h.dispose(); }
+  });
+
+  // Tester #483: `task continue` (checkpointOf, src/commands/domains/verbs.ts) resumes from the checkpoint the run records,
+  // read from this view's run line. The view never sent it (the CLI's fixture hand-wrote it), so the CLI never found one.
+  it("a real group view carries each run's checkpointId, and the wire schema accepts it (#483)", async () => {
+    const { h, runId } = await handedOff("partial"); try {
+      const view = readControlGroup(h.store, EPOCH, "g");
+      const run = view.runs.find((entry) => entry.runId === runId)!;
+      expect(run.checkpointId).toBe(`cp-${runId}`);
+      // What checkpointOf then looks up: a non-unknown checkpoint of this run under that id.
+      expect(view.checkpoints.filter((cp) => cp.checkpointId === run.checkpointId && cp.runId === runId && cp.state !== "unknown")).toHaveLength(1);
+      expect(() => runViewSchema.parse(run)).not.toThrow();
     } finally { await h.dispose(); }
   });
 
