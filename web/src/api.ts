@@ -232,6 +232,22 @@ export const renameProject = (id: string, name: string): Promise<PostResult<{ pr
 export const setProjectDirs = (id: string, dirs: string[]): Promise<PostResult<{ project: ProjectV1 }>> =>
   postJson(`/api/projects/${encodeURIComponent(id)}`, { dirs }, "PATCH");
 
+/** Project remove spec 2026-11-25 §6.3 (tester #470): a `project-has-groups` refusal's counts. */
+export interface ProjectGroupCounts { notArchived: number; byStatus: Record<string, number>; groupIds: string[] }
+export type RemoveProjectResult =
+  | { ok: true; body: { removed: { projectKey: string }; archivedGroups: string[]; archivedBefore: number; restartNeeded: boolean; next: string[] } }
+  | ({ ok: false; status: number; groups?: ProjectGroupCounts } & Omit<PanelRefusal, "status">);
+/** DELETE /api/projects/:id -- project remove spec 2026-11-25 §6.3: refused while groups are not archived, unless archiveGroups. */
+export async function removeProject(id: string, archiveGroups: boolean): Promise<RemoveProjectResult> {
+  const path = `/api/projects/${encodeURIComponent(id)}`;
+  const res = await fetch(path, { method: "DELETE", headers: { "content-type": "application/json", ...csrfHeader() }, body: JSON.stringify(archiveGroups ? { archiveGroups: true } : {}) });
+  const body = await readBody(res);
+  noteAnswer(res.status, body);
+  if (res.ok) return { ok: true, body: body as Extract<RemoveProjectResult, { ok: true }>["body"] };
+  const groups = (body as { groups?: ProjectGroupCounts } | undefined)?.groups;
+  return { ok: false, ...refusalFrom(`DELETE ${path}`, res.status, body), ...(groups === undefined ? {} : { groups }) };
+}
+
 export interface StartChainInput {
   repoKey: string;
   goal: string;

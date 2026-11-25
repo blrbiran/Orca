@@ -53,6 +53,7 @@ import {
   renameProject,
   registerPlan,
   setProjectDirs,
+  removeProject,
   requestChainStart,
   requestChainStop,
   startChainBody,
@@ -1777,6 +1778,11 @@ export function App(): JSX.Element {
           }}
           onSetDirs={async (id, dirs) => {
             const result = await setProjectDirs(id, dirs);
+            if (result.ok) await rereadAfterProjectChange();
+            return result;
+          }}
+          onRemove={async (id, archiveGroups) => {
+            const result = await removeProject(id, archiveGroups);
             if (result.ok) await rereadAfterProjectChange();
             return result;
           }}

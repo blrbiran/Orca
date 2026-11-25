@@ -8,7 +8,7 @@
 import { useContext, useState, type FormEvent, type JSX } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountContext, mayHumanOnly } from "./AuthGate.js";
-import type { PanelRefusal, PostResult } from "./api.js";
+import type { PanelRefusal, PostResult, ProjectGroupCounts, RemoveProjectResult } from "./api.js";
 import { refusalText } from "./i18n.js";
 import { projectName, type ProjectsAnswerV1 } from "./project.js";
 import { projectAction } from "./ui/classes.js";
@@ -27,6 +27,8 @@ export interface ProjectControlProps {
   /** Multi-directory projects spec §4.2: create one, or replace a multi project's order. */
   onAddMulti: (input: { name: string; dirs: string[] }) => Promise<PostResult<unknown>>;
   onSetDirs: (id: string, dirs: string[]) => Promise<PostResult<unknown>>;
+  /** Project remove spec 2026-11-25 §6.3 (tester #470): `DELETE /api/projects/:id`; absent, no Remove action. */
+  onRemove?: (id: string, archiveGroups: boolean) => Promise<RemoveProjectResult>;
 }
 
 const NOTICE_KEY = "orca.multiDirDowngradeNotice";
@@ -44,7 +46,9 @@ const lastSegment = (path: string): string => path.replace(/[/\\]+$/, "").split(
 
 export function ProjectControl(props: ProjectControlProps): JSX.Element {
   const { t } = useTranslation();
-  const [open, setOpen] = useState<"add" | "rename" | "multi" | "multiEdit" | null>(null);
+  const [open, setOpen] = useState<"add" | "rename" | "multi" | "multiEdit" | "remove" | null>(null);
+  /** Spec 2026-11-25 §6.3: the groups a first Remove was refused for; shown so the second confirmation names them. */
+  const [removeGroups, setRemoveGroups] = useState<ProjectGroupCounts | null>(null);
   const [path, setPath] = useState("");
   const [name, setName] = useState("");
   const [dirs, setDirs] = useState<string[]>([]);
@@ -66,7 +70,20 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
   };
 
   const close = (): void => {
-    setOpen(null); setRefusal(null); setPath(""); setName(""); setDirs([]); setPick(""); setNotice(false);
+    setOpen(null); setRefusal(null); setPath(""); setName(""); setDirs([]); setPick(""); setNotice(false); setRemoveGroups(null);
+  };
+  /**
+   * Project remove spec 2026-11-25 §6.3 (human rulings 1, 2): the first confirmation removes a project with no group left
+   * to archive; a `project-has-groups` answer shows the counts, and only the second confirmation archives them.
+   */
+  const submitRemove = (event: FormEvent): void => {
+    event.preventDefault();
+    if (current === undefined || props.onRemove === undefined) return;
+    void props.onRemove(current.projectKey, removeGroups !== null).then((result) => {
+      if (result.ok) { close(); return; }
+      if (result.code === "project-has-groups" && result.groups !== undefined) { setRefusal(null); setRemoveGroups(result.groups); return; }
+      setRefusal({ status: result.status, code: result.code, message: result.message });
+    });
   };
   const settle = (result: PostResult<unknown>): void => {
     if (result.ok) close();
@@ -174,6 +191,10 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
         <button type="button" className={projectAction} disabled={!editable || current?.kind !== "multi"} onClick={openMultiEdit}>
           {t("project.multiEdit")}
         </button>
+        {props.onRemove !== undefined && <button type="button" className={projectAction} disabled={!editable || current === undefined} title={editable ? undefined : t("project.fromCommandLine")}
+          onClick={() => { setRefusal(null); setRemoveGroups(null); setOpen("remove"); }}>
+          {t("project.remove")}
+        </button>}
       </div>}
       {mayChange && !editable && <p className="caveat">{t("project.fromCommandLine")}</p>}
       {/* Handoff §4.0 item 5 (seat G1): command-line mode is fixed at launch by ruling (registry spec §4, P1), so the
@@ -206,6 +227,18 @@ export function ProjectControl(props: ProjectControlProps): JSX.Element {
           <label>{t("project.name")}<input type="text" name="project-name" value={name} onChange={(e) => setName(e.currentTarget.value)} /></label>
           {refusal !== null && <p role="alert">{refusal.code}: {refusalText(refusal)}</p>}
           <button type="submit">{t("project.save")}</button>
+          <button type="button" onClick={close}>{t("project.cancel")}</button>
+        </form>
+      )}
+      {open === "remove" && current !== undefined && (
+        <form aria-label={t("project.remove")} onSubmit={submitRemove}>
+          <p>{t("project.removeWhat", { name: projectName(current) })}</p>
+          {removeGroups !== null && <p role="note" data-tone="warn">{t("project.removeGroups", {
+            count: removeGroups.notArchived,
+            items: Object.keys(removeGroups.byStatus).sort().map((status) => `${removeGroups.byStatus[status]} ${status}`).join(", "),
+          })}</p>}
+          {refusal !== null && <p role="alert">{refusal.code}: {refusalText(refusal)}</p>}
+          <button type="submit">{removeGroups === null ? t("project.removeConfirm", { name: projectName(current) }) : t("project.removeArchiveConfirm", { count: removeGroups.notArchived })}</button>
           <button type="button" onClick={close}>{t("project.cancel")}</button>
         </form>
       )}
