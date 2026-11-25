@@ -20,8 +20,10 @@ export function leftToPerson(last: { leftToPerson?: string[]; criteria: Readonly
  */
 export function reviewAnswers(groupId: string, why: string | undefined, left: ReadonlyArray<LeftCriterion>): string[] {
   const rerun = `orca group review-rerun ${groupId} --note '<what to look at>'`, accept = `orca group review-accept ${groupId} --note '<why accept as is>'`;
-  if (why !== "not-fixable-by-work") return [`orca group review-fix ${groupId} --goal '<what to fix>'`, rerun, accept];
+  // Tester #343/#392: a criterion only the plan can meet is answered by a new requirement (the step that works on an
+  // accepted group). Tester #502: that holds in every review shape that records one, a check conflict included.
   const plan = left.some((c) => c.by === "plan") ? ["orca requirement open --idea '<the requirement, with the plan changed>'"] : [];
+  if (why !== "not-fixable-by-work") return [`orca group review-fix ${groupId} --goal '<what to fix>'`, ...plan, rerun, accept];
   return [...plan, accept, rerun];
 }
 

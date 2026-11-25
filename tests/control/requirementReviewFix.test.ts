@@ -50,6 +50,28 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
     } finally { await w.t.h.dispose(); }
   }, 300000);
 
+  it("records a plan-level not-met as left to a person even when another criterion is a check conflict (#502)", async () => {
+    const command = "test ! -f base.txt";
+    const w = await reviewWorld({ answer: () => ({ outcome: "complete", output: {
+      ...verdicts({ AC1: "not-met", AC2: "not-met" }, { AC1: "plan" }),
+      checkConflict: { criterionId: "AC2", requiredCheck: command,
+        because: "The person forbids repairing an existing failing test, but this check requires that repair." },
+    } }) });
+    try {
+      const settings = readRepositorySettingsBody(w.t.h.store, "repo") ?? { workspaceMode: "worktree" as const, revision: 0 };
+      writeRepositorySettingsBody(w.t.h.store, "repo", { ...settings, revision: settings.revision + 1,
+        checks: { ...settings.checks, integrationCheck: { command } } });
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "not-passed" && w.review()?.why === "check-conflict", 120);
+      // Tester #502: the conflict branch used to skip settleNotPassed, so AC1 never entered leftToPerson and no next step
+      // could change the plan. mutation: skip leftToPerson in the conflict branch -> undefined, red
+      expect(w.review()).toMatchObject({ state: "not-passed", why: "check-conflict", autoFixRounds: 0,
+        rounds: [expect.objectContaining({ result: "not-met", leftToPerson: ["AC1"],
+          checkConflict: expect.objectContaining({ criterionId: "AC2" }) })] });
+      expect(w.t.h.store.db.prepare("SELECT id FROM work_items WHERE group_id='g' AND id LIKE 'review-fix-%'").all()).toEqual([]);
+    } finally { await w.t.h.dispose(); }
+  }, 300000);
+
   it("binds a reported check conflict to the acceptance command even when settings change during review (#322)", async () => {
     const command = "test ! -f base.txt";
     let w!: Awaited<ReturnType<typeof reviewWorld>>;

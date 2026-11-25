@@ -51,6 +51,23 @@ describe("group show names the requirement review (tester follow-up G §3.3)", (
     expect(lines.slice(at, at + 3)).toEqual(["conflict: criterion AC1", "  required check: npm test", "  because: only add"]);
   });
 
+  // Tester #502: a plan-level not-met recorded in a check-conflict round is named left to a person, and the step that
+  // changes the plan (a new requirement) sits beside review-fix and review-accept.
+  it("a check-conflict round names a plan criterion left to a person and offers the new requirement (#502)", async () => {
+    const p = await panel({ state: "not-passed", why: "check-conflict", problem: "requirement-review-not-passed:check-conflict", autoFixRounds: 0,
+      rounds: [{ ...round("not-met", [
+        { id: "AC12", verdict: "not-met", evidence: [{ path: "plan", line: null }], missing: "the plan puts sprint-audit in Layer 2", fixableBy: "plan" },
+        { id: "AC14", verdict: "not-met", evidence: [{ path: "README.md", line: 1 }], missing: "an assertion was weakened", fixableBy: "work" }]),
+        leftToPerson: ["AC12"], checkConflict: { criterionId: "AC14", requiredCheck: "npm test", because: "only add" } }] });
+    const lines = (await cli(["group", "show", "g-alpha"], p.dir)).stdout.split("\n");
+    // mutation: do not record leftToPerson in the conflict branch -> the line is missing, red
+    expect(lines).toContain("left to a person (no change to files can meet them): AC12 (plan)");
+    // mutation: gate the plan step behind not-fixable-by-work -> no requirement open, red
+    expect(lines).toContain("  or: orca requirement open --idea '<the requirement, with the plan changed>'");
+    expect(lines).toContain("next: orca group review-fix g-alpha --goal '<what to fix>'");
+    expect(lines).toContain("  or: orca group review-accept g-alpha --note '<why accept as is>'");
+  });
+
   // Tester #343: criteria no change to files can meet get no fix task; what answers them is a new plan draft or a person's call.
   it("a review no change to files can meet names a new plan draft and the person's answers, not review-fix", async () => {
     const p = await panel({ state: "not-passed", why: "not-fixable-by-work", problem: "requirement-review-not-passed:not-fixable-by-work", autoFixRounds: 0,

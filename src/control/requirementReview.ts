@@ -936,9 +936,18 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
       ...(relative.length === 0 ? {} : { relativePass: relative }) };
     const { rerun: _rerun, why: _why, ...rest } = current;
     let next: RequirementReview = { ...rest, rounds: [...current.rounds, round], state: "passed" };
-    if (result !== "passed") next = conflict === undefined ? settleNotPassed(store, runRow.groupId, next, round)
+    if (result !== "passed") {
+      if (conflict === undefined) next = settleNotPassed(store, runRow.groupId, next, round);
       // Tester #340: a definite not-met that conflicts with the person's restriction -- the person decides which gives way.
-      : { ...next, state: "not-passed", why: "check-conflict" };
+      // Tester #502: the same round can also carry a plan-level not-met. Record it as left to a person here (the shared
+      // rule settleNotPassed uses) before the conflict branch, so review-fix/review-accept do not hide the one step that
+      // can change the plan (`orca requirement open`).
+      else {
+        const left = leftToPersonOf(round);
+        if (left.length > 0) round.leftToPerson = left;
+        next = { ...next, state: "not-passed", why: "check-conflict" };
+      }
+    }
     // #337 §5.1: before both the save and the activity, so the activity names the state saved.
     next = settledReview(store, runRow.groupId, next);
     saveReview(store, runRow.groupId, next);
@@ -958,8 +967,8 @@ function settleNotPassed(store: ControlStore, groupId: string, review: Requireme
     // Tester #343 (spec S5): a criterion only the plan or the person can meet gets no work fix task -- one such fix burned
     // 48M tokens on a goal no file change could reach. A round recorded before S5 has no label and reads as `work`.
     // Tester #377: a relative pass does not count as not-met.
-    const notMet = round.criteria.filter((c) => c.verdict === "not-met" && !isRelativePass(round, c.id));
-    const left = notMet.filter((c) => (c.fixableBy ?? "work") !== "work").map((c) => c.id);
+    const notMet = notMetOf(round);
+    const left = leftToPersonOf(round);
     if (left.length > 0) round.leftToPerson = left;
     if (left.length === notMet.length) return { ...review, state: "not-passed", why: "not-fixable-by-work" };
     if (review.autoFixRounds >= MAX_AUTO_FIX_ROUNDS) return { ...review, state: "not-passed", why: "rounds-exhausted" };
@@ -970,6 +979,17 @@ function settleNotPassed(store: ControlStore, groupId: string, review: Requireme
   }
   const why: ReviewWhy = round.result === "cannot-judge" ? "cannot-judge" : round.result === "invalid" ? "invalid" : round.result === "unfunded" ? "unfunded" : "failed";
   return { ...review, state: "not-passed", why };
+}
+
+/** The round's criteria that are not met, a relative pass aside (tester #377). One rule for every caller (tester #502). */
+function notMetOf(round: ReviewRound): ReviewRound["criteria"] {
+  return round.criteria.filter((c) => c.verdict === "not-met" && !isRelativePass(round, c.id));
+}
+
+/** Tester #343: the not-met criteria no work fix covers, with who can meet them; shared by settleNotPassed and a
+ * check-conflict round (tester #502) so a plan-level finding is recorded in both shapes. */
+function leftToPersonOf(round: ReviewRound): string[] {
+  return notMetOf(round).filter((c) => (c.fixableBy ?? "work") !== "work").map((c) => c.id);
 }
 
 const isRelativePass = (round: ReviewRound, criterionId: string): boolean => (round.relativePass ?? []).some((r) => r.criterionId === criterionId);

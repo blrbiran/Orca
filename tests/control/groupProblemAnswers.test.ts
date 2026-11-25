@@ -24,4 +24,13 @@ describe("review answers after confirm (#392)", () => {
       "orca group review-fix g --goal '<what to fix>'", "orca group review-rerun g --note '<what to look at>'",
       "orca group review-accept g --note '<why accept as is>'"]);
   });
+
+  // Tester #502: a check conflict can sit beside a plan-level not-met; the plan step must not be hidden by it.
+  it("a check conflict with a plan criterion still offers the new requirement beside fix and accept", () => {
+    const answers = reviewAnswers("g", "check-conflict", [{ id: "AC12", by: "plan" }]);
+    // mutation: put the plan step behind the not-fixable-by-work branch only -> no requirement open, red
+    expect(answers).toContain("orca requirement open --idea '<the requirement, with the plan changed>'");
+    expect(answers).toContain("orca group review-accept g --note '<why accept as is>'");
+    expect(answers).toContain("orca group review-fix g --goal '<what to fix>'");
+  });
 });
