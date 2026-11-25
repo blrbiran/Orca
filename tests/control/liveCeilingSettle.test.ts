@@ -17,6 +17,8 @@ import { readWebGroup } from "../../src/control/webService.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import type { ExecutionPort, StartEnvelope } from "../../src/control/executionPort.js";
 import { driverHarness } from "./fixtures/driverHarness.js";
+import { withCommandContext } from "../../src/control/commandClient.js";
+import { ceilingStopNext } from "../../src/commands/domains/verbs.js";
 
 type Harness = Awaited<ReturnType<typeof driverHarness>>;
 const M = 1_000_000;
@@ -375,6 +377,56 @@ describe("a run stopped at its live ceiling (spec §2.1, §2.5)", { timeout: 300
       await driver.round();
       expect(t.body(runA).liveCeiling).toEqual(ceiling);
       expect(await deliverScheduledStart(t.dispatch, "g")).toMatchObject({ reason: "group-budget-unavailable" });
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  // Tester #478 (short term): the stopped task's person retry was refused `run-state:settled-recoverable` and recovery retry
+  // answered an empty observation, neither naming the stop or the top-up that continues the task. Both now refuse by the
+  // stop and name a set-limit that is run here as printed (parsed back from the refusal) and does continue the task.
+  it("a group-cap wait: task retry and recovery retry name the stop and a set-limit that continues the task", async () => {
+    const knobs: Knobs = { exhausted: true, workTokens: 0, cause: "group" };
+    const t = await harness(["a"], 3 * M, knobs);
+    try {
+      const driver = t.driver();
+      const first = await t.claim();
+      knobs.workTokens = t.body(first).liveCeiling.tokens - 100_000;
+      await settled(t, driver, first, "settled-recoverable");
+      expect(work(t)).toMatchObject({ status: "blocked", groupCapStop: { runId: first } });
+      const command = t.h.command("retry-task", { taskId: "a", runId: first });
+      const retried = withCommandContext(command.commandId, { client: "web", principal: "user:owner", personAuthority: true }, () => t.service.retryTask(command)) as { error: { code: string; message: string } };
+      // mutation: drop the ceilingStopWait check in retryTask -> run-state:settled-recoverable, red
+      expect(retried.error.code).toBe("task-not-retryable");
+      expect(retried.error.message).toContain("live-ceiling-stop:group-cap:the group's token limit (3000000) stopped this run");
+      const recovery = await t.service.recoveryRetry(t.h.runCommand("recovery-retry", first, { scope: "run", runId: first })) as { error: { code: string; message: string } };
+      // mutation: drop the ceilingStopWait check in retryRun -> recovery-observed resolved:false, red
+      expect(recovery.error).toMatchObject({ code: "recovery-blocked", message: expect.stringContaining("live-ceiling-stop:group-cap:") });
+      const next = ceilingStopNext(retried.error.message.slice("task-not-retryable:".length))!;
+      expect(next).toBe(`orca group set-limit g --limit ${3 * M + knobs.workTokens} --as-person`);
+      expect(ceilingStopNext(recovery.error.message.slice("recovery-blocked:".length))).toBe(next);
+      // The printed exit works: its limit is a top-up, which continues the task with its work.
+      expect(setLimit(t, Number(/--limit (\d+)/.exec(next)![1]))).toMatchObject({ result: { kind: "limit-set" } });
+      expect(work(t)).toMatchObject({ status: "ready", allowancePredecessorRunId: first });
+      knobs.exhausted = false;
+      const second = await nextRun(t, driver);
+      expect(t.body(second).taskId).toBe("a");
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a pause-line wait: task retry names the stop and the decision", async () => {
+    const knobs: Knobs = { exhausted: true, workTokens: 10_400_000, cause: "pause-line" };
+    const t = await harness(["a"], 100 * M, knobs);
+    try {
+      setIntent(t, "a", { tokens: M, hard: false, provenance: "human", estimateId: null });
+      const driver = t.driver();
+      const first = await t.claim();
+      await settled(t, driver, first, "settled-recoverable");
+      const command = t.h.command("retry-task", { taskId: "a", runId: first });
+      const retried = withCommandContext(command.commandId, { client: "web", principal: "user:owner", personAuthority: true }, () => t.service.retryTask(command)) as { error: { code: string; message: string } };
+      // mutation: drop the usagePause branch of ceilingStopWait -> run-state:settled-recoverable, red
+      expect(retried.error).toMatchObject({ code: "task-not-retryable", message: expect.stringContaining("live-ceiling-stop:pause-line:") });
+      expect(ceilingStopNext(retried.error.message.slice("task-not-retryable:".length))).toBe("orca task decide-usage g a --decision continue");
       await driver.stop();
     } finally { await t.h.dispose(); }
   });

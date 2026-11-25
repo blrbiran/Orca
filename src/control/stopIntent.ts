@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import { readCommittedCheckpointSync } from "./checkpoints.js";
 import { z } from "zod";
 import { rearmParkedEstimates } from "./estimateParking.js";
+import { ceilingStopWait } from "./usagePause.js";
 import { applyWebCommand, updateRevision, type WebCommandContext } from "./commandLedger.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions } from "./commands.js";
@@ -700,6 +701,12 @@ function retryRun(store: ControlStore, groupId: string, runId: string, context: 
   if (resumedDriverRun && workerSettled) recordActivity(store, { groupId, taskId: run.taskId, runId, kind: "worker-lost", body: { reason: "settled before recovery retry" } });
   const resolved = blockers.resolved || rearm !== null || resumedDriverRun;
   const requeued = requeueUnknownHandoff(store, groupId, runId, context.rawCommand.commandId, now);
+  // Tester #478 (short term): a retry that did nothing for a run a live ceiling stopped (its task waits at the group cap or
+  // its pause line) says why and names the way on, instead of answering an empty observation.
+  if (!resolved && !requeued && blockers.codes.length === 0 && wakeIds.length === 0) {
+    const wait = ceilingStopWait(store, groupId, run);
+    if (wait !== null) throw new ControlError("recovery-blocked", wait);
+  }
   return { resolved: resolved || requeued, blockerCodes: blockers.codes, evidenceIds: blockers.evidenceIds, wakeIds };
 }
 

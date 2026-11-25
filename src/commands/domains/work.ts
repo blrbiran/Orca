@@ -7,7 +7,7 @@ import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, WriteContext } from "../types.js";
 import {
-  adoptFullSuiteLine, checkpointOf, type ClarifyRoundView, config, contextHandoffLines, DELIVERY_FOR_LATER, DELIVERY_NOT_CHOSEN, type EstimateHistory, FULL_SUITE_NOT_SET, currentRun, file, fillRoundAnswer, fundingLines, historyLines, withFunding, group, GROUP, type GroupView, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, softCeilingLines, unestimatedLines, verb, workItem,
+  adoptFullSuiteLine, ceilingStopNext, checkpointOf, type ClarifyRoundView, config, contextHandoffLines, DELIVERY_FOR_LATER, DELIVERY_NOT_CHOSEN, type EstimateHistory, FULL_SUITE_NOT_SET, currentRun, file, fillRoundAnswer, fundingLines, historyLines, withFunding, group, GROUP, type GroupView, groupView, invalid, json, list, newGroupId, profileBinding, str, task, TASK, softCeilingLines, unestimatedLines, verb, workItem,
 } from "./verbs.js";
 import { SCHEME_FLAGS, schemeFromFlags } from "./settings.js";
 import { SYSTEM_LABELS } from "../../control/labels.js";
@@ -327,6 +327,8 @@ async function retryNext(error: { code: string; message: string }, c: WriteConte
   const detail = refusalDetail(error);
   const named = namedRecovery(detail);
   if (named !== undefined) return [named];
+  const ceiling = ceilingStopNext(detail);
+  if (ceiling !== undefined) return [ceiling];
   if (detail.startsWith("run-state:") || detail.startsWith("blocked-at:") || detail.startsWith("outcome:")) {
     const runId = await currentRun(c);
     const state = detail.startsWith("run-state:") ? detail.slice("run-state:".length) : null;

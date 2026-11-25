@@ -15,7 +15,7 @@ import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from
 import type { FrozenWorkAgent } from "./agentFreeze.js";
 import { applyAgentSwitch, AUTO_AGENT, runAgentAgrees, type SwitchSource } from "./agentSwitch.js";
 import { commandPrincipalFor, routedDispatchedRunFor, settlingPersonFor } from "./commandClient.js";
-import { movePauseLine } from "./usagePause.js";
+import { ceilingStopWait, movePauseLine } from "./usagePause.js";
 import { appendTopUp, topUpSum, withTopUp } from "./workTopUp.js";
 import { authorizeWorkTopUp } from "./authorizeWorkTopUp.js";
 import { continuationIdentity, registrationOf } from "./continuation.js";
@@ -273,6 +273,10 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           deps.beforeCommit?.();
           return commandSuccess(context, { kind: "task-retried", taskId, fromRunId: runId });
         }
+        // Tester #478 (short term): a run a live ceiling stopped while its task waits at the group cap or its pause line is
+        // refused by that cause, naming the way on (usagePause.ts ceilingStopWait), not as an unexplained run state.
+        const ceilingWait = live ? null : ceilingStopWait(store, groupId, run);
+        if (ceilingWait !== null) throw new ControlError("task-not-retryable", ceilingWait);
         const held = !live && run.state === "settled-recoverable" && run.recoverable === true && work.status === "held"
           && allocations.length === 2 && allocations.every(a => a.state === "held" && settlementSame(a.amount, run.remaining[a.bucket as "work" | "handoff"]))
           && settlementSame(work.grant, run.remaining);

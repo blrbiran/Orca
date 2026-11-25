@@ -221,7 +221,13 @@ export function budgetStateLines(groupId: string, source: { workItems?: Array<{ 
     return lines;
   });
 }
-const withLines = (base: string, lines: string[]): string => (lines.length === 0 ? base : `${base}\n${lines.join("\n")}`);
+/**
+ * Tester #478: a refusal for a run a live ceiling stopped (control/usagePause.ts ceilingStopWait) ends with the command
+ * that moves it on; `detail` is what follows the refusal's code. Undefined for any other refusal.
+ */
+export const ceilingStopNext = (detail: string): string | undefined =>
+  detail.startsWith("live-ceiling-stop:") && detail.includes(":orca ") ? detail.slice(detail.lastIndexOf(":orca ") + 1) : undefined;
+const withLines = (base: string, lines: string[]): string =>(lines.length === 0 ? base : `${base}\n${lines.join("\n")}`);
 /** Issue #212: the authored work allocation is a request; a claim funds what the group limit leaves after handoffs. */
 export function fundingLines(preview: unknown): string[] {
   const rows = (preview as { rows?: Array<{ taskId: string; authoredTokens: number | null; fundableTokens: number | null; reason: string | null; expectation?: boolean; taskCapTokens?: number }> } | null)?.rows ?? [];

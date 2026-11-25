@@ -78,6 +78,27 @@ export function classifyCeilingStop(store: ControlStore, run: { runId: string; g
 }
 
 /**
+ * Tester #478 (short term): a run settled by a live-ceiling stop whose task still waits on it -- at the group cap
+ * (`groupCapStop`) or at its pause line (`usagePause`) -- is neither retried nor resumed; the wait has its own way on.
+ * `task retry` used to refuse it as `run-state:settled-recoverable` and `recovery retry` did nothing; both now refuse with
+ * this detail, which names the stop and that way on: a top-up (set-limit by the tokens the run used, which continues every
+ * task at the group cap, webService setLimit) or a decision. The ceiling semantics are untouched. Null otherwise.
+ */
+export function ceilingStopWait(store: ControlStore, groupId: string, run: { runId: string; workItemId: string; taskId: string | null; state: string; liveCeilingStop?: unknown }): string | null {
+  if (run.state !== "settled-recoverable" || run.liveCeilingStop === undefined) return null;
+  const work = readWork(store, groupId, run.workItemId) as unknown as Record<string, unknown> & { status: string };
+  if (work.status !== "blocked") return null;
+  const cap = work.groupCapStop as { runId?: string; observedTokens?: number } | undefined;
+  const limit = (readGroup(store, groupId).limit as { tokens: number | null }).tokens;
+  if (cap?.runId === run.runId && limit !== null) {
+    return `live-ceiling-stop:group-cap:the group's token limit (${limit}) stopped this run at ${cap.observedTokens ?? 0} tokens; raise it and the task continues with its work:orca group set-limit ${groupId} --limit ${limit + Math.max(1, cap.observedTokens ?? 0)} --as-person`;
+  }
+  const pause = work.usagePause as { runId?: string } | undefined;
+  if (pause?.runId === run.runId) return `live-ceiling-stop:pause-line:the task's pause line stopped this run; decide:orca task decide-usage ${groupId} ${run.taskId ?? run.workItemId} --decision continue`;
+  return null;
+}
+
+/**
  * The pause line a task continues under (spec §2.5): the next multiple, and at least the first one above what the task
  * used, capped by half the group's remainder (pauseLineFor). Refused usage-pause-no-headroom when the task has no
  * expectation and usage-pause-group-headroom (naming set-limit) when the group has too little left. Shared by continue

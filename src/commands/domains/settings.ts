@@ -5,7 +5,7 @@
 import { EntryRejection } from "../../entry/envelope.js";
 import { resolveId } from "../resolve.js";
 import type { CommandDef, PositionalDef, WriteContext } from "../types.js";
-import { file, group, GROUP, invalid, list, str, verb } from "./verbs.js";
+import { ceilingStopNext, file, group, GROUP, invalid, list, str, verb } from "./verbs.js";
 
 const ID: PositionalDef = { name: "id", summary: "the pending item's id", required: true };
 const CORRECTION: PositionalDef = { name: "correction", summary: "a correction id (c_ + 16 hex)", required: true };
@@ -292,5 +292,10 @@ export const SETTINGS_ROWS: CommandDef[] = [
       if (target.scope !== "run") throw invalid("--acknowledge goes with --run <run>");
       if (acknowledge !== "charge-remaining-grant" && acknowledge !== "charge-observed-floor") throw invalid("--acknowledge wants charge-remaining-grant or charge-observed-floor");
       return { ...target, acknowledge };
+    },
+    // Tester #478: a run a live ceiling stopped is moved on by a top-up or a decision, which the refusal names.
+    next: (error) => {
+      const next = error.code === "recovery-blocked" && error.message.startsWith(`${error.code}:`) ? ceilingStopNext(error.message.slice(error.code.length + 1)) : undefined;
+      return next === undefined ? undefined : [next];
     } })),
 ];
