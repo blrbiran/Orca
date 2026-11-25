@@ -67,7 +67,8 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 ### 3.最新（2026-11-26，测试者台账 Batch 70）
 
 - **Orca**：#466 基线仅逐字复跑已确认的 required check，未匹配具名说明未核实。#494 未曾绿过的缺文件检查显示 `not-run`，验收接管后 CLI 标记历史 watch tip。#495 人设期望只显示一次，估算下限显示原建议值，倍数按实际期望算。#502 检查冲突与 plan 级不达标同时保留，给出 `requirement open`。#419/#485 无自定上限的 criteria-review 默认 500k，可配置并显示派发时上限。父组已通过时显示 advisory 和出口。父组终止后，派生 judge 无法裁定的 flag 由 `orca-auto` ratify 并附原因，已归档的 judge 也会在收敛时处理。
-- **门**：repin 前实现分支 `5bfbe51c` 的 `npm test -- --base main` 1770/1770，107 个文件延后；repin 后默认解析测试与下面两项通过。`vitest run tests/commands/groupShowLandingWatch.test.ts tests/panel/landingWatchSuperseded.test.ts` 9/9，`npm run build` RC 0（观测代码 `5149af72` ＋ pin `86444493`）。
+- **发布**：Batch 70 已快进合入本地 `main`。本轮首次 Orca push 被自动权限审查拒绝，理由是未识别到以 `allow-push` 开头的直接消息。接手用 `/usr/bin/git ls-remote` 现核。
+- **门**：repin 前实现分支 `5bfbe51c` 的 `npm test -- --base main` 1770/1770，107 个文件延后；repin 后默认解析测试与下面两项通过。`vitest run tests/commands/groupShowLandingWatch.test.ts tests/panel/landingWatchSuperseded.test.ts` 9/9，`npm run build` RC 0（观测代码 `5149af72` ＋ pin `86444493`）。新构建的配对改动门 `TMPDIR=/tmp ORCA_CCLOOP_BIN=<ccloop checkout>/dist/cli.js npm test -- --base 1ee96d8d --maxWorkers=4` 启动时排队等机器锁，日志 `/tmp/orca-b70-rebuilt-gate.NL0Tq8`；较早的门使用旧构建，不作新 pin 证据。完整套件未跑。
 - **#493**：Orca repin 到 ccloop 的 `fix(codex): a phase refuses a private CODEX_HOME that carries hooks.json (tester #493)`（pin `4ccbfc2`）。锁文件只改 ccloop，repin 脚本通过默认解析 E2E 12/12、typecheck、`npm ci`。运行前检查两个私有路径是否含 `hooks.json`。本机免费探针与测试者的真实 exec 现场读数不同，不能用 feature 列表断言所有 hook 来源都已关闭。当前面板部署另核，本轮未重启。
 - **syncskill**：#506 修复 SSH 远端 shell 脚本的引用，POSIX 测试通过。#482 非回退 rsync 错误与超时给 `E_REMOTE_TRANSPORT` / exit 5，清理失败报 staging 路径。超时后已启动的远端操作可能继续。已有共享 `agents` 链接保留，新技能只在共享目录已存在时默认链接，`install --shared-agents` 显式启用。`npm run build`、`npm test -- --maxWorkers=1` 在 `c80a3e8` 通过，987 项。
 - **ccmem**：#507 合并 backfill 入队护栏、无凭据停止续队、日报排除 embedding/维护任务，孤儿回收年龄单列。已有日报未重算，清理默认预览且须显式给两档期限，详见姊妹仓。#452 仅将 rollout 首行有证据的关闭请求单列，真实格式未验证。#445 超时单列，保留三次非额度失败的诊断口径。`npm test` 在 `77dfe8f` 1147/1147。生产 schema 021 迁移及 daemon 部署仍待操作，现有生产库未迁移。
@@ -486,7 +487,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ### 4.0 接手顺序（2026-11-26，Batch 70；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
 
-1. **#505 优先收测试者的大库 dry-run**：保留耗时、planned 和 `skippedByReason`，生产 `--apply` 另行批准。#478 同 attempt 的付费验收已通过，证据见 Batch 69。
+1. **#505 优先收测试者的大库 dry-run**。`/usr/bin/time -p orca gc --include-artifacts --older-than 0 --json` 默认只读。回传 Orca 版本、退出码、耗时、`.body.artifacts` 的 planned 数量、`bytes`、`heldBytes`、`skippedByReason` 和 `scan`。生产 `--apply` 另行批准。#478 同 attempt 的付费验收已通过，证据见 Batch 69。
 2. **待部署与设计**：核对生产面板 pin。ccmem 先在副本演练 schema 021 和回退，生产 stop → migrate → start 另行授权。#498/#508 的验收策略、#501 的结构化交付图和 #497 的 CLI 读取性能留后续。另有本地日志中曾出现的 API 密钥需由持有人轮换。#445 阈值、基线 #466 和 syncskill `agents` 目标已获确认并实施。
 3. **登记的余项**（不急）：#478 的 A2 拦截 lineage 与 `task continue` 扣减；#468 大 store 上的阻塞时长（请测试者在其 5 GB store 上给 dry run 计时、看 `--apply` 时面板卡多久）；#469 handoff 停止 run 的降级；#470 spec §2.2（被删项目的组在 `group show` 里标 `project.removed`）；syncskill `npm ci` 的 lock 不同步；ccmem `daemon status | head` 的 EPIPE。
 4. **残留（归人，命令见本会话最终汇报）**：`.wt-repin-465`（worktree，需 `--force`）、`.wt-466-mut`、`.wt-launchd-mut`、`.wt-ss-462-mut`、`.wt-ccloop-f8d368e`、`.wt-final-ccloop-pin`、`.wt-ccloop-276114a`（**已被 `.wt-ccloop-305dad1` 取代，可删**）、本会话的 `.wt-470-mut`、`.wt-batchA-mut`、`.wt-469-mut`、`.wt-478o-mut`、`.wt-478o-orig`、`.wt-478-ab-main`、`.wt-478-ab-br`，以及 `.wt-*.log`。`.wt-ccloop-305dad1` 是 Batch 69 的历史构建，当前配对测试按本仓实际 pin 选择。
