@@ -544,10 +544,9 @@ interface LandingWatchView { tip?: string; supersededBy?: "acceptance"; regressi
  */
 export function landingWatchLines(groupId: string, w: LandingWatchView | undefined): string[] {
   // Tester #371: the watch stopped and the group acceptance decides the final tip; no landing will run it again.
-  // Tester #494: the human output names that tip, so the record's last states (which the acceptance supersedes, and which
-  // an earlier red may still sit in) are not read as current problems; the JSON's `supersededBy` and `tip` say the same.
+  // Tester #494: label the last watch tip explicitly. Its states are historical once acceptance takes over.
   if (w?.supersededBy === "acceptance") {
-    const superseded = `landing watch superseded by acceptance (tip ${(w.tip ?? "").slice(0, 12) || "?"})`;
+    const superseded = `landing watch superseded by acceptance (last watch tip ${(w.tip ?? "").slice(0, 12) || "?"})`;
     return w.regressions.length === 0 ? [superseded]
       : [superseded, `  its last record had ${w.regressions.length} regression${w.regressions.length === 1 ? "" : "s"}: ${w.regressions.map((r) => r.command).join(", ")}; the acceptance on the final tip decides`];
   }

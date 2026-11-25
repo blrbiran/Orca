@@ -71,9 +71,9 @@ describe("a landing watch the group acceptance took over (#371)", { timeout: 60_
     const watch = { tip: TIP, supersededBy: "acceptance" as const, regressions: [{ ...WATCH.regressions[0]!, problem: "landing-regression:npm test" }] };
     const lines = landingWatchLines("g", watch);
     // mutation: drop the supersededBy branch of landingWatchLines -> the problem lines, red
-    // Tester #494: the human line names the acceptance tip so the watch's stale last states are not read as current reds.
+    // Tester #494: the human line labels the last watch tip explicitly.
     expect(lines).toEqual([
-      "landing watch superseded by acceptance (tip dddddddddddd)",
+      "landing watch superseded by acceptance (last watch tip dddddddddddd)",
       "  its last record had 1 regression: npm test; the acceptance on the final tip decides",
     ]);
     expect(landingWatchLines("g", { regressions: watch.regressions })[0]).toMatch(/^problem: landing-regression:npm test/);
