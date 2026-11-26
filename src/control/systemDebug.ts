@@ -283,7 +283,7 @@ export function writeSystemDebugSettled(store: ControlStore, groupId: string, st
 
 /** The system debug groups, with their marks, in creation order. */
 export function systemDebugGroups(store: ControlStore): Array<{ groupId: string; status: string; mark: SystemDebugMark }> {
-  return store.db.prepare("SELECT id, body FROM groups WHERE substr(id,1,9)='sysdebug-' OR substr(id,1,10)='sysreview-' OR substr(id,1,11)='sysfinding-' ORDER BY rowid").all().flatMap((row) => {
+  return store.db.prepare("SELECT id, body FROM groups WHERE id GLOB 'sysdebug-*' OR id GLOB 'sysreview-*' OR id GLOB 'sysfinding-*' ORDER BY rowid").all().flatMap((row) => {
     const body = JSON.parse(String(row.body)) as Record<string, unknown>;
     const mark = readSystemDebugMark(body);
     return mark === null ? [] : [{ groupId: String(row.id), status: String(body.status), mark }];

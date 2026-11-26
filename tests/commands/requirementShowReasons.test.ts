@@ -8,9 +8,9 @@ import { world } from "./fixtures/world.js";
 
 useFakePanels();
 
-const draftWith = (over: Record<string, unknown>) => ({
+const draftWith = (over: Record<string, unknown>, requirement: { roundNo: number; draftNo: number; draftState?: string; reasonCode?: string } = { roundNo: 2, draftNo: 3 }) => ({
   schema: "orca-requirement-view-v1",
-  summary: { groupId: "g-alpha", commandRevision: 5, requirement: { roundNo: 2, draftNo: 3 } },
+  summary: { groupId: "g-alpha", commandRevision: 5, requirement },
   rounds: [{ roundNo: 1 }],
   drafts: [{
     draftNo: 3, state: "invalid", autoRetry: 1, waiting: null, feedback: null, draftHash: "h",

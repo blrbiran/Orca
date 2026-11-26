@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
-import { buildSystemDebugPlanSource, escalationsOf, readSystemDebugMark, SYSTEM_DEBUG_INPUT_SCHEMA, systemDebugGroupId, type SystemDebugInputV1 } from "../../src/control/systemDebug.js";
+import { buildSystemDebugPlanSource, escalationsOf, readSystemDebugMark, SYSTEM_DEBUG_INPUT_SCHEMA, systemDebugGroupId, systemDebugGroups, type SystemDebugInputV1 } from "../../src/control/systemDebug.js";
 import { taskContractSchema } from "../../src/scheduler/planFile.js";
 import { replenishStartWakes } from "../../src/control/executionDriver.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
@@ -11,6 +11,7 @@ import { readGroupSummary } from "../../src/panel/controlViews.js";
 import { needsAttention } from "../../web/src/groupCategory.js";
 import type { GroupSummaryV1 } from "../../web/src/controlTypes.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
+import { openTestStore } from "./fixtures/store.js";
 
 /**
  * System debug task spec 2026-10-21 §2-§3 (kanban spec §6 levels 2 and 3, §9a.3-§9a.4): a started group's task whose run
@@ -68,6 +69,37 @@ async function ladderWorld(options: { debugFails?: boolean; humanBlock?: boolean
   const body = (groupId: string) => JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId)!.body)) as Record<string, unknown>;
   return { t, service, driver, failedRun, failedThroughLevelOne, driveDebug, taskStatus, summary, body, succeedNext: () => { failing = false; } };
 }
+
+describe("systemDebugGroups", () => {
+  it("uses the groups primary-key index and keeps matching system groups in creation order", async () => {
+    const t = await openTestStore();
+    try {
+      const ladder = { kind: "ladder", groupId: "g", taskId: "a", runId: null } as const;
+      const review = (runSeq: number) => ({ kind: "model-review", repoId: "repo", target: "main", from: "a".repeat(40), to: "b".repeat(40), runSeq } as const);
+      const finding = { kind: "model-review-finding", repoId: "repo", reviewGroupId: "review", findingId: "finding-1" } as const;
+      const rows = [
+        [`sysreview-${"f".repeat(16)}`, review(1)],
+        [`sysfinding-${"2".repeat(16)}`, finding],
+        [systemDebugGroupId(ladder), ladder],
+        [`sysreview-${"0".repeat(16)}`, review(2)],
+      ] as const;
+      const ids = rows.map(([id]) => id);
+      const insert = t.store.db.prepare("INSERT INTO groups (id, revision, graph_version, body) VALUES (?, 1, 1, ?)");
+      const markedBody = (source: (typeof rows)[number][1]) => JSON.stringify({ status: "ready", systemDebug: { source, stackOn: null, inputHash: "0".repeat(64), settled: null } });
+      for (const [id, source] of rows) insert.run(id, markedBody(source));
+      insert.run("ordinary-group", markedBody(ladder));
+
+      let query = "";
+      const queryStore = { db: { prepare(sql: string) { query = sql; return t.store.db.prepare(sql); } } } as unknown as typeof t.store;
+      const groups = systemDebugGroups(queryStore);
+      const plan = t.store.db.prepare(`EXPLAIN QUERY PLAN ${query}`).all();
+      const planDetails = plan.map((row) => String(row.detail));
+      expect(planDetails.filter((detail) => detail.includes("SEARCH") && detail.includes("id>? AND id<?"))).toHaveLength(3);
+      expect(t.store.db.prepare(query).all().map((row) => String(row.id))).toEqual(ids);
+      expect(groups.map(({ groupId }) => groupId)).toEqual(ids);
+    } finally { await t.dispose(); }
+  });
+});
 
 describe("escalation ladder level 2: a system debug group fixes a failed task, which then reruns once (spec §3)", { timeout: 180_000 }, () => {
   it("skips an optional-budget ladder when no authored work remains for its required retry", async () => {
