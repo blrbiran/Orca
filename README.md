@@ -49,19 +49,20 @@ lands each member by its own delivery, once per driver round.
 git clone <orca-repository-url> <path-to-orca>
 cd <path-to-orca>
 npm install                       # also installs the pinned ccloop
-npm run build --workspace web     # builds the panel; without it the panel refuses to start (panel-dist-missing)
+npm run build                     # compiles the CLI and builds the Web panel
 ```
 
-To get a global `orca` command, build once and link the checkout:
+To get a global `orca` command, link the checkout:
 
 ```sh
-npm run build                     # compiles dist/cli.js, which bin/orca runs
 npm link                          # puts orca on PATH (in the active node's global bin); npm unlink -g orca removes it
 ```
 
 `bin/orca` runs `dist/cli.js` with `/usr/local/bin/node` when that exists, else with `node` from PATH, because
-`orca panel install` records the node that ran it into the service config. Rebuild after pulling: `orca` runs the
-compiled `dist/`, not `src/`. Without the link, run every command from the Orca checkout as
+`orca panel install` records the node that ran it into the service config. After pulling, run `npm run build`
+and then `orca panel restart` if the service is running. The panel reads the compiled Web files at startup.
+`orca status` and `orca doctor` warn when this checkout's Web bundle is missing or older than its source.
+Without the link, run every command from the Orca checkout as
 
 ```sh
 node_modules/.bin/tsx src/cli.ts <command> ...

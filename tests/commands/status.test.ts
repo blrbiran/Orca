@@ -3,7 +3,7 @@
 // saying what to do per failure; `orca version` prints the CLI's version. Both are read-only: they never start, fix or
 // write anything -- the tree under a temp HOME is the same before and after (Rule 17: never the person's ~/.orca).
 import { spawn } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -97,10 +97,34 @@ describe("orca status (spec §8)", () => {
     expect(out()).toMatch(/^fail skill: /m);
   });
 
+  it("reports a missing or stale Web build and clears the warning after a rebuild (#523)", async () => {
+    const { home, env } = sandbox();
+    const source = join(home, "web", "src", "page.tsx");
+    const index = join(home, "web", "dist", "index.html");
+    mkdirSync(join(home, "web", "src"), { recursive: true });
+    mkdirSync(join(home, "web", "dist"));
+    writeFileSync(source, "source");
+    utimesSync(source, 200, 200);
+    const check = STATUS_CHECKS.find((candidate) => candidate.name === "webBuildCheck");
+    expect(check, "status and doctor must include a Web build check").toBeDefined();
+    const ctx = { env, checkout: home };
+    expect(await check!(ctx)).toMatchObject({ subject: "web", level: "warn", fact: expect.stringContaining("missing") });
+    writeFileSync(index, "build");
+    utimesSync(index, 100, 100);
+    expect(await check!(ctx)).toMatchObject({ subject: "web", level: "warn", fact: expect.stringContaining("stale") });
+    utimesSync(index, 300, 300);
+    expect(await check!(ctx)).toMatchObject({ subject: "web", level: "ok" });
+    const html = join(home, "web", "index.html");
+    writeFileSync(html, "entry");
+    utimesSync(html, 400, 400);
+    expect(await check!(ctx)).toMatchObject({ level: "warn", fact: expect.stringContaining("npm run build") });
+  });
+
   // Rewritten under session 3cfc2e73's ruling (issue 148): status also checks the projects file the panel applied.
-  it("status runs the spec's checks: service, panel socket and HTTP, control schema, agents table, ccloop pin, ccmem, skill, projects", () => {
+  // Ruling (#523, 2026-11-27): 「这次批准改写所有必要的判据。」 Status and doctor also check the Web build.
+  it("status runs the spec's checks, including the Web build", () => {
     expect(STATUS_CHECKS.map((check) => check.name)).toEqual([
-      "serviceCheck", "panelSocketCheck", "workHealthCheck", "panelHttpCheck", "schemaCheck", "agentsTableCheck", "ccloopPinCheck", "ccmemCheck", "skillCheck", "projectsCheck",
+      "serviceCheck", "panelSocketCheck", "workHealthCheck", "panelHttpCheck", "webBuildCheck", "schemaCheck", "agentsTableCheck", "ccloopPinCheck", "ccmemCheck", "skillCheck", "projectsCheck",
     ]);
     // Doctor: the same, then the slower ones.
     expect(DOCTOR_CHECKS.slice(0, STATUS_CHECKS.length)).toEqual(STATUS_CHECKS);

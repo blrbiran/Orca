@@ -134,6 +134,34 @@ export async function panelHttpCheck(ctx: CheckContext): Promise<StatusCheck> {
   }
 }
 
+/** Compare this checkout's bundle with its source. A running panel has to reload the rebuilt assets. */
+export async function webBuildCheck(ctx: CheckContext): Promise<StatusCheck> {
+  const { readdir, stat } = await import("node:fs/promises");
+  const web = join(ctx.checkout, "web");
+  const index = join(web, "dist", "index.html");
+  const fix = "npm run build, then orca panel restart";
+  const statIfPresent = (path: string) => stat(path).catch((error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error;
+    return undefined;
+  });
+  const indexStat = await statIfPresent(index);
+  if (!indexStat?.isFile()) return { level: "warn", subject: "web", fact: `missing ${index}. Run ${fix}.`, fix };
+  const inputs = ["index.html", "package.json", "vite.config.ts"].map((file) => join(web, file));
+  for (const dir of [join(web, "src"), join(web, "public")]) {
+    if (!(await statIfPresent(dir))?.isDirectory()) continue;
+    for (const file of await readdir(dir, { recursive: true, withFileTypes: true })) {
+      if (file.isFile()) inputs.push(join(file.parentPath, file.name));
+    }
+  }
+  for (const path of inputs) {
+    const source = await statIfPresent(path);
+    if (source !== undefined && source.mtimeMs > indexStat.mtimeMs) {
+      return { level: "warn", subject: "web", fact: `stale: ${path} is newer than ${index}. Run ${fix}.`, fix };
+    }
+  }
+  return { level: "ok", subject: "web", fact: `bundle present at ${index}` };
+}
+
 /** The control store's schema version (opened read-only) against the one this CLI's code writes. */
 export async function schemaCheck(ctx: CheckContext): Promise<StatusCheck> {
   const { discoverSocketPath } = await import("../entry/discovery.js");
@@ -315,7 +343,7 @@ export async function diskTopCheck(ctx: CheckContext): Promise<StatusCheck> {
   return { level: "ok", subject: "disk-top", fact: `${runsRoot}: ${sized.length} run director${sized.length === 1 ? "y" : "ies"}; largest ${top.join(", ")}` };
 }
 
-export const STATUS_CHECKS: readonly Check[] = [serviceCheck, panelSocketCheck, workHealthCheck, panelHttpCheck, schemaCheck, agentsTableCheck, ccloopPinCheck, ccmemCheck, skillCheck, projectsCheck];
+export const STATUS_CHECKS: readonly Check[] = [serviceCheck, panelSocketCheck, workHealthCheck, panelHttpCheck, webBuildCheck, schemaCheck, agentsTableCheck, ccloopPinCheck, ccmemCheck, skillCheck, projectsCheck];
 
 /** Every check in order; one that throws is a fail by name, never a crash of the whole screen. */
 export async function runChecks(checks: readonly Check[], ctx: CheckContext): Promise<StatusCheck[]> {
