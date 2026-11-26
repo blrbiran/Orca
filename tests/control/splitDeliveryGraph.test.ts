@@ -64,6 +64,22 @@ describe("a draft is checked against the delivery graph it claims (#385)", () =>
     expect(deliveryGraphProblems(draft([task("a"), task("b", ["a"])], graph))).toContain("delivery-graph-independent:b:a");
   });
 
+  it("requires a wave-k unit to reach wave k-1, not only to avoid its own wave (#501)", () => {
+    const graph: SplitOutput["deliveryGraph"] = {
+      units: [
+        { unit: "L1 schema", taskIds: ["schema"], dependsOn: [] },
+        { unit: "L2 apply", taskIds: ["apply"], dependsOn: ["L1 schema"] },
+        { unit: "L3 audit", taskIds: ["audit"], dependsOn: ["L1 schema"] },
+        { unit: "L3 cli", taskIds: ["cli"], dependsOn: ["L2 apply"] },
+      ],
+      independent: [["L1 schema"], ["L2 apply"], ["L3 audit", "L3 cli"]], finalVerification: null,
+    };
+    const output = draft([task("schema"), task("apply", ["schema"]), task("audit", ["schema"]), task("cli", ["apply"])], graph);
+    // mutation: drop the wave loop -> the audit unit is accepted beside Layer 2, red
+    expect(deliveryGraphProblems(output)).toContain("delivery-graph-layer:audit:L3 audit");
+    expect(deliveryGraphProblems(output)).not.toContain("delivery-graph-layer:cli:L3 cli");
+  });
+
   it("a final-verification claim must actually run the suite; the positive shape passes", () => {
     const bad = draft([task("a", [], ["node src/check.js"])], {
       units: [{ unit: "T1", taskIds: ["a"], dependsOn: [] }], independent: [], finalVerification: "a",

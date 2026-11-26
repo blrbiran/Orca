@@ -121,3 +121,16 @@ The implementation task writes these first, each seen red before it is green:
    positive shape (the task's check is `npm test`) passes.
 5. A mutation that drops each check (unassigned, edge, independent, final-verification) turns exactly its own criterion
    red, with the other drafts still green.
+## Correction (tester #501, 2026-11-26)
+
+§3's checks kept a draft to the graph it claimed, but nothing made the claim agree with the requirement's own wave
+order. `independent` listed the requirement's waves and only forbade edges **inside** one; a Layer 3 unit that named
+only a Layer 1 dependency was valid, so `sprint-audit` ran beside Layer 2 (and review AC12 failed after the group
+finished). `deliveryGraphProblems` now also requires every unit in wave *k* (k ≥ 1) to reach at least one unit of
+wave *k-1* through the graph's `dependsOn`; otherwise `delivery-graph-layer:<task>:<unit>`.
+
+This closes the layer-placement half only. The other shape in #501 — the draft's `dependsOn` omitting a unit the
+requirement named with "AFTER both" while the `independent` grouping is correct — is **not** covered: deciding which
+prose names are dependencies is not a structural check. It needs a design (structured expectation on the requirement,
+or a contract field), and #501 stays partially resolved until then. Criterion:
+`tests/control/splitDeliveryGraph.test.ts` ("requires a wave-k unit to reach wave k-1").

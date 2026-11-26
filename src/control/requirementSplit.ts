@@ -776,6 +776,30 @@ export function deliveryGraphProblems(output: SplitOutput): string[] {
     const groupA = independentUnits.get(a), groupB = independentUnits.get(b);
     if (groupA !== undefined && groupA === groupB) reasons.push(`delivery-graph-independent:${task.taskId}:${dependency}`);
   }
+  // Tester #501: `independent` is the requirement's wave declaration, not only a same-wave edge ban. A unit in wave k
+  // must reach at least one unit of wave k-1 through the graph's own `dependsOn`; otherwise the draft runs it earlier
+  // than the requirement placed it (sprint-audit, declared in Layer 3, ran beside Layer 2 because it only named Layer 1).
+  const byUnit = new Map(graph.units.map((entry) => [entry.unit, entry]));
+  const reaches = (from: string, targets: ReadonlySet<string>, seen = new Set<string>()): boolean => {
+    const unit = byUnit.get(from);
+    if (unit === undefined) return false;
+    for (const dependency of unit.dependsOn) {
+      if (targets.has(dependency)) return true;
+      if (seen.has(dependency)) continue;
+      seen.add(dependency);
+      if (reaches(dependency, targets, seen)) return true;
+    }
+    return false;
+  };
+  graph.independent.forEach((group, index) => {
+    if (index === 0) return;
+    const previous = new Set(graph.independent[index - 1]);
+    for (const name of group) {
+      const unit = byUnit.get(name);
+      if (unit === undefined) continue;
+      if (!reaches(name, previous)) reasons.push(`delivery-graph-layer:${unit.taskIds[0] ?? name}:${name}`);
+    }
+  });
   // The final-verification claim runs the named suite (the same command shape requirementDelivery.ts names).
   const FULL_SUITE = /\b(npm (?:run )?test|pytest|go test \.\/...|cargo test|make test)\b/i;
   const runsSuite = (taskId: string): boolean => (output.tasks.find((task) => task.taskId === taskId)?.checks ?? []).some((check) => FULL_SUITE.test(check));
