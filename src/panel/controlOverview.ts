@@ -136,8 +136,8 @@ function groupSteps(store: ControlStore, source: Source, add: Add) {
     const capBlock = readSpendCapBlock(store, groupId);
     if (capBlock !== null) add(body.status === "clarifying" ? "requirement-attention" : "task-attention", groupId, repoId, "spend-cap-blocked", body.status === "clarifying" ? requirementDestination("problem") : groupDestination("problem"), "spend-cap-blocked", null, null, true);
     const ladderHolds = new Set((summary.escalation ?? []).filter(entry => entry.state !== "exhausted").map(entry => entry.taskId));
-    // The needs-you rule: the group-level states the Tasks list always counted, now rows here too.
-    if (summary.state === "blocked") add("task-attention", groupId, repoId, "group-blocked", groupDestination("problem"), "group-blocked");
+    // A stored group block has its own row. A block derived from task counts already has task rows below.
+    if (body.status === "blocked") add("task-attention", groupId, repoId, "group-blocked", groupDestination("problem"), "group-blocked");
     const refusal = summary.orchestration?.refusal;
     if (refusal?.persistent === true) add("task-attention", groupId, repoId, refusal.code, groupDestination("problem"), "start-refused-persistent");
     // Tester follow-up K, item 2 (human ruling ①): an acceptance that ran no full suite is a row while the project still
