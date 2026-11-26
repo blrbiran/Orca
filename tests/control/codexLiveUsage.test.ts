@@ -12,14 +12,17 @@ const reading = (runId: string, revision = 1, tokens = 125): NonNullable<Executi
 
 async function inFlight() {
   let observation: ExecutionReport["liveUsage"];
+  let terminal: ExecutionReport["terminal"] = null;
+  let usageLowerBound: ExecutionReport["usageLowerBound"];
   const t = await driverHarness([{ taskId: "a" }], { behaviour: () => "stoppable-silent", wrapPort: (port: ExecutionPort) => ({
     ...port,
-    collect: async (input, afterSeq) => ({ ...await port.collect(input, afterSeq), ...(observation === undefined ? {} : { liveUsage: observation }) }),
+    collect: async (input, afterSeq) => ({ ...await port.collect(input, afterSeq), ...(observation === undefined ? {} : { liveUsage: observation }), ...(terminal === null ? {} : { terminal, ...(usageLowerBound === undefined ? {} : { usageLowerBound }) }) }),
   }) });
   const runId = await t.claim();
   const driver = t.driver();
   await t.until(driver, () => t.body(runId).state === "accepted");
-  return { t, driver, runId, set: (value: ExecutionReport["liveUsage"]) => { observation = value; } };
+  return { t, driver, runId, set: (value: ExecutionReport["liveUsage"]) => { observation = value; },
+    stop: (value: ExecutionReport["terminal"], floor?: ExecutionReport["usageLowerBound"]) => { terminal = value; usageLowerBound = floor; observation = undefined; } };
 }
 
 describe("Codex's running response usage (#285)", () => {
@@ -47,6 +50,44 @@ describe("Codex's running response usage (#285)", () => {
       set(reading(runId, 1, 125));
       await driver.round();
       expect(t.body(runId).liveUsage).toMatchObject({ revision: 2, tokens: 300 });
+    } finally { await t.h.dispose(); }
+  });
+
+  it.each([true, false])("retains a last response only when its phase matches the terminal stall (%s, #520)", async (matches) => {
+    const { t, driver, runId, set, stop } = await inFlight(); try {
+      set(reading(runId));
+      await driver.round();
+      expect(t.body(runId)).toHaveProperty("liveUsage.tokens", 125);
+      stop({ outcome: "failed", attemptSha: null, sourceDir: t.repo, repoDir: null, currentAttempt: 1,
+        failureCause: { cause: "stalled", phase: matches ? "execute" : "verify", retries: 0, detail: "fixture stall" } });
+      await collectInto(t.deps, t.body(runId));
+      const collected = t.body(runId);
+      if (matches) expect(collected).toHaveProperty("liveUsage.tokens", 125);
+      else expect(collected).not.toHaveProperty("liveUsage");
+      expect(collected).not.toHaveProperty("usageLowerBound");
+      expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM usage_events WHERE run_id=?").get(runId)).toEqual({ n: 0 });
+      // Model the terminal drive's stored projection independently of candidate/stop-proof handling.
+      t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...collected, state: "blocked",
+        drive: { ...collected.drive, outcome: "failed", finalAttempt: 1, blockedAt: "C", blockedReason: "terminal:failed",
+          failureCause: { cause: "stalled", phase: matches ? "execute" : "verify", retries: 0, detail: "fixture stall" } } }), runId);
+      const projected = readControlGroup(t.h.store, "epoch", "g").runs.find((entry) => entry.runId === runId);
+      expect(projected).toHaveProperty("outcome", "failed");
+      if (matches) expect(projected).toHaveProperty("liveUsage.tokens", 125);
+      else expect(projected).not.toHaveProperty("liveUsage");
+    } finally { await t.h.dispose(); }
+  });
+
+  it("prefers the worker's terminal floor to an earlier response sample (#520)", async () => {
+    const { t, driver, runId, set, stop } = await inFlight(); try {
+      set(reading(runId));
+      await driver.round();
+      expect(t.body(runId)).toHaveProperty("liveUsage.tokens", 125);
+      stop({ outcome: "failed", attemptSha: null, sourceDir: t.repo, repoDir: null, currentAttempt: 1,
+        failureCause: { cause: "stalled", phase: "execute", retries: 0, detail: "fixture stall" } }, { tokens: 400 });
+      await collectInto(t.deps, t.body(runId));
+      expect(t.body(runId)).toHaveProperty("usageLowerBound.tokens", 400);
+      expect(t.body(runId)).not.toHaveProperty("liveUsage");
+      expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM usage_events WHERE run_id=?").get(runId)).toEqual({ n: 0 });
     } finally { await t.h.dispose(); }
   });
 

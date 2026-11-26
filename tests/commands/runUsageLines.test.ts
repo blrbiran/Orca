@@ -63,6 +63,19 @@ describe("run show of a run whose agent reports usage at phase end (#285)", () =
     expect(lines).toContain("observed: at least 9,544,000 tokens in execute (attempt 2), last response at 2026-11-12T02:51:07.000Z (provisional: not booked; any live ceiling is checked after an observed response, so an in-flight request may pass it)");
   });
 
+  it("shows an incomplete call's floor separately from booked usage after a stall (#520)", async () => {
+    const run = { ...ENDED, state: "blocked", outcome: "failed", failureCause: { cause: "stalled", phase: "execute" }, usageLowerBound: 7_890_281 };
+    const { lines } = await show(run, null);
+    expect(lines).toContain("observed: at least 7,890,281 tokens across calls with incomplete usage reports (lower bound)");
+    expect(lines.some((line) => line.includes("last sampled response"))).toBe(false);
+    expect(lines).toContain("usage by kind: input 211,395 / output 122,592 / cacheRead 6,563,840");
+  });
+
+  it("names a stalled phase's last response when the worker reports no final floor (#520)", async () => {
+    const { lines } = await show({ ...ENDED, state: "blocked", outcome: "failed", failureCause: { cause: "stalled", phase: "execute" } }, null);
+    expect(lines).toContain("observed: at least 9,544,000 tokens in execute (attempt 2), last sampled response at 2026-11-12T02:51:07.000Z (provisional)");
+  });
+
   it("an ended run shows its usage by kind and no producing line", async () => {
     const { lines } = await show(ENDED, { lastTranscriptAt: WRITTEN });
     // mutation: drop the by-kind line -> red

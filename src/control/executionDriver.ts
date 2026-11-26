@@ -1140,7 +1140,14 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
     const previous = current.liveUsage === undefined ? undefined : liveUsageSchema.parse(current.liveUsage);
     const next = reading?.success && report.terminal === null && current.state === "accepted" ? reading.data : undefined;
     if (next === undefined) {
-      if (previous !== undefined) { delete current.liveUsage; saveDriverRun(store, current); }
+      if (previous !== undefined) {
+        const terminal = report.terminal;
+        // An older worker may omit a durable floor. Keep the matching response for display only.
+        const retainStalledReading = terminal?.outcome === "failed" && terminal.failureCause?.cause === "stalled"
+          && terminal.failureCause.phase === previous.phase && terminal.currentAttempt === previous.attempt
+          && report.usageLowerBound === undefined && current.usageLowerBound === undefined;
+        if (!retainStalledReading) { delete current.liveUsage; saveDriverRun(store, current); }
+      }
       return;
     }
     if (previous !== undefined) {

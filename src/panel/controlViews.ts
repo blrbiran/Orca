@@ -1788,9 +1788,12 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       lastActivityAt: activity.get(runId)?.at ?? null,
       // Tester #285: how the run's agent observes usage, when its figure was last booked, and its split by kind.
       usageObservation: run.agentCapabilities.usageObservation,
-      // Codex's last completed response, shown as provisional while the run is actually in flight; `used` stays booked spend.
-      ...(run.liveUsage === undefined || run.endedAt != null || isTerminalRunState(state) || state === "blocked"
-        ? {} : { liveUsage: { attempt: run.liveUsage.attempt, phase: run.liveUsage.phase, tokens: run.liveUsage.tokens, observedAt: run.liveUsage.observedAt, revision: run.liveUsage.revision } }),
+      // A stalled call may retain its final provisional reading for display when its worker supplied no floor.
+      ...(run.liveUsage !== undefined && ((run.endedAt == null && !isTerminalRunState(state) && state !== "blocked")
+        || (run.drive?.outcome === "failed" && run.drive.failureCause?.cause === "stalled"
+          && run.drive.failureCause.phase === run.liveUsage.phase && run.drive.finalAttempt === run.liveUsage.attempt
+          && run.usageLowerBound === undefined))
+        ? { liveUsage: { attempt: run.liveUsage.attempt, phase: run.liveUsage.phase, tokens: run.liveUsage.tokens, observedAt: run.liveUsage.observedAt, revision: run.liveUsage.revision } } : {}),
       ...((at) => at === null ? {} : { usageAt: at })(usageBookedAt(store, runId)),
       // Tester #321 part C (review ruling 2026-11-18): unknown usage is not 0; the cost notice leaves such a run out of medians.
       ...(run.unknown[bucket] ? { usageUnknown: true as const } : {}),

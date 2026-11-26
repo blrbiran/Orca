@@ -10,6 +10,9 @@ import { COST_LONG_RUNNING_MS, COST_MIN_COMPARABLE_TASKS, type CostReason, type 
 export interface UsageRun {
   runId?: string; state?: string; endedAt?: number | null; used?: { tokens: number };
   usageObservation?: string; usageAt?: number; usageBreakdown?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  usageLowerBound?: number;
+  outcome?: string | null;
+  failureCause?: { cause: string; phase: string } | null;
   liveUsage?: { attempt: number; phase: "plan" | "execute" | "verify"; tokens: number; observedAt: string; revision: number };
 }
 
@@ -35,6 +38,11 @@ export function runUsageLines(run: UsageRun | undefined, lastTranscriptAt: numbe
       ? [`used: ${count(run.used.tokens)} tokens (${run.usageAt === undefined ? "no work event booked yet" : `last booked at ${clock(run.usageAt)}`}; response reading is provisional)`] : []),
     ...(live && run.liveUsage !== undefined
       ? [`observed: at least ${count(run.liveUsage.tokens)} tokens in ${run.liveUsage.phase} (attempt ${run.liveUsage.attempt}), last response at ${run.liveUsage.observedAt} (provisional: not booked; any live ceiling is checked after an observed response, so an in-flight request may pass it)`] : []),
+    ...(!live && run.usageLowerBound !== undefined
+      ? [`observed: at least ${count(run.usageLowerBound)} tokens across calls with incomplete usage reports (lower bound)`] : []),
+    ...(!live && run.usageLowerBound === undefined && run.outcome === "failed" && run.failureCause?.cause === "stalled"
+      && run.liveUsage !== undefined && run.failureCause.phase === run.liveUsage.phase
+      ? [`observed: at least ${count(run.liveUsage.tokens)} tokens in ${run.liveUsage.phase} (attempt ${run.liveUsage.attempt}), last sampled response at ${run.liveUsage.observedAt} (provisional)`] : []),
     ...transcript,
     ...(!live && run.usageBreakdown !== undefined ? [`usage by kind: input ${count(run.usageBreakdown.input)} / output ${count(run.usageBreakdown.output)} / cacheRead ${count(run.usageBreakdown.cacheRead)}${run.usageBreakdown.cacheWrite > 0 ? ` / cacheWrite ${count(run.usageBreakdown.cacheWrite)}` : ""}`] : []),
   ];
