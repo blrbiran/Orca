@@ -21,6 +21,25 @@ const view = (latest: Record<string, unknown>) => ({
   } },
 });
 
+describe("requirement accept points to the next step (#552)", () => {
+  const accepted = { "POST groups/g-alpha/requirement/accept": { status: 200, body: { commandId: "c", commandRevision: 6, result: {
+    kind: "requirement-draft-accepted", draftNo: 1, estimateId: null, estimateState: "none", documentSha256: "a".repeat(64), exportWakeId: "wake",
+  } } } };
+
+  it("prints an executable confirm command and explains estimate or mode selection", async () => {
+    const requirement = { "GET groups/g-alpha/requirement": { status: 200, body: {
+      schema: "orca-requirement-view-v1", summary: { groupId: "g-alpha", commandRevision: 5, requirement: { roundNo: 2, draftNo: 1 } },
+      rounds: [{ roundNo: 2, state: "answered" }], drafts: [{ draftNo: 1, draftHash: "b".repeat(64), output: { tasks: [], notes: "" } }],
+    } } };
+    const w = await world({}, { ...requirement, ...accepted });
+    const out = await cli(["requirement", "accept", "g-alpha"], w.dir);
+    expect(out.code, out.stdout + out.stderr).toBe(0);
+    expect(out.stdout).toContain("next: orca group confirm g-alpha --budget-mode soft");
+    expect(out.stdout).toContain("orca group estimate g-alpha");
+    expect(out.stdout).toContain("--budget-mode strict");
+  });
+});
+
 describe("requirement answer fills what the person did not name (#231)", () => {
   it("unnamed questions take the recommendation, unnamed glossary/ADR ids are accepted, named ones keep the person's choice", async () => {
     const w = await world({}, view(ROUND));

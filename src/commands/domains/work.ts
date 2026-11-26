@@ -650,6 +650,13 @@ export const WORK_ROWS: CommandDef[] = [
         throw new EntryRejection("requirement-draft-conflicts", `draft ${d.draftNo} reports ${conflicts} conflict(s) with the requirement as written (orca requirement show ${group(c)}); send feedback, or pass --despite-conflicts to accept it as it stands`);
       }
       return { draftNo: d.draftNo, draftHash: d.draftHash };
+    },
+    formatWith: async (body, c) => {
+      const result = (body as { result?: { kind?: unknown } } | null)?.result;
+      const printed = text(body);
+      if (result?.kind !== "requirement-draft-accepted") return printed;
+      const id = group(c);
+      return `${printed}\nnext: orca group confirm ${id} --budget-mode soft\nChoose --budget-mode strict instead for strict budgeting, or run orca group estimate ${id} first and then confirm`;
     } }),
   // Tester follow-up K (#284, #265): apply one of the current draft's hints (requirement show lists them); Orca re-validates
   // the edited split as the next draft, awaiting review. No model call is made.
