@@ -1,0 +1,47 @@
+{
+  "v": 1,
+  "runId": "orca-dev-51784279",
+  "runtime": "claude-code",
+  "sessionRef": "51784279-765f-4444-9e5b-71dd5e4bf767",
+  "writtenAt": "2026-11-26T22:55:42.862Z",
+  "head": "587b75626a2ae77894fa0a9b409c6b64952106fb",
+  "level": {
+    "kind": "reading",
+    "level": 451904,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 2
+  },
+  "next": [
+    "Check the committed Orca recovery affected gate and fast-forward verified work",
+    "Repin Orca to the published Codex fixes after source approval",
+    "Finish #520 exact-thread approximate usage evidence"
+  ],
+  "open": [
+    "Orca changes are committed on fix/web-build-and-diagnostics-20261127",
+    "ccloop code is published. ccmem #524 is committed on its repair branch. syncskill code is on local main."
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "Automatic review refused Orca repin from public GitHub, ccmem repair merge, and syncskill publication"
+    }
+  ],
+  "measurements": [
+    {
+      "command": "git status --short --branch",
+      "exitCode": 0,
+      "commit": "587b75626a2ae77894fa0a9b409c6b64952106fb",
+      "observedAt": "2026-11-26T22:55:39.059Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-51784279-4cUZTc/1.txt"
+    },
+    {
+      "command": "git ls-remote origin refs/heads/main",
+      "exitCode": 0,
+      "commit": "587b75626a2ae77894fa0a9b409c6b64952106fb",
+      "observedAt": "2026-11-26T22:55:42.797Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-51784279-4cUZTc/2.txt"
+    }
+  ]
+}
