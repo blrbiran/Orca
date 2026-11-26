@@ -31,7 +31,8 @@ describe("the service runs a node build, never tsx (spec §3, plan D4)", () => {
     expect(config.compilerOptions.outDir).toBe("dist");
     expect(config.include).toEqual(["src/**/*.ts"]);
     const pkg = JSON.parse(await readFile("package.json", "utf8")) as { scripts: Record<string, string> };
-    expect(pkg.scripts.build).toBe("tsc -p tsconfig.build.json");
+    // Ruling (#523, 2026-11-27): 「这次批准改写所有必要的判据。」 The root build also builds the panel.
+    expect(pkg.scripts.build).toBe("tsc -p tsconfig.build.json && npm run build --workspace web");
     // "npm run build --workspace web" also contains "npm run build"; pin the root build, which must precede the tests.
     // Spec 2026-10-20 §4.2/§4.3: the release gate refuses first, then the one suite pass behind its env refusal --
     // and no second pass (npm test, test:all or the old re-run scripts) anywhere in the chain.

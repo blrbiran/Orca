@@ -83,6 +83,7 @@ _This is the CLI and development reference, moved verbatim from the README on 20
 - `orca group review-rerun <group> --note <note>` — run a group's requirement review again, telling the reviewer what to look at
 - `orca group review-fix <group> --goal <goal> [--path <path>]` — open a fix task in the group for what its requirement review found (does not use up an automatic round)
 - `orca group waive-acceptance <group> --note <note>` — accept a group whose acceptance failed on its tip anyway (a person's act) (person token)
+- `orca group accept-test-changes <group> --note <note> --tip <tip> --digest <digest>` — approve changes to existing tests for this exact acceptance tip (a person's act) (person token)
 - `orca group preexisting-failure <group> --command <command> --answer <answer>` — answer a check that already failed before the work: allow-fix, relative or edit-requirement (a person's act) (person token)
 - `orca group folder-change <group> [--take-folder] [--recheck] [--withhold] [--dir <dir>]` — answer a folder change that stopped placement: --take-folder, --recheck or --withhold (person token)
 - `orca group multi-land <group> [--retry-rest] [--mark-resolved]` — answer a stopped multi-directory landing: --retry-rest or --mark-resolved (person token)

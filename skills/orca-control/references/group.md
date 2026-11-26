@@ -284,6 +284,21 @@ accept a group whose acceptance failed on its tip anyway (a person's act)
 orca group waive-acceptance g1 --note 'the red test is the known flaky one; tracked in #12'
 ```
 
+## `orca group accept-test-changes <group> --note <note> --tip <tip> --digest <digest>`
+
+approve changes to existing tests for this exact acceptance tip (a person's act)
+
+- What it does: sends control verb `accept-test-changes`.
+- Who may: a person: needs a person token over the socket (`orca auth login`, then `--as-person`).
+- `<group>`: a group id or a unique prefix
+- `--note <note>` (required): why the existing test changes are accepted; recorded with the checked tip and paths
+- `--tip <tip>` (required): the exact accepted tip shown by group show (the approval is bound to it)
+- `--digest <digest>` (required): the checked path digest shown by group show
+
+```
+orca group accept-test-changes g1 --note 'the expanded test is intentional' --tip <tip> --digest <digest>
+```
+
 ## `orca group preexisting-failure <group> --command <command> --answer <answer>`
 
 answer a check that already failed before the work: allow-fix, relative or edit-requirement (a person's act)
