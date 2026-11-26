@@ -652,11 +652,16 @@ export const WORK_ROWS: CommandDef[] = [
       return { draftNo: d.draftNo, draftHash: d.draftHash };
     },
     formatWith: async (body, c) => {
-      const result = (body as { result?: { kind?: unknown } } | null)?.result;
+      const result = (body as { result?: { kind?: unknown; estimateId?: string | null; estimateState?: string } } | null)?.result;
       const printed = text(body);
       if (result?.kind !== "requirement-draft-accepted") return printed;
       const id = group(c);
-      return `${printed}\nnext: orca group confirm ${id} --budget-mode soft\nChoose --budget-mode strict instead for strict budgeting, or run orca group estimate ${id} first and then confirm`;
+      const strict = "Strict mode currently blocks ordinary task launch with strict-proof-unimplemented.";
+      if (result.estimateState === "queued") {
+        const estimate = result.estimateId == null ? "the estimate" : `estimate ${result.estimateId}`;
+        return `${printed}\nnext: ${estimate} is queued; wait until it finishes before confirming (confirming while queued withdraws it). ${strict}`;
+      }
+      return `${printed}\nnext: orca group confirm ${id} --budget-mode soft\nTo estimate first, run orca group estimate ${id}; wait until it finishes before confirming. ${strict}`;
     } }),
   // Tester follow-up K (#284, #265): apply one of the current draft's hints (requirement show lists them); Orca re-validates
   // the edited split as the next draft, awaiting review. No model call is made.
