@@ -2,6 +2,7 @@ import { dispatchedEnv, type DispatchedAs } from "./commandClient.js";
 import { ChildTimeout, spawnRunChild } from "./integrationGit.js";
 import type { CheckRunCommand } from "./driveRecord.js";
 import { parseFailureSummary } from "./failureNames.js";
+import { cutUtf8 } from "./noChange.js";
 import type { AcceptanceFailureIdentity, FailureIdentityParseStatus } from "./acceptanceFailureIdentity.js";
 import { failureIdentitiesOf } from "./acceptanceFailureIdentity.js";
 
@@ -43,7 +44,7 @@ export async function runCheckRecorded(cwd: string, command: string, timeoutMs: 
     const completeOutput = `${answer.stdout}\n${answer.stderr}`.trim();
     const output = tail(completeOutput), exit = String(answer.code);
     // Tester #391: name the failing tests beside the tail; a runner other than node:test simply gives none.
-    const failures = exit === "0" ? [] : parseFailureSummary(output).failures;
+    const failures = exit === "0" ? [] : parseFailureSummary(completeOutput).failures.slice(0, 20).map((name) => cutUtf8(name, 240));
     const identity = exit === "0" ? undefined : failureIdentitiesOf(completeOutput, "node-test-tap-v1", cwd);
     return { command, exit, tail: output, ...(failures.length === 0 ? {} : { failures }), ...(identity === undefined ? {} : { failureIdentities: identity.identities, failureIdentityStatus: identity.parseStatus }) };
   } catch (error) {

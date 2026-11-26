@@ -36,6 +36,14 @@ describe("runAsCheck", () => {
     expect((await runCheckRecorded(dir, "printf 'not ok 1 - reported but exit 0\\n'", 10_000, { runId: "run-c" })).failures).toBeUndefined();
   });
 
+  it("keeps a failure name even when it precedes the display tail (#527)", async () => {
+    const dir = await workdir();
+    const failed = await runAsCheck(dir, "printf 'not ok 1 - login rejects\n'; printf 'x%.0s' $(seq 1 3000); printf '\n# fail 1\n'; exit 1", 10_000, { runId: "run-c" });
+    expect(failed?.tail).toHaveLength(2048);
+    expect(failed?.tail).not.toContain("login rejects");
+    expect(failed?.failures).toEqual(["login rejects"]);
+  });
+
   it("runs as the dispatched run", async () => {
     const dir = await workdir();
     expect(await runAsCheck(dir, 'printf "%s" "$ORCA_DISPATCHED_RUN" > who.txt', 10_000, { runId: "run-who" })).toBeNull();

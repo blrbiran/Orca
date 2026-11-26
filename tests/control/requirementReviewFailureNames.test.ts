@@ -47,6 +47,18 @@ describe("review facts carry both sides' failing names (#391)", () => {
     } finally { await t.h.dispose(); }
   }, 60_000);
 
+  it("uses persisted TAP identities when the retained tails contain only counts (#527)", async () => {
+    const t = await driverHarness([{ taskId: "a" }]);
+    try {
+      const id = { key: "1".repeat(64), file: "tests/login.test.mjs", testPath: ["auth", "login rejects"], diagnosticHash: "2".repeat(64) };
+      const comparison = { command: "npm test", baseIdentities: [id], tipIdentities: [id] };
+      const body = { acceptance: acceptance({ tail: "# fail 1", identityComparisons: [comparison] }, { baseline: { tip: BASE, exits: ["1"], tail: "# fail 1" } }) };
+      const facts = await reviewFacts(t.repo, body, TIP, t.h.store, "g");
+      expect(facts).toContain("  failing tests on this tip: tests/login.test.mjs: auth > login rejects");
+      expect(facts).toContain("  failing tests at the group's base: tests/login.test.mjs: auth > login rejects");
+    } finally { await t.h.dispose(); }
+  }, 60_000);
+
   it("the tip's names for a red suite even when no base run is recorded (not only passed-relative)", async () => {
     const t = await driverHarness([{ taskId: "a" }]);
     try {
@@ -119,6 +131,15 @@ describe("the prompt's rules for relative pass and off-plan writes (#391, #392)"
     expect(text).toContain("do not answer cannot-judge for that reason alone when acceptance has decided the check");
     expect(text).toContain("Those failures are the last 2 KB of each output only");
     expect(text).toContain("signup validates email");
+  });
+
+  it("explains the stored TAP identities without relying on the bounded output excerpt (#527)", () => {
+    const base = { key: "1".repeat(64), file: "test/base.test.mjs", testPath: ["known red"], diagnosticHash: "2".repeat(64) };
+    const tip = { ...base, file: "test/tip.test.mjs", testPath: ["new red"] };
+    const text = prompt({ acceptanceBaseline: { command: "npm test", tipExits: ["1"], tipTail: "# fail 1", tipIdentities: [tip], baseIdentities: [base] } });
+    expect(text).toContain("Stored failures at the group's base: test/base.test.mjs: known red");
+    expect(text).toContain("Tip failure: test/tip.test.mjs: new red");
+    expect(text).not.toContain("the identities are unavailable");
   });
 
   it("a red suite with no base run says so, and still shows the tip's failing names", () => {
