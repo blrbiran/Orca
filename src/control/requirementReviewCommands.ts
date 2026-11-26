@@ -1,9 +1,9 @@
 import { recordActivity } from "./activity.js";
 import { applyWebCommand } from "./commandLedger.js";
-import { commandPrincipalFor } from "./commandClient.js";
+import { commandPrincipalFor, settlingPersonFor } from "./commandClient.js";
 import { ControlError } from "./errors.js";
 import { openFixTask, saveReview } from "./requirementReview.js";
-import { reviewOf, type RequirementReview } from "./requirementReviewRecord.js";
+import { reviewOf, terminalExhaustedReviewFix, type RequirementReview } from "./requirementReviewRecord.js";
 import { commandSuccess } from "./stopIntent.js";
 import type { ControlStore } from "./store.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
@@ -24,11 +24,18 @@ export type ReviewFixCommand = Extract<RawAuthorityCommandV1, { verb: "review-fi
  * rerun and fix stay refused there (`requirement-review-not-open:noted`): reopening a group that may be done and delivered
  * is a separate decision (spec Q2).
  */
-function notPassed(store: ControlStore, groupId: string, accept = false): RequirementReview {
+function notPassed(store: ControlStore, groupId: string, accept?: ReviewAcceptCommand): RequirementReview {
   const row = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);
   if (row === undefined) throw new ControlError("group-not-found");
   const review = reviewOf(JSON.parse(String(row.body)));
-  if (review === null || !(review.state === "not-passed" || (accept && review.state === "noted"))) throw new ControlError("requirement-review-not-open", review?.state ?? "none");
+  if (review?.state === "fixing" && accept !== undefined) {
+    const stop = terminalExhaustedReviewFix(store, groupId, review);
+    const refusal = stop === null ? "the fix has no closed exhausted attempt" : stop.refusal;
+    if (refusal !== null) throw new ControlError("requirement-review-not-open", `fixing; ${refusal}`);
+    if (settlingPersonFor(accept.commandId) === null) throw new ControlError("requirement-review-not-open", "fixing; accepting an exhausted fix requires a person (use --as-person)");
+    return review;
+  }
+  if (review === null || !(review.state === "not-passed" || (accept !== undefined && review.state === "noted"))) throw new ControlError("requirement-review-not-open", review?.state ?? "none");
   return review;
 }
 const principalOf = (command: { commandId: string; actorId: string }): string => commandPrincipalFor(command.commandId) ?? command.actorId;
@@ -37,7 +44,8 @@ export function applyReviewAccept(deps: { store: ControlStore }, command: Review
   return applyWebCommand<CommandSuccessV1 | CommandErrorBodyV1>(deps.store, {
     rawCommand: command, expand: () => ({ ...command, schema: "orca-authority-command-v1" }),
     apply: (context) => {
-      const groupId = command.target.groupId, review = notPassed(deps.store, groupId, true), by = principalOf(command), at = deps.store.now();
+      const groupId = command.target.groupId, review = notPassed(deps.store, groupId, command), at = deps.store.now();
+      const by = review.state === "fixing" ? settlingPersonFor(command.commandId)! : principalOf(command);
       const { why: _why, ...rest } = review;
       saveReview(deps.store, groupId, { ...rest, state: "accepted", accepted: { by, note: command.payload.note, at } });
       recordActivity(deps.store, { groupId, kind: "requirement-review", body: { action: "accepted", by, note: command.payload.note } });

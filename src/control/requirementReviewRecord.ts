@@ -55,6 +55,46 @@ export function reviewOf(body: unknown): RequirementReview | null {
   return value === undefined || value === null || typeof value !== "object" ? null : value as RequirementReview;
 }
 
+/** #531/#547: the fixing round's current terminal run and the action its accounting state permits. */
+export function terminalExhaustedReviewFix(store: Pick<ControlStore, "db">, groupId: string, review: RequirementReview | null) {
+  if (review?.state !== "fixing") return null;
+  const taskId = review.rounds.at(-1)?.fixTaskId;
+  if (taskId === undefined) return null;
+  const workRow = store.db.prepare("SELECT body FROM work_items WHERE group_id=? AND id=?").get(groupId, taskId);
+  if (workRow === undefined) return null;
+  const work = JSON.parse(String(workRow.body)) as { kind?: string; status?: string; currentRunId?: string; pendingRunId?: string } | null;
+  if (work?.kind !== "task" || typeof work.currentRunId !== "string" || work.pendingRunId != null) return null;
+  const row = store.db.prepare("SELECT id,active,body FROM runs WHERE group_id=? AND work_item_id=? ORDER BY rowid DESC LIMIT 1").get(groupId, taskId);
+  if (row?.id !== work.currentRunId) return null;
+  const run = JSON.parse(String(row.body)) as { runId?: string; groupId?: string; taskId?: string; phase?: string; state?: string;
+    unknown?: { work?: boolean; handoff?: boolean }; drive?: { blockedAt?: string; blockedReason?: string; outcome?: string };
+    operatorAcceptance?: { state?: string; reason?: string | null }; mode?: unknown; recoveryOf?: unknown } | null;
+  if (run === null || run.runId !== row.id || run.groupId !== groupId || run.taskId !== taskId || run.phase !== "work"
+    || run.drive?.blockedAt !== "C" || run.drive.outcome !== "exhausted" || run.drive.blockedReason !== "terminal:exhausted") return null;
+  const active = Number(row.active) === 1;
+  // Before close-run the task can still be stored as running even though its run is terminal.
+  if (active ? run.state !== "blocked" || (work.status !== "running" && work.status !== "blocked")
+    : run.state !== "settled-failed" || work.status !== "blocked") return null;
+  const runId = work.currentRunId;
+  const acceptanceRefusal = run.operatorAcceptance?.state === "refused" ? run.operatorAcceptance.reason ?? null : null;
+  const inspect = `orca run show ${runId}`;
+  const close = `orca group close-run ${groupId} --run ${runId}`;
+  let refusal: string | null = null;
+  let next = `orca group review-accept ${groupId} --note '<why accept after the fix stopped>' --as-person`;
+  if (active) {
+    const canClose = work.status === "running" && run.mode === undefined && run.recoveryOf === undefined && run.unknown?.work === false && run.unknown.handoff === false;
+    next = canClose ? close : inspect;
+    refusal = canClose ? `close its accounting first with ${close}` : `resolve its open accounting first (see ${inspect})`;
+  } else if (store.db.prepare("SELECT 1 FROM runs WHERE group_id=? AND active=1").get(groupId) !== undefined) {
+    next = `orca group brief ${groupId}`;
+    refusal = "wait for the group's active runs to stop";
+  } else if (store.db.prepare("SELECT 1 FROM runs WHERE group_id=? AND CASE WHEN json_valid(body) THEN json_extract(body,'$.operatorAcceptance.state')='pending' ELSE 0 END").get(groupId) !== undefined) {
+    next = inspect;
+    refusal = "attempt acceptance is pending";
+  }
+  return { taskId, runId, acceptanceRefusal, refusal, next };
+}
+
 /**
  * §3.1, §3.8, §10.5: a group created from a requirement under follow-up G is reviewed; a group created before the release,
  * an imported plan or a flow, a flow run's hidden child and a debug group Orca opened itself are not.

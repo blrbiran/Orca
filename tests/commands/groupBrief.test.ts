@@ -74,6 +74,22 @@ describe("group brief (issue 199)", () => {
     expect(out.stdout).toContain("next: orca group accept-test-changes g-alpha --note '<why>' --tip <tip> --digest <digest>");
   });
 
+  it("a blocked group brief labels the exhausted review-fix and offers its safe person exit", async () => {
+    const groupId = "journal-dogfood-20261126-1";
+    const next = `orca group review-accept ${groupId} --note '<why accept after the fix stopped>'`;
+    const p = await fakePanel({
+      "GET summary": { status: 200, body: { schema: "orca-control-summary-v1", epoch: "e", changeSeq: 11, resetRequired: false, groups: [{ groupId, repoId: "repo-1", state: "blocked", commandRevision: 7 }] } },
+      [`GET groups/${groupId}/brief`]: { status: 200, body: { schema: "orca-group-brief-v1", ...VIEW.summary, groupId, state: "blocked",
+        groupProblem: { code: "requirement-review-fix-exhausted", why: "attempt-accept-refused:criteria-modified:test/a.test.ts", next: [next] },
+        card: { firstFailure: { taskId: "review-fix-2", cause: "terminal:exhausted", next } } } },
+    });
+    const out = await cli(["group", "brief", groupId], p.dir);
+    expect(out.code, out.stderr).toBe(0);
+    expect(out.stdout).toContain(`problem: terminal:exhausted — task review-fix-2`);
+    expect(out.stdout).toContain("problem: requirement-review-fix-exhausted (attempt-accept-refused:criteria-modified:test/a.test.ts)");
+    expect(out.stdout).toContain(`next: ${next}`);
+  });
+
   it("keeps group show's full body unchanged", async () => {
     const p = await fakePanel(routes);
     const out = await cli(["group", "show", "g-alpha", "--json"], p.dir);

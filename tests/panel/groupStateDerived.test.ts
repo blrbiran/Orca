@@ -35,6 +35,23 @@ describe("a group's shown state follows its work (#361 #376)", { timeout: 60_000
     } finally { await t.h.dispose(); }
   });
 
+  it("a group with blocked work and nothing active is shown blocked, not running", async () => {
+    const t = await driverHarness(ids(2)); try {
+      const group = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+      t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...group, status: "running" }));
+      for (const [taskId, status] of [["t0", "done"], ["t1", "blocked"]]) {
+        const row = t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id=?").get(taskId)!;
+        const work = JSON.parse(String(row.body));
+        t.h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id=?").run(JSON.stringify({ ...work, status }), taskId);
+      }
+      const summary = readGroupSummary(t.h.store, "g");
+      expect(summary.counts).toMatchObject({ running: 0, waiting: 0, idle: 0, blocked: 1, done: 1 });
+      // Mutation: keep the stored `running` word when all work is blocked or done -> this assertion fails.
+      expect(summary.state).toBe("blocked");
+      expect(summary.storedState).toBe("running");
+    } finally { await t.h.dispose(); }
+  });
+
   // #361 review (I4): only a task under way derives `running`. A start queued with nothing claimed keeps the stored word;
   // executionPending already says a start is queued (and an archived group with a queued start read `running` before).
   it("a start queued with nothing claimed yet: state stays ready, executionPending says the start is queued", async () => {

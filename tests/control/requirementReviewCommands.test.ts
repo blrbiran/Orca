@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { reviewWorld, verdicts, type ReviewWorld } from "./fixtures/reviewWorld.js";
+import { readControlRecovery, readGroupSummary } from "../../src/panel/controlViews.js";
+import { replenishStartWakes } from "../../src/control/executionDriver.js";
+import { deliverScheduledStart } from "../../src/control/webDispatch.js";
 import { readConfirmedTaskExecution } from "../../src/control/executionSnapshot.js";
 import { fixTaskAllowlist } from "../../src/control/requirementReview.js";
 
@@ -20,6 +23,30 @@ async function notPassed(answers: Array<Record<string, unknown>> = [verdicts({ A
   return w;
 }
 
+const asPerson = <T>(commandId: string, fn: () => T): T => withCommandContext(commandId, { client: "web", principal: "user:owner" }, fn);
+
+const FIX_CHECK = `test "$(cat a 2>/dev/null)" != rejected`;
+
+async function fixingWorld(): Promise<ReviewWorld> {
+  const w = await reviewWorld({ harness: { sealedOwnerProof: true, requiredChecks: [FIX_CHECK],
+    files: (taskId) => taskId === "review-fix-1" ? { a: "rejected\n" } : { [taskId]: `${taskId}\n` },
+    behaviour: (taskId) => taskId === "review-fix-1" ? "exhausted" : "succeed" },
+    answer: () => ({ outcome: "complete", output: verdicts({ AC1: "not-met", AC2: "met" }) }) });
+  await w.runAll();
+  await w.t.until(w.driver, () => w.review()?.state === "fixing", 120);
+  return w;
+}
+
+async function exhaustFix(w: ReviewWorld): Promise<string> {
+  replenishStartWakes({ store: w.t.h.store, admissionGate: w.t.h.deps.admissionGate });
+  const delivery = await deliverScheduledStart(w.t.dispatch, "g");
+  if (delivery.kind !== "claimed") throw new Error(`fix claim: ${JSON.stringify(delivery)}`);
+  const runId = delivery.runId;
+  await w.t.until(w.driver, () => w.t.body(runId).state === "blocked", 60);
+  expect(w.t.body(runId)).toMatchObject({ taskId: "review-fix-1", drive: { blockedReason: "terminal:exhausted", outcome: "exhausted" } });
+  return runId;
+}
+
 describe("the requirement review's exits (tester follow-up G §3.5)", () => {
   it("accept as is makes a not-passed group done, by an agent too", async () => {
     const w = await notPassed();
@@ -29,6 +56,42 @@ describe("the requirement review's exits (tester follow-up G §3.5)", () => {
       // mutation M10a: accept without setting the state -> never done, red
       expect(w.review()).toMatchObject({ state: "accepted", accepted: { by: "agent:cli", note: "AC2 is checked by hand" } });
       await w.t.until(w.driver, () => w.groupStatus() === "done", 60);
+    } finally { await w.t.h.dispose(); }
+  }, 240000);
+
+  it("only a person can accept after the exhausted fix's accounting closes and its attempt is no longer pending", async () => {
+    const w = await fixingWorld();
+    try {
+      const accept = () => {
+        const command = w.t.h.command("review-accept", { note: "the exhausted fix cannot continue" });
+        return asPerson(command.commandId, () => w.t.service.reviewAccept(command));
+      };
+      const runId = await exhaustFix(w);
+      const before = readControlRecovery(w.t.h.store, "epoch");
+      expect(before.reviewFixStops).toEqual([expect.objectContaining({ taskId: "review-fix-1", reason: "terminal:exhausted",
+        next: [`orca group close-run g --run ${runId}`] })]);
+      expect(refusal(accept())).toMatchObject({ message: expect.stringContaining(`orca group close-run g --run ${runId}`) });
+      expect(w.t.service.closeRun(w.t.h.command("close-run", { runId }))).toMatchObject({ result: { kind: "run-closed" } });
+      const command = w.t.h.command("review-accept", { note: "agent tries to accept" });
+      expect(refusal(asAgent(command.commandId, () => w.t.service.reviewAccept(command)))).toMatchObject({
+        message: expect.stringContaining("--as-person"),
+      });
+      const request = w.t.h.command("accept-attempt", { taskId: "review-fix-1", runId, note: "consider the exhausted attempt" });
+      await asPerson(request.commandId, async () => {
+        expect(await w.t.service.acceptAttempt(request)).toMatchObject({ result: { kind: "attempt-accept-requested" } });
+      });
+      expect(refusal(accept())).toMatchObject({ message: expect.stringContaining("attempt acceptance is pending") });
+      await w.t.until(w.driver, () => w.t.body(runId).operatorAcceptance?.state === "refused", 60);
+      const reason = `check-failed:${FIX_CHECK}`;
+      const next = ["orca group review-accept g --note '<why accept after the fix stopped>' --as-person"];
+      expect(readControlRecovery(w.t.h.store, "epoch").reviewFixStops).toEqual([expect.objectContaining({ taskId: "review-fix-1",
+        reason: `terminal:exhausted; attempt-accept-refused:${reason}`, next })]);
+      expect(readGroupSummary(w.t.h.store, "g")).toMatchObject({ state: "blocked", counts: { blocked: 1, done: 2, running: 0 },
+        groupProblem: { code: "requirement-review-fix-exhausted", why: `attempt-accept-refused:${reason}`, next } });
+      expect(accept()).toMatchObject({ result: { kind: "review-accepted" } });
+      expect(w.review()).toMatchObject({ state: "accepted", accepted: { by: "user:owner", note: "the exhausted fix cannot continue" } });
+      expect(readControlRecovery(w.t.h.store, "epoch").reviewFixStops).toBeUndefined();
+      expect(w.groupStatus()).not.toBe("done");
     } finally { await w.t.h.dispose(); }
   }, 240000);
 

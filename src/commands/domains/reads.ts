@@ -39,11 +39,19 @@ const ids = (context: WriteContext, name: string): string => context.ids[name]!;
  * lines, since its row (two commands) is longer than the generic one-line item, which is cut at 160 characters.
  */
 function recoveryList(body: unknown): string {
-  const { heldTasks, ceilingStops, unresolvedRuns, integrationBlocked, finishedHidden, ...rest } = (body ?? {}) as { heldTasks?: Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }>;
+  const { reviewFixStops, heldTasks, ceilingStops, unresolvedRuns, integrationBlocked, finishedHidden, ...rest } = (body ?? {}) as { reviewFixStops?: Array<{ groupId: string; taskId: string; runId: string; reason: string; next: string[] }>;
+    heldTasks?: Array<{ groupId: string; taskId: string; runId: string; continuable: boolean; next: string[] }>;
     ceilingStops?: Array<{ groupId: string; taskId: string; runId: string; cause: string; next: string[] }>;
     unresolvedRuns?: Array<{ groupId: string; taskId: string; runId: string; code: string; next: string[] }>;
     integrationBlocked?: Array<{ groupId: string; delivery: string; reason: string; next: string }>; finishedHidden?: number };
   const lines = [text(rest)];
+  if (reviewFixStops !== undefined && reviewFixStops.length > 0) {
+    lines.push("reviewFixStops:");
+    for (const row of reviewFixStops) {
+      lines.push(`  - ${row.groupId} ${row.taskId}: ${row.reason} (run ${row.runId})`);
+      for (const command of row.next) lines.push(`    next: ${command}`);
+    }
+  }
   // Tester #434: a delivery the record says was refused, whole lines like a held task's, with the command that retries it.
   if (integrationBlocked !== undefined && integrationBlocked.length > 0) {
     lines.push("integrationBlocked:");
@@ -104,7 +112,15 @@ export function budgetHeadroomLines(body: unknown): string[] {
 export function firstFailureLines(body: unknown): string[] {
   const failure = (field(body, "card") as { firstFailure?: { taskId: string; cause: string; next?: string } | null } | undefined)?.firstFailure;
   if (failure === undefined || failure === null) return [];
-  return [`failure: ${failure.cause} — task ${failure.taskId}`, ...(typeof failure.next === "string" && failure.next !== "" ? [`  next: ${failure.next}`] : [])];
+  const label = field(body, "state") === "blocked" ? "problem" : "failure";
+  return [`${label}: ${failure.cause} — task ${failure.taskId}`, ...(typeof failure.next === "string" && failure.next !== "" ? [`  next: ${failure.next}`] : [])];
+}
+function reviewFixProblemLines(body: unknown): string[] {
+  const problem = field(body, "groupProblem") as { code?: unknown; why?: unknown; next?: unknown } | undefined;
+  if (problem?.code !== "requirement-review-fix-exhausted") return [];
+  const lines = [`problem: ${String(problem.code)} (${String(problem.why ?? "?")})`];
+  if (Array.isArray(problem.next)) for (const command of problem.next) if (typeof command === "string") lines.push(`next: ${command}`);
+  return lines;
 }
 function unreadableRunLines(entries: unknown): string[] {
   if (!Array.isArray(entries)) return [];
@@ -710,7 +726,7 @@ export const READ_ROWS: CommandDef[] = [
     format: (body) => { const note = field(body, "phaseEndUsage") as { runIds: string[]; asOf: number | null } | undefined;
       const groupId = field(body, "groupId"), acceptance = field(body, "acceptance") as Parameters<typeof acceptanceLines>[1];
       const costs = (field(body, "costOutliers") as TaskCost[] | undefined) ?? [];
-      return [...firstFailureLines(body), text(body), ...requirementRecoveryLines(body), ...budgetHeadroomLines(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf)),
+      return [...firstFailureLines(body), ...reviewFixProblemLines(body), text(body), ...requirementRecoveryLines(body), ...budgetHeadroomLines(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf)),
         // Tester follow-up K, item 2: the acceptance line show prints, with its full-suite warning.
         ...(typeof groupId === "string" ? acceptanceLines(groupId, acceptance, (field(body, "requirementReview") as { state?: string } | undefined)?.state) : []),
         // Tester #359: a review that did not pass, with what answers it, as group show prints it.

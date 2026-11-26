@@ -57,7 +57,7 @@ import { sameProfileHash } from "../control/profiles.js";
 import { clarifyLimits, hasRequirementBlock, latestDraft, latestRound, readDrafts, readRequirementGroup, readRounds, refuseClarifying } from "../control/requirementRecords.js";
 import { QUOTA_PROBE_MAX_OUTPUT_TOKENS, probeVerdictSchema, quotaProbeIdentitySchema } from "../control/quotaProbeCall.js";
 import { isGroupCallPurpose, isGroupCallWorkItem, readGroupCallContract } from "../control/groupSingleCall.js";
-import { reviewNote, reviewOf, reviewProblem } from "../control/requirementReviewRecord.js";
+import { reviewNote, reviewOf, reviewProblem, terminalExhaustedReviewFix } from "../control/requirementReviewRecord.js";
 import { AGENT_QUOTA_REASON, CLARIFY_CAPS, QUOTA_CAUSE, type CallRecord } from "../control/requirementSchemas.js";
 import { renderRequirementDocument } from "../control/requirementDocument.js";
 import { activeChain, chainRounds } from "../control/clarifyChain.js";
@@ -752,7 +752,7 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
  * `group show` prints). #359 review (I2): a failed group acceptance, then a failed delivered acceptance, then a requirement
  * review that did not pass -- the same three the overview's needs-you rule counts (controlOverview.ts). Null otherwise.
  */
-function groupProblemOf(groupId: string, body: unknown, acceptanceProblemCode: string | null): { code: string; why: string; next: string[] } | null {
+function groupProblemOf(store: ControlStore, groupId: string, body: unknown, acceptanceProblemCode: string | null): { code: string; why: string; next: string[] } | null {
   if (acceptanceProblemCode !== null) {
     const acceptance = acceptanceOf(body), review = reviewOf(body);
     const next = acceptanceTestChangeAnswers(groupId);
@@ -769,7 +769,13 @@ function groupProblemOf(groupId: string, body: unknown, acceptanceProblemCode: s
     }
     return { code: delivered, why: "delivered-acceptance-failed", next: deliveredAcceptanceAnswers(groupId) };
   }
-  const review = reviewOf(body), code = reviewProblem(review);
+  const review = reviewOf(body);
+  const exhaustedFix = terminalExhaustedReviewFix(store, groupId, review);
+  if (exhaustedFix !== null) {
+    const why = exhaustedFix.acceptanceRefusal === null ? "terminal:exhausted" : `attempt-accept-refused:${exhaustedFix.acceptanceRefusal}`;
+    return { code: "requirement-review-fix-exhausted", why, next: [exhaustedFix.next] };
+  }
+  const code = reviewProblem(review);
   if (code === null) return null;
   return { code, why: review!.why ?? "?", next: reviewAnswers(groupId, review!.why, leftToPerson(review!.rounds.at(-1))) };
 }
@@ -889,15 +895,12 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
     },
   };
   const scheduleStart = scheduleStartOf(store, groupId, body as Record<string, unknown>);
-  // Tester #361: a Web start keeps the stored status `ready` (and every settle writes `review`) while tasks run; the summary
-  // shows `running` then, and the stored word beside it. Only the shown word: every guard reads the stored status.
-  // #361 review (I4): only a task under way (running or settling) makes it `running` -- a queued start with nothing claimed
-  // yet keeps the stored word (`executionPending` already says a start is queued).
-  // Tester #419/#370: an archived (or closed) group's stored status is not what it is now, and `state` is the shown
-  // word everywhere else too (the text row and the Web card read the mark first). Say the terminal word here, keep the
-  // stored status beside it in `storedState`; every guard still reads the stored status itself.
+  // Tester #547: a stored `running`/`review` word can outlive all work; a blocked task with no running, settling, waiting or idle
+  // tasks is the group's current state. This is a projection only: guards continue to read the stored status.
+  const blockedOnly = (counts?.blocked ?? 0) > 0 && (counts?.running ?? 0) === 0 && (counts?.settling ?? 0) === 0
+    && (counts?.waiting ?? 0) === 0 && (counts?.idle ?? 0) === 0;
   const terminal = terminalKindOf(body as Record<string, unknown>);
-  const shownState = terminal ?? ((body.status === "ready" || body.status === "review") && ((counts?.running ?? 0) > 0 || (counts?.settling ?? 0) > 0)
+  const shownState = terminal ?? (blockedOnly ? "blocked" : (body.status === "ready" || body.status === "review") && ((counts?.running ?? 0) > 0 || (counts?.settling ?? 0) > 0)
     ? "running" : body.status);
   const summary = {
     groupId,
@@ -950,7 +953,7 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
       ...(reviewNote(reviewOf(body)) === null ? {} : { note: reviewNote(reviewOf(body))! }) } }),
     // Tester #359 (#377 layer 4): the same problem as a group-level fact beside the card's firstFailure (which stays the
     // tasks' own), so the brief, the card and `orca status` see a review that did not pass on a group whose tasks are done.
-    ...((problem) => problem === null ? {} : { groupProblem: problem })(groupProblemOf(groupId, body, acceptanceProblemCode)),
+    ...((problem) => problem === null ? {} : { groupProblem: problem })(groupProblemOf(store, groupId, body, acceptanceProblemCode)),
     // Tester follow-up G §6.3 (#189): what this group lets through, with who, how, when and from which request.
     ...(allowancesOf(body).length === 0 ? {} : { allowances: allowancesOf(body) }),
     ...(landingWatch === null ? {} : { landingWatch: {
@@ -2177,6 +2180,7 @@ function undeliveredHandoffRows(store: ControlStore): Array<{ outboxId: string; 
  */
 export function readControlRecovery(store: ControlStore, epoch: string, options: { all?: boolean } = {}): RecoveryViewV1 {
   const terminalRuns = terminalRunRows(store);
+  const reviewFixStops = reviewFixStopRows(store);
   const deferredWakes = deferredWakeRows(store);
   const blockedRuns = blockedRunRows(store);
   const blockedCalls = blockedCallRows(store);
@@ -2188,7 +2192,7 @@ export function readControlRecovery(store: ControlStore, epoch: string, options:
   const ceilingStops = ceilingStopRows(store);
   const unresolvedRuns = unresolvedRunRows(store);
   const integrationBlocked = integrationBlockedRows(store);
-  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }), ...(capBlocked.length === 0 ? {} : { capBlocked }), ...(handoffOutbox.length === 0 ? {} : { handoffOutbox }), ...(finishedHidden === 0 ? {} : { finishedHidden }), ...(heldTasks.length === 0 ? {} : { heldTasks }), ...(ceilingStops.length === 0 ? {} : { ceilingStops }), ...(unresolvedRuns.length === 0 ? {} : { unresolvedRuns }), ...(integrationBlocked.length === 0 ? {} : { integrationBlocked }) };
+  const view = { schema: "orca-control-recovery-v1" as const, epoch, dispatchBlocked: store.dispatchBlocked, blockers: blockerRows(store), ...(terminalRuns.length === 0 ? {} : { terminalRuns }), ...(reviewFixStops.length === 0 ? {} : { reviewFixStops }), ...(deferredWakes.length === 0 ? {} : { deferredWakes }), ...(blockedRuns.length === 0 ? {} : { blockedRuns }), ...(blockedCalls.length === 0 ? {} : { blockedCalls }), ...(capBlocked.length === 0 ? {} : { capBlocked }), ...(handoffOutbox.length === 0 ? {} : { handoffOutbox }), ...(finishedHidden === 0 ? {} : { finishedHidden }), ...(heldTasks.length === 0 ? {} : { heldTasks }), ...(ceilingStops.length === 0 ? {} : { ceilingStops }), ...(unresolvedRuns.length === 0 ? {} : { unresolvedRuns }), ...(integrationBlocked.length === 0 ? {} : { integrationBlocked }) };
   const parsed = recoveryViewSchema.safeParse(view);
   if (!parsed.success) return blocked(`recovery-view:${parsed.error.issues[0]?.message ?? "invalid"}`);
   return parsed.data;
@@ -2383,6 +2387,25 @@ function unresolvedRunRows(store: ControlStore): Array<{ groupId: string; taskId
     }
     if (request?.state === "outcome-unknown") out.push({ groupId, taskId, runId, code: "handoff-unresolved",
       next: run.abandon === undefined ? [`orca run abandon ${groupId} --run ${runId} --note <why>`, recoveryRetryCommand(runId)] : [`orca run show ${runId}`, recoveryRetryCommand(runId)] });
+  }
+  return out;
+}
+
+type ReviewFixStopRow = { groupId: string; taskId: string; runId: string; reason: string; next: string[] };
+
+/** An exhausted review fix remains visible after close-run, when the generic terminal-run row disappears. */
+function reviewFixStopRows(store: ControlStore): ReviewFixStopRow[] {
+  const out: ReviewFixStopRow[] = [];
+  for (const row of store.db.prepare("SELECT id,body FROM groups ORDER BY rowid").all()) {
+    const groupId = String(row.id);
+    try {
+      const body = JSON.parse(String(row.body));
+      if (archivedMarkOf(body) !== null) continue;
+      const stop = terminalExhaustedReviewFix(store, groupId, reviewOf(body));
+      if (stop === null) continue;
+      const reason = stop.acceptanceRefusal === null ? "terminal:exhausted" : `terminal:exhausted; attempt-accept-refused:${stop.acceptanceRefusal}`;
+      out.push({ groupId, taskId: stop.taskId, runId: stop.runId, reason, next: [stop.next] });
+    } catch { continue; } // The individual group read reports unreadable records.
   }
   return out;
 }
