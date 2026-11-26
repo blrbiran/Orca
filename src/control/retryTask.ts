@@ -15,7 +15,7 @@ import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from
 import type { FrozenWorkAgent } from "./agentFreeze.js";
 import { applyAgentSwitch, AUTO_AGENT, runAgentAgrees, type SwitchSource } from "./agentSwitch.js";
 import { commandPrincipalFor, routedDispatchedRunFor, settlingPersonFor } from "./commandClient.js";
-import { ceilingStopWait, movePauseLine } from "./usagePause.js";
+import { ceilingGrantExhausted, ceilingStopWait, movePauseLine } from "./usagePause.js";
 import { appendTopUp, topUpSum, withTopUp } from "./workTopUp.js";
 import { authorizeWorkTopUp } from "./authorizeWorkTopUp.js";
 import { continuationIdentity, registrationOf } from "./continuation.js";
@@ -275,8 +275,11 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         }
         // Tester #478 (short term): a run a live ceiling stopped while its task waits at the group cap or its pause line is
         // refused by that cause, naming the way on (usagePause.ts ceilingStopWait), not as an unexplained run state.
+        // Tester #513: an auto-continued stop whose own grant the overshoot emptied (the task is `ready`, its run holds the
+        // work) takes a `--work` top-up here and continues; without one it is refused by the same named wait.
         const ceilingWait = live ? null : ceilingStopWait(store, groupId, run);
-        if (ceilingWait !== null) throw new ControlError("task-not-retryable", ceilingWait);
+        const ceilingReady = !live && ceilingGrantExhausted(store, groupId, run);
+        if (ceilingWait !== null && !(ceilingReady && incoming !== null)) throw new ControlError("task-not-retryable", ceilingWait);
         const held = !live && run.state === "settled-recoverable" && run.recoverable === true && work.status === "held"
           && allocations.length === 2 && allocations.every(a => a.state === "held" && settlementSame(a.amount, run.remaining[a.bucket as "work" | "handoff"]))
           && settlementSame(work.grant, run.remaining);
@@ -306,7 +309,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
         // allocations terminal (stopIntent.ts settleAbandonedRunInTransaction), as a closed run's are; its retry is a fresh run.
         const abandoned = !live && run.state === "settled-failed" && run.recoverable === false && abandonedRun(run) && work.status === "blocked"
           && allocations.length === 2 && allocations.every(a => a.state === "terminal") && closedGrantMatches;
-        if ((!live || run.state !== "blocked") && !held && !heldReleased && !released && !closed && !abandoned) throw new ControlError("task-not-retryable", `run-state:${run.state}`);
+        if ((!live || run.state !== "blocked") && !held && !heldReleased && !released && !closed && !abandoned && !ceilingReady) throw new ControlError("task-not-retryable", `run-state:${run.state}`);
         const drive = run.drive as DriveRecord | undefined;
         // Tester #229 (plan 2026-11-10 follow-up B, T1): a run blocked at another step is resumed in place by recovery-retry
         // (its block is not a ccloop failure); the refusal names that command.
@@ -386,7 +389,7 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
           let left=remainingBudget(authored,inherited);
           if(dimensions.some(d=>left[d]===0))throw new ControlError("task-not-retryable",authoredBudgetExhausted(groupId,taskId,authored,inherited,left));
           const personAuthority=incoming===null?false:authorizeWorkTopUp(store,groupId,command.commandId,incoming,'retry-top-up');
-          if(!released && !closed && !abandoned){saveRunBody(store,{...run,state:"settled-failed",recoverable:false,drive:{...drive,cleanedUp:false}},false);if(!heldReleased)releaseCommitment(store,groupId,add(finiteCommitment(run.remaining.work),run.remaining.handoff));}
+          if(!released && !closed && !abandoned && !ceilingReady){saveRunBody(store,{...run,state:"settled-failed",recoverable:false,drive:{...drive,cleanedUp:false}},false);if(!heldReleased)releaseCommitment(store,groupId,add(finiteCommitment(run.remaining.work),run.remaining.handoff));}
           let freshStart:Amount|null=null;
           if(want!==null){
             // Never more than the group's own non-token limits leave the claim (decideFundedAllowance, fundingReleased), read
@@ -411,7 +414,10 @@ export function applyRetryTask(deps: RetryTaskDeps, command: RetryTaskCommand): 
             appendTopUp(store,groupId,taskId,runId,{amount:incoming,commandId:command.commandId,by:commandPrincipalFor(command.commandId)??command.actorId,personAuthority,at:store.now()});
           }
           Object.assign(work,{status:"ready",fundingReleased:true,pendingRunId:null});
-          delete work.continuation;delete work.retryGrantSourceRunId;delete (work as {allowancePredecessorRunId?:string}).allowancePredecessorRunId;
+          delete work.continuation;delete work.retryGrantSourceRunId;
+          // Tester #513: the grant-exhausted continuation keeps its predecessor so the next claim resumes the stopped
+          // attempt's work (fundedAllowance.ts pendingResumedAttemptOf) instead of re-planning it.
+          if(!ceilingReady) delete (work as {allowancePredecessorRunId?:string}).allowancePredecessorRunId;
           setAllocationStates(store,groupId,taskId,"confirmed");saveWork(store,groupId,work as never);
           const resumedGroup=readGroup(store,groupId);resumedGroup.status="running";saveGroup(store,resumedGroup);
           recordSavedOrdinaryRetry(store,runId,command.commandId);recordActivity(store,{groupId,taskId,runId,kind:"task-retried",body:{fromRunId:runId,...afterBody,...(switched===null?{}:{agent:switched}),...(incoming===null?{}:{topUp:incoming}),...(freshStart===null?{}:{freshStart})}});

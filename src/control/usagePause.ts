@@ -12,6 +12,7 @@ import { PAUSE_LINE_MULTIPLE, pauseLineFor, taskExpectation } from "./expectatio
 import { refuseClarifying } from "./requirementRecords.js";
 import { commandSuccess, readStopIntent } from "./stopIntent.js";
 import { continueRestartsFresh, USAGE_PAUSE_FRESH_START } from "./driveRecord.js";
+import { hasOptionalTaskPolicy } from "./fundedAllowance.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
 
 /**
@@ -84,9 +85,30 @@ export function classifyCeilingStop(store: ControlStore, run: { runId: string; g
  * this detail, which names the stop and that way on: a top-up (set-limit by the tokens the run used, which continues every
  * task at the group cap, webService setLimit) or a decision. The ceiling semantics are untouched. Null otherwise.
  */
-export function ceilingStopWait(store: ControlStore, groupId: string, run: { runId: string; workItemId: string; taskId: string | null; state: string; liveCeilingStop?: unknown }): string | null {
+/** A run a live ceiling stopped whose task is auto-continued (`ready`) and cannot fund another attempt from its own
+ * authored grant -- the shape of #513: the ceiling and the task grant were the same number, so overshoot left 0. */
+export function ceilingGrantExhausted(store: ControlStore, groupId: string, run: { runId: string; workItemId: string; state: string; liveCeilingStop?: unknown }): boolean {
+  if (run.state !== "settled-recoverable" || run.liveCeilingStop === undefined) return false;
+  const work = readWork(store, groupId, run.workItemId) as unknown as { status?: unknown; currentRunId?: unknown; allowancePredecessorRunId?: unknown };
+  return work.status === "ready" && work.currentRunId === run.runId && work.allowancePredecessorRunId === run.runId
+    && hasOptionalTaskPolicy(store, groupId, run.workItemId);
+}
+
+/** One more attempt's observed cost, at least 1: the top-up a grant-exhausted ceiling stop suggests. */
+function oneAttemptTokens(run: { cumulative?: { work?: { tokens?: unknown } } }): number {
+  const used = Number(run.cumulative?.work?.tokens ?? 0);
+  return Number.isFinite(used) ? Math.max(1, Math.ceil(used)) : 1;
+}
+
+export function ceilingStopWait(store: ControlStore, groupId: string, run: { runId: string; workItemId: string; taskId: string | null; state: string; liveCeilingStop?: unknown; cumulative?: { work?: { tokens?: unknown } } }): string | null {
   if (run.state !== "settled-recoverable" || run.liveCeilingStop === undefined) return null;
   const work = readWork(store, groupId, run.workItemId) as unknown as Record<string, unknown> & { status: string };
+  // Tester #513: the auto-continue branch left the task `ready`, but the overshoot emptied its own grant, so the claim
+  // gate skips it and every surface said nothing. The way on is a task top-up (optional policy) that continues its work.
+  if (ceilingGrantExhausted(store, groupId, run)) {
+    const stop = run.liveCeilingStop as { observedTokens?: number }, grant = (work as unknown as { grant: { work: { tokens: number | null } } }).grant.work.tokens;
+    return `live-ceiling-stop:grant-exhausted:the ceiling stopped this run at ${stop.observedTokens ?? 0} tokens and the task's grant (${grant ?? "unlimited"}) no longer funds a retry:orca task retry ${groupId} ${run.taskId ?? run.workItemId} --as-person --work '{"tokens":${oneAttemptTokens(run)}}'`;
+  }
   if (work.status !== "blocked") return null;
   const cap = work.groupCapStop as { runId?: string; observedTokens?: number } | undefined;
   const limit = (readGroup(store, groupId).limit as { tokens: number | null }).tokens;
@@ -106,16 +128,23 @@ export function ceilingStopWait(store: ControlStore, groupId: string, run: { run
  * (budgetState), group brief (firstFailure.next) and recovery list (ceilingStops).
  */
 export function ceilingStopExits(store: ControlStore, groupId: string, work: Record<string, unknown>): { runId: string; cause: "group" | "pause-line"; next: string[] } | null {
-  if (work.status !== "blocked" || typeof work.taskId !== "string") return null;
+  if (typeof work.taskId !== "string") return null;
   const cap = work.groupCapStop as { runId?: unknown; observedTokens?: number } | undefined, pause = work.usagePause as { runId?: unknown } | undefined;
-  const runId = typeof cap?.runId === "string" ? cap.runId : typeof pause?.runId === "string" ? pause.runId : null;
+  const predecessor = work.allowancePredecessorRunId;
+  const runId = typeof cap?.runId === "string" ? cap.runId : typeof pause?.runId === "string" ? pause.runId : typeof predecessor === "string" ? predecessor : null;
   if (runId === null || work.currentRunId !== runId) return null;
   const row = store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId);
   if (row === undefined) return null;
-  const run = JSON.parse(String(row.body)) as { state?: unknown; liveCeilingStop?: unknown; drive?: { outcome?: unknown } };
+  const run = JSON.parse(String(row.body)) as { state?: unknown; liveCeilingStop?: unknown; drive?: { outcome?: unknown }; cumulative?: { work?: { tokens?: unknown } } };
   if (run.state !== "settled-recoverable" || run.drive?.outcome !== "exhausted" || run.liveCeilingStop === undefined) return null;
   const taskId = work.taskId, limit = (readGroup(store, groupId).limit as { tokens: number | null }).tokens;
   const accept = `orca task accept-attempt ${groupId} ${taskId} --run ${runId} --note '<why the attempt is enough>'`;
+  // Tester #513: an auto-continued stop whose own grant the overshoot emptied has no wait to name and no set-limit to
+  // suggest (the group is where the headroom came from). Its one paid exit is a task top-up that continues the work.
+  if (ceilingGrantExhausted(store, groupId, { runId, workItemId: String(work.workItemId ?? taskId), state: String(run.state), liveCeilingStop: run.liveCeilingStop })) {
+    return { runId, cause: "group", next: [`orca task retry ${groupId} ${taskId} --as-person --work '{"tokens":${oneAttemptTokens(run)}}'`, accept] };
+  }
+  if (work.status !== "blocked") return null;
   if (cap !== undefined) {
     const raise = limit === null ? `orca group set-limit ${groupId} --limit <a higher limit> --as-person` : `orca group set-limit ${groupId} --limit ${limit + Math.max(1, cap.observedTokens ?? 0)} --as-person`;
     return { runId, cause: "group", next: [raise, accept] };

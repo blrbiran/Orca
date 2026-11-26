@@ -2295,10 +2295,14 @@ export function heldTaskOf(groupId: string, taskId: string, run: { state?: unkno
 /**
  * #478 §5.4: every task waiting after a live-ceiling stop -- at the group cap or at its pause line -- with every way on
  * (usagePause.ts ceilingStopExits), outside an archived group. Such a run is settled, so no other row of the list names it.
+ * Tester #513: an auto-continued stop whose own grant the overshoot emptied is `ready` (not waiting), and is listed too --
+ * its wait is the task's own budget, whose only exits are the top-up retry and accept-attempt.
  */
 function ceilingStopRows(store: ControlStore): Array<{ groupId: string; taskId: string; runId: string; cause: "group" | "pause-line"; next: string[] }> {
   const out: Array<{ groupId: string; taskId: string; runId: string; cause: "group" | "pause-line"; next: string[] }> = [];
-  const rows = store.db.prepare("SELECT group_id,id,body FROM work_items WHERE json_valid(body) AND json_extract(body,'$.status')='blocked' AND (json_extract(body,'$.groupCapStop') IS NOT NULL OR json_extract(body,'$.usagePause') IS NOT NULL) ORDER BY group_id,id").all();
+  const rows = store.db.prepare("SELECT group_id,id,body FROM work_items WHERE json_valid(body) AND ("
+    + "(json_extract(body,'$.status')='blocked' AND (json_extract(body,'$.groupCapStop') IS NOT NULL OR json_extract(body,'$.usagePause') IS NOT NULL))"
+    + " OR (json_extract(body,'$.status')='ready' AND json_extract(body,'$.allowancePredecessorRunId') IS NOT NULL)) ORDER BY group_id,id").all();
   for (const row of rows) {
     const groupId = String(row.group_id);
     const group = store.db.prepare("SELECT body FROM groups WHERE id=?").get(groupId);

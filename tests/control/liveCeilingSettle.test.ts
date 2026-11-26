@@ -80,6 +80,45 @@ describe("a run stopped at its live ceiling (spec §2.1, §2.5)", { timeout: 300
     } finally { await t.h.dispose(); }
   });
 
+  // Tester #513: the ceiling and the task's own grant were the same number, so the overshoot emptied the grant while the
+  // stop auto-continued the task (ready, its own run holding the work). The claim gate skips a zero-remaining task and no
+  // surface said why. The exits now name the top-up retry, which accepts --work here and keeps the predecessor.
+  it("an auto-continued stop its own grant cannot fund names a top-up, and the top-up continues its work", async () => {
+    const knobs: Knobs = { exhausted: true, workTokens: 2 * M, cause: "group" };
+    const t = await harness(["a"], 20 * M, knobs);
+    try {
+      const row = t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!;
+      const item = JSON.parse(String(row.body)); item.grant.work.tokens = 1 * M;
+      t.h.store.db.prepare("UPDATE work_items SET body=? WHERE group_id='g' AND id='a'").run(JSON.stringify(item));
+      const driver = t.driver();
+      const first = await t.claim();
+      await settled(t, driver, first, "settled-recoverable");
+      expect(work(t)).toMatchObject({ status: "ready", allowancePredecessorRunId: first });
+      // The grant gate skips it: remaining = max(0, 1M - 2M) = 0 (tokenPolicy.ts, fundedAllowance.ts). No start wake is
+      // armed for a ceiling stop, so dispatch answers idle -- nothing claims the task.
+      expect(await deliverScheduledStart(t.dispatch, "g")).toEqual({ kind: "idle" });
+      const topUp = `orca task retry g a --as-person --work '{"tokens":${2 * M}}'`;
+      const take = `orca task accept-attempt g a --run ${first} --note '<why the attempt is enough>'`;
+      // mutation: drop the ceilingGrantExhausted branch of ceilingStopExits -> ceilingStops undefined, red
+      expect(readControlRecovery(t.h.store, "epoch").ceilingStops).toEqual([{ groupId: "g", taskId: "a", runId: first, cause: "group", next: [topUp, take] }]);
+      const bare = t.h.command("retry-task", { taskId: "a", runId: first });
+      const refused = withCommandContext(bare.commandId, { client: "web", principal: "user:owner", personAuthority: true }, () => t.service.retryTask(bare)) as { error: { code: string; message: string } };
+      // mutation: drop the ceilingGrantExhausted branch of ceilingStopWait -> run-state:settled-recoverable, red
+      expect(refused.error).toMatchObject({ code: "task-not-retryable", message: expect.stringContaining("live-ceiling-stop:grant-exhausted:") });
+      expect(ceilingStopNext(refused.error.message.slice("task-not-retryable:".length))).toBe(topUp);
+      // mutation: keep the generic run-state refusal for a ready auto-continued stop -> the top-up retry is refused, red
+      const retry = t.h.command("retry-task", { taskId: "a", runId: first, work: { tokens: 2 * M } });
+      expect(withCommandContext(retry.commandId, { client: "web", principal: "user:owner", personAuthority: true }, () => t.service.retryTask(retry))).toMatchObject({ result: { kind: "task-retried" } });
+      // The predecessor survives the top-up, so the next claim resumes the stopped attempt instead of re-planning it.
+      expect(work(t)).toMatchObject({ status: "ready", allowancePredecessorRunId: first });
+      knobs.exhausted = false;
+      const second = await nextRun(t, driver);
+      for (let i = 0; i < 400 && t.body(second).drive?.prepared !== true; i++) await driver.round();
+      expect(readStartEnvelope(t.h.store, t.body(second)).inputCheckpoint).not.toBeNull();
+      await driver.stop();
+    } finally { await t.h.dispose(); }
+  });
+
   // #310: both C visits start while the run is accepted. The late one sees a changed result tree after the first settled.
   it("reuses the committed ceiling checkpoint instead of blocking a late C visit", async () => {
     let releaseSecond = () => {};
