@@ -399,7 +399,7 @@ describe("every enum value has its words in both languages (spec §3.5)", () => 
     // Ruling (2026-11-18 #356): lilac replaces light, scale included -- the theme family drops `lilac` (human: 「同意 lilac 整体覆盖 light」): 230 - 1.
     // Ruling (2026-11-19 #355/#357): 「这次批准改写所有必要的判据」 -- the activityKinds `closed` and `unclosed` (a done group closed, and the close undone) add two: 229 + 2.
     // Ruling (2026-11-21 #419/#370): 「这次批准改写所有必要的判据」 -- the shown group states `archived` and `closed` join the groupState family: 231 + 2.
-    expect(ENUM_VALUES.length).toBe(233);
+    expect(ENUM_VALUES.length).toBe(234);
   });
 
   it("in Chinese shows zh.ts's words for every value, words that differ from the English ones", async () => {

@@ -14,8 +14,8 @@ import { requestState, stop, work, type Harness } from "../control/fixtures/hand
 
 // Handoff delivery spec §13.1 C-4 (human ruling 2026-09-25, an online contract change): `RunViewV1.continuable`
 // is true only for a run a handoff stopped -- persisted `settled-recoverable` holding a checkpoint whose
-// result is `partial`. A run the driver settled normally also DISPLAYS `settled-recoverable` (persisted
-// `settled` + `recoverable`), and before this field the panel offered it for continuation.
+// result is `partial`. A run the driver settled normally displays `settled-succeeded` (persisted `settled`
+// + `recoverable`, tester #512), and before this field the panel offered it for continuation.
 
 const EPOCH = "epoch-continuable";
 const persisted = (store: ControlStore, runId: string) => JSON.parse(String(store.db.prepare("SELECT body FROM runs WHERE id=?").get(runId)!.body)) as Record<string, unknown>;
@@ -53,7 +53,7 @@ async function handedOff(result: "partial" | "complete", outcome: "settled-recov
 }
 
 describe("RunViewV1.continuable (handoff delivery C-4)", () => {
-  it("is false for a run the driver settled normally, although it displays settled-recoverable", async () => {
+  it("is false for a run the driver settled normally, which displays settled-succeeded", async () => {
     const t = await driverHarness([{ taskId: "a" }]); try {
       const runId = await t.claim();
       await t.until(t.driver(), () => t.body(runId).drive?.cleanedUp === true);
@@ -61,7 +61,8 @@ describe("RunViewV1.continuable (handoff delivery C-4)", () => {
       expect(run).toMatchObject({ state: "settled", recoverable: true });
       const checkpoint = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM checkpoints WHERE id=?").get(String(run.checkpointId))!.body)) as { result: string };
       expect(checkpoint.result).toBe("complete");
-      expect(viewOf(t.h.store, runId)).toMatchObject({ state: "settled-recoverable", continuable: false });
+      // Ruling: tester #512 -- a normal success no longer borrows the continuable stop's display name.
+      expect(viewOf(t.h.store, runId)).toMatchObject({ state: "settled-succeeded", continuable: false });
     } finally { await t.h.dispose(); }
   }, 30000);
 
@@ -202,7 +203,8 @@ describe("RunViewV1.continuable after a continuation (final fix wave FR-C1)", { 
       const view = readControlGroup(t.h.store, "epoch-test", "g");
       expect(view.summary.stopState).toBe("handoff-complete");
       expect(view.runs.find((run) => run.runId === predecessor)).toMatchObject({ state: "settled-recoverable", continuable: false });
-      expect(view.runs.find((run) => run.runId === continuation)).toMatchObject({ state: "settled-recoverable", continuable: false });
+      // Ruling: tester #512 -- the landed continuation is a normal success.
+      expect(view.runs.find((run) => run.runId === continuation)).toMatchObject({ state: "settled-succeeded", continuable: false });
       // The panel renders "Resume (no continuation)" exactly when this is empty at handoff-complete; that command is accepted.
       expect(panelSelections(t)).toEqual([]);
       const resumed = await t.service.resumeFromHandoff(t.h.command("resume-from-handoff", { selections: [] } as never));

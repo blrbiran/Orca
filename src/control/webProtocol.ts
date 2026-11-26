@@ -2216,6 +2216,7 @@ export const runViewSchema = z
       "settled-restartable",
       "settled-unrecoverable",
       "settled-failed",
+      "settled-succeeded",
       "collected",
       "landed",
       "reconciling",

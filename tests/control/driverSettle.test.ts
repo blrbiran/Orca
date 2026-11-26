@@ -25,7 +25,9 @@ describe("E: settle a landed run (spec §2.2, deviation D2)", () => {
       expect(t.h.store.db.prepare("SELECT active FROM runs WHERE id=?").get(runId)).toEqual({ active: 0 });
       expect(JSON.parse(String(t.h.store.db.prepare("SELECT body FROM work_items WHERE group_id='g' AND id='a'").get()!.body)).status).toBe("done");
       const view = readControlGroup(t.h.store, "epoch-test", "g");
-      expect(view.runs.find((entry) => entry.runId === runId)!.state).toBe("settled-recoverable");
+      // Ruling: tester #512. This run is a normal success; reading it as `settled-recoverable` made 8 succeeded runs
+      // indistinguishable from the one handoff/ceiling stop in the same group. The persisted row stays `settled`.
+      expect(view.runs.find((entry) => entry.runId === runId)!.state).toBe("settled-succeeded");
       expect(view.workItems.find((entry) => entry.taskId === "a")!.status).toBe("completed");
       expect(readWebGroup(t.h.store, "g").ledger.committedRemaining.tokens).toBe(before - remaining.work.tokens - remaining.handoff.tokens);
       const acceptance = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM outbox WHERE id=? AND kind='acceptance'").get(`acceptance:${runId}`)!.body));

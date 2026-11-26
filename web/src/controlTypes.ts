@@ -483,7 +483,7 @@ export type RunViewV1 = {
   taskId: string | null;
   estimateId: string | null;
   generation: number;
-  state: "starting" | "unknown" | "attempt-unknown" | "attempt-proof-invalid" | "running" | "failed-before-provider" | "settled-recoverable" | "settled-restartable" | "settled-unrecoverable" | "settled-failed" | "collected" | "landed" | "reconciling" | "blocked";
+  state: "starting" | "unknown" | "attempt-unknown" | "attempt-proof-invalid" | "running" | "failed-before-provider" | "settled-recoverable" | "settled-restartable" | "settled-unrecoverable" | "settled-failed" | "settled-succeeded" | "collected" | "landed" | "reconciling" | "blocked";
   phase: "estimate" | "work" | "handoff" | "single-call";
   /** N1 DR26: what a `single-call` run of a requirement was for; absent on every other phase. */
   purpose?: "clarify" | "split" | "quota-probe" | "no-change-judge" | "requirement-review";

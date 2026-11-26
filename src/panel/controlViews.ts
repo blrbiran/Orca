@@ -1503,13 +1503,20 @@ function validAccounting(run: z.infer<typeof persistedRunSchema>): boolean {
   return true;
 }
 
+/**
+ * Tester #512: a run the driver settled normally used to display as `settled-recoverable` whenever it carried a
+ * recoverable checkpoint, the same string as a handoff/ceiling stop that really is continuable. The state column then
+ * said nothing (8 of 9 runs in one group read identically while only one needed work), and `run show` printed it beside
+ * `run-settled {"outcome":"succeeded"}`. A persisted `settled` is a normal success and says so; `recoverable` stays a
+ * separate field.
+ */
 function displayRunState(run: z.infer<typeof persistedRunSchema>): RunViewV1["state"] {
   switch (run.state) {
     case "claimed": case "starting": return "starting";
     case "accepted": return "running";
     case "unknown": case "attempt-unknown": case "attempt-proof-invalid": case "failed-before-provider":
     case "settled-recoverable": case "settled-restartable": case "settled-unrecoverable": case "settled-failed": return run.state;
-    case "settled": return run.recoverable ? "settled-recoverable" : "settled-unrecoverable";
+    case "settled": return "settled-succeeded";
     case "start-pending": return "starting";
     case "collected": case "landed": case "reconciling": case "blocked": return run.state;
   }
@@ -1522,8 +1529,8 @@ function displayRunState(run: z.infer<typeof persistedRunSchema>): RunViewV1["st
  * in every dimension. `registerContinuation` (continuation.ts:169) refuses the whole batch with
  * `budget-overrun` the moment one selected predecessor has an exhausted dimension, so offering it
  * here would be a dead end. A run the driver settled normally (persisted `settled`, recoverable,
- * checkpoint `complete`) displays as `settled-recoverable` too, but its task is done and must
- * never be offered for continuation.
+ * checkpoint `complete`) displays as `settled-succeeded` and its task is done; it must never be
+ * offered for continuation.
  *
  * Final fix wave (FR-C1, controller ruling 2026-09-25): and it must still be the task's parked run -- the
  * work item's `currentRunId` and `status: "held"`, the two conditions `assertPredecessor`
@@ -1602,7 +1609,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       for (const id of missing) missingEvidence.add(id);
     }
     const state = displayRunState(run);
-    const terminal = ["failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed"].includes(state);
+    const terminal = ["failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed", "settled-succeeded"].includes(state);
     if ((Number(row.active) === 1) === terminal
       || (Number(row.active) === 1 && run.graphVersion !== graphVersion)
       || ((run.state === "accepted" || run.state === "settled") && run.providerAttemptOrdinal === 0)) {

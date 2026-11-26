@@ -82,7 +82,7 @@ export function savedResultSourceRunId(view: GroupViewV1, item: WorkItemViewV1):
  * `active` flag disagrees with this set, so every other state is an active run.
  */
 const INACTIVE_RUN_STATES: ReadonlySet<RunViewV1["state"]> = new Set([
-  "failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed",
+  "failed-before-provider", "settled-recoverable", "settled-restartable", "settled-unrecoverable", "settled-failed", "settled-succeeded",
 ]);
 
 /**
