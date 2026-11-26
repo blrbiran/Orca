@@ -116,15 +116,19 @@ describe("orca gc --include-artifacts: every holder kind keeps what it names (#4
     } finally { await h.dispose(); }
   });
 
-  it("an outbox kind in neither list stops the plan instead of holding forever (#505)", async () => {
+  it("an outbox kind in neither list holds only what it names and does not stop the plan (#509)", async () => {
     const { h, store, control, plan } = await world();
     try {
       const x = blob(store, "named by both");
       setRunBody(store, "run-old", { artifacts: [control, x] });
       store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,0)").run("mystery:1", "mystery-kind", JSON.stringify({ artifacts: [x] }));
-      // A new kind must be classified in outboxKinds.ts, not inherit "held for good".
-      // mutation (treat an unknown kind as a record) -> the plan returns, red.
-      expect(() => plan()).toThrowError(expect.objectContaining({ code: "outbox-kind-unclassified" }));
+      // Ruling: tester #509. The #505 guard was right to refuse "held forever", but refusing the whole plan let one
+      // unclassified production kind block every reclaim on the machine. An unknown kind keeps exactly what it names.
+      // mutation (throw GcRefusal again) -> the plan does not return, red.
+      const result = plan();
+      expect(planned(result)).toEqual([control.artifactId]);
+      expect(skipOf(result, x.artifactId)?.reason).toBe("outbox-kind-unclassified");
+      expect(skipOf(result, x.artifactId)?.detail).toBe("mystery-kind");
     } finally { await h.dispose(); }
   });
 

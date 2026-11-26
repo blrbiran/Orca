@@ -21,6 +21,16 @@ describe("outbox kinds (#119)", () => {
     expect(OUTBOX_QUEUE_KINDS.filter((kind) => OUTBOX_RECORD_KINDS.includes(kind))).toEqual([]);
   });
 
+  it("the single-call and estimate receipts are records (#509)", () => {
+    // Each is written through a parameterized INSERT (singleCallLedger.ts closeSingleCall, singleCall.ts
+    // singleCallClaimRowOf), so the literal scan above cannot see them; the literals live in the callers. They are
+    // read back by id only, so they are records: mutation (drop one from OUTBOX_RECORD_KINDS) -> red.
+    for (const kind of ["single-call-contract", "single-call-claim", "single-call-result", "estimate-result"]) {
+      expect(OUTBOX_RECORD_KINDS).toContain(kind);
+      expect(OUTBOX_QUEUE_KINDS).not.toContain(kind);
+    }
+  });
+
   it("every kind read as pending (delivered=0) is a queue kind", () => {
     const read = [...source.matchAll(/FROM outbox WHERE kind(?:='([a-z-]+)'| IN \(([^)]*)\)) AND delivered=0/g)]
       .flatMap((match) => match[1] !== undefined ? [match[1]] : match[2]!.split(",").map((kind) => kind.trim().replace(/'/g, "")));

@@ -15,9 +15,22 @@
  * the request settled. So for this kind `delivered=0` does not mean "still to deliver": read the request's state instead
  * (and, for a run's own request, whether its run is still active; controlViews.ts undeliveredHandoffRows, read side only).
  */
-export const OUTBOX_QUEUE_KINDS: readonly string[] = ["projection", "task-handoff", "group-handoff", "cleanup", "handoff-request", "landing"];
+const QUEUE_KINDS = ["projection", "task-handoff", "group-handoff", "cleanup", "handoff-request", "landing"] as const;
 /** Kinds that are records read by id; `delivered` carries no meaning for them. */
-export const OUTBOX_RECORD_KINDS: readonly string[] = [
+const RECORD_KINDS = [
   "acceptance", "archive", "estimate-claim", "estimate-contract", "handoff-attempt", "handoff-recovery", "integration-usage",
   "reconcile-usage", "recovery-error", "report", "start", "stop", "task-results", "work-claim",
-];
+  // Tester #509: written through `closeSingleCall` / `singleCallClaimRowOf`, so the literal scan cannot see them. All
+  // four are read back by id only (the contract, the claim row, the settlement receipt and the estimate receipt), and
+  // production writes them with `delivered=1`; they are records.
+  "single-call-claim", "single-call-contract", "single-call-result", "estimate-result",
+] as const;
+
+export const OUTBOX_QUEUE_KINDS: readonly string[] = QUEUE_KINDS;
+export const OUTBOX_RECORD_KINDS: readonly string[] = RECORD_KINDS;
+
+/**
+ * Every kind a writer may put in `outbox.kind`. Tester #509: typing the shared writers with this union makes a new
+ * kind a type error at its call site, which the literal-scan test cannot do for parameterized inserts.
+ */
+export type OutboxKind = (typeof QUEUE_KINDS)[number] | (typeof RECORD_KINDS)[number];

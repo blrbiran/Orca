@@ -1,4 +1,5 @@
 import { ControlError } from "./errors.js";
+import type { OutboxKind } from "./outboxKinds.js";
 
 /**
  * N1 spec §5.1 (human ruling H6, B′): one ccloop single call, told apart by what it is for. Pure: no store, no I/O, so
@@ -40,9 +41,9 @@ export function singleCallPurposeOf(run: { phase?: unknown; purpose?: unknown })
  * per work item let the next attempt overwrite it, so the earlier attempt's run stopped reading as a single call and a
  * restart's recovery blocked dispatch for every group (final review finding 1).
  */
-export function singleCallClaimRowOf(phase: "estimate", groupId: string, workItemId: string, runId?: string): { id: string; kind: string };
-export function singleCallClaimRowOf(phase: "estimate" | "single-call", groupId: string, workItemId: string, runId: string): { id: string; kind: string };
-export function singleCallClaimRowOf(phase: "estimate" | "single-call", groupId: string, workItemId: string, runId?: string): { id: string; kind: string } {
+export function singleCallClaimRowOf(phase: "estimate", groupId: string, workItemId: string, runId?: string): { id: string; kind: OutboxKind };
+export function singleCallClaimRowOf(phase: "estimate" | "single-call", groupId: string, workItemId: string, runId: string): { id: string; kind: OutboxKind };
+export function singleCallClaimRowOf(phase: "estimate" | "single-call", groupId: string, workItemId: string, runId?: string): { id: string; kind: OutboxKind } {
   return phase === "estimate"
     ? { id: `estimate:${groupId}:${workItemId}`, kind: "estimate-claim" }
     : { id: `single-call:${groupId}:${workItemId}:${runId}`, kind: "single-call-claim" };

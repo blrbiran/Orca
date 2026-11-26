@@ -23,7 +23,7 @@ import type { ControlStore } from "./store.js";
  *    is retired only when its owner (a run, a group, a flow's group: ARTIFACT_HOLDER_TABLES) is; a table the map does not
  *    know, an owner that does not resolve, an outbox row still pending on its queue kind and every global table hold for
  *    good. `delivered` is read only for a QUEUE kind; a RECORD kind has no consumer, so it goes straight to its owner
- *    (tester #505), and a kind in neither list refuses the plan.
+ *    (tester #505), and a kind in neither list holds only what it names (`outbox-kind-unclassified`, tester #509).
  *  - transitive: artifacts name artifacts (snapshot trees, capsules, packets, manifests). The contents of every held
  *    artifact are read and tokenized the same way -- no parse, so content that is not JSON still holds what it names. A
  *    held artifact whose contents cannot be read (anything but "the bytes are gone") stops the whole plan:
@@ -519,15 +519,16 @@ function ownedHold(spec: Extract<HolderTable, { kind: "owned" }>, row: Record<st
  * An outbox row of a QUEUE kind holds until delivered; one of a RECORD kind has no consumer, so its `delivered` says
  * nothing (outboxKinds.ts) and it goes straight to its owner. Then the owner is the run or group its body names, else the
  * run or group its `kind:<id>:…` key names (a report row's body is only `{source}`), else nobody -- held for good. Tester
- * #505: reading `delivered` for a RECORD kind held 92 artifacts on this machine for good. A kind in neither list is a
- * refusal: it must be classified in outboxKinds.ts rather than inherit "held forever".
+ * #505: reading `delivered` for a RECORD kind held 92 artifacts on this machine for good. A kind in neither list is
+ * itself a defect (classify it in outboxKinds.ts), but tester #509 showed that refusing the whole plan let one such
+ * row block every reclaim: it now holds only what its own row names, reported as `outbox-kind-unclassified`.
  */
 function outboxHold(row: Record<string, unknown>, u: Universe, ofRun: (runId: string) => Hold | null, ofGroup: (groupId: string) => Hold | null): Hold | null {
   const kind = String(row.kind);
   if (OUTBOX_QUEUE_KINDS.includes(kind)) {
     if (Number(row.delivered) !== 1) return { reason: "outbox-undelivered" };
   } else if (!OUTBOX_RECORD_KINDS.includes(kind)) {
-    throw new GcRefusal("outbox-kind-unclassified", `outbox row ${String(row.id)} has kind "${kind}", which is neither a queue kind nor a record kind (src/control/outboxKinds.ts)`);
+    return { reason: "outbox-kind-unclassified", detail: kind };
   }
   const body = parseBody(row.body);
   if (typeof body?.runId === "string") return ofRun(body.runId);

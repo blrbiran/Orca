@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { SingleCallPurpose } from "./singleCall.js";
+import type { OutboxKind } from "./outboxKinds.js";
 import { z } from "zod";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { dimensions, zero } from "./commands.js";
@@ -95,7 +96,7 @@ export function assertCallUsageBooked(group: { used: Amount; ledger: { usageUnkn
 }
 
 /** The settlement's last writes: the run leaves the active set and the purpose's receipt makes a replay a no-op. */
-export function closeSingleCall(store: ControlStore, runId: string, receipt: { id: string; kind: string; body: unknown }): void {
+export function closeSingleCall(store: ControlStore, runId: string, receipt: { id: string; kind: OutboxKind; body: unknown }): void {
   store.db.prepare("UPDATE runs SET active=0 WHERE id=?").run(runId);
   store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,1)").run(receipt.id, receipt.kind, canonicalBytes(receipt.body).toString("utf8"));
 }

@@ -3,6 +3,7 @@ import { add, subtract } from "./budget.js";
 import { canonicalBytes, sha256Canonical } from "./canonicalJson.js";
 import { fits, zero } from "./commands.js";
 import { ControlError } from "./errors.js";
+import type { OutboxKind } from "./outboxKinds.js";
 import { activeChain, chainRounds, supersededForPrompt } from "./clarifyChain.js";
 import { requirementHost } from "./clarifyHost.js";
 import { buildClarifyPrompt, CLARIFY_JSON_SCHEMA, classifyClarifyOutput } from "./requirementClarify.js";
@@ -85,7 +86,7 @@ function setWaiting(store: ControlStore, groupId: string, target: RequirementTar
  * previous attempt's; an earlier attempt's run is inactive by then (preflight scan m15) and nothing reads its contract
  * again. Its claim row is keyed by run (singleCallClaimRowOf), so it is never replaced (final review finding 1).
  */
-function upsertOutbox(store: ControlStore, id: string, kind: string, body: unknown): void {
+function upsertOutbox(store: ControlStore, id: string, kind: OutboxKind, body: unknown): void {
   store.db.prepare("INSERT INTO outbox(id,kind,body,delivered) VALUES (?,?,?,1) ON CONFLICT(id) DO UPDATE SET body=excluded.body").run(id, kind, canonicalBytes(body).toString("utf8"));
 }
 
