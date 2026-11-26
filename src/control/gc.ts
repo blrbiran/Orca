@@ -304,12 +304,12 @@ export async function gcControl(options: GcOptions): Promise<GcResult> {
       && (candidate.run.body.drive as { cleanedUp?: unknown }).cleanedUp !== true;
     if (candidate.runsDir !== undefined) {
       assertDirectChild(runsRoot, candidate.runsDir.path);
-      const size = await directorySize(candidate.runsDir.path);
+      const size = await directorySize(candidate.runsDir.path, undefined, { reclaim: true });
       planned.push({ item: { runId: candidate.runId, kind: "runs", path: candidate.runsDir.path, bytes: size.bytes, worktree: false, ...(uncleaned ? { uncleaned: true } : {}) }, worktreeRepo: null });
     }
     if (candidate.workspacesDir !== undefined) {
       assertDirectChild(workspacesRoot, candidate.workspacesDir.path);
-      const size = await directorySize(candidate.workspacesDir.path);
+      const size = await directorySize(candidate.workspacesDir.path, undefined, { reclaim: true });
       const item: GcItem = { runId: candidate.runId, kind: "workspaces", path: candidate.workspacesDir.path, bytes: size.bytes, worktree: false, ...(uncleaned ? { uncleaned: true } : {}) };
       // Registration decides the removal command, so it is resolved in both modes: dry-run then names what apply would do.
       const candidatePaths = repoCandidates(candidate.run, candidate.group, options.repoResolver);

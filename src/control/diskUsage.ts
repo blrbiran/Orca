@@ -12,15 +12,19 @@ export const isRunDirectoryName = (name: string): boolean => RUN_DIRECTORY.test(
 export interface DirectorySize { bytes: number; truncated: boolean }
 
 /**
- * Bytes under `root`, without following symbolic links (a link is skipped, as `du` counts it, never its target).
+ * Logical file bytes under `root`, counted once per inode, without following symbolic links. Reclaim mode includes
+ * an inode only when every link is in this candidate. The estimate can undercount across removal candidates and
+ * does not measure physical allocation, sparse extents or filesystem clones.
  * `limit` bounds the entries visited so a runaway tree cannot make the command hang: a truncated answer undercounts,
  * which is a reporting fact only -- the caller never decides to delete from a size.
  */
-export async function directorySize(root: string, limit = 500_000): Promise<DirectorySize> {
+export async function directorySize(root: string, limit = 500_000, { reclaim = false }: { reclaim?: boolean } = {}): Promise<DirectorySize> {
   let rootStat;
   try { rootStat = await lstat(root); } catch { return { bytes: 0, truncated: false }; }
   if (rootStat.isSymbolicLink() || !rootStat.isDirectory()) return { bytes: 0, truncated: false };
   let bytes = 0, seen = 0;
+  // GC counts a shared inode only once it sees its last link within this removal candidate.
+  const links = new Map<string, number>();
   const stack: string[] = [root];
   while (stack.length > 0) {
     const dir = stack.pop()!;
@@ -33,7 +37,15 @@ export async function directorySize(root: string, limit = 500_000): Promise<Dire
       const path = join(dir, entry.name);
       if (entry.isDirectory()) { stack.push(path); continue; }
       if (!entry.isFile()) continue;
-      try { bytes += (await lstat(path)).size; } catch { /* vanished between readdir and lstat */ }
+      try {
+        const stat = await lstat(path, { bigint: true });
+        if (!stat.isFile()) continue;
+        if (stat.nlink <= 1n) { bytes += Number(stat.size); continue; }
+        const inode = `${stat.dev}:${stat.ino}`;
+        const count = (links.get(inode) ?? 0) + 1;
+        links.set(inode, count);
+        if (reclaim ? BigInt(count) === stat.nlink : count === 1) bytes += Number(stat.size);
+      } catch { /* vanished between readdir and lstat */ }
     }
   }
   return { bytes, truncated: false };
