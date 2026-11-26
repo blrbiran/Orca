@@ -64,6 +64,29 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
+### 3.最新（2026-11-26，测试者台账 Batch 71，Orca 会话 `63396468`）
+
+- **#509（gc 回归，P0）**：`single-call-contract/claim/result`、`estimate-result` 归入 `OUTBOX_RECORD_KINDS`；`OutboxKind`
+  联合类型约束 `closeSingleCall`/`singleCallClaimRowOf`/`upsertOutbox`；未分类 kind 改为「只持有自身引用的 artifact」并记
+  `skippedByReason: outbox-kind-unclassified`（`--strict` 式整体拒绝取消）。判据 `tests/control/{outboxKinds,artifactReclaim}.test.ts`；
+  4 条变异各只打红自己。
+- **#513（P0）**：`usagePause.ts ceilingGrantExhausted` 识别「auto-continued 但 task grant 被越界清零」；`ceilingStopExits`/
+  `ceilingStopWait` 报 `live-ceiling-stop:grant-exhausted` 并给 `task retry --work`，`retryTask` 在该形态接受 top-up、保留
+  `allowancePredecessorRunId`（续下一 attempt），不把 `settled-recoverable` 改成 failed；`recovery list` 选入 ready 形态。
+  **记账不变**（不自动补 token；B 的「自动发钱」半条登记为 policy 项）。判据 `tests/control/liveCeilingSettle.test.ts`，4 条变异。
+- **#512**：`displayRunState` 把 persisted `settled` 投影成 `settled-succeeded`（`recoverable` 仍是独立字段，`continuable` 不变）；
+  web 类型/文案/`INACTIVE_RUN_STATES` 同步；改写了 `driverSettle`、`runContinuable` 两处与本条直接冲突的判据（人本轮授权）。
+- **#497（半）**：新 `GET /api/control/group-ids`（只读 groups 表），CLI 组名前缀解析改读它；旧面板 `route-not-found` 回落
+  summary。判据 `tests/panel/controlApi.test.ts`、`tests/commands/groupBrief.test.ts`。**`status` 仍读 summary**（需要 per-group
+  counts/needsYou），余项。
+- **#501（半）**：`deliveryGraph.independent` 现在也当 wave 约束——第 k 波每个 unit 必须经 `dependsOn` 传递到达第 k-1 波任一 unit，
+  否则 `delivery-graph-layer:<task>:<unit>`。spec `2026-11-23-split-instruction-v9-design.md` 追加 Correction；"AFTER both" 缺边那条
+  不是结构化检查，仍开放（设计项）。
+- **门**：每笔 `npm test`（改动部分）绿；#512 首轮命中 3 个旧名判据、#497 首轮命中 23 个 fakePanel 缺路由，均按新契约修正后绿。
+  全量 `test:full` 未跑。
+- **未做（下一轮）**：#498+#508（review-fix 改既有测试/acceptance flaky，需 brainstorm+spec）、#493 余项（链接 config.toml 与 Orca
+  文案）、#446/#453（ccmem 设计/付费 A/B）、#497 的 status 半边、#501 的边覆盖半边。
+
 ### 3.最新（2026-11-26，测试者台账 Batch 70）
 
 - **Orca**：#466 基线仅逐字复跑已确认的 required check，未匹配具名说明未核实。#494 未曾绿过的缺文件检查显示 `not-run`，验收接管后 CLI 标记历史 watch tip。#495 人设期望只显示一次，估算下限显示原建议值，倍数按实际期望算。#502 检查冲突与 plan 级不达标同时保留，给出 `requirement open`。#419/#485 无自定上限的 criteria-review 默认 500k，可配置并显示派发时上限。父组已通过时显示 advisory 和出口。父组终止后，派生 judge 无法裁定的 flag 由 `orca-auto` ratify 并附原因，已归档的 judge 也会在收敛时处理。
@@ -485,11 +508,12 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 ## 四、⛔ 下一件事（按顺序）
 
-### 4.0 接手顺序（2026-11-26，Batch 70；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
+### 4.0 接手顺序（2026-11-26，Batch 71；现状以 §3.最新与各仓 `/usr/bin/git ls-remote` 为准）
 
 1. **#505 优先收测试者的大库 dry-run**。`/usr/bin/time -p orca gc --include-artifacts --older-than 0 --json` 默认只读。回传 Orca 版本、退出码、耗时、`.body.artifacts` 的 planned 数量、`bytes`、`heldBytes`、`skippedByReason` 和 `scan`。生产 `--apply` 另行批准。#478 同 attempt 的付费验收已通过，证据见 Batch 69。
 2. **待部署与设计**：核对生产面板 pin。ccmem 先在副本演练 schema 021 和回退，生产 stop → migrate → start 另行授权。#498/#508 的验收策略、#501 的结构化交付图和 #497 的 CLI 读取性能留后续。另有本地日志中曾出现的 API 密钥需由持有人轮换。#445 阈值、基线 #466 和 syncskill `agents` 目标已获确认并实施。
 3. **登记的余项**（不急）：#478 的 A2 拦截 lineage 与 `task continue` 扣减；#468 大 store 上的阻塞时长（请测试者在其 5 GB store 上给 dry run 计时、看 `--apply` 时面板卡多久）；#469 handoff 停止 run 的降级；#470 spec §2.2（被删项目的组在 `group show` 里标 `project.removed`）；syncskill `npm ci` 的 lock 不同步；ccmem `daemon status | head` 的 EPIPE。
+   **Batch 71 新登记**：#513 的「auto-continue 只在 task 能资助一次尝试时置 ready」与「自动 top-up policy」待人裁；#497 的 `status` 轻量健康端点；#501 的 "AFTER both" 边覆盖（可能要做成结构化 expectation）；#498+#508 需 brainstorm + spec（review-fix 改既有测试、acceptance 已知 flaky）；#493 余项（链接的 config.toml 与 Orca「run 不加载记忆」文案）。
 4. **残留（归人，命令见本会话最终汇报）**：`.wt-repin-465`（worktree，需 `--force`）、`.wt-466-mut`、`.wt-launchd-mut`、`.wt-ss-462-mut`、`.wt-ccloop-f8d368e`、`.wt-final-ccloop-pin`、`.wt-ccloop-276114a`（**已被 `.wt-ccloop-305dad1` 取代，可删**）、本会话的 `.wt-470-mut`、`.wt-batchA-mut`、`.wt-469-mut`、`.wt-478o-mut`、`.wt-478o-orig`、`.wt-478-ab-main`、`.wt-478-ab-br`，以及 `.wt-*.log`。`.wt-ccloop-305dad1` 是 Batch 69 的历史构建，当前配对测试按本仓实际 pin 选择。
 5. **沿用的结论**：跑门前 `launchctl bootout gui/501/dev.orca.panel`，跑完 `launchctl bootstrap gui/501 ~/Library/LaunchAgents/dev.orca.panel.plist`＋`orca panel restart`；`TMPDIR=/tmp`；`ORCA_CCLOOP_BIN` 指向与当前 pin 代码一致且含 tests 的 ccloop 构建，使用前核对 `dist/build-info.json`；load 高时超时红先单跑三次、再和未改动 main 对照；本机 `cp`/`rm` 是 `-i` 别名；**子 agent 用 node_modules 软链时，ccmem／ccloop／syncskill 的 `.gitignore` 只写了 `node_modules/`（syncskill 已补裸名），提交前必须看 `git status`**；session scratchpad 由多个子 agent 共用，日志要放各自子目录；repin 用 §3.最新「repin 的坑」那组环境变量。
 
