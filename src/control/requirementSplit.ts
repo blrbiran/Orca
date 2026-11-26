@@ -800,9 +800,10 @@ export function deliveryGraphProblems(output: SplitOutput): string[] {
       if (!reaches(name, previous)) reasons.push(`delivery-graph-layer:${unit.taskIds[0] ?? name}:${name}`);
     }
   });
-  // The final-verification claim runs the named suite (the same command shape requirementDelivery.ts names).
-  const FULL_SUITE = /\b(npm (?:run )?test|pytest|go test \.\/...|cargo test|make test)\b/i;
-  const runsSuite = (taskId: string): boolean => (output.tasks.find((task) => task.taskId === taskId)?.checks ?? []).some((check) => FULL_SUITE.test(check));
+  // Count recognized whole-suite invocations. A shell list or quoted mention is not evidence that the suite controls
+  // the exit code. An optional trailing `&& true` preserves that exit on failure.
+  const fullSuiteCheck = /^(?:(?:npm|pnpm|yarn)[ \t]+(?:(?:run[ \t]+)?test|run[ \t]+test:full)|(?:node[ \t]+--test)|pytest|go[ \t]+test[ \t]+\.\/\.\.\.|cargo[ \t]+test|make[ \t]+test)(?:[ \t]*&&[ \t]*true)?$/;
+  const runsSuite = (taskId: string): boolean => (output.tasks.find((task) => task.taskId === taskId)?.checks ?? []).some((check) => fullSuiteCheck.test(check.trim()));
   if (graph.finalVerification !== null && graph.finalVerification !== undefined && !runsSuite(graph.finalVerification)) {
     reasons.push(`delivery-graph-final-verification:${graph.finalVerification}`);
   }

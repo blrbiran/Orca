@@ -91,6 +91,20 @@ describe("a draft is checked against the delivery graph it claims (#385)", () =>
     });
     expect(deliveryGraphProblems(good)).toEqual([]);
   });
+
+  it.each(["npm test || true", "npm test; exit 0", "grep -q 'npm test' README.md"])("does not count %s as final verification (#536)", (check) => {
+    const output = draft([task("a", [], [check])], {
+      units: [{ unit: "T1", taskIds: ["a"], dependsOn: [] }], independent: [], finalVerification: "a",
+    });
+    expect(deliveryGraphProblems(output)).toContain("delivery-graph-final-verification:a");
+  });
+
+  it.each(["node --test", "go test ./...", "npm test && true", "npm run test:full"])("recognizes %s without masking a failing suite (#536)", (check) => {
+    const output = draft([task("a", [], [check])], {
+      units: [{ unit: "T1", taskIds: ["a"], dependsOn: [] }], independent: [], finalVerification: "a",
+    });
+    expect(deliveryGraphProblems(output)).toEqual([]);
+  });
 });
 
 describe("a codex split's required-nullable deliveryGraph is folded before the strict schema (#385)", () => {
