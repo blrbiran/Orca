@@ -126,6 +126,19 @@ function knownRedAtBaseLines(entries: unknown): string[] {
   });
 }
 
+/**
+ * Tester #497: group names for prefix resolution, without the full summary (600 KB / seconds at 168 groups). A panel
+ * older than this route answers `route-not-found`; the summary is then the only source, and paying it is correct.
+ */
+async function groupIds(context: WriteContext): Promise<string[]> {
+  try {
+    return (await context.read("group-ids") as { groupIds: string[] }).groupIds;
+  } catch (error) {
+    if (readFailureCode(error) !== "route-not-found") throw error;
+    return ((await context.read("summary") as Summary).groups).map((group) => group.groupId);
+  }
+}
+
 /** Tester #402: an unanswered pre-existing failure, as the brief names it, with the command that answers it. */
 type PreexistingWaitingEntry = ReturnType<typeof import("../../control/preexistingFailure.js").preexistingFailureWaiting>[number];
 function preexistingFailureWaitingLines(entries: unknown, groupId: string | undefined): string[] {
@@ -164,14 +177,14 @@ interface Summary { groups: Array<{ groupId: string; repoId?: string; state?: st
  * so this is the only membership check, and it runs before the run's activity or evidence is read.
  */
 async function groupOfRun(context: WriteContext, runId: string): Promise<string> {
-  const summary = await context.read("summary") as Summary;
   const named = context.args.flags.group;
   if (typeof named === "string") {
-    const groupId = resolveId("group", named, summary.groups.map((g) => g.groupId));
+    const groupId = resolveId("group", named, await groupIds(context));
     const view = await context.read(`groups/${groupId}`) as GroupView;
     if (!view.runs.some((run) => run.runId === runId)) throw new EntryRejection("run-not-found", `run ${runId} is not in group ${groupId}`);
     return groupId;
   }
+  const summary = await context.read("summary") as Summary;
   for (const { groupId } of summary.groups) {
     let view: GroupView;
     try { view = await context.read(`groups/${groupId}`) as GroupView; } catch { continue; }
@@ -200,8 +213,7 @@ async function runEntryOf(context: WriteContext, runId: string): Promise<{ group
   }
   const named = context.args.flags.group;
   if (typeof named === "string") {
-    const summary = await context.read("summary") as Summary;
-    const groupId = resolveId("group", named, summary.groups.map((g) => g.groupId));
+    const groupId = resolveId("group", named, await groupIds(context));
     if (groupId !== entry.groupId) throw new EntryRejection("run-not-found", `run ${runId} is not in group ${groupId}`);
   }
   return entry;
@@ -266,10 +278,7 @@ async function commandScope(context: WriteContext): Promise<string> {
   if (global.project !== undefined) chosen.push("project");
   if (chosen.length !== 1) throw new EntryRejection("control-cli-argument-invalid", "orca command show wants exactly one of --group <group>, --project <project>, --operator, --spend, --corrections, --orchestration");
   switch (chosen[0]) {
-    case "group": {
-      const summary = await context.read("summary") as Summary;
-      return resolveId("group", String(flags.group), summary.groups.map((g) => g.groupId));
-    }
+    case "group": return resolveId("group", String(flags.group), await groupIds(context));
     case "project": return `@repository:${(await context.project()).repoId}`;
     case "operator": return `@operator:${String(field(await context.read("operator/agent-preferences"), "operatorId"))}`;
     default: return `@${chosen[0]}`;

@@ -434,6 +434,12 @@ export function registerControlReadRoutes(app: Express, deps: ControlReadApiDeps
     }
   });
 
+  // Tester #497: the CLI resolves a group-name prefix before its real request; the summary cost a full projection per group
+  // (600 KB / seconds at 168 groups) to answer a name. This route answers names only, from the groups table.
+  app.get("/api/control/group-ids", (_req, res) => {
+    res.json({ groupIds: (deps.store.db.prepare("SELECT id FROM groups ORDER BY id").all() as Array<{ id: unknown }>).map((row) => String(row.id)) });
+  });
+
   // Tester follow-up G Part 4.7: one run's stored handoff and summary (the group view lists the records). Here, so the socket
   // (agents, `orca task handoff --run`) reads it too. Ids are parsed before they name a file.
   app.get("/api/control/groups/:groupId/handoffs/:taskId/:runId", (req, res) => {

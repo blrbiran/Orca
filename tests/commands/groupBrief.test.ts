@@ -31,6 +31,15 @@ describe("group brief (issue 199)", () => {
     expect(body).not.toHaveProperty("runs");
   });
 
+  it("resolves a group prefix from group-ids, not the full summary (#497)", async () => {
+    const p = await fakePanel({ ...routes, "GET group-ids": { status: 200, body: { groupIds: ["g-alpha"] } } });
+    const out = await cli(["group", "brief", "g-alpha"], p.dir);
+    expect(out.code, out.stderr).toBe(0);
+    expect(p.requests.some((request) => request.path === "group-ids")).toBe(true);
+    // mutation: resolve the prefix from the summary again -> this request appears, red
+    expect(p.requests.some((request) => request.path === "summary")).toBe(false);
+  });
+
   it("keeps group show's full body unchanged", async () => {
     const p = await fakePanel(routes);
     const out = await cli(["group", "show", "g-alpha", "--json"], p.dir);

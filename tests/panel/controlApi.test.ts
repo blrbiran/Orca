@@ -42,6 +42,21 @@ afterAll(async () => {
   await h.dispose();
 });
 
+describe("group ids without the summary (#497)", () => {
+  it("answers the names a CLI prefix resolves against, and they are the summary's groups", async () => {
+    const paths = await h.workspace();
+    const panel = await h.boot("epoch-ids", paths);
+    const imported = await command(panel, "/api/control/groups/import-plan", {
+      commandId: "ids-import", expectedRevision: 0, payload: { groupId: GROUP, repoId: "repo", planId: "plan" },
+    });
+    expect(imported.status).toBe(201);
+    const ids = await json(await get(panel, "/api/control/group-ids")) as { groupIds: string[] };
+    const summary = controlSummarySchema.parse(await json(await get(panel, "/api/control/summary")));
+    expect(ids.groupIds).toEqual(summary.groups.map((group) => group.groupId));
+    expect(ids.groupIds).toContain(GROUP);
+  });
+});
+
 describe("web control acceptance over a real panel (task 10 step 1)", () => {
   it("takes a plan from import to a continued task, and the ledger's own state is durable at every boundary", async () => {
     const paths = await h.workspace();

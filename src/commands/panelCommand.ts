@@ -76,8 +76,16 @@ export async function resolveIds(args: ParsedArgs, session: PanelSession): Promi
   const ids: Record<string, string> = {};
   for (const [name, value] of Object.entries(args.positionals)) if (typeof value === "string") ids[name] = value;
   if (ids.group !== undefined) {
-    const summary = await session.read("summary") as SummaryV1;
-    ids.group = resolveId("group", ids.group, summary.groups.map((g) => g.groupId));
+    // Tester #497: names only; the summary is a full projection per group. An older panel has no id route.
+    let groupIds: string[];
+    try {
+      groupIds = (await session.read("group-ids") as { groupIds: string[] }).groupIds;
+    } catch (error) {
+      const e = error as { response?: { body?: { error?: { code?: unknown } } }; code?: unknown };
+      if ((e?.response?.body?.error?.code ?? e?.code) !== "route-not-found") throw error;
+      groupIds = (await session.read("summary") as SummaryV1).groups.map((group) => group.groupId);
+    }
+    ids.group = resolveId("group", ids.group, groupIds);
   }
   if (ids.task !== undefined && ids.group !== undefined) {
     const view = await session.read(`groups/${ids.group}`) as GroupViewLike;
