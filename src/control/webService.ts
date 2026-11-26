@@ -59,14 +59,14 @@ import { overGrantBlockRuns, unblockedStatus } from "./overGrantBlock.js";
 import { applySetWorkspaceMode, type SetWorkspaceModeCommand } from "./workspaceSettings.js";
 import { prepareResolution } from "./integrationResolve.js";
 import { controlWorkspaceRoots } from "./workspace.js";
-import { applyRecheckAcceptance, applyWaiveAcceptance, type RecheckAcceptanceCommand, type WaiveAcceptanceCommand } from "./groupAcceptanceCommands.js";
+import { applyRecheckAcceptance, applyWaiveAcceptance, applyAcceptTestChanges, type AcceptTestChangesCommand, type RecheckAcceptanceCommand, type WaiveAcceptanceCommand } from "./groupAcceptanceCommands.js";
 import { applyReopenTask, type ReopenTaskCommand } from "./reopenTask.js";
 import { applyReviewAccept, applyReviewFix, applyReviewRerun, type ReviewAcceptCommand, type ReviewFixCommand, type ReviewRerunCommand } from "./requirementReviewCommands.js";
 import { applyAcceptNoChange, writeAcceptNoChangeProof, type AcceptNoChangeCommand } from "./acceptNoChange.js";
 import { applyAllowRequest, applyRevokeAllowance, type AllowRequestCommand, type RevokeAllowanceCommand } from "./allowanceCommands.js";
 import { activeAllowances, applyDecisionAllowances, pathsCovered, type GroupAllowance } from "./groupAllowances.js";
 import { applyIntegrateNow, type IntegrateNowCommand } from "./integrationCommands.js";
-import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, historyReconciledTarget, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
+import { applyResolveIntegrationConflict, applyRetryIntegration, applySetGroupIntegration, applySetIntegrationScheme, type ResolveIntegrationConflictCommand, type RetryIntegrationCommand, type SetGroupIntegrationCommand, type SetIntegrationSchemeCommand } from "./integrationCommands.js";
 import { applyResolveFolderChange, type ResolveFolderChangeCommand } from "./folderChangeCommands.js";
 import { applyMultiDirLanding, type MultiDirLandingCommand } from "./multiLanding.js";
 import { applyRequirementResplit, type RequirementResplitCommand } from "./requirementResplit.js";
@@ -2069,6 +2069,10 @@ export class WebControlService {
   async acceptNoChange(command: AcceptNoChangeCommand): Promise<WebCommandResult> {
     const source = await writeAcceptNoChangeProof(this.store, command);
     return this.mutate(() => applyAcceptNoChange({ store: this.store, admissionGate: this.deps.admissionGate }, command, source)) as WebCommandResult;
+  }
+  async acceptTestChanges(command: AcceptTestChangesCommand): Promise<WebCommandResult> {
+    // The person's approval names the exact tip and path digest they read; a tip that moved since is refused as stale.
+    return this.mutate(() => applyAcceptTestChanges({ store: this.store }, command, command.payload)) as WebCommandResult;
   }
   /** Tester follow-up E §5 (#241): a person accepts a group whose acceptance failed on its tip, with why. */
   waiveAcceptance(command: WaiveAcceptanceCommand): WebCommandResult {

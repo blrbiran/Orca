@@ -247,11 +247,12 @@ const CALLS: Record<string, { call: Call; target: "group" | "task"; payload: unk
   "resolve-integration-conflict": { call: (s, c) => s.resolveIntegrationConflict(c), target: "group", payload: {} },
   // Tester follow-up E §5 (#241): the group acceptance's recheck (any) and waiver (a person) are group-targeted too.
   "recheck-acceptance": { call: (s, c) => s.recheckAcceptance(c), target: "group", payload: {} },
+  "accept-test-changes": { call: (s, c) => withCommandContext((c as { commandId: string }).commandId, { client: "web", principal: "user:owner" }, () => s.acceptTestChanges(c)), target: "group", payload: { note: "reviewed the changed test paths", tip: "a".repeat(40), digest: "b".repeat(64) } },
+  "waive-acceptance": { call: (s, c) => withCommandContext((c as { commandId: string }).commandId, { client: "web", principal: "user:owner" }, () => s.waiveAcceptance(c)), target: "group", payload: { note: "the red test is a known flake" } },
   // Tester follow-up G spec §3.5: the requirement review's exits are group-targeted, so an archived group refuses them too.
   "review-accept": { call: (s, c) => s.reviewAccept(c), target: "group", payload: { note: "n" } },
   "review-rerun": { call: (s, c) => s.reviewRerun(c), target: "group", payload: { note: "n" } },
   "review-fix": { call: (s, c) => s.reviewFix(c), target: "group", payload: { goal: "g" } },
-  "waive-acceptance": { call: (s, c) => withCommandContext((c as { commandId: string }).commandId, { client: "web", principal: "user:owner" }, () => s.waiveAcceptance(c)), target: "group", payload: { note: "the red test is a known flake" } },
   // Pre-existing failures spec L2 (#341): a person's answer to a problem row is group-targeted, so an archived group refuses it too.
   "answer-preexisting-failure": { call: (s, c) => withCommandContext((c as { commandId: string }).commandId, { client: "web", principal: "user:owner" }, () => s.answerPreexistingFailure(c)), target: "group", payload: { command: "npm test", answer: "relative" } },
   "resolve-folder-change": { call: (s, c) => s.resolveFolderChange(c), target: "group", payload: { action: "recheck" } },

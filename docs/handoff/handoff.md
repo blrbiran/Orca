@@ -87,6 +87,16 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **未做（下一轮）**：#498+#508（review-fix 改既有测试/acceptance flaky，需 brainstorm+spec）、#493 余项（链接 config.toml 与 Orca
   文案）、#446/#453（ccmem 设计/付费 A/B）、#497 的 status 半边、#501 的边覆盖半边。
 
+### 3.最新（2026-11-26，Orca session `00f1b4df`）—— #498/#508 acceptance failure identities 与 test-change disposition：Task 1–5 实施完成
+
+- 实施在隔离 worktree `worktree-acceptance-baselines`：`/Users/biran/code/skills/orca/Orca/.claude/worktrees/acceptance-baselines`。进度唯一记录 `.superpowers/sdd/2026-11-26-acceptance-baselines-and-test-changes/progress.md`；设计与计划是 `docs/superpowers/specs/2026-11-26-acceptance-baselines-and-test-changes-design.md`、`docs/superpowers/plans/2026-11-26-acceptance-baselines-and-test-changes.md`。
+- **Task 1–2**：schema 25→26 精确键 TAP failure identity 基线，键含 repo/base/原样 command/setup digest/reporter；base 红身份累积、green 不删。node:test TAP 只保存相对文件/嵌套 test path/诊断哈希；每个 tip 红尝试都参与比较，新增或不可比身份失败。setup 成功后 union checks 全跑；suite 与 union 完全同命令时复用，缺 baseline 时只在 tip 红后用冻结 base 与同一 setup/command 收集。
+- **Task 3–4**：任何 base 已有 test 文件修改/删除都使 acceptance 为 `test-change-pending`；新增测试仅 focus/skip/todo 才设门。person-only `group accept-test-changes` 绑定 checked tip 与 sorted path digest。D3 对 delivered commit 重跑同样检查；review-fix 的测试改动不会被 criteria-review auto-ratify 或 command waiver 清掉；CLI/brief 分开显示 acceptance 与 requirement review。
+- **Task 5 E2E**：review-fix 在 `targetPaths` 内改已有测试、required checks 绿、criteria flag 经 `orca-auto` ratify 后，acceptance 仍 pending，直到 person disposition；另覆盖新 TAP failure 拒绝与相同已知 flake 的 `passed-relative`。这一跨路径行为在 Task 1–4 现有实现上已成立，因此只补 E2E 判据，无生产代码修补。
+- **最终 affected gate**（命令 `TMPDIR=/tmp npm test`，代码观测基线 `2731ddaa`＋隔离 worktree 改动）：RC 0；最终 review 修复后重跑，root 与 web 全绿，85 个慢文件/真实 ccloop E2E 按 Rule 18 延后；root 与 web typecheck 通过，web build RC 0（既有 >500 kB chunk advisory）。`npm run test:full` 未跑。**独立 TypeScript 与整分支 review** 共 0 Critical／7 Important／2 Minor；全部处置：批准 payload 绑定人所见 tip/digest、扫描失败阻塞（含 single landing）、D3 waiver 只覆盖唯一未解决失败、真实 Node TAP（block scalar／location／suite summary）、`{skip:true}` 选项、缓存基线保留 base tests/exit 供 #387、schema26 夹具、失败详情取实际失败比较。新判据先红后绿。
+- migration 25→26 仅由隔离临时库判据覆盖；**未迁移生产 `~/.orca` 数据库、未重启 panel**。本仓契约无变化，ccloop 未 repin，无付费 provider 真跑。
+- **下一步**：commit、`--ff-only` 集成并按本 session 授权 push；然后就地更新 ccloop／ccmem 的 Orca 滚动 handoff。
+
 ### 3.最新（2026-11-26，测试者台账 Batch 70）
 
 - **Orca**：#466 基线仅逐字复跑已确认的 required check，未匹配具名说明未核实。#494 未曾绿过的缺文件检查显示 `not-run`，验收接管后 CLI 标记历史 watch tip。#495 人设期望只显示一次，估算下限显示原建议值，倍数按实际期望算。#502 检查冲突与 plan 级不达标同时保留，给出 `requirement open`。#419/#485 无自定上限的 criteria-review 默认 500k，可配置并显示派发时上限。父组已通过时显示 advisory 和出口。父组终止后，派生 judge 无法裁定的 flag 由 `orca-auto` ratify 并附原因，已归档的 judge 也会在收敛时处理。

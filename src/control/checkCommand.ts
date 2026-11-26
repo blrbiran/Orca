@@ -2,6 +2,8 @@ import { dispatchedEnv, type DispatchedAs } from "./commandClient.js";
 import { ChildTimeout, spawnRunChild } from "./integrationGit.js";
 import type { CheckRunCommand } from "./driveRecord.js";
 import { parseFailureSummary } from "./failureNames.js";
+import type { AcceptanceFailureIdentity, FailureIdentityParseStatus } from "./acceptanceFailureIdentity.js";
+import { failureIdentitiesOf } from "./acceptanceFailureIdentity.js";
 
 /**
  * One command Orca runs itself the way ccloop runs a contract's required checks (runLoop.js runRequiredChecks): `sh -lc` in
@@ -17,6 +19,9 @@ export interface CheckFailure {
    * Optional so records written before it still parse; `tail` stays as it always was.
    */
   failures?: string[];
+  /** Parsed only from complete, supported TAP output; never from the bounded display tail. */
+  failureIdentities?: AcceptanceFailureIdentity[];
+  failureIdentityStatus?: FailureIdentityParseStatus;
 }
 
 const TAIL_CHARS = 2048;
@@ -35,10 +40,12 @@ export async function runAsCheck(cwd: string, command: string, timeoutMs: number
 export async function runCheckRecorded(cwd: string, command: string, timeoutMs: number, as: DispatchedAs, signal?: AbortSignal): Promise<CheckFailure> {
   try {
     const answer = await spawnRunChild("sh", ["-lc", command], { cwd, timeoutMs, inheritEnv: true, env: dispatchedEnv(as), ...(signal ? { signal } : {}) });
-    const output = tail(`${answer.stdout}\n${answer.stderr}`.trim()), exit = String(answer.code);
+    const completeOutput = `${answer.stdout}\n${answer.stderr}`.trim();
+    const output = tail(completeOutput), exit = String(answer.code);
     // Tester #391: name the failing tests beside the tail; a runner other than node:test simply gives none.
     const failures = exit === "0" ? [] : parseFailureSummary(output).failures;
-    return { command, exit, tail: output, ...(failures.length === 0 ? {} : { failures }) };
+    const identity = exit === "0" ? undefined : failureIdentitiesOf(completeOutput, "node-test-tap-v1", cwd);
+    return { command, exit, tail: output, ...(failures.length === 0 ? {} : { failures }), ...(identity === undefined ? {} : { failureIdentities: identity.identities, failureIdentityStatus: identity.parseStatus }) };
   } catch (error) {
     if (!(error instanceof ChildTimeout)) throw error;
     return { command, exit: `timeout ${timeoutMs} ms`, tail: "" };

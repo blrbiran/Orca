@@ -112,7 +112,14 @@ describe("which not-met criterion is a relative pass (#377)", () => {
 
 describe("a relative pass in a review round (#377)", () => {
   // The fixture repository has base.txt at the group's base, so this suite is red at the base and on the tip.
-  const SUITE = "test ! -f base.txt";
+  const SUITE_FAILURE = [
+    "TAP version 13", "# Subtest: tests/acceptance.test.js", "    not ok 1 - known flaky suite test", "      ---",
+    "      error: AssertionError", "      actual: 1", "      expected: 2", "      operator: strictEqual", "      ...",
+    "    1..1", "    # tests 1", "    # pass 0", "    # fail 1", "not ok 1 - tests/acceptance.test.js", "  ---",
+    "  error: 1 subtest failed", "  failureType: subtestsFailed", "  ...", "# tests 1", "# pass 0", "# fail 1", "",
+  ].join("\n");
+  const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+  const SUITE = `printf '%s' ${shellQuote(SUITE_FAILURE)}; exit 1`;
   const CRITERIA = [{ id: "AC1", text: "a.txt says hello" }, { id: "AC2", text: `\`${SUITE}\` exits 0` }];
   const ac2 = { id: "AC2", verdict: "not-met", evidence: [{ path: "orca:acceptance", line: null }], missing: "the suite exits 1 on the tip (and at the base)", fixableBy: "work" };
   const withSuite = (w: Awaited<ReturnType<typeof reviewWorld>>) => {
@@ -130,7 +137,7 @@ describe("a relative pass in a review round (#377)", () => {
       await w.t.until(w.driver, () => w.review()?.state === "passed" || w.review()?.state === "not-passed" || w.review()?.state === "fixing", 120);
       // mutation: do not apply relativePasses in completeInTransaction -> fixing with review-fix-1, red
       expect(w.review()).toMatchObject({ state: "passed", autoFixRounds: 0, rounds: [expect.objectContaining({ result: "passed",
-        relativePass: [{ criterionId: "AC2", command: SUITE, tipExits: ["1", "1"], baseExits: ["1", "1"] }] })] });
+        relativePass: [{ criterionId: "AC2", command: SUITE, tipExits: ["1", "1"], baseExits: ["1"] }] })] });
       // The reviewer's answer is kept as it was given.
       expect(w.review()!.rounds[0]!.criteria[1]).toMatchObject({ id: "AC2", verdict: "not-met" });
       expect(fixes(w)).toEqual([]);
@@ -139,10 +146,10 @@ describe("a relative pass in a review round (#377)", () => {
       const summary = readGroupSummary(w.t.h.store, "g");
       // mutation: drop relativePass from webProtocol's round schema -> false, red
       expect(groupSummarySchema.safeParse(summary).success).toBe(true);
-      expect(summary.requirementReview?.rounds[0]?.relativePass).toEqual([{ criterionId: "AC2", command: SUITE, tipExits: ["1", "1"], baseExits: ["1", "1"] }]);
+      expect(summary.requirementReview?.rounds[0]?.relativePass).toEqual([{ criterionId: "AC2", command: SUITE, tipExits: ["1", "1"], baseExits: ["1"] }]);
       // mutation: drop the relative-pass lines from reviewLines -> red
       expect(reviewLines("g", w.review() as never)).toEqual([`review: passed on ${w.review()!.rounds[0]!.tip.slice(0, 12)} (round 1)`,
-        `  AC2 relative pass: \`${SUITE}\` exited 1, 1 on this tip and 1, 1 at the group's base -- red before the group; not counted as not met`]);
+        `  AC2 relative pass: \`${SUITE}\` exited 1, 1 on this tip and 1 at the group's base -- red before the group; not counted as not met`]);
     } finally { await w.t.h.dispose(); }
   }, 300000);
 

@@ -887,6 +887,15 @@ export const WORK_ROWS: CommandDef[] = [
     flags: [{ name: "note", type: "string", required: true, summary: "why you accept the failed tip; recorded with the waiver and in the group's activity" }],
     route: (c) => `groups/${group(c)}/acceptance/waive`, payload: (c) => ({ note: str(c, "note") }),
     examples: ["orca group waive-acceptance g1 --note 'the red test is the known flaky one; tracked in #12'"] }),
+  verb({ domain: "group", action: "accept-test-changes", summary: "approve changes to existing tests for this exact acceptance tip (a person's act)",
+    verb: "accept-test-changes", positionals: [GROUP], access: "token",
+    flags: [
+      { name: "note", type: "string", required: true, summary: "why the existing test changes are accepted; recorded with the checked tip and paths" },
+      { name: "tip", type: "string", required: true, summary: "the exact accepted tip shown by group show (the approval is bound to it)" },
+      { name: "digest", type: "string", required: true, summary: "the checked path digest shown by group show" },
+    ],
+    route: (c) => `groups/${group(c)}/acceptance/test-changes`, payload: (c) => ({ note: str(c, "note"), tip: str(c, "tip"), digest: str(c, "digest") }),
+    examples: ["orca group accept-test-changes g1 --note 'the expanded test is intentional' --tip <tip> --digest <digest>"] }),
   // Pre-existing failures spec L2 (#341): the person's answer to a check that was already red before a task changed anything.
   preexistingFailureFormat(verb({ domain: "group", action: "preexisting-failure", summary: "answer a check that already failed before the work: allow-fix, relative or edit-requirement (a person's act)",
     verb: "answer-preexisting-failure", positionals: [GROUP], access: "token",

@@ -479,6 +479,7 @@ export type ControlAction =
   // Tester follow-up E §5 (#241): a failed group acceptance, checked again (any), or accepted by an owner with why.
   | { verb: "recheck-acceptance"; groupId: string; expectedRevision: number; payload: Record<string, never> }
   | { verb: "waive-acceptance"; groupId: string; expectedRevision: number; payload: { note: string } }
+  | { verb: "accept-test-changes"; groupId: string; expectedRevision: number; payload: { note: string; tip: string; digest: string } }
   // Pre-existing failures spec L2 (#341): a person's answer to one problem row (server route .../preexisting-failure).
   | { verb: "answer-preexisting-failure"; groupId: string; expectedRevision: number; payload: { command: string; answer: "allow-fix" | "relative" | "edit-requirement" } }
   | { verb: "review-accept"; groupId: string; expectedRevision: number; payload: { note: string } }
@@ -599,6 +600,8 @@ export function controlCommandPath(action: ControlAction): string {
       return `${group}/review/fix`;
     case "waive-acceptance":
       return `${group}/acceptance/waive`;
+    case "accept-test-changes":
+      return `${group}/acceptance/test-changes`;
     case "answer-preexisting-failure":
       return `${group}/preexisting-failure`;
     case "resolve-folder-change":

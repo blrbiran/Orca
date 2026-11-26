@@ -20,6 +20,9 @@ export function leftToPerson(last: { leftToPerson?: string[]; criteria: Readonly
  */
 export function reviewAnswers(groupId: string, why: string | undefined, left: ReadonlyArray<LeftCriterion>): string[] {
   const rerun = `orca group review-rerun ${groupId} --note '<what to look at>'`, accept = `orca group review-accept ${groupId} --note '<why accept as is>'`;
+  if (why === "test-change-only") return [
+    `orca group review-rerun ${groupId} --note '<after restoring the changed test paths>'`, accept,
+  ];
   // Tester #343/#392: a criterion only the plan can meet is answered by a new requirement (the step that works on an
   // accepted group). Tester #502: that holds in every review shape that records one, a check conflict included.
   const plan = left.some((c) => c.by === "plan") ? ["orca requirement open --idea '<the requirement, with the plan changed>'"] : [];
@@ -30,6 +33,10 @@ export function reviewAnswers(groupId: string, why: string | undefined, left: Re
 /** Follow-up E §5 (#241): a failed group acceptance -- run it again (a flaky check), or a person waives it. */
 export function acceptanceAnswers(groupId: string): string[] {
   return [`orca group recheck ${groupId}`, `orca group waive-acceptance ${groupId} --note '<why>'`];
+}
+
+export function acceptanceTestChangeAnswers(groupId: string): string[] {
+  return [`orca group accept-test-changes ${groupId} --note '<why>' --tip <tip> --digest <digest>`];
 }
 
 /** Delivery tail spec D3: a failed acceptance on the delivered commit -- recheck it, or a person waives it. */

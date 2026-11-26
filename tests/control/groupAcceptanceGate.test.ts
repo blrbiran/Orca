@@ -64,7 +64,17 @@ describe("the acceptance gate on done (tester follow-up E §5)", () => {
     }
   });
 
-  it.each([["failed", false], ["passed", true], ["waived", true], ["not-needed", true], ["not-run", true]] as const)(
+  it("test-change-pending does not satisfy delivery or the done gate", async () => {
+    const h = await openTestStore(); try {
+      const pending = { ...record("test-change-pending"), testChanges: { paths: ["tests/a.test.ts"], weakeningSignals: [], digest: "d".repeat(64), pendingResult: "passed" } };
+      group(h.store, 2, pending);
+      expect(groupComplete(h.store, "g")).toBe(false);
+      expect(prerequisiteDone(h.store, "g")).toBe(false);
+      expect(h.store.transaction(() => markGroupsDone(h.store))).toEqual([]);
+    } finally { await h.dispose(); }
+  });
+
+  it.each([["failed", false], ["passed", true], ["passed-relative", true], ["waived", true], ["not-needed", true], ["not-run", true]] as const)(
     "a recorded %s acceptance lets the group be done: %s", async (result, done) => {
       const h = await openTestStore(); try {
         group(h.store, 2, record(result));

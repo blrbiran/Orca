@@ -32,6 +32,27 @@ describe("group show names the group acceptance (tester follow-up E §5)", () =>
     ]);
   });
 
+  it("a pending test change shows the paths and the tip-bound person command", async () => {
+    const lines = await show({ tip: TIP, result: "test-change-pending", commands: [], at: 1,
+      testChanges: { base: "b".repeat(40), paths: ["tests/a.test.ts"], weakeningSignals: [], digest: "d".repeat(64), pendingResult: "passed" },
+      problem: "test-change-pending" });
+    expect(lines).toContain(`problem: test-change-pending on orca/g-alpha at ${TIP.slice(0, 12)}`);
+    expect(lines).toContain("  changed test paths: tests/a.test.ts");
+    expect(lines).toContain("next: orca group accept-test-changes g-alpha --note '<why>' --tip <tip> --digest <digest>  (a person approves these exact test paths and tip)");
+    expect(lines).toContain("  or restore the paths from base bbbbbbbbbbbb on orca/g-alpha, commit the restored tip, and Orca checks it again");
+  });
+
+  it("names a relative required-check failure instead of claiming the configured full suite was red", async () => {
+    const command = "npm run typecheck", base = "b".repeat(40);
+    const identity = { key: "k".repeat(64), file: "tests/check.test.ts", testPath: ["same failure"], diagnosticHash: "d".repeat(64) };
+    const lines = await show({ tip: TIP, result: "passed-relative", commands: [{ command, exit: "1", ms: 2_400 }], at: 1,
+      fullSuite: { command: "npm test", suggestion: null, exits: ["0"], flaky: false },
+      identityComparisons: [{ command, base, setupDigest: "s".repeat(64), reporter: "node-test-tap-v1", baselineSource: "collected",
+        tipAttempts: [{ exit: "1", failureIdentityStatus: "complete", failureIdentities: [identity] }], baseIdentities: [identity], tipIdentities: [identity] }] });
+    expect(lines).toContain(`acceptance: passed relative to the base ${base.slice(0, 12)} on ${TIP.slice(0, 12)} (1 command, 2 s): required check \`${command}\` matched a known failure identity in the collected baseline ${base.slice(0, 12)}`);
+    expect(lines[0]).not.toContain("npm test was already red there");
+  });
+
   it("a passed, not-needed or waived acceptance: one line", async () => {
     expect(await show({ tip: TIP, result: "passed", commands: [{ command: "npm test", exit: "0", ms: 2_400 }], at: 1 }))
       .toContain("acceptance: passed on cccccccccccc (1 command, 2 s)");

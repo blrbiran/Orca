@@ -3,12 +3,13 @@ import { isGroupArchived } from "./archivedMark.js";
 import { groupRepoId } from "./dirGroup.js";
 import { fullSuiteCommand } from "./fullSuite.js";
 import {
-  acceptanceCommands, clearGroupFailure, logGroupFailureOnce, nextAcceptancePath, runAcceptance,
+  acceptanceCommands, acceptanceResultOf, clearGroupFailure, logGroupFailureOnce, nextAcceptancePath, runAcceptance,
   type AcceptanceOutcome, type GroupAcceptanceCheck, type GroupAcceptanceDeps,
 } from "./groupAcceptance.js";
 import {
-  acceptanceOf, acceptanceSatisfied, deliveredAcceptanceOf, deliveredAcceptanceTarget, failedCommandOf, type DeliveredAcceptance,
+  acceptanceOf, acceptanceSatisfied, deliveredAcceptanceOf, deliveredAcceptanceTarget, failedCommandOf, groupBaseCommit, type DeliveredAcceptance,
 } from "./groupAcceptanceRecord.js";
+import { existingTestChanges, type ExistingTestChanges } from "./acceptanceTestChanges.js";
 import { recordProjectionChange } from "./projectionJournal.js";
 import { QUIET_GIT } from "./workspace.js";
 import { git } from "../scheduler/gitExec.js";
@@ -76,7 +77,7 @@ async function acceptDelivery(deps: GroupAcceptanceDeps, checks: Map<string, Gro
     if (inFlight.settled === null) return false;
     checks.delete(keyOf(groupId));
     if ("error" in inFlight.settled) throw inFlight.settled.error;
-    const record = classify(target, inFlight.settled.outcome, accepted, inFlight.suite, store.now());
+    const record = classify(target, inFlight.settled.outcome, accepted, store.now(), inFlight.testChanges);
     deps.write(() => save(store, groupId, record, true));
     return true;
   }
@@ -100,9 +101,19 @@ async function acceptDelivery(deps: GroupAcceptanceDeps, checks: Map<string, Gro
   if (deps.stopped()) return false;
   const { setup, checks: commands, timeoutMs } = acceptanceCommands(store, groupId);
   const suite = fullSuiteCommand(store, groupRepoId(store, groupId));
+  const baselineTip = groupBaseCommit(store, groupId);
+  if (baselineTip === null) throw new Error(`acceptance-base-unavailable:${groupId}`);
+  let scan: ExistingTestChanges;
+  try { scan = await existingTestChanges(repo, baselineTip, target.commit); }
+  catch (error) {
+    deps.write(() => save(store, groupId, { tip: target.tip, commit: target.commit, result: "failed", commands: [], at,
+      testChanges: { base: baselineTip, paths: [], weakeningSignals: [], digest: "", error: `test-change-scan-failed: ${(error as Error).message}` } }, false));
+    return true;
+  }
+  const testChanges = { ...scan, base: baselineTip };
   const controller = new AbortController();
-  const entry: GroupAcceptanceCheck = { controller, tip: key, suite, settled: null, done: Promise.resolve() };
-  entry.done = runAcceptance(deps, repo, groupId, nextAcceptancePath(deps.roots, groupId), target.commit, null, setup, commands, suite, timeoutMs, controller.signal)
+  const entry: GroupAcceptanceCheck = { controller, tip: key, suite, base: baselineTip, testChanges, settled: null, done: Promise.resolve() };
+  entry.done = runAcceptance(deps, repo, groupId, nextAcceptancePath(deps.roots, groupId), target.commit, baselineTip, setup, commands, suite, timeoutMs, controller.signal)
     .then((outcome) => { entry.settled = { outcome }; }, (error: unknown) => { entry.settled = { error }; });
   checks.set(keyOf(groupId), entry);
   return false;
@@ -113,13 +124,26 @@ async function acceptDelivery(deps: GroupAcceptanceDeps, checks: Map<string, Gro
  * already red at the group's base (spec D3); waived when the tip's acceptance was waived and the same command fails here
  * (Correction 1.6: the person already accepted that failure); failed otherwise.
  */
-function classify(target: { tip: string; commit: string }, outcome: AcceptanceOutcome, accepted: ReturnType<typeof acceptanceOf>, suite: string | null, at: number): DeliveredAcceptance {
-  const base = { tip: target.tip, commit: target.commit, commands: outcome.commands, at };
-  if (outcome.failure === null) return { ...base, result: "passed" };
-  const tail = outcome.failure.tail === "" ? {} : { tail: outcome.failure.tail };
-  const failing = outcome.commands.at(-1)?.command ?? null;
-  if (suite !== null && failing === suite && accepted?.result === "passed-relative" && accepted.fullSuite?.command === suite) return { ...base, ...tail, result: "passed-relative" };
-  if (accepted?.result === "waived" && accepted.waived !== undefined && failing === failedCommandOf(accepted))
-    return { ...base, ...tail, result: "waived", waived: { ...accepted.waived, note: `carried from the tip's waiver: ${accepted.waived.note}` } };
-  return { ...base, ...tail, result: "failed" };
+function classify(target: { tip: string; commit: string }, outcome: AcceptanceOutcome, accepted: ReturnType<typeof acceptanceOf>, at: number, changes: ExistingTestChanges): DeliveredAcceptance {
+  const comparisons = outcome.identityComparisons ?? [];
+  const comparison = comparisons.find((item) => item.reason !== undefined) ?? comparisons[0];
+  const failing = comparison?.command ?? outcome.commands.find((item) => item.exit !== "0" && !item.command.startsWith("baseline:"))?.command ?? null;
+  let result: Exclude<DeliveredAcceptance["result"], "test-change-pending" | "not-needed"> = acceptanceResultOf(outcome);
+  let waived: DeliveredAcceptance["waived"];
+  const unresolved = comparisons.filter((item) => item.reason !== undefined || item.tipAttempts.some((attempt) => attempt.exit !== "0"));
+  // A tip waiver covers only the same failed command, and only when nothing else on the delivered tree is unresolved.
+  const covered = accepted?.result === "waived" && accepted.waived !== undefined && failing !== null && failing === failedCommandOf(accepted)
+    && (comparisons.length === 0 || (unresolved.length === 1 && unresolved[0]!.command === failing && unresolved[0]!.reason === undefined));
+  if (covered) {
+    result = "waived";
+    waived = { ...accepted!.waived!, note: `carried from the tip's waiver: ${accepted!.waived!.note}` };
+  }
+  const record: DeliveredAcceptance = {
+    tip: target.tip, commit: target.commit, result, commands: outcome.commands, at,
+    ...(outcome.failure === null || outcome.failure.tail === "" ? {} : { tail: outcome.failure.tail }),
+    ...(comparisons.length === 0 ? {} : { identityComparisons: comparisons }),
+    ...(waived === undefined ? {} : { waived }),
+  };
+  if (changes.paths.length === 0) return { ...record, testChanges: changes };
+  return { ...record, result: "test-change-pending", testChanges: { ...changes, pendingResult: result } };
 }

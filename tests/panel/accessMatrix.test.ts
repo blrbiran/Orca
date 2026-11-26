@@ -109,6 +109,7 @@ const ROWS: ReadonlyArray<{ entry: string; payload: Record<string, unknown>; tie
   { entry: "abandon-run", payload: { runId: "run-1", note: "cannot succeed" }, tier: "token", member: V },
   // Tester follow-up E §5 (#241): accepting a failed group acceptance is a person's act (socket tier token).
   { entry: "waive-acceptance", payload: { note: "known flake" }, tier: "token", member: V },
+  { entry: "accept-test-changes", payload: { note: "reviewed tests", tip: "a".repeat(40), digest: "b".repeat(64) }, tier: "token", member: V },
   // Pre-existing failures spec L2 (#341): human-only, socket tier token, as waive-acceptance.
   { entry: "answer-preexisting-failure", payload: { command: "npm test", answer: "relative" }, tier: "token", member: V },
   { entry: "apply-agent-update", payload: {}, tier: "token", member: V },

@@ -74,7 +74,7 @@ any command (`--json`: as data; ask for one domain, the whole list is large); `o
 | answer a stopped folder placement or multi landing | `orca group folder-change <g> --take-folder / --recheck / --withhold`, `orca group multi-land <g> --retry-rest / --mark-resolved` | references/group.md |
 | make one group wait for another | `orca group depend <g> --on <other>`, `orca group undepend …` | references/group.md |
 | find out why a run failed, or whether its result can be verified | `orca run show <r>`, `run activity`, `run transcript`, `run evidence`, `run results`, `run eligibility` | references/run.md |
-| retry, continue, verify a saved result or settle unknown usage | `orca task retry / continue / verify-saved-result / settle-usage <g> <t>` | references/task.md |
+| retry, continue, verify a saved result or settle unknown usage | `orca task retry / continue / verify-saved-result / settle-usage <g> <t>`; accept changed test paths with `orca group accept-test-changes <g> --note <why>` | references/task.md, group.md |
 | change a task's loop or labels | `orca task set-loop <g> <t> --file …`, `orca task set-labels …` | references/task.md |
 | decide a pending or flagged decision | `orca decision list <g>`, `decision approve / reject / ratify <g> <id>` | references/decision.md |
 | record, close or withdraw a correction | `orca correction record / close / withdraw / debug` | references/correction.md |

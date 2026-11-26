@@ -1166,7 +1166,7 @@ export const zh: Translation<typeof en> = {
       doneCount: "{{done}}/{{total}} 个任务已完成",
       doneUnread: "完成数：还没读到",
       acceptance: "验收：{{result}}",
-      acceptanceResult: { passed: "通过", "passed-relative": "通过（失败的检查在起点上也失败）", failed: "未通过", "not-needed": "不需要", "not-run": "未运行", waived: "已豁免" },
+      acceptanceResult: { passed: "通过", "passed-relative": "通过（失败的检查在起点上也失败）", failed: "未通过", "not-needed": "不需要", "not-run": "未运行", waived: "已豁免", "test-change-pending": "测试改动待人审阅" },
       delivery: "交付",
       deliveryKind: {
         folder: "写进本组的文件夹",
@@ -2628,6 +2628,8 @@ export const zhErrors: Record<string, string> = {
   "run-abandon-pending": "已经请求放弃这个运行；它停下后 Orca 会结算。",
   "run-abandon-person-required": "放弃尝试需要由所有者来做。",
   "group-acceptance-not-failed": "这个组的验收没有失败（{{detail}}），没有可重查或豁免的内容。",
+  "group-acceptance-test-change-not-pending": "这个组没有等待处理的测试改动。",
+  "group-acceptance-test-change-stale": "检查后的末端提交或测试路径摘要已变化；请重新运行验收并审阅当前测试路径。",
   "preexisting-failure-not-reported": "这个组没有这条命令的原有失败；请回答组视图里列出的某一行。",
   "preexisting-failure-command-ambiguous": "这条命令匹配到多个原有失败（{{detail}}）；请写更完整的命令。",
   "preexisting-failure-person-required": "回答原有失败需要由人来做：网页上的所有者，或带个人令牌的代理。",

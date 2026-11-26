@@ -1345,7 +1345,7 @@ export const en = {
       doneCount: "{{done}}/{{total}} tasks done",
       doneUnread: "tasks done: not read yet",
       acceptance: "acceptance: {{result}}",
-      acceptanceResult: { passed: "passed", "passed-relative": "passed (the failing check failed on the base too)", failed: "failed", "not-needed": "not needed", "not-run": "not run", waived: "waived" },
+      acceptanceResult: { passed: "passed", "passed-relative": "passed (the failing check failed on the base too)", failed: "failed", "not-needed": "not needed", "not-run": "not run", waived: "waived", "test-change-pending": "test change pending (person review required)" },
       delivery: "Delivery",
       deliveryKind: {
         folder: "Written into the group's folder",
@@ -2757,6 +2757,8 @@ export const enErrors: Record<string, string> = {
   "run-abandon-pending": "Abandoning this run is already requested; Orca settles it when it stops.",
   "run-abandon-person-required": "Abandoning an attempt is done by an owner.",
   "group-acceptance-not-failed": "This group's acceptance has not failed ({{detail}}); there is nothing to recheck or waive.",
+  "group-acceptance-test-change-not-pending": "This group has no test change awaiting disposition.",
+  "group-acceptance-test-change-stale": "The checked tip or test-path digest changed; rerun acceptance and review the current test paths.",
   "preexisting-failure-not-reported": "This group has no pre-existing failure for that command; answer one of the rows its view lists.",
   "preexisting-failure-command-ambiguous": "That command matches more than one pre-existing failure ({{detail}}); pass more of the command.",
   "preexisting-failure-person-required": "Answering a pre-existing failure is a person's act: an owner on the Web, or an agent with a person token.",

@@ -42,7 +42,7 @@ describe("schema 7 to 8 (accounts spec §5, §6, D3)", () => {
     const store = await openControlStore({ stateDir: await stateDir() });
     try {
       // Rewritten for issue-fixes spec §5.2 (ruling H5, 2026-10-08): the store is now at schema version 9.
-      expect(schemaVersion).toBe("25"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; schema 24 -> 25, #341 base_check_results)
+      expect(schemaVersion).toBe("26"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; schema 24 -> 25, #341 base_check_results)
       expect(tables(store.db)).toEqual(expect.arrayContaining(NEW_TABLES));
       expect(columns(store.db, "commands")).toContain("principal");
       expect(store.db.prepare("SELECT COUNT(*) AS n FROM usage_ledger").get()).toMatchObject({ n: 0 });
@@ -57,7 +57,7 @@ describe("schema 7 to 8 (accounts spec §5, §6, D3)", () => {
     const store = await openControlStore({ stateDir: dir });
     try {
       // Rewritten for issue-fixes spec §5.2 (ruling H5, 2026-10-08): the store is now at schema version 9.
-      expect(version(store.db)).toBe("25"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; schema 24 -> 25, #341 base_check_results)
+      expect(version(store.db)).toBe("26"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; schema 24 -> 25, #341 base_check_results)
       const rows = store.db.prepare("SELECT applied_at,group_id,repo_id,source,model,tokens,quality FROM usage_ledger ORDER BY group_id").all();
       expect(rows).toEqual([
         { applied_at: 0, group_id: "g1", repo_id: "r1", source: "pre-ledger", model: null, tokens: 1234, quality: "unattributed" },
@@ -110,7 +110,7 @@ describe("schema 7 to 8 (accounts spec §5, §6, D3)", () => {
       store.db.exec("BEGIN IMMEDIATE"); migrateSchema(store.db, "7"); store.db.exec("COMMIT");
       expect(store.db.prepare("SELECT COUNT(*) AS n FROM usage_ledger").get()).toMatchObject({ n: 1 });
       // Rewritten for issue-fixes spec §5.2 (ruling H5, 2026-10-08): the store is now at schema version 9.
-      expect(version(store.db)).toBe("25"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; schema 24 -> 25, #341 base_check_results)
+      expect(version(store.db)).toBe("26"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; schema 24 -> 25, #341 base_check_results)
     } finally { store.close(); }
   });
 

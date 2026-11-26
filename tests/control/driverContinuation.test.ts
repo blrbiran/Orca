@@ -80,7 +80,7 @@ describe("a continuation run (spec §4)", { timeout: 60_000 }, () => {
       expect(t.body(predecessor).drive.cleanedUp).toBe(true);
       // The task's lineage reads back whole: the parked predecessor, then its continuation (deviations D-SNAP, D-VIEW).
       const views = readControlGroup(t.h.store, "epoch-test", "g").runs;
-      expect(Object.fromEntries(views.map((view) => [view.runId, view.state]))).toEqual({ [predecessor]: "settled-recoverable", [continuation]: "settled-recoverable" });
+      expect(Object.fromEntries(views.map((view) => [view.runId, view.state]))).toEqual({ [predecessor]: "settled-recoverable", [continuation]: "settled-succeeded" });
     } finally { await t.h.dispose(); }
   });
 

@@ -354,7 +354,7 @@ export async function reviewRequirements(deps: ReviewPassDeps): Promise<boolean>
       // review too -- because both passes need the group's runs idle, so letting review run first would starve the
       // acceptance it is meant to complement. The round carries the failure to the prompt.
       const acceptance = acceptanceOf(body);
-      if (!acceptanceSatisfied(store, groupId, body) && !(acceptance !== null && acceptance.result === "failed" && acceptance.why === undefined)) continue;
+      if (!acceptanceSatisfied(store, groupId, body) && !(acceptance !== null && (acceptance.result === "test-change-pending" || (acceptance.result === "failed" && acceptance.why === undefined)))) continue;
       // #337 §8: a dir flow group is still not reviewed (it carries no requirement; this keeps the old record shape).
       if (isDirFlowGroup(store, groupId)) {
         if (review?.state === "not-run") continue;
@@ -935,9 +935,11 @@ export const REQUIREMENT_REVIEW_HANDLER: SingleCallHandler = {
       ...(conflict === undefined ? {} : { checkConflict: { criterionId: conflict.criterionId, requiredCheck: cutUtf8(conflict.requiredCheck, 4096), because: cutUtf8(conflict.because, 4096) } }),
       ...(relative.length === 0 ? {} : { relativePass: relative }) };
     const { rerun: _rerun, why: _why, ...rest } = current;
+    const testChangeOnly = result === "not-met" && conflict === undefined && testChangeOnlyReview(body, round);
     let next: RequirementReview = { ...rest, rounds: [...current.rounds, round], state: "passed" };
     if (result !== "passed") {
-      if (conflict === undefined) next = settleNotPassed(store, runRow.groupId, next, round);
+      if (testChangeOnly) next = { ...next, state: "not-passed", why: "test-change-only" };
+      else if (conflict === undefined) next = settleNotPassed(store, runRow.groupId, next, round);
       // Tester #340: a definite not-met that conflicts with the person's restriction -- the person decides which gives way.
       // Tester #502: the same round can also carry a plan-level not-met. Record it as left to a person here (the shared
       // rule settleNotPassed uses) before the conflict branch, so review-fix/review-accept do not hide the one step that
@@ -990,6 +992,12 @@ function notMetOf(round: ReviewRound): ReviewRound["criteria"] {
  * check-conflict round (tester #502) so a plan-level finding is recorded in both shapes. */
 function leftToPersonOf(round: ReviewRound): string[] {
   return notMetOf(round).filter((c) => (c.fixableBy ?? "work") !== "work").map((c) => c.id);
+}
+
+function testChangeOnlyReview(body: unknown, round: ReviewRound): boolean {
+  const paths = new Set(acceptanceOf(body)?.testChanges?.paths ?? []);
+  const notMet = round.criteria.filter((criterion) => criterion.verdict === "not-met");
+  return paths.size > 0 && notMet.length > 0 && notMet.every((criterion) => criterion.evidence.length > 0 && criterion.evidence.every((evidence) => paths.has(evidence.path)));
 }
 
 const isRelativePass = (round: ReviewRound, criterionId: string): boolean => (round.relativePass ?? []).some((r) => r.criterionId === criterionId);

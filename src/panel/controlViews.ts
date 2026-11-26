@@ -1,5 +1,5 @@
 import { autoConfirmView } from "../control/autoConfirm.js";
-import { acceptanceAnswers, deliveredAcceptanceAnswers, leftToPerson, reviewAnswers } from "../control/groupProblemAnswers.js";
+import { acceptanceAnswers, acceptanceTestChangeAnswers, deliveredAcceptanceAnswers, leftToPerson, reviewAnswers } from "../control/groupProblemAnswers.js";
 import {validSavedNoDispatch} from "../control/savedResultNoDispatch.js";
 import { flowGroupOf, flowRoleSql } from "../flow/groups.js";
 import {savedDispatchSchema,recoveryOfSchema,savedRecoverySchema,savedSourceSchema} from "../control/savedResultProtocol.js";
@@ -753,9 +753,22 @@ function cardFacts(store: ControlStore, groupId: string, body: Record<string, un
  * review that did not pass -- the same three the overview's needs-you rule counts (controlOverview.ts). Null otherwise.
  */
 function groupProblemOf(groupId: string, body: unknown, acceptanceProblemCode: string | null): { code: string; why: string; next: string[] } | null {
-  if (acceptanceProblemCode !== null) return { code: acceptanceProblemCode, why: "group-acceptance-failed", next: acceptanceAnswers(groupId) };
+  if (acceptanceProblemCode !== null) {
+    const acceptance = acceptanceOf(body), review = reviewOf(body);
+    const next = acceptanceTestChangeAnswers(groupId);
+    if (review?.why === "test-change-only") next.push(...reviewAnswers(groupId, review.why, leftToPerson(review.rounds.at(-1))));
+    if (acceptance?.result === "test-change-pending") return { code: acceptanceProblemCode, why: review?.why === "test-change-only" ? "test-change-review" : "test-change-pending", next };
+    return { code: acceptanceProblemCode, why: "group-acceptance-failed", next: acceptanceAnswers(groupId) };
+  }
   const delivered = deliveredAcceptanceProblem(body);
-  if (delivered !== null) return { code: delivered, why: "delivered-acceptance-failed", next: deliveredAcceptanceAnswers(groupId) };
+  if (delivered !== null) {
+    if (delivered === "test-change-pending") {
+      const review = reviewOf(body), next = acceptanceTestChangeAnswers(groupId);
+      if (review?.why === "test-change-only") next.push(...reviewAnswers(groupId, review.why, leftToPerson(review.rounds.at(-1))));
+      return { code: delivered, why: review?.why === "test-change-only" ? "test-change-review" : "test-change-pending", next };
+    }
+    return { code: delivered, why: "delivered-acceptance-failed", next: deliveredAcceptanceAnswers(groupId) };
+  }
   const review = reviewOf(body), code = reviewProblem(review);
   if (code === null) return null;
   return { code, why: review!.why ?? "?", next: reviewAnswers(groupId, review!.why, leftToPerson(review!.rounds.at(-1))) };

@@ -693,7 +693,7 @@ export const READ_ROWS: CommandDef[] = [
       const costs = (field(body, "costOutliers") as TaskCost[] | undefined) ?? [];
       return [...firstFailureLines(body), text(body), ...budgetHeadroomLines(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf)),
         // Tester follow-up K, item 2: the acceptance line show prints, with its full-suite warning.
-        ...(typeof groupId === "string" ? acceptanceLines(groupId, acceptance) : []),
+        ...(typeof groupId === "string" ? acceptanceLines(groupId, acceptance, (field(body, "requirementReview") as { state?: string } | undefined)?.state) : []),
         // Tester #359: a review that did not pass, with what answers it, as group show prints it.
         ...(typeof groupId === "string" ? reviewLines(groupId, field(body, "requirementReview") as Parameters<typeof reviewLines>[1]) : []),
         // Tester #419: a criteria-review judge that failed or is blocked at its cap, with the next step; #419/#485: advisory

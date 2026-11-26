@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -82,6 +82,41 @@ describe("a group is accepted on its final tip before it is done (tester follow-
     } finally { await t.h.dispose(); }
   });
 
+  it("runs every union check after an earlier check fails and preserves each exit", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "orca-acceptance-union-"));
+    const log = join(dir, "checks");
+    const first = `case "$PWD" in *group-acceptance-*) echo first >> '${log}'; exit 4 ;; *) true ;; esac`;
+    const second = `case "$PWD" in *group-acceptance-*) echo second >> '${log}'; true ;; *) true ;; esac`;
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { requiredChecks: [first, second] }); try {
+      await t.claim(); await t.claim();
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).acceptance !== undefined);
+      const record = group(t).acceptance;
+      expect(record.result).toBe("failed");
+      expect(record.commands.slice(0, 2).map((command: { command: string; exit: string }) => [command.command, command.exit])).toEqual([[first, "4"], [second, "0"]]);
+      expect(readFileSync(log, "utf8").trim().split("\n")).toEqual(["first", "second"]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("stops the acceptance union when setup fails", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "orca-acceptance-setup-failure-"));
+    const log = join(dir, "commands");
+    const setup = `case "$PWD" in *group-acceptance-*) echo setup >> '${log}'; exit 9 ;; *) true ;; esac`;
+    const check = `case "$PWD" in *group-acceptance-*) echo check >> '${log}'; true ;; *) true ;; esac`;
+    const t = await driverHarness([
+      { taskId: "a", contextExtra: { setupCommands: [setup] } },
+      { taskId: "b", contextExtra: { setupCommands: [setup] } },
+    ], { requiredChecks: [check] }); try {
+      await t.claim(); await t.claim();
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).acceptance !== undefined);
+      const record = group(t).acceptance;
+      expect(record.result).toBe("failed");
+      expect(record.commands.slice(0, 1).map((command: { command: string; exit: string }) => [command.command, command.exit])).toEqual([[`setup: ${setup}`, "9"]]);
+      expect(readFileSync(log, "utf8").trim().split("\n")).toEqual(["setup"]);
+    } finally { await t.h.dispose(); }
+  });
+
   it("a passing acceptance runs the tasks' setup union, then their checks once each, and the group is done after it", async () => {
     const { log, check } = scratch();
     const t = await driverHarness([
@@ -120,6 +155,22 @@ describe("a group is accepted on its final tip before it is done (tester follow-
       expect(scratchDirs(t)).toEqual([]);
       expect(group(t).acceptance).toBeUndefined();
       expect(acceptanceRows(t)).toEqual([]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a single landing that edits an existing test stays pending for a human disposition", async () => {
+    const baseTest = "it('works', () => { expect(1).toBe(1); });\n";
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["tests/**", "a"] }], {
+      requiredChecks: ["true"], files: () => ({ a: "a\n", "tests/existing.test.ts": `${baseTest}// additive-looking edit\n` }),
+    }); try {
+      mkdirSync(join(t.repo, "tests"), { recursive: true });
+      writeFileSync(join(t.repo, "tests", "existing.test.ts"), baseTest);
+      git(t.repo, "add", "tests/existing.test.ts"); git(t.repo, "commit", "-qm", "test baseline");
+      await t.claim();
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).acceptance !== undefined);
+      expect(group(t).acceptance).toMatchObject({ result: "test-change-pending", testChanges: { paths: ["tests/existing.test.ts"] } });
+      expect(group(t).status).not.toBe("done");
     } finally { await t.h.dispose(); }
   });
 

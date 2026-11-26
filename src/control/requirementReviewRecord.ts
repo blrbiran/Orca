@@ -42,7 +42,7 @@ export interface RelativePass { criterionId: string; command: string; tipExits: 
  * after its automatic fix rounds. It keeps the `why`, is shown as a note (reviewNote), and satisfies the done gate.
  */
 export type ReviewState = "pending" | "reviewing" | "passed" | "fixing" | "not-passed" | "accepted" | "not-run" | "noted";
-export type ReviewWhy = "multi-repo" | "dir" | "unfunded" | "invalid" | "cannot-judge" | "rounds-exhausted" | "failed" | "check-conflict" | "not-fixable-by-work";
+export type ReviewWhy = "multi-repo" | "dir" | "unfunded" | "invalid" | "cannot-judge" | "rounds-exhausted" | "failed" | "check-conflict" | "not-fixable-by-work" | "test-change-only";
 export interface RequirementReview {
   state: ReviewState; why?: ReviewWhy; rounds: ReviewRound[]; autoFixRounds: number;
   accepted?: { by: string; note: string; at: number };

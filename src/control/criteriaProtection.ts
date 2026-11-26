@@ -125,9 +125,11 @@ export function checkPaths(requiredChecks: readonly string[], setupCommands: rea
   return out;
 }
 
+export function isTestFilePath(path: string): boolean { return TEST_PATH.test(path); }
+
 /** §3: the check-defining files -- a required check's own file, a test file, `package.json`, a CI workflow. */
 export function definesChecks(path: string, fromChecks: ReadonlySet<string>): boolean {
-  return fromChecks.has(path) || TEST_PATH.test(path) || path === "package.json" || path.endsWith("/package.json") || WORKFLOW.test(path);
+  return fromChecks.has(path) || isTestFilePath(path) || path === "package.json" || path.endsWith("/package.json") || WORKFLOW.test(path);
 }
 
 async function show(repo: string, rev: string, path: string): Promise<string> {

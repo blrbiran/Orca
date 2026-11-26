@@ -321,7 +321,7 @@ describe("after retry-task: cleanup, a new run, success (spec §4.2(2), §4.4)",
       expect(t.body(second).drive.workspacePath).not.toBe(failedDrive.workspacePath);
       expect(work(t, "a")).toMatchObject({ status: "done", currentRunId: second });
       expect(git(t.repo, "show", "refs/heads/orca/g:a")).toBe("a");
-      expect(new Map(view(t).runs.map((run) => [run.runId, run.state]))).toEqual(new Map([[runId, "settled-failed"], [second, "settled-recoverable"]]));
+      expect(new Map(view(t).runs.map((run) => [run.runId, run.state]))).toEqual(new Map([[runId, "settled-failed"], [second, "settled-succeeded"]]));
     } finally { await t.h.dispose(); }
   }, 30000);
 
@@ -363,7 +363,7 @@ describe("after retry-task: cleanup, a new run, success (spec §4.2(2), §4.4)",
       const third = await claimAgain(t, driver);
       expect(taskRunNumber(view(t), "a")).toBe(3);
       await t.until(driver, () => t.body(third).state === "settled" && [first, second, third].every((id) => t.body(id).drive?.cleanedUp === true));
-      expect(new Map(view(t).runs.map((run) => [run.runId, run.state]))).toEqual(new Map([[first, "settled-failed"], [second, "settled-failed"], [third, "settled-recoverable"]]));
+      expect(new Map(view(t).runs.map((run) => [run.runId, run.state]))).toEqual(new Map([[first, "settled-failed"], [second, "settled-failed"], [third, "settled-succeeded"]]));
       expect(work(t, "a")).toMatchObject({ status: "done", currentRunId: third });
     } finally { await t.h.dispose(); }
   }, 30000);

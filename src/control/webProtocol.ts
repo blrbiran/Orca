@@ -699,6 +699,7 @@ export const commandVerbSchema = z.enum([
   // Tester follow-up E §5 (#241): rerun a failed group acceptance on the same tip (any), or accept it anyway (a person).
   "recheck-acceptance",
   "waive-acceptance",
+  "accept-test-changes",
   // Pre-existing failures spec L2 (#341): a person answers a check that was already red before a task changed anything.
   "answer-preexisting-failure",
   // Tester follow-up G spec §3.5: the exits of a requirement review that did not pass (any principal).
@@ -930,6 +931,11 @@ export const allowRequestPayloadSchema = z.object({
 }).strict();
 export const revokeAllowancePayloadSchema = z.object({ allowanceId: idSchema }).strict();
 export const waiveAcceptancePayloadSchema = z.object({ note: z.string().max(2048).refine((note) => note.trim().length > 0, "note-empty") }).strict();
+export const acceptTestChangesPayloadSchema = z.object({
+  note: z.string().max(2048).refine((note) => note.trim().length > 0, "note-empty"),
+  tip: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
+  digest: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict();
 /** Pre-existing failures spec L2 (#341): the three answers to a check that was already red before a task changed anything. */
 export const preexistingFailureAnswerSchema = z.enum(["allow-fix", "relative", "edit-requirement"]);
 export type PreexistingFailureAnswer = z.infer<typeof preexistingFailureAnswerSchema>;
@@ -1424,6 +1430,7 @@ const rawAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...rawCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("recheck-acceptance"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("waive-acceptance"), target: groupCommandTargetSchema, payload: waiveAcceptancePayloadSchema }).strict(),
+  z.object({ ...rawCommandFields, verb: z.literal("accept-test-changes"), target: groupCommandTargetSchema, payload: acceptTestChangesPayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("answer-preexisting-failure"), target: groupCommandTargetSchema, payload: answerPreexistingFailurePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("review-accept"), target: groupCommandTargetSchema, payload: reviewNotePayloadSchema }).strict(),
   z.object({ ...rawCommandFields, verb: z.literal("review-rerun"), target: groupCommandTargetSchema, payload: reviewNotePayloadSchema }).strict(),
@@ -1546,6 +1553,7 @@ const effectiveAuthorityCommandVariants = z.discriminatedUnion("verb", [
   z.object({ ...effectiveCommandFields, verb: z.literal("resolve-integration-conflict"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("recheck-acceptance"), target: groupCommandTargetSchema, payload: emptyPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("waive-acceptance"), target: groupCommandTargetSchema, payload: waiveAcceptancePayloadSchema }).strict(),
+  z.object({ ...effectiveCommandFields, verb: z.literal("accept-test-changes"), target: groupCommandTargetSchema, payload: acceptTestChangesPayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("answer-preexisting-failure"), target: groupCommandTargetSchema, payload: answerPreexistingFailurePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("review-accept"), target: groupCommandTargetSchema, payload: reviewNotePayloadSchema }).strict(),
   z.object({ ...effectiveCommandFields, verb: z.literal("review-rerun"), target: groupCommandTargetSchema, payload: reviewNotePayloadSchema }).strict(),
@@ -1691,6 +1699,21 @@ export const requirementSummarySchema = z.object({
 }).strict();
 export type RequirementSummaryV1 = z.infer<typeof requirementSummarySchema>;
 
+const acceptanceFailureIdentitySchema = z.object({ key: hashSchema, file: nonemptyString, testPath: z.array(nonemptyString), diagnosticHash: hashSchema }).strict();
+const acceptanceIdentityComparisonSchema = z.object({
+  command: nonemptyString, base: commitShaSchema.nullable(), setupDigest: hashSchema, reporter: z.literal("node-test-tap-v1"),
+  baselineSource: z.enum(["stored", "collected", "unavailable"]),
+  tipAttempts: z.array(z.object({ exit: nonemptyString, failureIdentityStatus: z.enum(["complete", "unsupported", "ambiguous"]).optional(), failureIdentities: z.array(acceptanceFailureIdentitySchema).optional() }).strict()),
+  baseIdentities: z.array(acceptanceFailureIdentitySchema), tipIdentities: z.array(acceptanceFailureIdentitySchema),
+  reason: z.enum(["new-failure", "non-comparable", "baseline-unavailable", "base-green"]).optional(),
+}).strict();
+const acceptanceTestChangesSchema = z.object({
+  base: commitShaSchema.optional(), paths: z.array(nonemptyString), weakeningSignals: z.array(nonemptyString), digest: hashSchema,
+  error: z.string().max(2048).optional(),
+  pendingResult: z.enum(["passed", "failed", "passed-relative", "not-needed", "not-run", "waived"]).optional(),
+  disposition: z.object({ tip: commitShaSchema, digest: hashSchema, by: nonemptyString, note: nonemptyString, at: safeInteger }).strict().optional(),
+}).strict();
+
 export const groupSummarySchema = z
   .object({
     groupId: idSchema,
@@ -1804,11 +1827,13 @@ export const groupSummarySchema = z
     // Tester follow-up E §5 (#241): the group's acceptance on its final tip (groupAcceptanceRecord.ts); `problem` is
     // `group-acceptance-failed:<command>` when it failed. Optional so a group without a record parses unchanged.
     acceptance: z.object({
-      tip: commitShaSchema.nullable(), result: z.enum(["passed", "passed-relative", "failed", "not-needed", "not-run", "waived"]),
+      tip: commitShaSchema.nullable(), result: z.enum(["passed", "passed-relative", "failed", "not-needed", "not-run", "waived", "test-change-pending"]),
       why: z.enum(["single-landing", "multi-repo", "dir", "work-branch-missing"]).optional(), landings: safeInteger.optional(),
       commands: z.array(z.object({ command: nonemptyString, exit: nonemptyString, ms: safeInteger }).strict()),
       tail: z.string().max(2048).optional(), at: safeInteger,
       waived: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),
+      identityComparisons: z.array(acceptanceIdentityComparisonSchema).optional(),
+      testChanges: acceptanceTestChangesSchema.optional(),
       problem: nonemptyString.optional(),
       // Full suite spec 2026-11-12 §4-§5 (#279): the project's full-suite command and its runs' exits (null: none set, with
       // the suggestion code detected); `warning` is `full-suite-not-set` or `full-suite-flaky:<command>`, never blocking.
@@ -1829,11 +1854,13 @@ export const groupSummarySchema = z
     // Delivery tail spec D3: the acceptance on a local delivery's commit (groupAcceptanceRecord.ts); `problem` is
     // `delivered-acceptance-failed:<command>` when it failed. Optional so a group without a record parses unchanged.
     deliveredAcceptance: z.object({
-      tip: commitShaSchema, commit: commitShaSchema, result: z.enum(["passed", "passed-relative", "failed", "not-needed", "waived"]),
+      tip: commitShaSchema, commit: commitShaSchema, result: z.enum(["passed", "passed-relative", "failed", "not-needed", "waived", "test-change-pending"]),
       why: z.enum(["same-tree", "already-in-target", "before-record"]).optional(),
       commands: z.array(z.object({ command: nonemptyString, exit: nonemptyString, ms: safeInteger }).strict()),
       tail: z.string().max(2048).optional(), at: safeInteger,
       waived: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),
+      identityComparisons: z.array(acceptanceIdentityComparisonSchema).optional(),
+      testChanges: acceptanceTestChangesSchema.optional(),
       problem: nonemptyString.optional(),
     }).strict().optional(),
     // Tester follow-up G spec §3.3: the requirement review record (requirementReviewRecord.ts); `problem` is
@@ -1841,7 +1868,7 @@ export const groupSummarySchema = z
     requirementReview: z.object({
       // #337 §5.5: `noted` -- a folder or multi-directory group's review that did not pass; it does not hold the group.
       state: z.enum(["pending", "reviewing", "passed", "fixing", "not-passed", "accepted", "not-run", "noted"]),
-      why: z.enum(["multi-repo", "dir", "unfunded", "invalid", "cannot-judge", "rounds-exhausted", "failed", "check-conflict", "not-fixable-by-work"]).optional(),
+      why: z.enum(["multi-repo", "dir", "unfunded", "invalid", "cannot-judge", "rounds-exhausted", "failed", "check-conflict", "not-fixable-by-work", "test-change-only"]).optional(),
       rounds: z.array(z.object({
         roundNo: positiveSafeInteger, tip: z.string(), runId: idSchema.nullable(), at: safeInteger,
         result: z.enum(["passed", "not-met", "cannot-judge", "invalid", "failed", "unfunded"]),
@@ -2822,6 +2849,7 @@ const commandResultSchema = z.discriminatedUnion("kind", [
   // Tester follow-up E §5 (#241): the failed record is cleared and the next round checks the tip again; or it is waived.
   z.object({ kind: z.literal("acceptance-recheck-requested"), groupId: idSchema, tip: commitShaSchema }).strict(),
   z.object({ kind: z.literal("acceptance-waived"), groupId: idSchema, tip: commitShaSchema }).strict(),
+  z.object({ kind: z.literal("test-changes-accepted"), groupId: idSchema, tip: commitShaSchema, digest: hashSchema }).strict(),
   // Pre-existing failures spec L2 (#341): the person's answer to one problem row, recorded for the review.
   z.object({ kind: z.literal("preexisting-failure-answered"), groupId: idSchema, command: nonemptyString, answer: preexistingFailureAnswerSchema }).strict(),
   // Tester follow-up G spec §3.5: the requirement review's exits.

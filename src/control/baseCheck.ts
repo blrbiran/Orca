@@ -17,12 +17,20 @@ import { runCheckSequence } from "./checkCommand.js";
 import { readConfirmedTaskExecution } from "./executionSnapshot.js";
 import { clearGroupFailure, logGroupFailureOnce, nextAcceptancePath, runOnScratchTip, type GroupAcceptanceDeps } from "./groupAcceptance.js";
 import { LIVE_NOTE_MAX_BYTES, queueOrcaLiveNote, writeRunLiveNotes } from "./liveNotes.js";
+import { acceptanceSetupDigest, recordAcceptanceFailureIdentities } from "./acceptanceFailureIdentity.js";
+import type { AcceptanceFailureIdentity } from "./acceptanceFailureIdentity.js";
 import { isGroupAcceptancePathOf } from "./workspace.js";
 import type { ControlStore } from "./store.js";
 
-export interface BaseCheckAnswer { result: BaseCheckResult; tail: string | null; why: string | null }
+export interface BaseCheckAnswer {
+  result: BaseCheckResult;
+  tail: string | null;
+  why: string | null;
+  failureIdentities?: AcceptanceFailureIdentity[];
+  failureIdentityStatus?: "complete" | "unsupported" | "ambiguous";
+}
 /** One base run in flight, by its key; `done` settles once its scratch worktree is removed. */
-export interface BaseCheckRun { key: BaseCheckKey; controller: AbortController; settled: { answer: BaseCheckAnswer } | { error: unknown } | null; done: Promise<void> }
+export interface BaseCheckRun { key: BaseCheckKey; setupDigest: string; controller: AbortController; settled: { answer: BaseCheckAnswer } | { error: unknown } | null; done: Promise<void> }
 
 const WHY_MAX = 512;
 /** `sh` could not run the command (126: not executable, 127: not found): the base says nothing about the check. */
@@ -45,7 +53,11 @@ export async function runBaseCheck(deps: GroupAcceptanceDeps, repo: string, row:
     if (failure.command.startsWith("setup: ")) return { result: "unknown", tail: failure.tail === "" ? null : failure.tail, why: "setup-failed" };
     if (failure.exit.startsWith("timeout")) return { result: "unknown", tail: null, why: "timeout" };
     if (NOT_RUNNABLE_EXITS.has(failure.exit)) return { result: "unknown", tail: failure.tail === "" ? null : failure.tail, why: "not-runnable" };
-    return { result: "red", tail: failure.tail, why: null };
+    return {
+      result: "red", tail: failure.tail, why: null,
+      ...(failure.failureIdentities === undefined ? {} : { failureIdentities: failure.failureIdentities }),
+      ...(failure.failureIdentityStatus === undefined ? {} : { failureIdentityStatus: failure.failureIdentityStatus }),
+    };
   } catch (error) {
     if (signal.aborted) throw error;
     return { result: "unknown", tail: null, why: `error: ${error instanceof Error ? error.message : String(error)}`.slice(0, WHY_MAX) };
@@ -62,11 +74,18 @@ function taskRunShape(store: ControlStore, row: BaseCheckRow): { setup: string[]
  * The answer, in one write: the row, and for red the live note for the asking task's running run, if it has one. The
  * note's file is mirrored after the write (settleLiveNotes rewrites it next round if that fails).
  */
-function recordAnswer(deps: GroupAcceptanceDeps, key: BaseCheckKey, answer: BaseCheckAnswer): boolean {
+function recordAnswer(deps: GroupAcceptanceDeps, key: BaseCheckKey, setupDigest: string, answer: BaseCheckAnswer): boolean {
   const { store } = deps;
   let noted: { groupId: string; taskId: string } | null = null;
   const recorded = deps.write(() => {
     if (!recordBaseCheck(store, key, answer)) return false;
+    if (answer.result === "red" && answer.failureIdentityStatus === "complete" && (answer.failureIdentities?.length ?? 0) > 0) {
+      const row = readBaseCheck(store, key);
+      if (row !== null) recordAcceptanceFailureIdentities(store, {
+        repoId: key.repoId, base: key.base, command: key.command, setupDigest, reporter: "node-test-tap-v1",
+        identities: answer.failureIdentities!, source: "task-base-check", groupId: row.groupId, runId: row.runId, at: store.now(),
+      });
+    }
     const row = readBaseCheck(store, key);
     if (answer.result === "red" && row !== null && queueOrcaLiveNote(store, row.groupId, row.taskId, baseCheckNoteId, baseCheckLine(answer.tail ?? "", LIVE_NOTE_MAX_BYTES)) !== null) {
       noted = { groupId: row.groupId, taskId: row.taskId };
@@ -94,7 +113,7 @@ export async function checkBases(deps: GroupAcceptanceDeps, runs: Map<string, Ba
     runs.delete(key);
     // An abort records nothing: the row stays pending for the next driver.
     if ("error" in inFlight.settled) continue;
-    if (recordAnswer(deps, inFlight.key, inFlight.settled.answer)) moved = true;
+    if (recordAnswer(deps, inFlight.key, inFlight.setupDigest, inFlight.settled.answer)) moved = true;
   }
   const busy = new Set([...runs.values()].map((run) => run.key.repoId));
   // Read after the answers above: a row answered just now is not pending any more, so it is never started a second time.
@@ -107,7 +126,8 @@ export async function checkBases(deps: GroupAcceptanceDeps, runs: Map<string, Ba
       const { setup, timeoutMs } = taskRunShape(store, row);
       const repo = deps.resolveRepository(row.repoId);
       const controller = new AbortController();
-      const entry: BaseCheckRun = { key: { repoId: row.repoId, base: row.base, command: row.command }, controller, settled: null, done: Promise.resolve() };
+      const setupDigest = acceptanceSetupDigest(setup);
+      const entry: BaseCheckRun = { key: { repoId: row.repoId, base: row.base, command: row.command }, setupDigest, controller, settled: null, done: Promise.resolve() };
       entry.done = runBaseCheck(deps, repo, row, setup, timeoutMs, controller.signal)
         .then((answer) => { entry.settled = { answer }; }, (error: unknown) => { entry.settled = { error }; });
       runs.set(key, entry);

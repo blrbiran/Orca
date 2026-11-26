@@ -3,7 +3,7 @@ import { canonicalBytes } from "./canonicalJson.js";
 import { mirrorWebAuthority, reopenProposalBodies, type Body } from "./proposalReopen.js";
 import { overGrantBlockRuns } from "./overGrantBlock.js";
 
-export const schemaVersion = "25";
+export const schemaVersion = "26";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -266,6 +266,30 @@ export const schema23To24 = usageDetailColumns.map(([name, type]) => `ALTER TABL
 export const schema24To25 = `CREATE TABLE IF NOT EXISTS base_check_results(repo_id TEXT NOT NULL, base TEXT NOT NULL, command TEXT NOT NULL, result TEXT NOT NULL CHECK(result IN ('pending','red','green','unknown')), tail TEXT, why TEXT, group_id TEXT NOT NULL, task_id TEXT NOT NULL, run_id TEXT NOT NULL, requested_at INTEGER NOT NULL, at INTEGER, attempts INTEGER NOT NULL DEFAULT 1 CHECK(attempts >= 1), PRIMARY KEY(repo_id, base, command)) STRICT;
 `;
 
+// Acceptance baseline design 2026-11-26 (#508): one durable row per failing test identity under the exact execution key.
+// Red identities accumulate for a frozen base/setup; a later green run does not erase a known flaky failure.
+export const schema25To26 = `CREATE TABLE IF NOT EXISTS acceptance_failure_baselines(
+  repo_id TEXT NOT NULL,
+  base TEXT NOT NULL,
+  command TEXT NOT NULL,
+  setup_digest TEXT NOT NULL,
+  reporter TEXT NOT NULL CHECK(reporter IN ('node-test-tap-v1')),
+  identity TEXT NOT NULL,
+  file TEXT NOT NULL,
+  test_path_json TEXT NOT NULL,
+  diagnostic_hash TEXT NOT NULL,
+  source TEXT NOT NULL CHECK(source IN ('task-base-check','group-acceptance')),
+  group_id TEXT NOT NULL,
+  run_id TEXT NOT NULL,
+  first_seen_at INTEGER NOT NULL,
+  last_seen_at INTEGER NOT NULL,
+  tests INTEGER,
+  exit TEXT,
+  PRIMARY KEY(repo_id,base,command,setup_digest,reporter,identity)
+) STRICT;
+CREATE INDEX IF NOT EXISTS acceptance_failure_baselines_by_base ON acceptance_failure_baselines(repo_id,base,command,setup_digest,reporter);
+`;
+
 /** 23 → 24: idempotent per column (see usageDetailColumns). */
 function migrate23To24(store: DatabaseSync): void {
   const present = new Set(store.prepare("PRAGMA table_info(usage_ledger)").all().map((row) => String(row.name)));
@@ -285,7 +309,7 @@ function rekeyRequirementRounds(store: DatabaseSync): void {
 
 // A fresh store has no groups, so the pre-ledger insert adds nothing.
 export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15 + schema15To16
-  + requirementRoundsKeyed + schema16To17 + schema17To18 + schema19To20 + schema20To21 + schema22To23WorkTopUps + schema23To24 + schema24To25;
+  + requirementRoundsKeyed + schema16To17 + schema17To18 + schema19To20 + schema20To21 + schema22To23WorkTopUps + schema23To24 + schema24To25 + schema25To26;
 
 /**
  * Checks spec 2026-10-22 §4.1 "Migration (no aliases, P1)": each repository settings body's `integrationCheck
@@ -425,6 +449,7 @@ function finishMigration(store: DatabaseSync, now: () => number): void {
   store.exec(schema22To23WorkTopUps);
   migrate23To24(store);
   store.exec(schema24To25);
+  store.exec(schema25To26);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }
 
@@ -443,22 +468,30 @@ function migrate7To8(store: DatabaseSync): boolean {
 }
 
 export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () => number = Date.now): void {
+  if (fromVersion === "25") {
+    store.exec(schema25To26);
+    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    return;
+  }
   if (fromVersion === "24") {
     store.exec(schema24To25);
-    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    store.exec(schema25To26);
+  store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "23") {
     migrate23To24(store);
     store.exec(schema24To25);
-    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    store.exec(schema25To26);
+  store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "22") {
     store.exec(schema22To23WorkTopUps);
     migrate23To24(store);
     store.exec(schema24To25);
-    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    store.exec(schema25To26);
+  store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "21") {
@@ -466,7 +499,8 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     store.exec(schema22To23WorkTopUps);
     migrate23To24(store);
     store.exec(schema24To25);
-    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    store.exec(schema25To26);
+  store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   // Saved recovery's 11→12 marker fenced older owners. The current 11/12→13 upgrade also
@@ -477,7 +511,8 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     store.exec(schema22To23WorkTopUps);
     migrate23To24(store);
     store.exec(schema24To25);
-    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    store.exec(schema25To26);
+  store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "19") {
@@ -487,7 +522,8 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     store.exec(schema22To23WorkTopUps);
     migrate23To24(store);
     store.exec(schema24To25);
-    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    store.exec(schema25To26);
+  store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "18") {
@@ -498,7 +534,8 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     store.exec(schema22To23WorkTopUps);
     migrate23To24(store);
     store.exec(schema24To25);
-    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    store.exec(schema25To26);
+  store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "17") {
@@ -510,7 +547,8 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     store.exec(schema22To23WorkTopUps);
     migrate23To24(store);
     store.exec(schema24To25);
-    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    store.exec(schema25To26);
+  store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "16") {
@@ -523,7 +561,8 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     store.exec(schema22To23WorkTopUps);
     migrate23To24(store);
     store.exec(schema24To25);
-    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    store.exec(schema25To26);
+  store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "15") {

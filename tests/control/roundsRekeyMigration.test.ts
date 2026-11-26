@@ -42,8 +42,8 @@ describe("schema 17: flow journal tables and requirement_rounds keyed by step ex
     const { root, dir, before } = await v16Store();
     const store = await openControlStore({ stateDir: dir });
     try {
-      expect(schemaVersion).toBe("25"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; schema 24 -> 25, #341 base_check_results)
-      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("25"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; schema 24 -> 25, #341 base_check_results)
+      expect(schemaVersion).toBe("26"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; schema 24 -> 25, #341 base_check_results)
+      expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("26"); // Ruling: 「这次批准改写所有必要的判据」 (schema 23 -> 24, raw usage detail); Ruling: 「这次批准改写所有必要的判据」 (Orca session 2026-11-18; schema 24 -> 25, #341 base_check_results)
       const after = store.db.prepare("SELECT group_id,step_key,exec_seq,round_no,state,body FROM requirement_rounds ORDER BY group_id,round_no").all();
       expect(after).toHaveLength(3);
       expect(after.map(({ step_key, exec_seq, ...rest }) => { expect([step_key, exec_seq]).toEqual(["clarify", 1]); return rest; })).toEqual(before);

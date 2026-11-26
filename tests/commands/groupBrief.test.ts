@@ -40,6 +40,40 @@ describe("group brief (issue 199)", () => {
     expect(p.requests.some((request) => request.path === "summary")).toBe(false);
   });
 
+  it("explains that a passing acceptance and a not-passed requirement review are independent", async () => {
+    const acceptance = { tip: "a".repeat(40), result: "passed", commands: [], at: 1,
+      testChanges: { base: "b".repeat(40), paths: ["tests/a.test.ts"], weakeningSignals: [], digest: "d".repeat(64),
+        disposition: { tip: "a".repeat(40), digest: "d".repeat(64), by: "user:owner", note: "approved" } } };
+    const requirementReview = { state: "not-passed", why: "rounds-exhausted", rounds: [], autoFixRounds: 2,
+      problem: "requirement-review-not-passed:rounds-exhausted" };
+    const p = await fakePanel({
+      "GET summary": { status: 200, body: { schema: "orca-control-summary-v1", epoch: "e", changeSeq: 11, resetRequired: false, groups: [{ groupId: "g-alpha", repoId: "repo-1", state: "review", commandRevision: 7 }] } },
+      "GET groups/g-alpha/brief": { status: 200, body: { schema: "orca-group-brief-v1", ...VIEW.summary, acceptance, requirementReview } },
+    });
+    const out = await cli(["group", "brief", "g-alpha"], p.dir);
+    expect(out.code, out.stderr).toBe(0);
+    expect(out.stdout).toContain("acceptance: passed");
+    expect(out.stdout).toContain("requirement review: not-passed; independent of acceptance, with its own next action below");
+    expect(out.stdout).toContain("next: orca group review-fix g-alpha --goal '<what to fix>'");
+    expect(out.stdout).toContain("test changes: accepted by user:owner on aaaaaaaaaaaa");
+  });
+
+  it("group brief shows a pending test change, its paths, and the person command", async () => {
+    const acceptance = { tip: "a".repeat(40), result: "test-change-pending", commands: [], at: 1, problem: "test-change-pending",
+      testChanges: { base: "b".repeat(40), paths: ["tests/a.test.ts"], weakeningSignals: [], digest: "d".repeat(64), pendingResult: "passed" } };
+    const p = await fakePanel({
+      "GET summary": { status: 200, body: { schema: "orca-control-summary-v1", epoch: "e", changeSeq: 11, resetRequired: false, groups: [{ groupId: "g-alpha", repoId: "repo-1", state: "review", commandRevision: 7 }] } },
+      "GET groups/g-alpha/brief": { status: 200, body: { schema: "orca-group-brief-v1", ...VIEW.summary, acceptance, groupProblem: {
+        code: "test-change-pending", why: "test-change-pending", next: ["orca group accept-test-changes g-alpha --note '<why>' --tip <tip> --digest <digest>"],
+      } } },
+    });
+    const out = await cli(["group", "brief", "g-alpha"], p.dir);
+    expect(out.code, out.stderr).toBe(0);
+    expect(out.stdout).toContain("problem: test-change-pending on orca/g-alpha at aaaaaaaaaaaa");
+    expect(out.stdout).toContain("  changed test paths: tests/a.test.ts");
+    expect(out.stdout).toContain("next: orca group accept-test-changes g-alpha --note '<why>' --tip <tip> --digest <digest>");
+  });
+
   it("keeps group show's full body unchanged", async () => {
     const p = await fakePanel(routes);
     const out = await cli(["group", "show", "g-alpha", "--json"], p.dir);

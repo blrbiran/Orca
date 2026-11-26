@@ -10,6 +10,7 @@ import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
 import { createWebWakeHandlers } from "../../src/control/webDispatch.js";
 import { isGroupAcceptancePathOf } from "../../src/control/workspace.js";
 import { readRepositorySettingsBody, writeRepositorySettingsBody } from "../../src/control/workspaceSettings.js";
+import { acceptanceSetupDigest, failureIdentitiesOf, recordAcceptanceFailureIdentities } from "../../src/control/acceptanceFailureIdentity.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
 
 // Full suite spec 2026-11-12 (#279): a group was "done, acceptance passed" on 8 focused checks while its full suite was red
@@ -46,6 +47,15 @@ function suite(script: string): { command: string; log: string; runs: () => stri
     command: `echo "$PWD" >> '${log}'; n=$(( $(cat '${counter}' 2>/dev/null || echo 0) + 1 )); echo $n > '${counter}'; ${script}`,
     runs: () => existsSync(log) ? readFileSync(log, "utf8").trim().split("\n") : [],
   };
+}
+
+function tapFailure(name: string, tests = 1): string {
+  return [
+    "TAP version 13", "# Subtest: tests/acceptance.test.js", `    not ok 1 - ${name}`,
+    "      ---", "      error: AssertionError", "      actual: 1", "      expected: 2", "      operator: strictEqual", "      ...",
+    "    1..1", "    # tests 1", "    # pass 0", "    # fail 1", "not ok 1 - tests/acceptance.test.js", "  ---",
+    "  error: 1 subtest failed", "  failureType: subtestsFailed", "  ...", `# tests ${tests}`, "# pass 0", "# fail 1", "",
+  ].join("\n");
 }
 
 /** A suite that logs whether it ran in the tip tree (task a present) or the base tree, and exits as `script` says. */
@@ -138,23 +148,8 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
     } finally { await t.h.dispose(); }
   });
 
-  it("red once, green on the retry: passed, recorded flaky, and the group is done", async () => {
+  it("an unsupported red suite is not excused by a green retry", async () => {
     const s = suite("test $n -ge 2");
-    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
-      await t.claim(); await t.claim();
-      setSuite(t, s.command);
-      const driver = t.driver();
-      await untilDeadline(driver, () => group(t).status === "done");
-      const record = group(t).acceptance;
-      expect(record.result).toBe("passed");
-      expect(commandsOf(t)).toEqual([["true", "0"], [s.command, "1"], [s.command, "0"]]);
-      expect(record.fullSuite).toEqual({ command: s.command, suggestion: null, exits: ["1", "0"], flaky: true });
-      expect(fullSuiteWarning(record)).toBe(`full-suite-flaky:${s.command}`);
-    } finally { await t.h.dispose(); }
-  });
-
-  it("red twice at the tip, green at the base: the acceptance failed (this group broke it)", async () => {
-    const s = suiteAtBase("test ! -f a");
     const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
       await t.claim(); await t.claim();
       setSuite(t, s.command);
@@ -162,8 +157,128 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
       await untilDeadline(driver, () => group(t).acceptance !== undefined);
       const record = group(t).acceptance;
       expect(record.result).toBe("failed");
-      expect(commandsOf(t)).toEqual([["true", "0"], [s.command, "1"], [s.command, "1"]]);
-      expect(record.fullSuite).toEqual({ command: s.command, suggestion: null, exits: ["1", "1"], flaky: false });
+      expect(record.fullSuite).toMatchObject({ exits: ["1", "0"], flaky: true });
+      expect(record.identityComparisons).toMatchObject([{ command: s.command, baselineSource: "unavailable", reason: "non-comparable" }]);
+      expect(s.runs()).toHaveLength(2);
+      expect(group(t).status).not.toBe("done");
+    } finally { await t.h.dispose(); }
+  });
+
+  it("#387: a cached baseline keeps the base's test count, so a short tip run is still failed", async () => {
+    const tipOutput = tapFailure("known flaky check", 79);
+    const s = suite(`printf '%s' '${tipOutput}'; exit 1`);
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
+      const base = git(t.repo, "rev-parse", "main");
+      setSuite(t, s.command);
+      const parsed = failureIdentitiesOf(tipOutput, "node-test-tap-v1", t.repo);
+      recordAcceptanceFailureIdentities(t.h.store, {
+        repoId: "repo", base, command: s.command, setupDigest: acceptanceSetupDigest([]), reporter: "node-test-tap-v1",
+        identities: parsed.identities, source: "group-acceptance", groupId: "prior", runId: "prior-run", at: 1, tests: 552, exit: "1",
+      });
+      await t.claim(); await t.claim();
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).acceptance !== undefined);
+      const record = group(t).acceptance;
+      // mutation: drop the cached tests/exit from the baseline lookup -> passed-relative, red
+      expect(record.result).toBe("failed");
+      expect(record.evidence?.shortfall).toEqual({ tests: 79, baselineTests: 552 });
+      expect(s.runs()).toHaveLength(2); // both are tip attempts; the cached baseline means no base run
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a stored base identity cannot excuse a different failing test identity at the tip", async () => {
+    const output = (name: string) => tapFailure(name);
+    const quote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
+    const knownOutput = output("known flaky check");
+    const newOutput = output("new regression");
+    const command = `if [ -f a ]; then printf '%s' ${quote(newOutput)}; else printf '%s' ${quote(knownOutput)}; fi; exit 1`;
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
+      const base = git(t.repo, "rev-parse", "main");
+      setSuite(t, command);
+      const known = failureIdentitiesOf(knownOutput, "node-test-tap-v1", t.repo);
+      expect(known.parseStatus).toBe("complete");
+      expect(known.identities.map((identity) => identity.testPath)).toEqual([["known flaky check"]]);
+      recordAcceptanceFailureIdentities(t.h.store, {
+        repoId: "repo", base, command, setupDigest: acceptanceSetupDigest([]), reporter: "node-test-tap-v1",
+        identities: known.identities, source: "group-acceptance", groupId: "prior", runId: "prior-run", at: 1,
+      });
+      await t.claim(); await t.claim();
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).acceptance !== undefined);
+      const record = group(t).acceptance;
+      expect(record.result).toBe("failed");
+      const comparison = record.identityComparisons[0];
+      expect(comparison).toMatchObject({ command, base, baselineSource: "stored", reason: "new-failure" });
+      expect(comparison.baseIdentities.map((identity: { file: string; testPath: string[] }) => [identity.file, identity.testPath])).toEqual([["tests/acceptance.test.js", ["known flaky check"]]]);
+      expect(comparison.tipIdentities.map((identity: { file: string; testPath: string[] }) => [identity.file, identity.testPath])).toEqual([["tests/acceptance.test.js", ["new regression"]]]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it.each(["command", "setup"] as const)("collects the exact base after a %s mismatch instead of reusing the old baseline", async (mismatch) => {
+    const dir = mkdtempSync(join(tmpdir(), "orca-acceptance-exact-key-"));
+    const log = join(dir, "runs"), output = tapFailure("known flaky check");
+    const command = `if [ -f a ]; then echo tip >> '${log}'; else echo base >> '${log}'; fi; printf '%s' '${output}'; exit 1`;
+    const setupCommands = mismatch === "setup" ? ["echo configured setup"] : [];
+    const context = setupCommands.length === 0 ? {} : { contextExtra: { setupCommands } };
+    const tasks = [{ taskId: "a", ...context }, { taskId: "b", ...context }];
+    const t = await driverHarness(tasks); try {
+      const base = git(t.repo, "rev-parse", "main");
+      setSuite(t, command);
+      const parsed = failureIdentitiesOf(output, "node-test-tap-v1", t.repo);
+      recordAcceptanceFailureIdentities(t.h.store, {
+        repoId: "repo", base, command: mismatch === "command" ? `${command} ` : command,
+        setupDigest: mismatch === "setup" ? acceptanceSetupDigest([]) : acceptanceSetupDigest(setupCommands), reporter: "node-test-tap-v1",
+        identities: parsed.identities, source: "group-acceptance", groupId: "prior", runId: "prior-run", at: 1,
+      });
+      await t.claim(); await t.claim();
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).status === "done");
+      const comparison = group(t).acceptance.identityComparisons[0];
+      expect(group(t).acceptance.result).toBe("passed-relative");
+      expect(comparison).toMatchObject({ command, base, baselineSource: "collected" });
+      expect(readFileSync(log, "utf8").trim().split("\n")).toEqual(["tip", "tip", "base"]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it.each([["new failure", "failed", "new regression"], ["known failure", "passed-relative", "known flaky check"]] as const)(
+    "a red full-suite attempt followed by green keeps a %s identity as %s",
+    async (_label, expectedResult, tipName) => {
+      const knownOutput = tapFailure("known flaky check");
+      const tipOutput = tapFailure(tipName);
+      const s = suite(`if [ "$n" -eq 1 ]; then printf '%s' '${tipOutput}'; exit 1; else true; fi`);
+      const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
+        const base = git(t.repo, "rev-parse", "main");
+        setSuite(t, s.command);
+        const known = failureIdentitiesOf(knownOutput, "node-test-tap-v1", t.repo);
+        recordAcceptanceFailureIdentities(t.h.store, {
+          repoId: "repo", base, command: s.command, setupDigest: acceptanceSetupDigest([]), reporter: "node-test-tap-v1",
+          identities: known.identities, source: "group-acceptance", groupId: "prior", runId: "prior-run", at: 1,
+        });
+        await t.claim(); await t.claim();
+        const driver = t.driver();
+        await untilDeadline(driver, () => group(t).acceptance !== undefined);
+        const record = group(t).acceptance;
+        expect(record.result).toBe(expectedResult);
+        expect(record.fullSuite).toMatchObject({ exits: ["1", "0"], flaky: true });
+        expect(record.identityComparisons[0]).toMatchObject({ baselineSource: "stored", tipIdentities: [{ testPath: [tipName] }], baseIdentities: [{ testPath: ["known flaky check"] }] });
+        expect(record.identityComparisons[0].reason).toBe(expectedResult === "failed" ? "new-failure" : undefined);
+        expect(s.runs()).toHaveLength(2);
+      } finally { await t.h.dispose(); }
+    },
+  );
+
+  it("red twice at the tip, green at the base: the acceptance failed (this group broke it)", async () => {
+    const red = tapFailure("tip-only failure");
+    const s = suiteAtBase(`if [ -f a ]; then printf '%s' '${red}'; exit 1; else true; fi`);
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
+      await t.claim(); await t.claim();
+      setSuite(t, s.command);
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).acceptance !== undefined);
+      const record = group(t).acceptance;
+      expect(record.result).toBe("failed");
+      expect(commandsOf(t)).toEqual([["true", "0"], [s.command, "1"], [s.command, "1"], [`baseline: ${s.command}`, "0"]]);
+      expect(record.fullSuite).toEqual({ command: s.command, suggestion: null, exits: ["1", "1"], flaky: false, tests: 1 });
       expect(record.fullSuite.baseline).toBeUndefined();
       expect(acceptanceProblem(record)).toBe(`group-acceptance-failed:${s.command}`);
       // The baseline was still measured, once green at the base (so no retry there).
@@ -174,7 +289,9 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
   });
 
   it("#387: a tip suite that ran far fewer tests than the base is failed, not passed relative, and the record says why", async () => {
-    const s = suiteAtBase(`if [ -f a ]; then echo '# tests 79'; echo '# fail 1'; else echo '# tests 552'; echo '# fail 1'; fi; exit 1`);
+    const tipOutput = tapFailure("same known failure", 79);
+    const baseOutput = tapFailure("same known failure", 552);
+    const s = suiteAtBase(`if [ -f a ]; then printf '%s' '${tipOutput}'; else printf '%s' '${baseOutput}'; fi; exit 1`);
     const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
       await t.claim(); await t.claim();
       setSuite(t, s.command);
@@ -194,7 +311,8 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
   });
 
   it("red twice at the tip and at the base: passed relative to the base, and the group is done (spec 2026-11-16)", async () => {
-    const s = suiteAtBase("false");
+    const red = tapFailure("known flaky test");
+    const s = suiteAtBase(`printf '%s' '${red}'; exit 1`);
     const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
       await t.claim(); await t.claim();
       setSuite(t, s.command);
@@ -203,11 +321,11 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
       await untilDeadline(driver, () => group(t).status === "done");
       const record = group(t).acceptance;
       expect(record.result).toBe("passed-relative");
-      expect(commandsOf(t)).toEqual([["true", "0"], [s.command, "1"], [s.command, "1"], [`baseline: ${s.command}`, "1"], [`baseline: ${s.command}`, "1"]]);
-      expect(record.fullSuite).toMatchObject({ command: s.command, exits: ["1", "1"], baseline: { tip: base, exits: ["1", "1"] } });
+      expect(commandsOf(t)).toEqual([["true", "0"], [s.command, "1"], [s.command, "1"], [`baseline: ${s.command}`, "1"]]);
+      expect(record.fullSuite).toMatchObject({ command: s.command, exits: ["1", "1"], baseline: { tip: base, exits: ["1"] } });
       expect(fullSuiteWarning(record)).toBe(`full-suite-pre-existing:${s.command}`);
       expect(acceptanceProblem(record)).toBeNull();
-      expect(s.runs()).toEqual(["tip", "tip", "base", "base"]);
+      expect(s.runs()).toEqual(["tip", "tip", "base"]);
     } finally { await t.h.dispose(); }
   });
 

@@ -156,8 +156,9 @@ export type GroupSummaryV1 = {
   /** Tester follow-up E §5 (#241): the group's acceptance on its final tip; `problem` is set when it failed. */
   acceptance?: GroupAcceptanceV1;
   /** Delivery tail spec D3: the acceptance on a local delivery's commit; `problem` is set when it failed. */
-  deliveredAcceptance?: { tip: string; commit: string; result: "passed" | "passed-relative" | "failed" | "not-needed" | "waived"; why?: "same-tree" | "already-in-target" | "before-record";
-    commands: CheckRunCommandV1[]; tail?: string; at: number; waived?: { by: string; note: string; at: number }; problem?: string };
+  deliveredAcceptance?: { tip: string; commit: string; result: "passed" | "passed-relative" | "failed" | "not-needed" | "waived" | "test-change-pending"; why?: "same-tree" | "already-in-target" | "before-record";
+    commands: CheckRunCommandV1[]; tail?: string; at: number; waived?: { by: string; note: string; at: number }; problem?: string;
+    identityComparisons?: AcceptanceIdentityComparisonV1[]; testChanges?: AcceptanceTestChangesV1 };
   /** Tester follow-up G spec §3.3: the requirement review record; `problem` is set when it did not pass. */
   requirementReview?: RequirementReviewV1;
   /** Tester follow-up G §6.2 (#269): the landing watch's last record; each regression is a problem. */
@@ -780,7 +781,7 @@ export type EvidenceManifestV1 = {
 export type RequirementReviewV1 = {
   /** #337: `noted` -- a folder or multi-directory group's review that did not pass; it does not hold the group. */
   state: "pending" | "reviewing" | "passed" | "fixing" | "not-passed" | "accepted" | "not-run" | "noted";
-  why?: "multi-repo" | "dir" | "unfunded" | "invalid" | "cannot-judge" | "rounds-exhausted" | "failed" | "check-conflict" | "not-fixable-by-work";
+  why?: "multi-repo" | "dir" | "unfunded" | "invalid" | "cannot-judge" | "rounds-exhausted" | "failed" | "check-conflict" | "not-fixable-by-work" | "test-change-only";
   rounds: Array<{ roundNo: number; tip: string; runId: string | null; at: number; result: "passed" | "not-met" | "cannot-judge" | "invalid" | "failed" | "unfunded";
     criteria: Array<{ id: string; verdict: "met" | "not-met" | "cannot-judge"; evidence: Array<{ path: string; line: number | null }>; missing: string | null;
       /** Tester #343: who can meet it; absent in a round recorded before. */
@@ -799,9 +800,22 @@ export type RequirementReviewV1 = {
   /** #337: `requirement-review-noted:<why>` for a noted review. */
   note?: string;
 };
+export type AcceptanceFailureIdentityV1 = { key: string; file: string; testPath: string[]; diagnosticHash: string };
+export type AcceptanceIdentityComparisonV1 = {
+  command: string; base: string | null; setupDigest: string; reporter: "node-test-tap-v1"; baselineSource: "stored" | "collected" | "unavailable";
+  tipAttempts: Array<{ exit: string; failureIdentityStatus?: "complete" | "unsupported" | "ambiguous"; failureIdentities?: AcceptanceFailureIdentityV1[] }>;
+  baseIdentities: AcceptanceFailureIdentityV1[]; tipIdentities: AcceptanceFailureIdentityV1[];
+  reason?: "new-failure" | "non-comparable" | "baseline-unavailable" | "base-green";
+};
+export type AcceptanceTestChangesV1 = {
+  base?: string; paths: string[]; weakeningSignals: string[]; digest: string;
+  pendingResult?: "passed" | "failed" | "passed-relative" | "not-needed" | "not-run" | "waived";
+  disposition?: { tip: string; digest: string; by: string; note: string; at: number };
+};
 export type GroupAcceptanceV1 = {
-  tip: string | null; result: "passed" | "passed-relative" | "failed" | "not-needed" | "not-run" | "waived"; why?: "single-landing" | "multi-repo" | "dir" | "work-branch-missing"; landings?: number;
+  tip: string | null; result: "passed" | "passed-relative" | "failed" | "not-needed" | "not-run" | "waived" | "test-change-pending"; why?: "single-landing" | "multi-repo" | "dir" | "work-branch-missing"; landings?: number;
   commands: CheckRunCommandV1[]; tail?: string; at: number; waived?: { by: string; note: string; at: number }; problem?: string;
+  identityComparisons?: AcceptanceIdentityComparisonV1[]; testChanges?: AcceptanceTestChangesV1;
   /** Full suite spec 2026-11-12 §4-§5 (#279): the full-suite command and its runs' exits; `warning` never blocks. */
   fullSuite?: { command: string | null; suggestion: string | null; exits: string[]; flaky: boolean; baseline?: { tip: string; exits: string[]; tail?: string } }; warning?: string;
   /** Tester follow-up K, item 2: true only on a `passed` acceptance that ran no full suite (none adopted). */
@@ -985,8 +999,8 @@ export type CommandSuccessV1 = {
   actorId: string;
   verb: "import-plan" | "proposal-edit" | "estimate" | "confirm" | "start" | "pause-dispatch" | "handoff-stop" | "resume-dispatch" | "resume-from-handoff" | "set-limit" | "continue-task" | "add-live-note" | "usage-pause-decide" | "recovery-retry" | "retry-task" | "verify-saved-result" | "settle-unknown-usage" | "settle-approximate-usage" | "close-run" | "accept-attempt" | "abandon-run" | "reopen-task" | "accept-no-change" | "shutdown" | "set-workspace-mode" | "set-agent-preferences" | "apply-agent-update" | "proposal-set-agent" | "set-task-labels" | "set-task-loop"
     | "requirement-open" | "requirement-answer" | "requirement-consensus" | "requirement-draft-feedback" | "requirement-draft-accept" | "requirement-draft-edit" | "requirement-clarify-more" | "requirement-classify" | "requirement-revise" | "requirement-set-agent" | "requirement-resplit"
-    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "integrate-now" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "answer-preexisting-failure" | "review-accept" | "review-rerun" | "review-fix"
-    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "integrate-now" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "allow-request" | "revoke-allowance"
+    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "integrate-now" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "accept-test-changes" | "answer-preexisting-failure" | "review-accept" | "review-rerun" | "review-fix"
+    | "set-spend-cap" | "clear-spend-cap" | "set-usage-calendar" | "set-integration-scheme" | "set-criteria-review" | "set-group-integration" | "retry-integration" | "integrate-now" | "resolve-integration-conflict" | "recheck-acceptance" | "waive-acceptance" | "accept-test-changes" | "allow-request" | "revoke-allowance"
     | "archive-group" | "unarchive-group" | "close-group" | "unclose-group" | "approve-pending-decision" | "reject-pending-decision" | "ratify-flagged-decision" | "set-orchestration-settings" | "add-group-dependency" | "remove-group-dependency" | "correction-debug-open" | "system-debug-open"
     | "correction-record" | "correction-close" | "correction-withdraw"
     | "set-check-settings" | "set-scheduled-check" | "set-check-locks" | "run-check-now" | "resume-check"
@@ -1055,6 +1069,7 @@ export type CommandSuccessV1 = {
     | { kind: "integration-resolution-started"; groupId: string }
     | { kind: "acceptance-recheck-requested"; groupId: string; tip: string }
     | { kind: "acceptance-waived"; groupId: string; tip: string }
+    | { kind: "test-changes-accepted"; groupId: string; tip: string; digest: string }
     | { kind: "preexisting-failure-answered"; groupId: string; command: string; answer: PreexistingFailureAnswerV1 }
     | { kind: "review-accepted"; groupId: string }
     | { kind: "review-rerun-requested"; groupId: string }

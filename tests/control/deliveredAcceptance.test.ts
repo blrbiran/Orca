@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readGroupActivity } from "../../src/control/activity.js";
@@ -21,14 +21,22 @@ type Harness = Awaited<ReturnType<typeof driverHarness>>;
 const body = (t: Harness) => JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
 
 /** Two tasks land on orca/g; then `onMain` (if any) is committed to main by the person; the driver runs until `until`. */
-async function deliver(onMain: string | null, until: (t: Harness) => boolean) {
-  const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { requiredChecks: [CHECK], integration: LOCAL });
+async function deliver(onMain: string | null, until: (t: Harness) => boolean, options: { check?: string; existingTest?: boolean } = {}) {
+  const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }], { requiredChecks: [options.check ?? CHECK], integration: LOCAL });
   try {
+    if (options.existingTest === true) {
+      const path = join(t.repo, "tests", "existing.test.ts");
+      mkdirSync(join(t.repo, "tests"), { recursive: true });
+      writeFileSync(path, "it('works', () => { expect(1).toBe(1); });\n");
+      git(t.repo, "add", "tests/existing.test.ts"); git(t.repo, "commit", "-qm", "test base");
+    }
     await t.claim(); await t.claim();
     const driver = t.driver();
     for (let i = 0; i < 400 && JSON.parse(String(t.h.store.db.prepare("SELECT count(*) AS n FROM work_items WHERE group_id='g' AND json_extract(body,'$.status')='done'").get()!.n)) < 2; i += 1) await driver.round();
     if (onMain !== null) {
-      writeFileSync(join(t.repo, onMain), "the person's\n");
+      writeFileSync(join(t.repo, onMain), onMain === "tests/existing.test.ts"
+        ? "it('works', () => { expect(1).toBe(1); });\n// the delivered test changed\n"
+        : "the person's\n");
       git(t.repo, "add", onMain);
       git(t.repo, "commit", "-qm", `person: ${onMain}`);
     }
@@ -84,6 +92,38 @@ describe("acceptance on the delivered commit (delivery tail D3)", { timeout: 240
       for (let i = 0; i < 100 && body(t).status !== "done"; i += 1) await driver.round();
       await driver.stop();
       expect(body(t).status).toBe("done");
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a delivery's new failing identity is compared at the group's base instead of inheriting the tip pass", async () => {
+    const failure = [
+      "TAP version 13", "# Subtest: tests/delivery.test.ts", "    not ok 1 - new delivery failure", "      ---",
+      "      error: AssertionError", "      actual: 1", "      expected: 2", "      operator: strictEqual", "      ...",
+      "    1..1", "    # tests 1", "    # pass 0", "    # fail 1", "not ok 1 - tests/delivery.test.ts", "  ---",
+      "  error: 1 subtest failed", "  failureType: subtestsFailed", "  ...", "# tests 1", "# pass 0", "# fail 1", "",
+    ].join("\n");
+    const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+    const check = `if [ -f delivery-failure ]; then printf '%s' ${quote(failure)}; exit 1; else true; fi`;
+    const t = await deliver("delivery-failure", (x) => body(x).deliveredAcceptance?.result === "failed", { check });
+    try {
+      expect(body(t).acceptance.result).toBe("passed");
+      expect(body(t).deliveredAcceptance).toMatchObject({ result: "failed", identityComparisons: [{ reason: "new-failure", baselineSource: "collected" }] });
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a changed existing test on the delivered commit requires its own disposition", async () => {
+    const t = await deliver("tests/existing.test.ts", (x) => body(x).deliveredAcceptance?.result === "test-change-pending", { existingTest: true });
+    try {
+      expect(body(t).acceptance.result).toBe("passed");
+      expect(body(t).deliveredAcceptance).toMatchObject({ result: "test-change-pending", testChanges: { paths: ["tests/existing.test.ts"] } });
+      expect(deliveredAcceptanceSatisfied(body(t))).toBe(false);
+      expect(body(t).status).not.toBe("done");
+      const pending = body(t).deliveredAcceptance as { commit: string; testChanges: { digest: string } };
+      const command = t.h.command("accept-test-changes", { note: "the delivered test expansion is intentional", tip: pending.commit, digest: pending.testChanges.digest });
+      const answer = await withCommandContext(command.commandId, { client: "web", principal: "user:owner" }, () => t.service.acceptTestChanges(command));
+      expect(answer).toMatchObject({ result: { kind: "test-changes-accepted" } });
+      expect(body(t).deliveredAcceptance).toMatchObject({ result: "passed", testChanges: { disposition: { by: "user:owner", note: "the delivered test expansion is intentional" } } });
+      expect(deliveredAcceptanceSatisfied(body(t))).toBe(true);
     } finally { await t.h.dispose(); }
   });
 

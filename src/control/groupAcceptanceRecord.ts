@@ -4,9 +4,43 @@
  * it without pulling in the acceptance runner (groupAcceptance.ts).
  */
 import { fullSuiteCommand } from "./fullSuite.js";
+import type { AcceptanceFailureIdentity } from "./acceptanceFailureIdentity.js";
 import type { ControlStore } from "./store.js";
 
-export type GroupAcceptanceResult = "passed" | "failed" | "passed-relative" | "not-needed" | "not-run" | "waived";
+export type GroupAcceptanceResult = "passed" | "failed" | "passed-relative" | "not-needed" | "not-run" | "waived" | "test-change-pending";
+export interface AcceptanceTestChangeDisposition {
+  tip: string;
+  digest: string;
+  by: string;
+  note: string;
+  at: number;
+}
+export interface AcceptanceTestChanges {
+  base?: string;
+  paths: string[];
+  weakeningSignals: string[];
+  digest: string;
+  /** The test-change scan failed: acceptance fails closed rather than treating "could not read" as "no change". */
+  error?: string;
+  pendingResult?: Exclude<GroupAcceptanceResult, "test-change-pending">;
+  disposition?: AcceptanceTestChangeDisposition;
+}
+export interface AcceptanceIdentityAttempt {
+  exit: string;
+  failureIdentityStatus?: "complete" | "unsupported" | "ambiguous";
+  failureIdentities?: AcceptanceFailureIdentity[];
+}
+export interface AcceptanceIdentityComparison {
+  command: string;
+  base: string | null;
+  setupDigest: string;
+  reporter: "node-test-tap-v1";
+  baselineSource: "stored" | "collected" | "unavailable";
+  tipAttempts: AcceptanceIdentityAttempt[];
+  baseIdentities: AcceptanceFailureIdentity[];
+  tipIdentities: AcceptanceFailureIdentity[];
+  reason?: "new-failure" | "non-comparable" | "baseline-unavailable" | "base-green";
+}
 export interface GroupAcceptance {
   /** The `orca/<g>` tip the record is for; null for not-run (no single tree). */
   tip: string | null;
@@ -28,6 +62,10 @@ export interface GroupAcceptance {
    * (#383). Absent on records written before it, and on not-run.
    */
   fullSuite?: FullSuiteRecord;
+  /** Parsed test identities behind every red acceptance command, including exact-key base evidence. */
+  identityComparisons?: AcceptanceIdentityComparison[];
+  /** Existing-test changes are separate from check execution; `pendingResult` preserves the underlying command outcome. */
+  testChanges?: AcceptanceTestChanges;
   /**
    * Tester #387 (2026-11-20): where the suite ran and what the tree held there, so a partial checkout (the policy group's
    * 79-test green where the tip had 552) is decidable after the fact instead of inferred from a duration. `shortfall`
@@ -134,6 +172,7 @@ export function fullSuiteWarning(record: GroupAcceptance | null): string | null 
   // read as not set. A waived or not-run record without the field never had a suite to run, so it says nothing.
   if (suite === undefined) return record.result === "passed" || record.result === "not-needed" ? "full-suite-not-set" : null;
   if (suite.command === null) return "full-suite-not-set";
+  if (record.identityComparisons?.some((comparison) => comparison.command === suite.command && comparison.baseIdentities.length > 0)) return `full-suite-pre-existing:${suite.command}`;
   if (suite.baseline !== undefined) return `full-suite-pre-existing:${suite.command}`;
   // Tester #383 (2026-11-20): task runs had already reported this suite red; a green here is one green, not a stable suite.
   if ((suite.reported ?? 0) > 0) return `full-suite-reported-flaky:${suite.command}`;
@@ -142,11 +181,13 @@ export function fullSuiteWarning(record: GroupAcceptance | null): string | null 
 
 /** The command a failed acceptance stopped at (the last one it ran). */
 export function failedCommandOf(record: GroupAcceptance): string {
-  return record.commands.at(-1)?.command ?? "?";
+  const comparison = record.identityComparisons?.find((item) => item.reason !== undefined) ?? record.identityComparisons?.[0];
+  return comparison?.command ?? record.commands.slice().reverse().find((command) => !command.command.startsWith("baseline:"))?.command ?? "?";
 }
 
 /** The problem a failed acceptance shows (Board, Problems, `group show`); null otherwise. */
 export function acceptanceProblem(record: GroupAcceptance | null): string | null {
+  if (record?.result === "test-change-pending") return "test-change-pending";
   return record?.result === "failed" ? `group-acceptance-failed:${failedCommandOf(record)}` : null;
 }
 
@@ -158,10 +199,13 @@ export function acceptanceProblem(record: GroupAcceptance | null): string | null
  */
 export interface DeliveredAcceptance {
   tip: string; commit: string;
-  result: "passed" | "passed-relative" | "failed" | "not-needed" | "waived";
+  result: "passed" | "passed-relative" | "failed" | "not-needed" | "waived" | "test-change-pending";
   why?: "same-tree" | "already-in-target" | "before-record";
   commands: Array<{ command: string; exit: string; ms: number }>;
-  tail?: string; at: number;
+  tail?: string;
+  identityComparisons?: AcceptanceIdentityComparison[];
+  testChanges?: AcceptanceTestChanges;
+  at: number;
   waived?: { by: string; note: string; at: number };
 }
 
@@ -209,7 +253,9 @@ export function deliveredAcceptanceSatisfied(body: unknown): boolean {
 /** The problem a failed delivered acceptance shows (Overview, `group show`); null otherwise. */
 export function deliveredAcceptanceProblem(body: unknown): string | null {
   const record = deliveredAcceptanceOf(body), target = deliveredAcceptanceTarget(body);
-  if (record === null || target === null || record.result !== "failed" || record.tip !== target.tip || record.commit !== target.commit) return null;
+  if (record === null || target === null || record.tip !== target.tip || record.commit !== target.commit) return null;
+  if (record.result === "test-change-pending") return "test-change-pending";
+  if (record.result !== "failed") return null;
   return `delivered-acceptance-failed:${record.commands.at(-1)?.command ?? "?"}`;
 }
 

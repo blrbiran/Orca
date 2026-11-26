@@ -218,7 +218,7 @@ stdout is exactly one JSON line:
 
 ## 8. Route table
 
-`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit`, `repositories/<repoId>/integration`, the `repositories/<repoId>/checks/…` and `operator/checks/…` rows, `repositories/<repoId>/criteria-review`, `groups/<groupId>/integration`, `groups/<groupId>/integration/retry`, `groups/<groupId>/integration/resolve`, `groups/<groupId>/acceptance/waive`, `groups/<groupId>/preexisting-failure`, `groups/<groupId>/decisions/approve`, `groups/<groupId>/decisions/reject`, `groups/<groupId>/decisions/ratify`, `groups/<groupId>/dependencies/add`, `groups/<groupId>/dependencies/remove`, the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows and `operator/set-orchestration-settings` are listed for completeness and are owner-only (section 6).
+`<param>` segments are filled with real ids. Payloads are minimal valid examples; ids, hashes and versions are placeholders (take real values from `get groups/<id>`; each `aaaa…` hash is 64 lowercase hex). `set-limit`, `repositories/<repoId>/integration`, the `repositories/<repoId>/checks/…` and `operator/checks/…` rows, `repositories/<repoId>/criteria-review`, `groups/<groupId>/integration`, `groups/<groupId>/integration/retry`, `groups/<groupId>/integration/resolve`, `groups/<groupId>/acceptance/waive`, `groups/<groupId>/acceptance/test-changes`, `groups/<groupId>/preexisting-failure`, `groups/<groupId>/decisions/approve`, `groups/<groupId>/decisions/reject`, `groups/<groupId>/decisions/ratify`, `groups/<groupId>/dependencies/add`, `groups/<groupId>/dependencies/remove`, the three `operator/set-spend-cap`, `operator/clear-spend-cap`, `operator/set-usage-calendar` rows and `operator/set-orchestration-settings` are listed for completeness and are owner-only (section 6).
 
 | Route | Verb | Payload example |
 | --- | --- | --- |
@@ -262,6 +262,7 @@ stdout is exactly one JSON line:
 | `POST groups/<groupId>/integration/now` | integrate-now | `{}` |
 | `POST groups/<groupId>/integration/resolve` | resolve-integration-conflict | `{}` |
 | `POST groups/<groupId>/acceptance/recheck` | recheck-acceptance | `{}` |
+| `POST groups/<groupId>/acceptance/test-changes` | accept-test-changes | `{"note":"reviewed the changed test paths","tip":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}` |
 | `POST groups/<groupId>/review/accept` | review-accept | `{"note":"AC2 is out of scope after all"}` |
 | `POST groups/<groupId>/review/rerun` | review-rerun | `{"note":"look at docs/usage.md too"}` |
 | `POST groups/<groupId>/review/fix` | review-fix | `{"goal":"add the usage section the review asked for","paths":["README.md"]}` |

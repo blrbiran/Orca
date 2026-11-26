@@ -9,7 +9,7 @@ import { withNeedsYou } from "../../src/panel/controlOverview.js";
 import { groupSummarySchema } from "../../src/control/webProtocol.js";
 import { readControlRecovery, readControlSummary, readGroupSummary } from "../../src/panel/controlViews.js";
 import { cli, fakePanel, useFakePanels } from "../commands/fixtures/fakePanel.js";
-import { driverHarness } from "../control/fixtures/driverHarness.js";
+import { driverHarness, git } from "../control/fixtures/driverHarness.js";
 
 useFakePanels();
 
@@ -135,6 +135,27 @@ describe("a not-passed requirement review is a group problem (#359)", { timeout:
       // A panel before #359 sends needsYou and no groupProblem: the needs-you rule alone makes it a warning.
       // mutation: drop `needsYou` from workHealthCheck's count -> red here (level ok)
       expect(await status({ ...read, groups: groups.map(({ groupProblem: _, ...group }) => group) })).toMatchObject({ level: "warn", subject: "work" });
+    } finally { await t.h.dispose(); }
+  });
+
+  it("shows changed test paths and the person-only acceptance disposition", async () => {
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
+      const groupBody = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
+      const tip = git(t.repo, "rev-parse", "main");
+      groupBody.acceptance = { tip, result: "test-change-pending", commands: [], at: 1,
+        testChanges: { base: tip, paths: ["tests/a.test.ts"], weakeningSignals: [], digest: "d".repeat(64), pendingResult: "passed" } };
+      t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(groupBody));
+      const summary = readGroupSummary(t.h.store, "g");
+      expect(summary.acceptance).toMatchObject({ problem: "test-change-pending", testChanges: { paths: ["tests/a.test.ts"] } });
+      expect(summary.groupProblem).toEqual({ code: "test-change-pending", why: "test-change-pending", next: ["orca group accept-test-changes g --note '<why>' --tip <tip> --digest <digest>"] });
+      groupBody.requirementReview = { state: "not-passed", why: "test-change-only", autoFixRounds: 0,
+        rounds: [{ roundNo: 1, tip, runId: null, at: 1, result: "not-met", summary: "only the changed test", criteria: [
+          { id: "AC1", verdict: "not-met", evidence: [{ path: "tests/a.test.ts", line: 1 }], missing: "the test change is not accepted", fixableBy: "work" },
+        ] }] };
+      t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify(groupBody));
+      expect(readGroupSummary(t.h.store, "g").groupProblem).toEqual({ code: "test-change-pending", why: "test-change-review", next: [
+        "orca group accept-test-changes g --note '<why>' --tip <tip> --digest <digest>", "orca group review-rerun g --note '<after restoring the changed test paths>'", "orca group review-accept g --note '<why accept as is>'",
+      ] });
     } finally { await t.h.dispose(); }
   });
 });

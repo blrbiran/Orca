@@ -107,6 +107,28 @@ describe("L3: a failed check is run once at the group's base", { timeout: 180_00
     } finally { await t.h.dispose(); }
   });
 
+  it("stores parsed red test identities under the exact base command and setup key", async () => {
+    const output = [
+      "TAP version 13", "# Subtest: tests/base-check.test.mjs", "    # Subtest: base failure",
+      "    not ok 1 - is recognized", "      ---", "      error: AssertionError", "      actual: 1", "      expected: 2",
+      "      operator: strictEqual", "      ...", "not ok 1 - tests/base-check.test.mjs", "  ---",
+      "  error: 1 subtest failed", "  failureType: subtestsFailed", "  ...", "# tests 1", "# pass 0", "# fail 1",
+    ].join("\n");
+    const check = `node -e 'process.stdout.write(${JSON.stringify(output)});process.exit(1)'`;
+    const w = await world(check); const { t } = w; try {
+      const first = await w.blocked(await t.claim());
+      await w.settle(() => w.row()?.result === "red");
+      const rows = t.h.store.db.prepare("SELECT * FROM acceptance_failure_baselines").all();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        repo_id: "repo", base: w.base(), command: check, setup_digest: expect.stringMatching(/^[a-f0-9]{64}$/),
+        reporter: "node-test-tap-v1", identity: expect.stringMatching(/^[a-f0-9]{64}$/), source: "task-base-check",
+        group_id: "g", run_id: first,
+      });
+      expect(Number(rows[0]!.first_seen_at)).toBe(Number(rows[0]!.last_seen_at));
+    } finally { await t.h.dispose(); }
+  });
+
   it("green at the base is recorded and adds nothing to the next attempt", async () => {
     const counter = join(tempDir(), "runs");
     const w = await world(counted(counter, "green")); const { t } = w; try {
@@ -322,8 +344,9 @@ describe("L3: a failed check is run once at the group's base", { timeout: 180_00
   });
 });
 
-describe("schema 24 -> 25: the base check table", () => {
-  it("a v24 store opens at 25 with an empty base_check_results table that takes only the four results", async () => {
+// Ruling: the user authorized rewriting necessary criteria in this session (2026-11-26); opening a v24 store now upgrades through schema 26.
+describe("schema 24 -> 26: the base check table", () => {
+  it("a v24 store opens at the current schema with an empty base_check_results table that takes only the four results", async () => {
     const root = mkdtempSync(join(tmpdir(), "s25-")), dir = join(root, "s");
     try {
       (await openControlStore({ stateDir: dir, now: () => 1000 })).close();
@@ -333,8 +356,8 @@ describe("schema 24 -> 25: the base check table", () => {
       raw.close();
       const store = await openControlStore({ stateDir: dir, now: () => 2000 });
       try {
-        expect(schemaVersion).toBe("25");
-        expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("25");
+        expect(schemaVersion).toBe("26");
+        expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("26");
         expect(store.db.prepare("SELECT COUNT(*) AS n FROM base_check_results").get()).toMatchObject({ n: 0 });
         const insert = (result: string) => () => store.db.prepare("INSERT INTO base_check_results(repo_id,base,command,result,group_id,task_id,run_id,requested_at) VALUES ('r',?,'c',?,'g','a','run-1',1)").run(result, result);
         for (const result of ["pending", "red", "green", "unknown"]) expect(insert(result)).not.toThrow();

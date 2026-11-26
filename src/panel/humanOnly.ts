@@ -83,6 +83,7 @@ export const VERB_ACCESS: Readonly<Record<CommandVerbV1, "any" | "human-only" | 
   // accepting a group whose final tree failed its checks is a person's act, named with why.
   "recheck-acceptance": "any",
   "waive-acceptance": "human-only",
+  "accept-test-changes": "human-only",
   // Pre-existing failures spec L2 (#341): how a check already red before the work counts is the person's answer, as a waiver.
   "answer-preexisting-failure": "human-only",
   // Tester follow-up G spec §3.5, §7: a requirement review's exits are a person's and an orchestrating agent's alike.
@@ -282,6 +283,7 @@ export const SOCKET_TIER: Readonly<Record<string, SocketTier | ((payload: Payloa
   "abandon-run": "token",
   // Tester follow-up E §5 (#241): an owner on the Web, or the socket agent with an owner's person token.
   "waive-acceptance": "token",
+  "accept-test-changes": "token",
   // Pre-existing failures spec L2 (#341): an owner on the Web, or the socket agent with an owner's person token.
   "answer-preexisting-failure": "token",
   // Tester follow-up E §8: the single call's settlement charges its remaining grant -- the open form of settle-unknown-usage.

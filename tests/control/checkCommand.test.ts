@@ -47,7 +47,7 @@ describe("firstFailingSetup", () => {
   it("runs in order and stops at the first failure, answering it whole", async () => {
     const dir = await workdir();
     expect(await firstFailingSetup(dir, ["touch one", "echo broke; exit 3", "touch three"], 10_000, { runId: "run-c" }))
-      .toEqual({ command: "echo broke; exit 3", exit: "3", tail: "broke" });
+      .toEqual({ command: "echo broke; exit 3", exit: "3", tail: "broke", failureIdentities: [], failureIdentityStatus: "unsupported" });
     expect(existsSync(join(dir, "one"))).toBe(true);
     expect(existsSync(join(dir, "three"))).toBe(false);
     expect(await firstFailingSetup(dir, [], 10_000, { runId: "run-c" })).toBeNull();

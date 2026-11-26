@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { acceptanceCommands } from "../../src/control/groupAcceptance.js";
 import { frozenWorkAgent } from "../../src/control/agentFreeze.js";
@@ -16,10 +18,56 @@ import { autoFixTokenCeiling, classifyReviewOutput, fixTaskContract, fixTaskPath
  * rounds: a third not-met stops the group in Problems.
  */
 const fixFiles = (id: string): Record<string, string | null> => (id.startsWith("review-fix-") ? { a: `fixed a by ${id}\n` } : { [id]: `${id}\n` });
+const KNOWN_BASE_FAILURE = [
+  "TAP version 13", "# Subtest: tests/existing.test.ts", "    not ok 1 - known pre-existing test failure", "      ---",
+  "      error: AssertionError", "      actual: 1", "      expected: 2", "      operator: strictEqual", "      ...",
+  "    1..1", "    # tests 1", "    # pass 0", "    # fail 1", "not ok 1 - tests/existing.test.ts", "  ---",
+  "  error: 1 subtest failed", "  failureType: subtestsFailed", "  ...", "# tests 1", "# pass 0", "# fail 1", "",
+].join("\n");
+const knownBaseFailureCheck = `printf '%s' '${KNOWN_BASE_FAILURE}'; exit 1`;
 
 describe("a not-met review opens a fix task in the same group (tester follow-up G §3.4)", () => {
+  it("a not-met review whose only evidence is an edited test offers disposition without another review-fix", async () => {
+    const before = "it('works', () => { expect(1).toBe(1); });\n";
+    const after = `${before}// changed by the task\n`;
+    const w = await reviewWorld({ tasks: [
+      { taskId: "a", targetPaths: ["a", "tests/**"] }, { taskId: "b", targetPaths: ["b", "tests/**"] },
+    ], harness: { requiredChecks: ["true"], files: (taskId) => ({ [taskId]: `${taskId}\n`, "tests/a.test.ts": after }) },
+    criteria: [{ id: "TEST", text: "the test preserves the original behavior" }],
+    answer: () => ({ outcome: "complete", output: { criteria: [{ id: "TEST", verdict: "not-met", evidence: [{ path: "tests/a.test.ts", line: 1 }], missing: "the test change is not accepted", fixableBy: "work" }], summary: "test change only" } }) });
+    try {
+      mkdirSync(join(w.t.repo, "tests"), { recursive: true });
+      writeFileSync(join(w.t.repo, "tests", "a.test.ts"), before);
+      git(w.t.repo, "add", "tests/a.test.ts"); git(w.t.repo, "commit", "-qm", "test base");
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "not-passed", 120);
+      expect(w.review()).toMatchObject({ why: "test-change-only", autoFixRounds: 0 });
+      expect(w.t.h.store.db.prepare("SELECT id FROM work_items WHERE group_id='g' AND id LIKE 'review-fix-%'").all()).toEqual([]);
+      const acceptance = JSON.parse(String(w.t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body)).acceptance;
+      expect(acceptance).toMatchObject({ result: "test-change-pending", testChanges: { paths: ["tests/a.test.ts"] } });
+    } finally { await w.t.h.dispose(); }
+  }, 180_000);
+
+  it("an unrelated not-met criterion keeps the existing automatic review-fix action", async () => {
+    const before = "it('works', () => { expect(1).toBe(1); });\n";
+    const after = `${before}// changed by the task\n`;
+    const w = await reviewWorld({ tasks: [
+      { taskId: "a", targetPaths: ["a", "tests/**"] }, { taskId: "b", targetPaths: ["b", "tests/**"] },
+    ], harness: { requiredChecks: ["true"], files: (taskId) => ({ [taskId]: `${taskId}\n`, "tests/a.test.ts": after }) },
+    criteria: [{ id: "CODE", text: "a contains the required code" }],
+    answer: () => ({ outcome: "complete", output: { criteria: [{ id: "CODE", verdict: "not-met", evidence: [{ path: "a", line: 1 }], missing: "the code is incomplete", fixableBy: "work" }], summary: "code needs work" } }) });
+    try {
+      mkdirSync(join(w.t.repo, "tests"), { recursive: true });
+      writeFileSync(join(w.t.repo, "tests", "a.test.ts"), before);
+      git(w.t.repo, "add", "tests/a.test.ts"); git(w.t.repo, "commit", "-qm", "test base");
+      await w.runAll();
+      await w.t.until(w.driver, () => w.review()?.state === "fixing", 120);
+      expect(w.t.h.store.db.prepare("SELECT id FROM work_items WHERE group_id='g' AND id='review-fix-1'").get()).toBeDefined();
+    } finally { await w.t.h.dispose(); }
+  }, 180_000);
+
   it("stops before an automatic fix when the reviewer reports a conflict with a person's no-repair instruction (#322)", async () => {
-    const command = "test ! -f base.txt";
+    const command = knownBaseFailureCheck;
     const w = await reviewWorld({ answer: () => ({ outcome: "complete", output: {
       ...verdicts({ AC1: "not-met", AC2: "met" }),
       checkConflict: { criterionId: "AC1", requiredCheck: command,
@@ -35,7 +83,7 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
         checks: { ...settings.checks, integrationCheck: { command } } });
       await w.runAll();
       await w.t.until(w.driver, () => w.review()?.state === "fixing" || w.review()?.state === "not-passed", 120);
-      expect(group().acceptance).toMatchObject({ result: "passed-relative", fullSuite: { command, baseline: { exits: ["1", "1"] } } });
+      expect(group().acceptance).toMatchObject({ result: "passed-relative", fullSuite: { command, baseline: { exits: ["1"] } } });
       expect(w.calls[0]?.prompt).toContain("do not repair a pre-existing failing test");
       expect(w.calls[0]?.prompt).toContain("failed at the group's base");
       expect(w.calls[0]?.prompt).toContain("Tip failure:");
@@ -51,7 +99,7 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
   }, 300000);
 
   it("records a plan-level not-met as left to a person even when another criterion is a check conflict (#502)", async () => {
-    const command = "test ! -f base.txt";
+    const command = knownBaseFailureCheck;
     const w = await reviewWorld({ answer: () => ({ outcome: "complete", output: {
       ...verdicts({ AC1: "not-met", AC2: "not-met" }, { AC1: "plan" }),
       checkConflict: { criterionId: "AC2", requiredCheck: command,
@@ -73,7 +121,7 @@ describe("a not-met review opens a fix task in the same group (tester follow-up 
   }, 300000);
 
   it("binds a reported check conflict to the acceptance command even when settings change during review (#322)", async () => {
-    const command = "test ! -f base.txt";
+    const command = knownBaseFailureCheck;
     let w!: Awaited<ReturnType<typeof reviewWorld>>;
     w = await reviewWorld({ answer: () => {
       const settings = readRepositorySettingsBody(w.t.h.store, "repo")!;

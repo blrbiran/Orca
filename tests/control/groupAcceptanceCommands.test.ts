@@ -5,12 +5,14 @@
  * done. Both refuse a record that has not failed. The record is written straight onto the group body (as the pass writes
  * it); groupAcceptance.test.ts drives the pass itself.
  */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readGroupActivity } from "../../src/control/activity.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
 import { acceptanceSatisfied } from "../../src/control/groupAcceptanceRecord.js";
 import { readGroupSummary } from "../../src/panel/controlViews.js";
-import { driverHarness } from "./fixtures/driverHarness.js";
+import { driverHarness, git } from "./fixtures/driverHarness.js";
 
 type Harness = Awaited<ReturnType<typeof driverHarness>>;
 const TIP = "c".repeat(40);
@@ -23,7 +25,85 @@ function setAcceptance(t: Harness, acceptance: unknown): void {
 const rows = (t: Harness) => readGroupActivity(t.h.store, "g", 200).filter((entry) => entry.kind === "group-acceptance");
 const asOwner = <T>(commandId: string, action: () => T): T => withCommandContext(commandId, { client: "web", principal: "user:owner" }, action);
 
+async function pendingTestChange() {
+  const before = "it('works', () => { expect(1).toBe(1); });\n";
+  const after = `${before}// changed in the accepted run\n`;
+  const t = await driverHarness([{ taskId: "a", targetPaths: ["tests/**", "a"] }], {
+    requiredChecks: ["true"], files: () => ({ a: "a\n", "tests/existing.test.ts": after }),
+  });
+  mkdirSync(join(t.repo, "tests"), { recursive: true });
+  writeFileSync(join(t.repo, "tests", "existing.test.ts"), before);
+  git(t.repo, "add", "tests/existing.test.ts"); git(t.repo, "commit", "-qm", "test baseline");
+  await t.claim();
+  const driver = t.driver();
+  await t.until(driver, () => (body(t).acceptance as { result?: string } | undefined)?.result === "test-change-pending", 120);
+  return { t, driver };
+}
+
 describe("recheck and waive a failed group acceptance (tester follow-up E §5)", () => {
+  it("a person disposition records the checked tip and paths digest while leaving the underlying result intact", async () => {
+    const { t, driver } = await pendingTestChange(); try {
+      const pending = body(t).acceptance as { tip: string; testChanges: { digest: string } };
+      const command = t.h.command("accept-test-changes", { note: "reviewed the changed test", tip: pending.tip, digest: pending.testChanges.digest });
+      const answer = await asOwner(command.commandId, () => t.service.acceptTestChanges(command));
+      expect(answer).toMatchObject({ result: { kind: "test-changes-accepted", groupId: "g" } });
+      expect(body(t).acceptance).toMatchObject({ result: "not-needed", testChanges: {
+        paths: ["tests/existing.test.ts"], disposition: { by: "user:owner", note: "reviewed the changed test" },
+      } });
+      expect(acceptanceSatisfied(t.h.store, "g", body(t))).toBe(true);
+      await t.until(driver, () => body(t).status === "done", 120);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("an agent cannot disposition test changes, and a command waiver cannot clear the test-change gate", async () => {
+    const { t } = await pendingTestChange(); try {
+      const acceptance = body(t).acceptance;
+      const pending = body(t).acceptance as { tip: string; testChanges: { digest: string } };
+      const command = t.h.command("accept-test-changes", { note: "agent attempt", tip: pending.tip, digest: pending.testChanges.digest });
+      const agent = await withCommandContext(command.commandId, { client: "cli:claude", principal: "agent:cli:claude" }, () => t.service.acceptTestChanges(command));
+      expect(agent).toMatchObject({ error: { code: "group-acceptance-person-required" } });
+      const waiver = t.h.command("waive-acceptance", { note: "known flake" });
+      expect(asOwner(waiver.commandId, () => t.service.waiveAcceptance(waiver))).toMatchObject({ error: { code: "group-acceptance-not-failed" } });
+      expect(body(t).acceptance).toEqual(acceptance);
+      expect(acceptanceSatisfied(t.h.store, "g", body(t))).toBe(false);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("refuses a disposition when the accepted tip has moved", async () => {
+    const { t } = await pendingTestChange();
+    const moved = join(t.h.root, "moved-acceptance-tip");
+    let registered = false;
+    try {
+      git(t.repo, "worktree", "add", "-q", moved, "orca/g");
+      registered = true;
+      writeFileSync(join(moved, "moved.txt"), "moved\n");
+      git(moved, "add", "moved.txt"); git(moved, "commit", "-qm", "moved tip");
+      git(t.repo, "worktree", "remove", moved);
+      registered = false;
+      const command = t.h.command("accept-test-changes", { note: "stale tip", tip: "a".repeat(40), digest: (body(t).acceptance as { testChanges: { digest: string } }).testChanges.digest });
+      const answer = await asOwner(command.commandId, () => t.service.acceptTestChanges(command));
+      expect(answer).toMatchObject({ error: { code: "group-acceptance-test-change-stale" } });
+      expect((body(t).acceptance as { result: string }).result).toBe("test-change-pending");
+    } finally {
+      if (registered) try { git(t.repo, "worktree", "remove", moved); } catch { /* cleanup if the test failed before the explicit removal */ }
+      await t.h.dispose();
+    }
+  });
+
+  it("refuses a disposition when the stored path digest is stale", async () => {
+    const { t } = await pendingTestChange(); try {
+      const stored = body(t).acceptance as Record<string, unknown>;
+      const testChanges = stored.testChanges as Record<string, unknown>;
+      const readDigest = String(testChanges.digest);
+      t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...body(t), acceptance: { ...stored, testChanges: { ...testChanges, digest: "0".repeat(64) } } }));
+      const pending = body(t).acceptance as { tip: string };
+      const command = t.h.command("accept-test-changes", { note: "stale review", tip: pending.tip, digest: readDigest });
+      const answer = await asOwner(command.commandId, () => t.service.acceptTestChanges(command));
+      expect(answer).toMatchObject({ error: { code: "group-acceptance-test-change-stale" } });
+      expect((body(t).acceptance as { result: string }).result).toBe("test-change-pending");
+    } finally { await t.h.dispose(); }
+  });
+
   it("recheck removes the failed record (the next round checks the tip again) and writes no acceptance row", async () => {
     const t = await driverHarness([{ taskId: "a" }]); try {
       setAcceptance(t, FAILED);

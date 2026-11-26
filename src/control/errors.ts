@@ -270,6 +270,8 @@ export const durableCommandErrorStatuses = {
   "run-abandon-person-required": 409,
   // Tester follow-up E §5 (#241): recheck and waive answer a failed group acceptance only; a waiver names a person.
   "group-acceptance-not-failed": 409,
+  "group-acceptance-test-change-not-pending": 409,
+  "group-acceptance-test-change-stale": 409,
   // Pre-existing failures spec L2 (#341): an answer names a command the group has a row for, and a person.
   "preexisting-failure-not-reported": 409,
   // Tester #402: the --command matched several rows; the refusal names them.
@@ -658,6 +660,8 @@ export const v1WebErrorCodes = [
   "flow-dir-unregistered",
   "flow-group-delivery-fixed",
   "grant-amendment-unsupported",
+  "group-acceptance-test-change-not-pending",
+  "group-acceptance-test-change-stale",
   "group-budget-unavailable",
   "group-state-invalid",
   "handoff-capability-unavailable",
