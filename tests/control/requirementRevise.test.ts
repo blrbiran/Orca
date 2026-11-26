@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { activeChain } from "../../src/control/clarifyChain.js";
-import { readRequirementGroup, readRounds, saveRequirementGroup } from "../../src/control/requirementRecords.js";
+import { readDraft, readDrafts, readRequirementGroup, readRounds, saveRequirementGroup } from "../../src/control/requirementRecords.js";
 import { readRequirementView } from "../../src/panel/controlViews.js";
 import { requirementHarness, type QueuedAnswer } from "./fixtures/requirementHarness.js";
-import { ROUND_ONE, VALID_SPLIT } from "./fixtures/requirementOutputs.js";
+import { INVALID_SPLIT, ROUND_ONE, VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 
 /**
  * Flow engine spec §10.3 (Issue #76, W-76; criterion C10): a person revises an answered clarify round. Nothing they
@@ -39,6 +39,26 @@ async function threeRounds(extra: QueuedAnswer[]) {
 }
 
 describe("requirement-revise (spec §10.3, C10)", () => {
+  it("finishing a revised clarification appends a claimable draft without changing prior failed draft records", async () => {
+    const x = await requirementHarness({ answers: [
+      { purpose: "clarify", output: ROUND_ONE }, { purpose: "split", output: INVALID_SPLIT }, { purpose: "split", output: INVALID_SPLIT }, { purpose: "split", output: INVALID_SPLIT },
+      { purpose: "clarify", output: ROUND_ONE }, { purpose: "split", output: SPLIT },
+    ] });
+    try {
+      await x.until(() => x.round(1).state === "awaiting-answers");
+      expect(x.service.answerRequirement(x.command("requirement-answer", { ...answersFor(x, 1), finish: true }))).toMatchObject({ result: { finished: true } });
+      await x.until(() => readDraft(x.store, "r", 3).state === "failed");
+      const historical = readDrafts(x.store, "r").map((draft) => structuredClone(draft));
+      expect(historical).toHaveLength(3);
+      expect(x.service.requirementRevise(x.command("requirement-revise", answersFor(x, 1, { 0: "changed" })))).toMatchObject({ result: { consensusWithdrawn: true } });
+      await x.until(() => x.round(3).state === "awaiting-answers");
+      expect(x.service.answerRequirement(x.command("requirement-answer", { ...answersFor(x, 3), finish: true }))).toMatchObject({ result: { finished: true } });
+      expect(readDrafts(x.store, "r").slice(0, 3)).toEqual(historical);
+      expect(readDraft(x.store, "r", 4)).toMatchObject({ state: "drafting", draftNo: 4 });
+      await x.until(() => readDraft(x.store, "r", 4).state === "awaiting-review");
+    } finally { await x.dispose(); }
+  });
+
   it("appends a revision row, leaves rounds 1-3 byte-equal, and queues one call: a chain of 2 under cap 3 although round_no is 4", async () => {
     const x = await threeRounds([{ purpose: "clarify", output: LATER }]);
     try {

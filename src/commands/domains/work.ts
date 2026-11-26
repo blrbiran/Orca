@@ -58,7 +58,7 @@ function operatorNote(c: WriteContext): { text: string; scope: typeof NOTE_SCOPE
 type RoundView = ClarifyRoundView;
 interface RequirementView {
   summary: { archived?: boolean; archiveKind?: "archived" | "closed"; requirement?: { roundNo: number | null; draftNo: number | null } };
-  rounds?: RoundView[]; drafts: Array<{ draftNo: number; draftHash: string | null; output?: { requirementConflicts?: unknown[] } | null }>;
+  rounds?: RoundView[]; drafts: Array<{ draftNo: number; draftHash: string | null; state?: string; output?: { requirementConflicts?: unknown[] } | null }>;
 }
 const requirement = async (c: WriteContext): Promise<RequirementView> => await c.read(`groups/${group(c)}/requirement`) as RequirementView;
 /**
@@ -638,7 +638,13 @@ export const WORK_ROWS: CommandDef[] = [
     route: (c) => `groups/${group(c)}/requirement/accept`,
     payload: async (c) => {
       const d = await latestDraft(c);
-      if (d.draftHash === null) throw missing(c, await requirement(c), "requirement-no-draft", `draft ${d.draftNo} has no output yet`);
+      if (d.draftHash === null) {
+        const view = await requirement(c);
+        const detail = d.state === "failed"
+          ? `draft ${d.draftNo} failed; next: orca recovery retry --group ${group(c)}`
+          : `draft ${d.draftNo} has no output yet`;
+        throw missing(c, view, "requirement-no-draft", detail);
+      }
       const conflicts = d.output?.requirementConflicts?.length ?? 0;
       if (conflicts > 0 && c.args.flags["despite-conflicts"] !== true) {
         throw new EntryRejection("requirement-draft-conflicts", `draft ${d.draftNo} reports ${conflicts} conflict(s) with the requirement as written (orca requirement show ${group(c)}); send feedback, or pass --despite-conflicts to accept it as it stands`);

@@ -237,6 +237,10 @@ export function latestDraft(store: ControlStore, groupId: string): DraftBody | n
   return row ? parsedDraft(groupId, row.state, row.body) : null;
 }
 export function writeDraft(store: ControlStore, groupId: string, draft: DraftBody): void {
+  const current = store.db.prepare("SELECT state FROM requirement_drafts WHERE group_id=? AND draft_no=?").get(groupId, draft.draftNo) as { state: string } | undefined;
+  if (current !== undefined && current.state !== "drafting" && draft.state === "drafting") {
+    throw new ControlError("group-state-invalid", `draft-${draft.draftNo}-already-${current.state}`);
+  }
   const body = canonicalBytes(draftBodySchema.parse(draft)).toString("utf8");
   store.db.prepare("INSERT INTO requirement_drafts(group_id,draft_no,state,body) VALUES (?,?,?,?) ON CONFLICT(group_id,draft_no) DO UPDATE SET state=excluded.state, body=excluded.body")
     .run(groupId, draft.draftNo, draft.state, body);

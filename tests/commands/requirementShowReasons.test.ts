@@ -34,6 +34,36 @@ describe("orca requirement show names why a draft came back (#440)", () => {
     expect(text).toMatch(/draft 4|re-?draft/i);
   });
 
+  it("prints failed accurately and names the available recovery commands", async () => {
+    const body = draftWith({ state: "failed", autoRetry: 0, reasonCode: "split-validation-exhausted", reasons: ["delivery-graph-final-verification:final-check"] });
+    body.summary.requirement = { roundNo: 1, draftNo: 3, draftState: "failed", reasonCode: "split-validation-exhausted" };
+    const w = await world({}, { "GET groups/g-alpha/requirement": { status: 200, body } });
+    const out = await cli(["requirement", "show", "g-alpha"], w.dir);
+    expect(out.code).toBe(0);
+    expect(out.stdout).toContain("draft 3 failed: delivery-graph-final-verification:final-check");
+    expect(out.stdout).toContain("orca requirement revise g-alpha --round 1 --file <path>");
+    expect(out.stdout).not.toContain("draft 3 rejected:");
+  });
+
+  it("group brief names revise for an exhausted failed split", async () => {
+    const w = await world({}, { "GET groups/g-alpha/brief": { status: 200, body: {
+      groupId: "g-alpha", requirement: { roundNo: 1, draftNo: 3, draftState: "failed", reasonCode: "split-validation-exhausted" },
+    } } });
+    const out = await cli(["group", "brief", "g-alpha"], w.dir);
+    expect(out.code).toBe(0);
+    expect(out.stdout).toContain("next: orca requirement revise g-alpha --round 1 --file <path>");
+    expect(out.stdout).toContain("every question, glossary, and ADR id");
+  });
+
+  it("failed consensus draft names recovery retry", async () => {
+    const body = draftWith({ state: "failed", autoRetry: 0, reasonCode: "split-call-failed", reasons: [] });
+    body.summary.requirement = { roundNo: 1, draftNo: 3, draftState: "failed", reasonCode: "split-call-failed" };
+    const w = await world({}, { "GET groups/g-alpha/requirement": { status: 200, body } });
+    const out = await cli(["requirement", "show", "g-alpha"], w.dir);
+    expect(out.code).toBe(0);
+    expect(out.stdout).toContain("next: orca recovery retry --group g-alpha");
+  });
+
   it("prints nothing extra for a draft with no reasons", async () => {
     const w = await world({}, { "GET groups/g-alpha/requirement": { status: 200, body: draftWith({ state: "accepted", autoRetry: 0, reasons: [] }) } });
     const out = await cli(["requirement", "show", "g-alpha"], w.dir);

@@ -1,6 +1,6 @@
 import { CLARIFY_INSTRUCTION_MULTI_V1, CLARIFY_INSTRUCTION_V3, CLARIFY_PROMPT_HEAD, deepFreeze, CLARIFY_JSON_SCHEMA } from "./requirementClarify.js";
 import { multiDirOf } from "./multiGroup.js";
-import { newDraft, queueRequirementCall, saveRequirementGroup, writeDraft, type RequirementGroup } from "./requirementRecords.js";
+import { latestDraft, newDraft, queueRequirementCall, saveRequirementGroup, writeDraft, type RequirementGroup } from "./requirementRecords.js";
 import { CLARIFY_CAPS, type ClarifyCaps } from "./requirementSchemas.js";
 import type { ControlStore } from "./store.js";
 
@@ -48,7 +48,7 @@ export function requirementHost(store: ControlStore, group: RequirementGroup, co
     onConsensus(input) {
       group.requirement.consensus = { roundNo: input.roundNo, at: input.at, openBranches: input.openBranches, openQuestions: input.openQuestions };
       saveRequirementGroup(store, group);
-      writeDraft(store, group.groupId, newDraft(1, 0));
+      writeDraft(store, group.groupId, newDraft((latestDraft(store, group.groupId)?.draftNo ?? 0) + 1, 0));
       return queueRequirementCall(store, group.groupId, input.tag);
     },
   };

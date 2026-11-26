@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { schemaVersion } from "../../src/control/migrations.js";
 import { openControlStore } from "../../src/control/store.js";
 import { insertClarifyingGroup, latestRound, newDraft, newRound, readDraft, readRequirementGroup, readRound, writeDraft, writeRound } from "../../src/control/requirementRecords.js";
+import { requirementHost } from "../../src/control/clarifyHost.js";
+import { pendingRequirementCall, claimRequirementCallInTransaction } from "../../src/control/requirementCalls.js";
 import { readWebGroup } from "../../src/control/webService.js";
 import { REQUIREMENT_LIMIT_DEFAULT, clarifyingInput } from "./fixtures/requirement.js";
 import { openTestStore } from "./fixtures/store.js";
@@ -60,6 +62,24 @@ describe("requirement records (N1 spec §4)", () => {
       h.store.db.prepare("UPDATE requirement_rounds SET state='answered' WHERE group_id='r' AND round_no=1").run();
       expect(() => readRound(h.store, "r", 1)).toThrow("recovery-blocked");
       expect(() => h.store.db.prepare("UPDATE requirement_rounds SET state='bogus' WHERE group_id='r'").run()).toThrow();
+    } finally { await h.dispose(); }
+  });
+  it("consensus allocates after the highest draft and leaves terminal draft rows intact", async () => {
+    const h = await openTestStore();
+    try {
+      insertClarifyingGroup(h.store, clarifyingInput("r"));
+      const failed = { ...newDraft(1, 0), state: "failed" as const, output: { notes: "historical output", tasks: [{ taskId: "old", title: "old", labels: [], goal: "old", successCondition: "old", targetPaths: ["old"], checks: ["true"], dependsOn: [], traces: [] }] } };
+      writeDraft(h.store, "r", failed);
+      writeDraft(h.store, "r", { ...newDraft(2, 2), state: "invalid" });
+      const before = readDraft(h.store, "r", 1);
+      const group = readRequirementGroup(h.store, "r");
+      const host = requirementHost(h.store, group);
+      host.onConsensus({ roundNo: 1, at: "2026-11-27T00:00:00.000Z", openBranches: [], openQuestions: [], tag: "finish" });
+      expect(readDraft(h.store, "r", 1)).toEqual(before);
+      expect(readDraft(h.store, "r", 3)).toEqual(newDraft(3, 0));
+      expect(pendingRequirementCall(h.store, "r")).toMatchObject({ kind: "draft", no: 3, workItemId: "draft-3" });
+      expect(claimRequirementCallInTransaction(h.store, "r")).toBe("claimed");
+      expect(() => writeDraft(h.store, "r", newDraft(1, 0))).toThrow();
     } finally { await h.dispose(); }
   });
 });

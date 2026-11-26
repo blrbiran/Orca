@@ -233,12 +233,31 @@ function feedbackAfterRedraftLine(draftNo: number, carry: FeedbackAfterRedraft):
   return `draft ${draftNo} came from Orca re-drafting draft ${first}, which answered your feedback on draft ${carry.feedbackDraftNo} ("${carry.feedback}")${again.length === 0 ? "" : ` (then re-drafting ${again.length === 1 ? "draft" : "drafts"} ${again.join(", ")})`}; draft ${draftNo} reports no conflict with that feedback, so check that it still follows it${before}. If it does not, send the feedback again: orca requirement feedback <group> --text "..."`;
 }
 
+function requirementRecoveryLines(body: unknown): string[] {
+  const summary = field(body, "summary") as { groupId?: unknown; requirement?: { roundNo?: unknown; draftNo?: unknown; draftState?: unknown; reasonCode?: unknown } } | undefined;
+  const briefRequirement = field(body, "requirement") as { roundNo?: unknown; draftNo?: unknown; draftState?: unknown; reasonCode?: unknown } | undefined;
+  const requirement = summary?.requirement ?? briefRequirement;
+  const groupId = summary?.groupId ?? field(body, "groupId");
+  if (typeof groupId !== "string" || requirement?.draftState !== "failed" || requirement.draftNo === null || requirement.draftNo === undefined) return [];
+  if (requirement.reasonCode === "split-validation-exhausted" && typeof requirement.roundNo === "number") {
+    const rounds = (field(body, "rounds") ?? []) as Array<{ roundNo?: number; result?: { questions?: Array<{ id: string }>; glossary?: Array<{ id: string }>; adrs?: Array<{ id: string }> } }>;
+    const round = rounds.find((candidate) => candidate.roundNo === requirement.roundNo);
+    const ids = [
+      ...(round?.result?.questions ?? []).map((entry) => `answers:${entry.id}`),
+      ...(round?.result?.glossary ?? []).map((entry) => `glossaryDecisions:${entry.id}`),
+      ...(round?.result?.adrs ?? []).map((entry) => `adrDecisions:${entry.id}`),
+    ];
+    return [`next: orca requirement revise ${groupId} --round ${requirement.roundNo} --file <path>${ids.length === 0 ? ` (include every question, glossary, and ADR id shown by orca requirement show ${groupId} --json)` : ` (include every round id: ${ids.join(", ")})`}`];
+  }
+  return [`next: orca recovery retry --group ${groupId}`];
+}
+
 function requirementShow(body: unknown): string {
   const drafts = (field(body, "drafts") ?? []) as Array<{ draftNo: number; layers: string[][] | null; parallelCandidates?: Array<{ before: string; after: string }>; impliedPathsOutsideTargets?: ImpliedPathOutsideTargets[]; goalPathsOutsideTargets?: GoalPathOutsideTargets[]; requirementUnits?: RequirementUnitProblem[]; requirementDelivery?: DeliveryProblem[]; runtimeDataPaths?: Array<{ taskId: string; dir?: string; path: string }>; feedbackAfterRedraft?: FeedbackAfterRedraft; impliedPathsAdded?: ImpliedPathAddition[] | null; overlapSerialized?: Array<{ a: string; b: string; paths: string[] }>; implicitEdges?: Array<{ from: string; to: string; conflicts: Array<{ a: string; b: string }> }> | null; reasons?: string[]; autoRetry?: number; state?: string; output?: { tasks?: Array<object>; requirementConflicts?: Array<{ criterion: string; feedback?: string; why: string }> } | null }>;
   const lines = drafts.flatMap((draft) => [
     // Tester #440: WHY the draft came back. It sits after `output` in the JSON, so the generic 160-character compact()
     // line below always cut it off and only `--json` showed it. The explanation is the one the Web UI prints.
-    ...(draft.reasons ?? []).map((reason) => `draft ${draft.draftNo} ${draft.state === "invalid" ? "invalid" : "rejected"}: ${reason}${explainSplitReason(reason) === null ? "" : ` -- ${explainSplitReason(reason)}`}${draft.state === "invalid" && (draft.autoRetry ?? 0) > 0 ? " (Orca re-drafts on its own)" : ""}`),
+    ...(draft.reasons ?? []).map((reason) => `draft ${draft.draftNo} ${draft.state}: ${reason}${explainSplitReason(reason) === null ? "" : ` -- ${explainSplitReason(reason)}`}${draft.state === "invalid" && (draft.autoRetry ?? 0) > 0 ? " (Orca re-drafts on its own)" : ""}`),
     ...(draft.layers === null ? [] : [`draft ${draft.draftNo} layers: ${draft.layers.map((layer) => `[${layer.join(", ")}]`).join(" -> ")}`]),
     // Tester #384: a declared edge whose pair a broad target-path overlap already orders (#268). The declaration adds no
     // order code does not already enforce, so a person drops exactly the pairs they name (or all of them on purpose).
@@ -268,7 +287,7 @@ function requirementShow(body: unknown): string {
     // Dogfood finding (3): Orca re-drafted after the person's feedback and nothing in this draft reports on it.
     ...(draft.feedbackAfterRedraft === undefined ? [] : [feedbackAfterRedraftLine(draft.draftNo, draft.feedbackAfterRedraft)]),
   ]);
-  return [text(body), ...lines].join("\n");
+  return [text(body), ...lines, ...requirementRecoveryLines(body)].join("\n");
 }
 
 /** Spec §14 R7: the retained-result lookup needs its scope; exactly one scope flag (the global --project included). */
@@ -691,7 +710,7 @@ export const READ_ROWS: CommandDef[] = [
     format: (body) => { const note = field(body, "phaseEndUsage") as { runIds: string[]; asOf: number | null } | undefined;
       const groupId = field(body, "groupId"), acceptance = field(body, "acceptance") as Parameters<typeof acceptanceLines>[1];
       const costs = (field(body, "costOutliers") as TaskCost[] | undefined) ?? [];
-      return [...firstFailureLines(body), text(body), ...budgetHeadroomLines(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf)),
+      return [...firstFailureLines(body), text(body), ...requirementRecoveryLines(body), ...budgetHeadroomLines(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf)),
         // Tester follow-up K, item 2: the acceptance line show prints, with its full-suite warning.
         ...(typeof groupId === "string" ? acceptanceLines(groupId, acceptance, (field(body, "requirementReview") as { state?: string } | undefined)?.state) : []),
         // Tester #359: a review that did not pass, with what answers it, as group show prints it.

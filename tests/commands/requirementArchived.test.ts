@@ -43,6 +43,14 @@ describe("requirement writes on an archived group (#132)", () => {
     expect([out.code, out.json().body.error.code]).toEqual([1, "requirement-no-draft"]);
   });
 
+  it("accept on the failed current draft points to group recovery", async () => {
+    const w = await world({}, view(false, { roundNo: 1, draftNo: 3 }, [{ draftNo: 3, state: "failed", draftHash: null }]));
+    const out = await cli(["requirement", "accept", "g-alpha", "--json"], w.dir);
+    expect([out.code, out.json().body.error.code]).toEqual([1, "requirement-no-draft"]);
+    expect(JSON.stringify(out.json().body.error)).toContain("next: orca recovery retry --group g-alpha");
+    expect(w.posts()).toEqual([]);
+  });
+
   it("with a draft present the CLI still sends, so the panel's own archive gate answers", async () => {
     const w = await world({}, view(true, { roundNo: 1, draftNo: 1 }, [{ draftNo: 1, state: "awaiting-review", draftHash: H.draft }]));
     await cli(["requirement", "accept", "g-alpha", "--json"], w.dir);
