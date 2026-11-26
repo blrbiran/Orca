@@ -95,7 +95,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 - **Task 5 E2E**：review-fix 在 `targetPaths` 内改已有测试、required checks 绿、criteria flag 经 `orca-auto` ratify 后，acceptance 仍 pending，直到 person disposition；另覆盖新 TAP failure 拒绝与相同已知 flake 的 `passed-relative`。这一跨路径行为在 Task 1–4 现有实现上已成立，因此只补 E2E 判据，无生产代码修补。
 - **最终 affected gate**（命令 `TMPDIR=/tmp npm test`，代码观测基线 `2731ddaa`＋隔离 worktree 改动）：RC 0；最终 review 修复后重跑，root 与 web 全绿，85 个慢文件/真实 ccloop E2E 按 Rule 18 延后；root 与 web typecheck 通过，web build RC 0（既有 >500 kB chunk advisory）。`npm run test:full` 未跑。**独立 TypeScript 与整分支 review** 共 0 Critical／7 Important／2 Minor；全部处置：批准 payload 绑定人所见 tip/digest、扫描失败阻塞（含 single landing）、D3 waiver 只覆盖唯一未解决失败、真实 Node TAP（block scalar／location／suite summary）、`{skip:true}` 选项、缓存基线保留 base tests/exit 供 #387、schema26 夹具、失败详情取实际失败比较。新判据先红后绿。
 - migration 25→26 仅由隔离临时库判据覆盖；**未迁移生产 `~/.orca` 数据库、未重启 panel**。本仓契约无变化，ccloop 未 repin，无付费 provider 真跑。
-- **下一步**：commit、`--ff-only` 集成并按本 session 授权 push；然后就地更新 ccloop／ccmem 的 Orca 滚动 handoff。
+- **下一步**：commit 已完成（工作树主题行见下）并已 `--ff-only` 合入 Orca main；**push 被自动发布面审查拦下**（它未识别 `origin` 指向公开 `blrbiran/Orca` 的授权），留待人执行 `git push origin main`。workspace 保留在 worktree 中供复核。
 
 ### 3.最新（2026-11-26，测试者台账 Batch 70）
 
