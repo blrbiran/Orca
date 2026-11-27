@@ -88,10 +88,10 @@ describe.skipIf(!realBinary)("handoff delivery against real ccloop (spec §9.2) 
       expect(w.show("a.txt")).toBe("A");
       expect(w.landings()).toBe(1);
       expect(readStopIntent(second.store, "g")!.state).toBe("handoff-complete");
-      // spec §13.1 C-4: both display settled-recoverable; only the stopped one is continuable.
+      // Ruling (#512), spec §13.1 C-4: the normally landed run displays succeeded; the stopped run is recoverable and continuable.
       const view = readControlGroup(second.store, second.epoch, "g");
       expect(view.runs.filter((run) => run.taskId !== null).map((run) => [run.taskId, run.state, run.continuable]).sort())
-        .toEqual([["a", "settled-recoverable", false], ["b", "settled-recoverable", true]]);
+        .toEqual([["a", "settled-succeeded", false], ["b", "settled-recoverable", true]]);
       const selections = await resumeAsThePanelWould(second);
       expect(selections.map((selection) => selection.taskId)).toEqual(["b"]);
       await until(() => { noBlocked(second); return ["a", "b", "c"].every((id) => work(second, id).status === "done") && workRuns(second).every((run) => run.body.drive?.cleanedUp === true); }, 300_000, "b's continuation and c to settle");

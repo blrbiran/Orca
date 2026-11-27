@@ -58,7 +58,8 @@ describe.skipIf(!realBinary)("the execution driver against real ccloop (spec §7
         && !readdirSync(`${runtime.store.stateDir}.workspaces`).some((name) => name.startsWith("group-acceptance-")); }, 360_000, "every task to settle");
       const runs = workRuns(runtime);
       expect(runs.map((run) => run.body.state)).toEqual(["settled", "settled", "settled"]);
-      expect(readControlGroup(runtime.store, runtime.epoch, "g").runs.map((run) => run.state)).toEqual(["settled-recoverable", "settled-recoverable", "settled-recoverable"]);
+      // Ruling (#512): a normally settled run is displayed as succeeded.
+      expect(readControlGroup(runtime.store, runtime.epoch, "g").runs.map((run) => run.state)).toEqual(["settled-succeeded", "settled-succeeded", "settled-succeeded"]);
       expect(g(w.repo, "show", "refs/heads/orca/g:shared.txt")).toBe("A\nB");
       expect(g(w.repo, "show", "refs/heads/orca/g:c.txt")).toBe("C");
       const reconciled = runs.filter((run) => run.body.drive.reconcile !== null);
