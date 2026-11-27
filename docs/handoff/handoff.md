@@ -68,7 +68,7 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 - **拆分 #534/#548/#516/#551/#515**：每个任务必须等到草稿声明的前置单元全部任务完成。即使 `independent` 为空也检查。写集相交造成的实际串行与独立声明冲突时交回具名理由。补了 v9 提示与原因解释。需求原文遗漏的边、AC 与澄清答案不一致、接受冲突后的持久证据仍归 #501/#542/#557 的设计。以 `docs/superpowers/specs/2026-11-23-split-instruction-v9-design.md` 最新 Correction 为准。
 - **#565/#541**：CLI 在组与交付验收中显示测试改动扫描的错误。父组的 ladder 与 criteria-review 查询使用索引前缀。核对 ladder 测试时确认 #547 派生 blocked 会误把仍在自动修复的任务交给人，修正该投影。源码观测提交 `133340d0` 的 `env -u ORCA_CCMEM_BIN -u CCMEM_CONFIG_PATH TMPDIR=/tmp npm test -- --base main --maxWorkers=3` 退出 0，247 文件／2649 项通过、0 跳过、19 文件延后。日志 `/tmp/orca-batch-gate.GnK6Yt`。
-- **姊妹仓**：ccmem #525 的未知 `admin` verb 拒绝已合入。syncskill #486 在来源无法读全时保留悬空链接，也保留尚可读的非托管链接。基于历史源码提交 `ba15901`，隔离 `npm run build` 与 `vitest run tests/integration/doctor-cli.test.ts` 通过，聚焦 12/12。`--sync-dir` 仍接受配置中的绝对 agent 路径。一次调查误删五个真实悬空链接，随后隔离复现使用合成配置。另一次子席误在 Orca 主检出执行 `npm ci`，重装了依赖。ccloop 只更新交接，现有 pin 足够。
+- **姊妹仓**：ccmem #525 的未知 `admin` verb 拒绝已合入。syncskill #486 在来源无法读全时保留悬空链接，也保留尚可读的非托管链接。补验了连续两次修复都保留暂不可读的来源与其链接。源码观测提交 `75ebf7c` 的隔离 `npm run build` 与 `vitest run tests/integration/doctor-cli.test.ts` 通过，聚焦 12/12。ccmem #566 已合入，隔离全套 1166 项通过。Orca 合入门 `npm test -- --base c3ac4832 --maxWorkers=3` 在交接提交 `19df1add` 上退出 0，2179 项通过、43 文件延后。`--sync-dir` 仍接受配置中的绝对 agent 路径。一次调查误删五个真实悬空链接，随后隔离复现使用合成配置。另一次子席误在 Orca 主检出执行 `npm ci`，重装了依赖。ccloop 只更新交接，现有 pin 足够。
 - **接手优先级**：Orca 先处理 #562/#564 的验收缺口及 #558 失败身份诊断，再处理 #528 的重试资助口径。ccmem 先冻结召回语料并校准实际注入 ID 与 agent 归因（#566/#571/#576），同时为 #569 保留合成前原文。syncskill 后续处理 #533、#555，以及 #514 dry-run 预览。#529/#530 归 dogfood 交付仓。原 issue 台账保持原状。发布状态用 `git ls-remote` 现查。
 
 ### 3.上一轮（2026-11-27，Orca 会话 `862140e4`）—— ccloop repin 与台账续作
