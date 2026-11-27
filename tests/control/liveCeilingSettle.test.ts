@@ -97,7 +97,8 @@ describe("a run stopped at its live ceiling (spec §2.1, §2.5)", { timeout: 300
       // The grant gate skips it: remaining = max(0, 1M - 2M) = 0 (tokenPolicy.ts, fundedAllowance.ts). No start wake is
       // armed for a ceiling stop, so dispatch answers idle -- nothing claims the task.
       expect(await deliverScheduledStart(t.dispatch, "g")).toEqual({ kind: "idle" });
-      const topUp = `orca task retry g a --as-person --work '{"tokens":${2 * M}}'`;
+      // #528: 1M covers the overshoot and 2M funds one observed attempt.
+      const topUp = `orca task retry g a --as-person --work '{"tokens":${3 * M}}'`;
       const take = `orca task accept-attempt g a --run ${first} --note '<why the attempt is enough>'`;
       // mutation: drop the ceilingGrantExhausted branch of ceilingStopExits -> ceilingStops undefined, red
       expect(readControlRecovery(t.h.store, "epoch").ceilingStops).toEqual([{ groupId: "g", taskId: "a", runId: first, cause: "group", next: [topUp, take] }]);
@@ -107,7 +108,7 @@ describe("a run stopped at its live ceiling (spec §2.1, §2.5)", { timeout: 300
       expect(refused.error).toMatchObject({ code: "task-not-retryable", message: expect.stringContaining("live-ceiling-stop:grant-exhausted:") });
       expect(ceilingStopNext(refused.error.message.slice("task-not-retryable:".length))).toBe(topUp);
       // mutation: keep the generic run-state refusal for a ready auto-continued stop -> the top-up retry is refused, red
-      const retry = t.h.command("retry-task", { taskId: "a", runId: first, work: { tokens: 2 * M } });
+      const retry = t.h.command("retry-task", { taskId: "a", runId: first, work: { tokens: 3 * M } });
       expect(withCommandContext(retry.commandId, { client: "web", principal: "user:owner", personAuthority: true }, () => t.service.retryTask(retry))).toMatchObject({ result: { kind: "task-retried" } });
       // The predecessor survives the top-up, so the next claim resumes the stopped attempt instead of re-planning it.
       expect(work(t)).toMatchObject({ status: "ready", allowancePredecessorRunId: first });

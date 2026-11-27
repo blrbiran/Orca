@@ -13,6 +13,7 @@ import { refuseClarifying } from "./requirementRecords.js";
 import { commandSuccess, readStopIntent } from "./stopIntent.js";
 import { continueRestartsFresh, USAGE_PAUSE_FRESH_START } from "./driveRecord.js";
 import { hasOptionalTaskPolicy } from "./fundedAllowance.js";
+import { retryFundingOf } from "./retryFunding.js";
 import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from "./webProtocol.js";
 
 /**
@@ -94,10 +95,14 @@ export function ceilingGrantExhausted(store: ControlStore, groupId: string, run:
     && hasOptionalTaskPolicy(store, groupId, run.workItemId);
 }
 
-/** One more attempt's observed cost, at least 1: the top-up a grant-exhausted ceiling stop suggests. */
-function oneAttemptTokens(run: { cumulative?: { work?: { tokens?: unknown } } }): number {
-  const used = Number(run.cumulative?.work?.tokens ?? 0);
-  return Number.isFinite(used) ? Math.max(1, Math.ceil(used)) : 1;
+/** Cover the deficit before leaving work for an attempt at the lineage's observed cost (#528). */
+function ceilingRetryNext(store: ControlStore, groupId: string, taskId: string, runId: string): string {
+  const funding = retryFundingOf(store, groupId, taskId, runId);
+  if (funding === null || funding.authored.tokens === null || funding.perAttemptTokens === null) {
+    return `orca control get 'groups/${groupId}/funding-preview?retry=${encodeURIComponent(taskId)}&tokens=0'`;
+  }
+  const tokens = Math.max(1, funding.inherited.tokens + funding.perAttemptTokens - funding.authored.tokens);
+  return `orca task retry ${groupId} ${taskId} --as-person --work '{"tokens":${tokens}}'`;
 }
 
 export function ceilingStopWait(store: ControlStore, groupId: string, run: { runId: string; workItemId: string; taskId: string | null; state: string; liveCeilingStop?: unknown; cumulative?: { work?: { tokens?: unknown } } }): string | null {
@@ -107,7 +112,7 @@ export function ceilingStopWait(store: ControlStore, groupId: string, run: { run
   // gate skips it and every surface said nothing. The way on is a task top-up (optional policy) that continues its work.
   if (ceilingGrantExhausted(store, groupId, run)) {
     const stop = run.liveCeilingStop as { observedTokens?: number }, grant = (work as unknown as { grant: { work: { tokens: number | null } } }).grant.work.tokens;
-    return `live-ceiling-stop:grant-exhausted:the ceiling stopped this run at ${stop.observedTokens ?? 0} tokens and the task's grant (${grant ?? "unlimited"}) no longer funds a retry:orca task retry ${groupId} ${run.taskId ?? run.workItemId} --as-person --work '{"tokens":${oneAttemptTokens(run)}}'`;
+    return `live-ceiling-stop:grant-exhausted:the ceiling stopped this run at ${stop.observedTokens ?? 0} tokens and the task's grant (${grant ?? "unlimited"}) no longer funds a retry:${ceilingRetryNext(store, groupId, run.taskId ?? run.workItemId, run.runId)}`;
   }
   if (work.status !== "blocked") return null;
   const cap = work.groupCapStop as { runId?: string; observedTokens?: number } | undefined;
@@ -142,7 +147,7 @@ export function ceilingStopExits(store: ControlStore, groupId: string, work: Rec
   // Tester #513: an auto-continued stop whose own grant the overshoot emptied has no wait to name and no set-limit to
   // suggest (the group is where the headroom came from). Its one paid exit is a task top-up that continues the work.
   if (ceilingGrantExhausted(store, groupId, { runId, workItemId: String(work.workItemId ?? taskId), state: String(run.state), liveCeilingStop: run.liveCeilingStop })) {
-    return { runId, cause: "group", next: [`orca task retry ${groupId} ${taskId} --as-person --work '{"tokens":${oneAttemptTokens(run)}}'`, accept] };
+    return { runId, cause: "group", next: [ceilingRetryNext(store, groupId, taskId, runId), accept] };
   }
   if (work.status !== "blocked") return null;
   if (cap !== undefined) {

@@ -19,6 +19,7 @@ import { ceilingGrantExhausted, ceilingStopWait, movePauseLine } from "./usagePa
 import { appendTopUp, topUpSum, withTopUp } from "./workTopUp.js";
 import { authorizeWorkTopUp } from "./authorizeWorkTopUp.js";
 import { continuationIdentity, registrationOf } from "./continuation.js";
+import { retryFundingOf } from "./retryFunding.js";
 import { validateRetryGrantSource } from "./retryGrant.js";
 import { terminalClosureEvidenceMissing, validTerminalClosure } from "./terminalRunClosure.js";
 import { abandonedRun } from "./abandonRun.js";
@@ -79,21 +80,6 @@ const topUpOf = (command: RetryTaskCommand): Amount | null => {
 /** Why a ladder's automatic retry is refused funding; the attempt-cost form names the fresh grant and one attempt's cost. */
 export type AutoRetryFundingRefusal = "authored-budget-exhausted" | "retry-funding-missing" | `retry-funding-below-attempt-cost:${number}/${number}`;
 
-/**
- * Tester follow-up B T2 (#234, #202): what retrying an optional-policy task's failed run leaves its next claim, by the
- * task's authored work -- authored + every top-up (+ `incoming`) - lineage usage, as the claim's decideFundedAllowance
- * sizes it (the group's headroom may fund less) -- and what one attempt of that lineage has cost (its token usage over the
- * attempts it used, rounded up; null when it used none). Null when the run has no funded allowance to read.
- */
-export interface RetryFunding { authored: BudgetAmount; inherited: Amount; fresh: BudgetAmount; perAttemptTokens: number | null }
-export function retryFundingOf(store: ControlStore, groupId: string, taskId: string, runId: string, incoming: Amount | null = null): RetryFunding | null {
-  const run = readRunBody(store, runId), work = readWork(store, groupId, taskId) as unknown as RetriedWork;
-  const funding = readFundedAllowance(store, run as never);
-  if (funding === null) return null;
-  const authored = withTopUp(work.grant.work, add(topUpSum(store, groupId, taskId, null), incoming ?? { tokens: 0, activeMs: 0, attempts: 0, sessions: 0 }));
-  const inherited = add(funding.inheritedUsage, lineageWorkUsage(run));
-  return { authored, inherited, fresh: remainingBudget(authored, inherited), perAttemptTokens: inherited.attempts > 0 ? Math.ceil(inherited.tokens / inherited.attempts) : null };
-}
 
 /**
  * Issue #202: display-only, what retrying the task's current run with a `tokens` top-up would leave its next claim, read by

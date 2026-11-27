@@ -9,7 +9,7 @@ import { ControlError } from "./errors.js";
 import { hasOptionalTaskPolicy } from "./fundedAllowance.js";
 import { readGroupIntegration } from "./integrationScheme.js";
 import { readBudgetProposal, readGroup, readWork, saveGroup, saveWork } from "./queries.js";
-import { retryFundingOf } from "./retryTask.js";
+import { retryFundingOf } from "./retryFunding.js";
 import { commandSuccess, groupCommandTarget, readGroupBody, readStopIntent, reserveCommitment, setAllocationStates } from "./stopIntent.js";
 import { refuseFlowChild } from "../flow/groups.js";
 import { remainingBudget } from "./tokenPolicy.js";
