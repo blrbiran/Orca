@@ -64,7 +64,14 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
-### 3.最新（2026-11-27，Orca 会话 `51784279`）—— 测试者台账复核与首批修复
+### 3.最新（2026-11-27，Orca 会话 `862140e4`）—— ccloop repin 与台账续作
+
+- **#546/#563 已在 Orca main**，主题 `fix(cli): show next steps for refused group reads and partial failure lists`。澄清中的 `group show` 保留 422，文本与 JSON 均提示 `requirement show`／`group brief`。失败名不足以覆盖已知失败数时提示清单不完整。下节提到的 #546 红测 stash 是历史证据，无须恢复。
+- **ccloop repin**：Orca 提交 `chore(deps): repin ccloop to cf4f9b4 (#520)` 钉到 ccloop 历史提交 `cf4f9b4`，包含 #519/#520/#553。`node scripts/pin-ccloop.mjs <该提交的完整 SHA>` 在 Orca 基线 `62d1d3c5` 的独立 worktree 退出 0，默认解析与二进制检查 12/12，typecheck 与 `npm ci` 复现通过（`/tmp/orca-repin-ccloop.log`）。采用该脚本产出的 lock，主树先前的 pin 文件保留于 stash `Orca repin before adopting script-verified lock (862140e4)`，两份 lock 只差 Git 包的 integrity。`TMPDIR=/tmp node scripts/verify-ccloop-pin.mjs` 在相同依赖树复核 3/3（`/tmp/orca-pin-default.cvqN12`）。安装与运行中面板的版本仍各自核对。
+- **未合入的姊妹仓工作**：syncskill #514 在 `.wt-syncskill-514`，按主题 `fix(link): close issue 514 review gaps` 找。最后复审发现共享确认门改变 `link build` 的非交互行为，需收窄到 `set/add`，并补回 `add` 拒绝判据。ccmem #559 在 `.wt-ccmem-559` 未提交，需限制历史 rollout 扫描并只认当前轮的 hooks-off 证据。#532 在 `.wt-ccmem-532` 尚未实施。生产 DB、LaunchAgent 与 daemon 保持未动。归档 issue 台账未编辑。
+- **下一会话先讨论 ccmem 召回评估**：现有 `retrieval-check` 是词法 smoke test，magpie 可量注入尺寸、缓存与请求代价。推荐用冻结语料、相关性标签和逐 query 的候选／门控／注入证据建立离线基线，再以 LongMemEval／LoCoMo 子集补覆盖，另用对照组衡量实际任务收益。尚未写 spec 或实现。Orca #516/#534/#557 部分解决，#539/#542/#548/#551 仍待设计。
+
+### 3.上一轮（2026-11-27，Orca 会话 `51784279`）—— 测试者台账复核与首批修复
 
 - 台账现可读，命令 `issuemd counts /Users/biran/code/skills/orca/orca_archived_files/issue-20261023.md` 在基线 `ebbe3209` 读到 58 条开放。用户授权本轮必要判据改写、付费真跑、四仓普通 push，并要求保留需人处理的事项。本轮生产库及服务未动。
 - Orca 首批主题行：`fix(build): build and diagnose the Web bundle with the CLI (#523)`；`fix(review): retain test failure names before truncating output (#527)`；`fix(gc): account for hard links in workspace sizes (#549)`；`fix(split): require an actual full-suite command for final verification (#536)`；`fix(requirement): preserve earlier drafts and name split recovery exits (#550 #515)`。#523 检查当前 checkout 的 bundle 时间戳，运行中面板须重启才加载。#549 仍报逻辑字节，跨候选共享 inode 会低估，不保证与 `du` 的物理块相符。#536 约束 split 中的 `finalVerification`，不审计任意 shell/npm 脚本。#515 图校验语义的余项归 #501/#534/#548/#551。#552 的成功输出补 confirm/estimate 下一步，brief/status 的等待提示仍可补。#541 周期查询已走索引，CPU 改善待现场采样。
