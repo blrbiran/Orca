@@ -1790,7 +1790,7 @@ function runViews(store: ControlStore, groupId: string, graphVersion: number, pr
       usageObservation: run.agentCapabilities.usageObservation,
       // A stalled call may retain its final provisional reading for display when its worker supplied no floor.
       ...(run.liveUsage !== undefined && ((run.endedAt == null && !isTerminalRunState(state) && state !== "blocked")
-        || (run.drive?.outcome === "failed" && run.drive.failureCause?.cause === "stalled"
+        || ((run.drive?.outcome === "failed" || run.drive?.outcome === "exhausted") && run.drive.failureCause?.cause === "stalled"
           && run.drive.failureCause.phase === run.liveUsage.phase && run.drive.finalAttempt === run.liveUsage.attempt
           && run.usageLowerBound === undefined))
         ? { liveUsage: { attempt: run.liveUsage.attempt, phase: run.liveUsage.phase, tokens: run.liveUsage.tokens, observedAt: run.liveUsage.observedAt, revision: run.liveUsage.revision } } : {}),

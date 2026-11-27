@@ -40,7 +40,7 @@ export function runUsageLines(run: UsageRun | undefined, lastTranscriptAt: numbe
       ? [`observed: at least ${count(run.liveUsage.tokens)} tokens in ${run.liveUsage.phase} (attempt ${run.liveUsage.attempt}), last response at ${run.liveUsage.observedAt} (provisional: not booked; any live ceiling is checked after an observed response, so an in-flight request may pass it)`] : []),
     ...(!live && run.usageLowerBound !== undefined
       ? [`observed: at least ${count(run.usageLowerBound)} tokens across calls with incomplete usage reports (lower bound)`] : []),
-    ...(!live && run.usageLowerBound === undefined && run.outcome === "failed" && run.failureCause?.cause === "stalled"
+    ...(!live && run.usageLowerBound === undefined && (run.outcome === "failed" || run.outcome === "exhausted") && run.failureCause?.cause === "stalled"
       && run.liveUsage !== undefined && run.failureCause.phase === run.liveUsage.phase
       ? [`observed: at least ${count(run.liveUsage.tokens)} tokens in ${run.liveUsage.phase} (attempt ${run.liveUsage.attempt}), last sampled response at ${run.liveUsage.observedAt} (provisional)`] : []),
     ...transcript,

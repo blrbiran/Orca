@@ -1143,7 +1143,8 @@ export async function collectInto(deps: ExecutionDriverDeps, run: DriverRun): Pr
       if (previous !== undefined) {
         const terminal = report.terminal;
         // An older worker may omit a durable floor. Keep the matching response for display only.
-        const retainStalledReading = terminal?.outcome === "failed" && terminal.failureCause?.cause === "stalled"
+        const retainStalledReading = (terminal?.outcome === "failed" || terminal?.outcome === "exhausted")
+          && terminal.failureCause?.cause === "stalled"
           && terminal.failureCause.phase === previous.phase && terminal.currentAttempt === previous.attempt
           && report.usageLowerBound === undefined && current.usageLowerBound === undefined;
         if (!retainStalledReading) { delete current.liveUsage; saveDriverRun(store, current); }

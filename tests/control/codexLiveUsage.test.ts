@@ -53,12 +53,17 @@ describe("Codex's running response usage (#285)", () => {
     } finally { await t.h.dispose(); }
   });
 
-  it.each([true, false])("retains a last response only when its phase matches the terminal stall (%s, #520)", async (matches) => {
+  it.each([
+    { outcome: "failed", matches: true },
+    { outcome: "failed", matches: false },
+    { outcome: "exhausted", matches: true },
+    { outcome: "exhausted", matches: false },
+  ] as const)("retains a last response for a terminal $outcome stall only when the phase matches ($matches, #520)", async ({ outcome, matches }) => {
     const { t, driver, runId, set, stop } = await inFlight(); try {
       set(reading(runId));
       await driver.round();
       expect(t.body(runId)).toHaveProperty("liveUsage.tokens", 125);
-      stop({ outcome: "failed", attemptSha: null, sourceDir: t.repo, repoDir: null, currentAttempt: 1,
+      stop({ outcome, attemptSha: null, sourceDir: t.repo, repoDir: null, currentAttempt: 1,
         failureCause: { cause: "stalled", phase: matches ? "execute" : "verify", retries: 0, detail: "fixture stall" } });
       await collectInto(t.deps, t.body(runId));
       const collected = t.body(runId);
@@ -68,10 +73,10 @@ describe("Codex's running response usage (#285)", () => {
       expect(t.h.store.db.prepare("SELECT COUNT(*) AS n FROM usage_events WHERE run_id=?").get(runId)).toEqual({ n: 0 });
       // Model the terminal drive's stored projection independently of candidate/stop-proof handling.
       t.h.store.db.prepare("UPDATE runs SET body=? WHERE id=?").run(JSON.stringify({ ...collected, state: "blocked",
-        drive: { ...collected.drive, outcome: "failed", finalAttempt: 1, blockedAt: "C", blockedReason: "terminal:failed",
+        drive: { ...collected.drive, outcome, finalAttempt: 1, blockedAt: "C", blockedReason: `terminal:${outcome}`,
           failureCause: { cause: "stalled", phase: matches ? "execute" : "verify", retries: 0, detail: "fixture stall" } } }), runId);
       const projected = readControlGroup(t.h.store, "epoch", "g").runs.find((entry) => entry.runId === runId);
-      expect(projected).toHaveProperty("outcome", "failed");
+      expect(projected).toHaveProperty("outcome", outcome);
       if (matches) expect(projected).toHaveProperty("liveUsage.tokens", 125);
       else expect(projected).not.toHaveProperty("liveUsage");
     } finally { await t.h.dispose(); }
