@@ -59,5 +59,8 @@ export function failureNamesLine(text: string | undefined, limit = 20): string {
       ? "the recorded output names no failing test (its last 2 KB holds no \"not ok\" line and no failure count)"
       : `the recorded output names no failing test (its summary reports ${summary.failCount} failing; the last 2 KB holds no \"not ok\" line)`;
   const shown = summary.failures.slice(0, limit);
-  return `${total} failing test${total === 1 ? "" : "s"}: ${shown.join("; ")}${summary.failures.length > limit ? ` (+${summary.failures.length - limit} more named)` : ""}`;
+  const partial = total > summary.failures.length
+    ? ` (only ${summary.failures.length} name${summary.failures.length === 1 ? "" : "s"} in the recorded 2 KB)`
+    : "";
+  return `${total} failing test${total === 1 ? "" : "s"}${partial}: ${shown.join("; ")}${summary.failures.length > limit ? ` (+${summary.failures.length - limit} more named)` : ""}`;
 }

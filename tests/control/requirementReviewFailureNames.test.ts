@@ -31,9 +31,21 @@ describe("the node:test output reader (#391)", () => {
 
   it("says the identities are unavailable when the tail holds only the summary", () => {
     const line = failureNamesLine("# tests 5\n# fail 2\n# duration_ms 12");
-    // mutation: fall back to a count-only sentence that claims names -> red
-    expect(line).toBe("the recorded output names no failing test (its summary reports 2 failing; the last 2 KB holds no \"not ok\" line)");
+    expect(line).toBe('the recorded output names no failing test (its summary reports 2 failing; the last 2 KB holds no "not ok" line)');
     expect(failureNamesLine(undefined)).toContain("no output was recorded");
+  });
+
+  it("marks a partial set of names when the tail reports more failures (#563)", () => {
+    const tail = ["not ok 199 - fail-198", "not ok 200 - fail-199", "# tests 200", "# fail 200", "# duration_ms 12"].join("\n");
+    const line = failureNamesLine(tail);
+    expect(line).toContain("200 failing tests (only 2 names in the recorded 2 KB)");
+    expect(line).toContain("fail-198; fail-199");
+  });
+
+  it("does not call a complete two-name list partial", () => {
+    const line = failureNamesLine("not ok 1 - first\nnot ok 2 - second\n# fail 2");
+    expect(line).toBe("2 failing tests: first; second");
+    expect(line).not.toContain("only");
   });
 });
 

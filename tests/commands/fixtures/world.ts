@@ -27,6 +27,7 @@ export function groupView(over: { revision?: number; currentRunId?: string; chec
 }
 
 export const READS: Record<string, unknown> = {
+  "group-ids": { groupIds: ["g-alpha", "g-beta"] },
   "groups/g-alpha/agent-preview": { schema: "orca-agent-selection-preview-v1", groupId: "g-alpha", proposalVersion: 3, selectionsHash: H.sel },
   "groups/g-alpha/funding-preview": { schema: "orca-funding-preview-v1", groupId: "g-alpha", rows: [] },
   "groups/g-alpha/requirement": {

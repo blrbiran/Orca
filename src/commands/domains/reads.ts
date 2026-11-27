@@ -17,6 +17,7 @@ import { deliveryProblemLine, type DeliveryProblem } from "../../control/require
 import { explainSplitReason } from "../../control/requirementSplit.js";
 import { phaseEndBudgetLines, runUsageLines, taskCostLine, type UsageRun } from "./usageLines.js";
 import { viewTaskCost, type TaskCost } from "../../control/taskCost.js";
+import { shellQuote } from "../../level/invocation.js";
 import { runUsageDetailLines, type UsageDetailLine } from "./usageDetailLines.js";
 
 type Row = Omit<CommandDef, "access" | "mapsTo" | "examples" | "format" | "flags" | "positionals"> & {
@@ -27,6 +28,7 @@ const read = (row: Row): CommandDef => ({
   domain: row.domain, action: row.action, summary: row.summary, positionals: row.positionals ?? [], flags: row.flags ?? [], access: "open",
   mapsTo: { kind: "read", paths: row.paths, ...(row.compose === undefined ? {} : { compose: row.compose }) },
   examples: row.examples ?? [], format: row.format ?? ((body) => text(body)),
+  ...(row.next === undefined ? {} : { next: row.next }),
   ...(row.answersUnmounted === true ? { answersUnmounted: true } : {}),
 });
 const GROUP: PositionalDef = { name: "group", summary: "a group id or a unique prefix", required: true };
@@ -717,6 +719,13 @@ export const READ_ROWS: CommandDef[] = [
     examples: ["orca group show g1", "orca group show g1 --runs summary --json"],
     paths: (c) => { runsMode(c); return [`groups/${ids(c, "group")}`]; },
     compose: ([view], c) => { fullShowGroup = runsMode(c) === "full" ? ids(c, "group") : null; return runsMode(c) === "full" ? view : { ...(view as object), runs: (view as { runs: Array<Record<string, unknown>> }).runs.map(runSummary) }; },
+    next: (error, c) => {
+      if (error.code !== "requirement-not-split") return undefined;
+      const stateDir = c.args.global.controlStateDir;
+      const option = stateDir === undefined ? "" : ` --control-state-dir ${shellQuote(stateDir)}`;
+      const groupId = ids(c, "group");
+      return [`orca requirement show ${groupId}${option}`, `orca group brief ${groupId}${option}`];
+    },
     format: (body) => [formatWithUnestimated(body), ...evidenceMissingLines((body as GroupView).summary.groupId, (body as GroupView).runs), ...largeShowTip(body)].join("\n") }),
   // Issue #199: the summary route answers the compact body itself, so a poll ships neither the full view's plan and
   // runs nor a clarifying group's refusal (its full view is refused; its summary is not).

@@ -1,6 +1,7 @@
 // Issue #199: an agent polling a long run needs the group's state, completion, counts and blockers, not the ~100 KB
 // full view. `group brief` reads the summary route itself; `group show` keeps its bytes.
 import { createServer } from "node:http";
+import { symlink, unlink } from "node:fs/promises";
 import express from "express";
 import { describe, expect, it } from "vitest";
 import { registerControlReadRoutes } from "../../src/panel/controlApi.js";
@@ -95,6 +96,24 @@ describe("group brief (issue 199)", () => {
     const out = await cli(["group", "show", "g-alpha", "--json"], p.dir);
     expect(out.code, out.stderr).toBe(0);
     expect(out.json().body).toEqual(VIEW);
+  });
+
+  it("offers usable next commands in JSON and text when a clarifying group's full view is refused (#546)", async () => {
+    const p = await fakePanel({ ...routes, "GET groups/g-alpha": { status: 422,
+      body: { error: { code: "requirement-not-split", message: "requirement-not-split" } } } });
+    const panelDir = `${p.dir}'quoted`;
+    const expectedDir = `'${p.dir}'\\''quoted'`;
+    await symlink(p.dir, panelDir, "dir");
+    try {
+      const json = await cli(["group", "show", "g-al", "--json"], panelDir);
+      expect(json.code).toBe(2);
+      expect(json.json()).toMatchObject({ status: 422, body: { error: { code: "requirement-not-split" },
+        next: [`orca requirement show g-alpha --control-state-dir ${expectedDir}`, `orca group brief g-alpha --control-state-dir ${expectedDir}`] } });
+      const text = await cli(["group", "show", "g-al"], panelDir);
+      expect(text.code).toBe(2);
+      expect(text.stderr).toContain(`next: orca requirement show g-alpha --control-state-dir ${expectedDir}`);
+      expect(text.stderr).toContain(`next: orca group brief g-alpha --control-state-dir ${expectedDir}`);
+    } finally { await unlink(panelDir); }
   });
 
   it("answers a clarifying group's brief while its full view is refused", async () => {
