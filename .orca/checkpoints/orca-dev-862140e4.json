@@ -1,0 +1,69 @@
+{
+  "v": 1,
+  "runId": "orca-dev-862140e4",
+  "runtime": "claude-code",
+  "sessionRef": "862140e4-af43-474c-9ad1-562fddc5ebd5",
+  "writtenAt": "2026-11-27T14:29:03.630Z",
+  "head": "2603a4ee62fff2647ec2592d75e0b921675b6ccf",
+  "level": {
+    "kind": "reading",
+    "level": 616899,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 2
+  },
+  "next": [
+    "Read Orca handoff §3.最新 and verify the four local and remote main branches. The repin, #512 test adjustments, and updated Orca handoff are already on local main.",
+    "Start the next session by discussing ccmem recall evaluation. Compare an offline runner with frozen fixtures and relevance labels, extending retrieval-check, and an end-to-end public benchmark. Prefer the offline runner with candidate and gate traces, then add public slices and Magpie cost correlation once its outputs are stable. No spec or implementation has been started.",
+    "The Orca post-merge affected gate passed on 66aff1fc with 104 files, 421 tests passed and 15 skipped. See /tmp/orca-pin-main.bpLypM. The later Orca commit updates only the handoff.",
+    "Check publication status before any push. All four pushes were denied. The existing stash named Orca repin before adopting script-verified lock (862140e4) preserves the original pair of pending pin edits.",
+    "Ask the testers to retest #546/#563 and sister-repo fixes after deployment. Leave the external issue ledger to the owner. Review the DAG and acceptance-criteria design items after the recall discussion."
+  ],
+  "open": [
+    "ccmem #559/#532 are integrated on local main, with 1163 isolated tests passed. #532 deliberately has no probe override and status does not launch a child process. Production database, LaunchAgent, and daemon were not changed.",
+    "syncskill #514 is integrated on local main. The final single-worker unit/integration gate passed all 1007 tests. Earlier concurrent runs had timeouts in install/profile integration, recorded separately. Dry-run preview details were deferred.",
+    "Orca #516/#534/#557 are partial. #539/#542/#548/#551 remain open. #546/#563 are implemented. See handoff for the earlier R-F intermittent refusal and the #512 test adjustments.",
+    "Handoffs for Orca, ccloop and ccmem are updated. No recall-evaluation spec or provider experiment was requested for this session."
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "Write the Orca checkpoint from the user terminal with this draft. Agent-side dev checkpoint write was denied."
+    },
+    {
+      "kind": "named-authorization",
+      "what": "All four pushes were denied by automatic approval. Orca and syncskill were denied on authorization grounds. ccloop and ccmem were denied because the handoffs contain internal session metadata or local log paths. Review the unpublished commit ranges before deciding what to publish. Do not retry denied actions without resolving their respective blocks."
+    }
+  ],
+  "measurements": [
+    {
+      "command": "/usr/bin/git status --short --branch",
+      "exitCode": 0,
+      "commit": "2603a4ee62fff2647ec2592d75e0b921675b6ccf",
+      "observedAt": "2026-11-27T14:29:03.421Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-862140e4-lg9eZM/1.txt"
+    },
+    {
+      "command": "/usr/bin/git log -5 --oneline",
+      "exitCode": 0,
+      "commit": "2603a4ee62fff2647ec2592d75e0b921675b6ccf",
+      "observedAt": "2026-11-27T14:29:03.455Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-862140e4-lg9eZM/2.txt"
+    },
+    {
+      "command": "/usr/bin/git worktree list",
+      "exitCode": 0,
+      "commit": "2603a4ee62fff2647ec2592d75e0b921675b6ccf",
+      "observedAt": "2026-11-27T14:29:03.508Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-862140e4-lg9eZM/3.txt"
+    },
+    {
+      "command": "/usr/bin/git stash list",
+      "exitCode": 0,
+      "commit": "2603a4ee62fff2647ec2592d75e0b921675b6ccf",
+      "observedAt": "2026-11-27T14:29:03.557Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-862140e4-lg9eZM/4.txt"
+    }
+  ]
+}
