@@ -1,5 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { deliveryLines } from "../../src/commands/domains/verbs.js";
+import { acceptanceLines, deliveryLines } from "../../src/commands/domains/verbs.js";
+
+it("names a failed test-change scan without presenting it as a flaky test (#565)", () => {
+  const failed = { tip: "a".repeat(40), result: "failed", commands: [], testChanges: {
+    paths: [], weakeningSignals: [], digest: "", error: "test-change-scan-failed: base revision is missing",
+  } };
+  for (const lines of [
+    acceptanceLines("g1", failed),
+    deliveryLines("g1", { ...failed, commit: "b".repeat(40) }, undefined),
+  ]) {
+    const text = lines.join("\n");
+    expect(text).toContain("test-change-scan-failed: base revision is missing");
+    expect(text).toContain("orca doctor");
+    expect(text).not.toMatch(/flaky|exited \?/);
+  }
+});
 
 // Delivery tail spec D3/D5 (#333, #336): `group show` says a delivery backing off (when, why, what tries now) and the
 // acceptance on the delivered commit, with what answers a red one.

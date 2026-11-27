@@ -193,7 +193,8 @@ export const SPLIT_PROMPT_HEAD_V9 = "Orca requirement split, instruction version
  * merged or lose an edge, and an acceptance's own final verification could be handed to no task. Version 9 asks the
  * answer to state the graph it was given; validateSplitDraft checks the draft against that claim (deliveryGraphProblems).
  */
-export const DELIVERY_GRAPH_RULE = "- When the requirement's goal or a success condition names delivery units (a labelled list such as T1..T6, a sentence that two units are independent, or a final documentation-and-overall-verification step), report the graph in `deliveryGraph`: `units` is one entry per named unit with the `taskIds` that carry it and the units it must follow (`dependsOn`); `independent` lists the groups of units the requirement calls independent; `finalVerification` names the task whose `checks` run the requirement's overall verification, or null. A task's `dependsOn` stays within what the graph orders, and tasks the graph calls independent share no edge. When the requirement names no units, omit `deliveryGraph`.";
+export const DELIVERY_GRAPH_RULE = "- When the requirement's goal or a success condition names delivery units (a labelled list such as T1..T6, a sentence that two units are independent, or a final documentation-and-overall-verification step), report the graph in `deliveryGraph`: `units` is one entry per named unit with the `taskIds` that carry it and the units it must follow (`dependsOn`); `independent` lists the groups of units the requirement calls independent; `finalVerification` names the task whose `checks` run the requirement's overall verification, or null. A task's `dependsOn` stays within what the graph orders, and tasks the graph calls independent share no edge. When the requirement names no units, omit `deliveryGraph`.\n"
+  + "- Explicit delivery order in the requirement also justifies a task dependency. For every predecessor unit listed in `dependsOn`, each task in the later unit must wait for all tasks in that predecessor unit, directly or through other tasks. Units in an `independent` group must have no direct or transitive dependency on one another and must have disjoint write sets. When listing successive waves in `independent`, give each later unit a dependency path to at least one unit of the previous wave.";
 /** Version 9 is version 8 plus the graph rule and template line; the V5-V8 bytes stay as they are. */
 export const SPLIT_INSTRUCTION_V9 = SPLIT_INSTRUCTION_V8
   .replace(SPLIT_PROMPT_HEAD_V8, SPLIT_PROMPT_HEAD_V9)
@@ -740,6 +741,17 @@ export function importReasons(error: ControlError): string[] {
  * an edge outside the graph's order, an edge between units the graph calls independent, and a final-verification claim
  * with no suite check. Each is a hand-back reason, not a refusal; a draft with no `deliveryGraph` passes untouched.
  */
+function reachableDependencies(taskId: string, direct: ReadonlyMap<string, readonly string[]>): Set<string> {
+  const reachable = new Set<string>();
+  const pending = [...(direct.get(taskId) ?? [])];
+  for (const dependency of pending) {
+    if (reachable.has(dependency)) continue;
+    reachable.add(dependency);
+    for (const indirect of direct.get(dependency) ?? []) pending.push(indirect);
+  }
+  return reachable;
+}
+
 export function deliveryGraphProblems(output: SplitOutput): string[] {
   const graph = output.deliveryGraph;
   if (graph === undefined) return [];
@@ -791,6 +803,13 @@ export function deliveryGraphProblems(output: SplitOutput): string[] {
     }
     return false;
   };
+  for (const group of graph.independent) {
+    for (const name of group) for (const peer of group) {
+      if (name !== peer && reaches(name, new Set([peer]))) {
+        reasons.push(`delivery-graph-independent-order:${name}:${peer}`);
+      }
+    }
+  }
   graph.independent.forEach((group, index) => {
     if (index === 0) return;
     const previous = new Set(graph.independent[index - 1]);
@@ -800,6 +819,19 @@ export function deliveryGraphProblems(output: SplitOutput): string[] {
       if (!reaches(name, previous)) reasons.push(`delivery-graph-layer:${unit.taskIds[0] ?? name}:${name}`);
     }
   });
+  // A task can otherwise start before a predecessor unit that its draft explicitly lists (#534).
+  const directDependencies = new Map(output.tasks.map((task) => [task.taskId, task.dependsOn]));
+  for (const unit of graph.units) for (const taskId of unit.taskIds) {
+    const predecessors = reachableDependencies(taskId, directDependencies);
+    for (const name of unit.dependsOn) {
+      const predecessor = byUnit.get(name);
+      if (predecessor === undefined || predecessor.taskIds.length === 0) {
+        reasons.push(`delivery-graph-predecessor-without-tasks:${taskId}:${name}`);
+      } else if (!predecessor.taskIds.every((id) => predecessors.has(id))) {
+        reasons.push(`delivery-graph-task-order:${taskId}:${name}`);
+      }
+    }
+  }
   // Count recognized whole-suite invocations. A shell list or quoted mention is not evidence that the suite controls
   // the exit code. An optional trailing `&& true` preserves that exit on failure.
   const fullSuiteCheck = /^(?:(?:npm|pnpm|yarn)[ \t]+(?:(?:run[ \t]+)?test|run[ \t]+test:full)|(?:node[ \t]+--test)|pytest|go[ \t]+test[ \t]+\.\/\.\.\.|cargo[ \t]+test|make[ \t]+test)(?:[ \t]*&&[ \t]*true)?$/;
@@ -883,6 +915,26 @@ export async function validateSplitDraft(input: { output: SplitOutput; plan: Spl
   } catch (error) {
     return { ok: false, reasons: [`graph:${error instanceof Error ? error.message : String(error)}`], layers: null, implicitEdges: null };
   }
+  if (graph.implicit.length > 0 && output.deliveryGraph !== undefined) {
+    const tasksByUnit = new Map(output.deliveryGraph.units.map((unit) => [unit.unit, unit.taskIds]));
+    const predecessors = new Map<string, string[]>();
+    for (const [from, to] of [...graph.explicit, ...graph.implicit.map((edge) => [edge.from, edge.to] as const)]) {
+      const previous = predecessors.get(to) ?? [];
+      previous.push(from);
+      predecessors.set(to, previous);
+    }
+    for (const group of output.deliveryGraph.independent) {
+      for (const unit of group) {
+        const peers = new Set(group.filter((peer) => peer !== unit).flatMap((peer) => tasksByUnit.get(peer) ?? []));
+        for (const taskId of tasksByUnit.get(unit) ?? []) {
+          for (const dependency of reachableDependencies(taskId, predecessors)) {
+            if (peers.has(dependency)) reasons.push(`delivery-graph-scheduled-order:${taskId}:${dependency}`);
+          }
+        }
+      }
+    }
+  }
+  if (reasons.length > 0) return { ok: false, reasons, layers: null, implicitEdges: null };
   return { ok: true, reasons, layers: graph.layers, implicitEdges: graph.implicit.map((edge) => ({ from: edge.from, to: edge.to, conflicts: edge.conflicts.map((c) => ({ a: c.a.declared, b: c.b.declared })) })) };
 }
 
@@ -987,8 +1039,34 @@ const EXPAND_MEANING: Record<LoopRefusal, string> = {
  * reasons that carry their checker's own message (`plan:`, other `import:` items, `graph:`, `schema:`). The reasons
  * themselves stay codes (stored, shown and asserted as such); the meaning is added where they are read.
  */
+/**
+ * Testers #515/#551: every delivery-graph hand-back had no words, so a model handed the same shape again and burned a
+ * call. The codes are one flat prefix (`delivery-graph-unit-order:<a>:<b>`), so the sub-code is `parts[0]` minus the
+ * shared prefix. Null for a code this does not know, as every other reason's meaning.
+ */
+function deliveryGraphMeaning(code: string, parts: readonly string[]): string | null {
+  const at = (index: number): string => parts[index] ?? "?";
+  switch (code.slice("delivery-graph-".length)) {
+    case "unit-unknown-task": return `\`${at(2)}\` is listed under unit \`${at(1)}\` but no task has that taskId`;
+    case "unit-unassigned": return `task \`${at(1)}\` is in no unit; every task belongs to exactly one`;
+    case "unit-ambiguous": return `task \`${at(1)}\` is listed under more than one unit`;
+    case "edge": return `task \`${at(1)}\` depends on \`${at(2)}\` in another unit, but its own unit's \`dependsOn\` does not name that unit; name the unit there (a dependency inside one unit needs no entry)`;
+    case "independent": return `tasks \`${at(1)}\` and \`${at(2)}\` have an edge between units the requirement calls independent; remove the edge, or move one of the units out of that \`independent\` group`;
+    case "layer": return `unit \`${at(2)}\` sits in a later \`independent\` wave but reaches no unit of the wave before it; add a dependency path from this unit to a unit in the previous wave`;
+    case "independent-order": return `unit \`${at(1)}\` depends on unit \`${at(2)}\` directly or indirectly. Put dependent units in separate waves`;
+    case "task-order": return `task \`${at(1)}\` must wait for all tasks in its declared predecessor unit \`${parts.slice(2).join(":")}\`. Add the missing task dependencies`;
+    case "predecessor-without-tasks": return `task \`${at(1)}\` names a missing or empty predecessor unit \`${parts.slice(2).join(":")}\`. Give that unit a task or correct its name`;
+    case "scheduled-order": return `task \`${at(1)}\` must follow \`${at(2)}\` in the effective schedule, but their units are declared independent. Separate overlapping writes or correct the independent groups`;
+    case "final-verification": return `\`finalVerification\` names task \`${at(1)}\`, whose \`checks\` run no whole-suite command (\`npm test\`, \`node --test\`, \`pytest\`, \`cargo test\`, \`make test\`, …); point it at the task that runs the requirement's overall verification, or null when the requirement names none`;
+    default: return null;
+  }
+}
+
 export function explainSplitReason(reason: string): string | null {
   const parts = reason.split(":");
+  // Tester #515/#551: a hand-back from the delivery graph had no words, so a model handed the same shape again. These
+  // codes are one flat prefix (`delivery-graph-unit-order:a:b`), not a `delivery-graph:` head with a sub-code.
+  if (parts[0]?.startsWith("delivery-graph-") === true) return deliveryGraphMeaning(parts[0], parts);
   switch (parts[0]) {
     case "expand": return EXPAND_MEANING[parts.at(-1) as LoopRefusal] ?? null;
     case "path": return PATH_MEANING;

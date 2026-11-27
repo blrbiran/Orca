@@ -325,7 +325,7 @@ export function contextHandoffLines(threshold: number | null): string[] {
 }
 /** Human text of a group view or a proposal document, with the unestimated-default lines (D3). */
 interface AcceptanceView { tip: string | null; result: string; why?: string; commands: Array<{ command: string; exit: string; ms: number }>; tail?: string; waived?: { by: string; note: string };
-  testChanges?: { base?: string; paths: string[]; weakeningSignals: string[]; digest: string; disposition?: { tip: string; digest: string; by: string; note: string } };
+  testChanges?: { base?: string; paths: string[]; weakeningSignals: string[]; digest: string; error?: string; disposition?: { tip: string; digest: string; by: string; note: string } };
   warning?: string; passedWithoutFullSuite?: true; fullSuite?: { command?: string | null; suggestion: string | null; baseline?: { tip: string; exits: string[]; tests?: number | null }; tests?: number | null };
   identityComparisons?: AcceptanceIdentityComparison[];
   evidence?: { shortfall?: { tests: number; baselineTests: number }; trackedFiles?: number | null; testFiles?: number | null; cwd?: string | null } }
@@ -346,6 +346,9 @@ export function adoptFullSuiteLine(suggestion: string | null | undefined): strin
 export function acceptanceLines(groupId: string, a: AcceptanceView | undefined, requirementReviewState?: string): string[] {
   if (a === undefined) return [];
   const tip = a.tip === null ? "" : ` on ${a.tip.slice(0, 12)}`;
+  if (a.result === "failed" && a.testChanges?.error !== undefined) {
+    return [`problem: ${a.testChanges.error}${tip}`, "next: orca doctor  (inspect the repository before rechecking; the test-change scan could not finish)"];
+  }
   const n = a.commands.length;
   const ran = `(${n} command${n === 1 ? "" : "s"}, ${Math.round(a.commands.reduce((sum, c) => sum + c.ms, 0) / 1000)} s)`;
   const notSet = a.warning === "full-suite-not-set"
@@ -432,14 +435,16 @@ function notFixableLines(groupId: string, left: ReadonlyArray<LeftCriterion>): s
  * problem code, each criterion of its last round, and the three commands that answer it.
  */
 interface DeliveredView { tip: string; commit: string; result: string; why?: string; commands: Array<{ command: string; exit: string; ms: number }>; tail?: string; waived?: { by: string; note: string };
-  testChanges?: { base?: string; paths: string[]; weakeningSignals: string[]; digest: string; disposition?: { tip: string; digest: string; by: string; note: string } }; problem?: string }
+  testChanges?: { base?: string; paths: string[]; weakeningSignals: string[]; digest: string; error?: string; disposition?: { tip: string; digest: string; by: string; note: string } }; problem?: string }
 /** Delivery tail spec D3/D5: the acceptance on the delivered commit, and a delivery backing off -- with what answers each. */
 export function deliveryLines(groupId: string, delivered: DeliveredView | undefined, integration: { retryAfter?: number; transient?: number; transientReason?: string | null } | undefined): string[] {
   const lines: string[] = [];
   if (integration?.retryAfter !== undefined) lines.push(`integration: retrying after ${new Date(integration.retryAfter).toISOString()} (failure ${integration.transient ?? "?"} in a row: ${integration.transientReason ?? "?"}); orca group integrate ${groupId} tries at the next round`);
   if (delivered === undefined) return lines;
   const on = `on ${delivered.commit.slice(0, 12)} (delivered tip ${delivered.tip.slice(0, 12)})`;
-  if (delivered.result === "test-change-pending") {
+  if (delivered.result === "failed" && delivered.testChanges?.error !== undefined) {
+    lines.push(`problem: ${delivered.testChanges.error} ${on}`, "next: orca doctor  (inspect the repository before rechecking; the test-change scan could not finish)");
+  } else if (delivered.result === "test-change-pending") {
     const changes = delivered.testChanges;
     lines.push(`problem: test-change-pending ${on}`,
       `  changed test paths: ${changes?.paths.join(", ") ?? "?"}`,

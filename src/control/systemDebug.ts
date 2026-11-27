@@ -596,7 +596,7 @@ export type EscalationState = "debugging" | "rerunning" | "exhausted";
 export function escalationsOf(store: ControlStore, groupId: string): Array<{ taskId: string; debugGroupId: string; state: EscalationState; reason: string | null }> {
   // One read of the ladder groups first: a group with none (nearly every group) costs no work item or run read, so a
   // summary's reads stay independent of its task count (controlPollPerformance's bound).
-  const ladders = store.db.prepare("SELECT id, body FROM groups WHERE substr(id,1,16)='sysdebug-ladder-' ORDER BY rowid").all().flatMap((row) => {
+  const ladders = store.db.prepare("SELECT id, body FROM groups WHERE id GLOB 'sysdebug-ladder-*' ORDER BY rowid").all().flatMap((row) => {
     let mark: SystemDebugMark | null;
     try { mark = readSystemDebugMark(JSON.parse(String(row.body))); } catch { return []; }
     return mark !== null && mark.source.kind === "ladder" && mark.source.groupId === groupId && mark.source.taskId !== null ? [{ debugGroupId: String(row.id), mark }] : [];
@@ -653,7 +653,7 @@ function derivedTerminalReason(body: Record<string, unknown>): string {
 
 export function criteriaReviewsOf(store: ControlStore, groupId: string): Array<{ taskId: string; debugGroupId: string; state: CriteriaReviewState; reason: string | null }> {
   const out: Array<{ taskId: string; debugGroupId: string; state: CriteriaReviewState; reason: string | null }> = [];
-  for (const row of store.db.prepare("SELECT id, body FROM groups WHERE id LIKE 'sysdebug-criteria-review-%' ORDER BY rowid").all()) {
+  for (const row of store.db.prepare("SELECT id, body FROM groups WHERE id GLOB 'sysdebug-criteria-review-*' ORDER BY rowid").all()) {
     let body: Record<string, unknown>;
     let mark: SystemDebugMark | null;
     try { body = JSON.parse(String(row.body)) as Record<string, unknown>; mark = readSystemDebugMark(body); } catch { continue; }

@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { readArchivedPlan, readBudgetProposal } from "../../src/control/queries.js";
-import { buildSystemDebugPlanSource, escalationsOf, readSystemDebugMark, SYSTEM_DEBUG_INPUT_SCHEMA, systemDebugGroupId, systemDebugGroups, type SystemDebugInputV1 } from "../../src/control/systemDebug.js";
+import { buildSystemDebugPlanSource, criteriaReviewsOf, escalationsOf, readSystemDebugMark, SYSTEM_DEBUG_INPUT_SCHEMA, systemDebugGroupId, systemDebugGroups, type SystemDebugInputV1 } from "../../src/control/systemDebug.js";
 import { taskContractSchema } from "../../src/scheduler/planFile.js";
 import { replenishStartWakes } from "../../src/control/executionDriver.js";
 import { deliverScheduledStart } from "../../src/control/webDispatch.js";
@@ -71,6 +71,17 @@ async function ladderWorld(options: { debugFails?: boolean; humanBlock?: boolean
 }
 
 describe("systemDebugGroups", () => {
+  it.each([escalationsOf, criteriaReviewsOf])("uses an indexed prefix when reading parent-group diagnostics ($name, #541)", async (read) => {
+    const t = await openTestStore();
+    try {
+      let query = "";
+      const store = { db: { prepare(sql: string) { query = sql; return t.store.db.prepare(sql); } } } as unknown as typeof t.store;
+      expect(read(store, "ordinary")).toEqual([]);
+      expect(t.store.db.prepare(`EXPLAIN QUERY PLAN ${query}`).all().map((row) => String(row.detail)))
+        .toEqual(expect.arrayContaining([expect.stringMatching(/SEARCH .*id>\? AND id<\?/)]));
+    } finally { await t.dispose(); }
+  });
+
   it("uses the groups primary-key index and keeps matching system groups in creation order", async () => {
     const t = await openTestStore();
     try {

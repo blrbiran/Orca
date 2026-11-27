@@ -134,3 +134,9 @@ requirement named with "AFTER both" while the `independent` grouping is correct 
 prose names are dependencies is not a structural check. It needs a design (structured expectation on the requirement,
 or a contract field), and #501 stays partially resolved until then. Criterion:
 `tests/control/splitDeliveryGraph.test.ts` ("requires a wave-k unit to reach wave k-1").
+
+## Correction (testers #534, #548, #516 and #551, 2026-11-27, session `ed65fdb8`)
+
+Each task in a unit must reach all tasks in each predecessor unit named by `dependsOn`. A named predecessor with no tasks cannot enforce delivery order. Both checks apply with an empty `independent` list. Units in an independent group may not reach one another through the declared unit graph. The effective schedule is checked for dependencies between those peers when it contains implicit write-set edges. A reason names the affected tasks. The scheduling guarantee for overlapping writes still applies.
+
+The single-repository v9 prompt states these checks. An explicit delivery dependency is a valid reason to add a task edge. The earlier paragraphs' scope limit still applies: the validator takes the declaration as input and does not infer dependencies from prose or from a unit name's numbering. It cannot recover an edge that the model omitted from both graphs. An older in-flight v9 answer is checked against the current validator when it settles and may be handed back with the new explanation.

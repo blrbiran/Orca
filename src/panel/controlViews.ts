@@ -897,7 +897,8 @@ export function readGroupSummaryFromSnapshot(store: ControlStore, groupId: strin
   const scheduleStart = scheduleStartOf(store, groupId, body as Record<string, unknown>);
   // Tester #547: a stored `running`/`review` word can outlive all work; a blocked task with no running, settling, waiting or idle
   // tasks is the group's current state. This is a projection only: guards continue to read the stored status.
-  const blockedOnly = (counts?.blocked ?? 0) > 0 && (counts?.running ?? 0) === 0 && (counts?.settling ?? 0) === 0
+  const escalating = escalation.filter((entry) => entry.state !== "exhausted").length;
+  const blockedOnly = (counts?.blocked ?? 0) > escalating && (counts?.running ?? 0) === 0 && (counts?.settling ?? 0) === 0
     && (counts?.waiting ?? 0) === 0 && (counts?.idle ?? 0) === 0;
   const terminal = terminalKindOf(body as Record<string, unknown>);
   const shownState = terminal ?? (blockedOnly ? "blocked" : (body.status === "ready" || body.status === "review") && ((counts?.running ?? 0) > 0 || (counts?.settling ?? 0) > 0)

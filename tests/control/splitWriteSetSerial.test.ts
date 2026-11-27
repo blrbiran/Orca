@@ -28,6 +28,18 @@ describe("intersecting write sets run serially after a split is accepted (#268)"
     } finally { await x.dispose(); }
   });
 
+  it("hands back an independent pair that the scheduler must serialize (#516)", async () => {
+    const output = { ...PARALLEL, deliveryGraph: {
+      units: PARALLEL.tasks.map(({ taskId }) => ({ unit: taskId, taskIds: [taskId], dependsOn: [] })),
+      independent: [["exporter", "images"]], finalVerification: null,
+    } };
+    const x = await requirementHarness({ answers: [{ purpose: "split", output }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state !== "drafting");
+      expect(readDraft(x.store, "r", 1).reasons).toContain("delivery-graph-scheduled-order:images:exporter");
+    } finally { await x.dispose(); }
+  });
+
   it("a pair the model already ordered keeps its one edge", async () => {
     const x = await requirementHarness({ answers: [{ purpose: "split", output: VALID_SPLIT }], startAt: "split" });
     try {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSplitPrompt, deliveryGraphProblems, SPLIT_INSTRUCTION_V8, SPLIT_INSTRUCTION_V9, withoutEmptySetup } from "../../src/control/requirementSplit.js";
+import { buildSplitPrompt, deliveryGraphProblems, explainSplitReason, SPLIT_INSTRUCTION_V8, SPLIT_INSTRUCTION_V9, withoutEmptySetup } from "../../src/control/requirementSplit.js";
 import type { SplitOutput } from "../../src/control/requirementSchemas.js";
 import { VALID_SPLIT } from "./fixtures/requirementOutputs.js";
 
@@ -117,5 +117,58 @@ describe("a codex split's required-nullable deliveryGraph is folded before the s
     expect(Object.hasOwn(withoutEmptySetup({ ...base, deliveryGraph: { units: [], independent: [], finalVerification: null } }) as object, "deliveryGraph")).toBe(false);
     const real = { units: [{ unit: "T1", taskIds: [VALID_SPLIT.tasks[0]!.taskId], dependsOn: [] }], independent: [], finalVerification: null };
     expect(withoutEmptySetup({ ...base, deliveryGraph: real })).toMatchObject({ deliveryGraph: real });
+  });
+});
+
+describe("declared unit order (#534 #548)", () => {
+  it("requires each task to follow each declared predecessor unit even without independent groups", () => {
+    const graph = { units: [
+      { unit: "schema", taskIds: ["schema"], dependsOn: [] },
+      { unit: "apply", taskIds: ["first", "second"], dependsOn: ["schema"] },
+    ], independent: [], finalVerification: null };
+    expect(deliveryGraphProblems(draft([task("schema"), task("first", ["schema"]), task("second")], graph)))
+      .toEqual(["delivery-graph-task-order:second:schema"]);
+    expect(deliveryGraphProblems(draft([task("schema"), task("first", ["schema"]), task("second", ["first"])], graph)))
+      .toEqual([]);
+  });
+
+  it("waits for all tasks in a predecessor unit", () => {
+    const graph = { units: [
+      { unit: "schema", taskIds: ["core", "migration"], dependsOn: [] },
+      { unit: "apply", taskIds: ["apply"], dependsOn: ["schema"] },
+    ], independent: [], finalVerification: null };
+    expect(deliveryGraphProblems(draft([task("core"), task("migration"), task("apply", ["core"])], graph)))
+      .toContain("delivery-graph-task-order:apply:schema");
+  });
+
+  it.each([[], [{ unit: "schema", taskIds: [], dependsOn: [] }]])("rejects a predecessor without a task (%j)", (...units) => {
+    const output = draft([task("apply")], { units: [
+      ...units, { unit: "apply", taskIds: ["apply"], dependsOn: ["schema"] },
+    ], independent: [], finalVerification: null });
+    expect(deliveryGraphProblems(output)).toContain("delivery-graph-predecessor-without-tasks:apply:schema");
+  });
+
+  it("rejects transitive dependencies within the first independent group", () => {
+    const output = draft([task("a"), task("b", ["a"]), task("c", ["b"])], {
+      units: [
+        { unit: "one", taskIds: ["a"], dependsOn: [] },
+        { unit: "two", taskIds: ["b"], dependsOn: ["one"] },
+        { unit: "three", taskIds: ["c"], dependsOn: ["two"] },
+      ], independent: [["one", "three"]], finalVerification: null,
+    });
+    expect(deliveryGraphProblems(output)).toEqual(["delivery-graph-independent-order:three:one"]);
+  });
+
+  it("keeps numbered unit names as labels", () => {
+    expect(deliveryGraphProblems(draft([task("a"), task("b")], { units: [
+      { unit: "Stage 1", taskIds: ["a"], dependsOn: [] },
+      { unit: "Stage 2", taskIds: ["b"], dependsOn: [] },
+    ], independent: [], finalVerification: null }))).toEqual([]);
+  });
+
+  it("explains how to repair a missing unit edge and a wave mismatch (#515 #551)", () => {
+    expect(explainSplitReason("delivery-graph-task-order:second:schema")).toContain("task `second`");
+    expect(explainSplitReason("delivery-graph-edge:second:first")).toContain("dependsOn");
+    expect(explainSplitReason("delivery-graph-layer:apply:Stage 2")).toContain("previous wave");
   });
 });
