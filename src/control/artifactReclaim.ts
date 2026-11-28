@@ -61,6 +61,8 @@ const flow = (column: string): Owner => ({ kind: "flow", column });
 export const ARTIFACT_HOLDER_TABLES: Readonly<Record<string, HolderTable>> = {
   // Baselines belong to the repository/base, and remain usable after their original group is archived.
   acceptance_failure_baselines: { kind: "global", columns: ["repo_id", "base", "command", "setup_digest", "reporter", "identity", "file", "test_path_json", "diagnostic_hash", "source", "group_id", "run_id", "first_seen_at", "last_seen_at", "tests", "exit"] },
+  // #564: the suite-count baseline belongs to the repository/base and stays usable after its original group is archived.
+  acceptance_suite_baselines: { kind: "global", columns: ["repo_id", "base", "command", "setup_digest", "reporter", "state", "tests", "exit", "source", "observed_at"] },
   artifacts: { kind: "artifact-index", columns: ["id", "hash", "body"] },
   activity: { kind: "owned", owners: [run("run_id"), group("group_id")], columns: ["seq", "group_id", "task_id", "run_id", "at", "kind", "body"] },
   agent_preferences: { kind: "global", columns: ["operator_id", "revision", "doc_json"] },

@@ -175,6 +175,7 @@ A `retryable: true` error may be sent again with the same command id; anything e
 | `graph-version-conflict` | 409 |
 | `group-acceptance-not-failed` | 409 |
 | `group-acceptance-person-required` | 409 |
+| `group-acceptance-shortfall-not-waivable` | 409 |
 | `group-acceptance-test-change-not-pending` | 409 |
 | `group-acceptance-test-change-stale` | 409 |
 | `group-already-exists` | 409 |
