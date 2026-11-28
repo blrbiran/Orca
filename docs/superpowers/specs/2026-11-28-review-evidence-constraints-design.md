@@ -20,7 +20,7 @@ Address tester issue #544: requirement review can cite a file path as evidence f
 
 ## Approach
 
-Update the requirement-review instructions only. For a constraint, the reviewer should connect the exact subject and relation in the criterion to evidence in the delivered diff or other material supplied in the review. For dependency examples, distinguish a direct import from a transitive dependency when the criterion or surrounding requirement makes that distinction; do not infer one from the other. A citation must point to the evidence actually supporting the judgment, not merely to a named or existing path.
+Update the requirement-review instructions only. For a constraint, the reviewer should connect the exact subject and relation in the criterion to evidence in the delivered diff or other material supplied in the review. For dependency examples, use the criterion, original requirement and agreed statement together to determine whether the intended relation is a direct import or the transitive dependency graph; do not silently substitute one relation for the other. If those sources still permit materially different readings that would change the verdict, use the existing `cannot-judge` outcome and name the clarification needed; otherwise use judgment for the supplied evidence. A citation must point to the evidence actually supporting the judgment, not merely to a named or existing path.
 
 The reviewer continues to decide using the existing `met`, `not-met`, and `cannot-judge` outcomes. The controller keeps its existing schema and classification rules. No new deterministic restriction is introduced, so criteria outside the evidence available to the reviewer remain a judgment call rather than being rejected by a new parser.
 
@@ -28,9 +28,10 @@ The reviewer continues to decide using the existing `met`, `not-met`, and `canno
 
 1. The review prompt tells the reviewer not to treat path existence or unrelated file evidence as proof of a content or dependency constraint.
 2. For a criterion such as “module A must not directly import B,” the prompt tells the reviewer to cite evidence about A's dependency relation to B; evidence about another file alone is insufficient.
-3. When the review material does not show the relevant relation, the prompt directs the reviewer to use `cannot-judge` and name what evidence is missing, rather than claim `met` from a path-only citation.
-4. Existing verdict schema and controller classification remain unchanged; no static dependency analyzer or new hard rejection is added.
-5. A regression criterion demonstrates the prompt change against the reported mismatch shape, while preserving ordinary reviews for criteria that are supported by the supplied evidence.
+3. For dependency wording that does not specify direct versus transitive behavior, the prompt directs the reviewer to use the criterion, original requirement and agreed statement together. If materially different readings remain and would change the verdict, the reviewer uses `cannot-judge` and names the needed clarification.
+4. When the review material does not show the relevant relation, the prompt directs the reviewer to use `cannot-judge` and name what evidence is missing, rather than claim `met` from a path-only citation.
+5. Existing verdict schema and controller classification remain unchanged; no static dependency analyzer or new hard rejection is added.
+6. A regression criterion demonstrates the prompt change against the reported A/B mismatch shape, while preserving ordinary reviews for criteria that are supported by the supplied evidence.
 
 ## Trade-off
 

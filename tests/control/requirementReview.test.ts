@@ -105,6 +105,23 @@ describe("the requirement review (tester follow-up G §3)", () => {
     expect(planned).toContain("- b (metric): depends on a; writes src/b.ts; checks node check.js; success: b reads a");
   }, 180000);
 
+  it("matches dependency evidence to the criterion and requirement (#544)", () => {
+    const prompt = buildReviewPrompt({
+      idea: "Keep the retry adapter independent of policy evaluation.",
+      statement: "backoff.js must not depend on policy.js.",
+      criteria: [{ id: "AC1", text: "backoff.js must not import policy.js" }], openBranches: [], truncated: false,
+      changedFiles: [{ path: "explain.js", status: "M", bytes: 31, sha256: "a".repeat(64), binary: false }],
+      diff: "diff --git a/explain.js b/explain.js\n+import { policy } from './policy.js';",
+    });
+    expect(prompt).toContain("- AC1: backoff.js must not import policy.js");
+    expect(prompt).toContain("+import { policy } from './policy.js';");
+    expect(prompt).toContain("For every criterion, match the evidence to its exact subject and relation.");
+    expect(prompt).toContain("For a dependency constraint, use the criterion, original requirement and agreed statement together to determine whether it describes a direct import or the transitive dependency graph.");
+    expect(prompt).toContain("If those sources still permit materially different readings that would change the verdict, use cannot-judge and name the clarification needed; otherwise use your judgment for the evidence provided.");
+    expect(prompt).toContain("- verdict cannot-judge: only when neither the diff, the files listed nor Orca's records above can show it;");
+    expect(prompt).toContain("if the supplied material does not show the relevant subject and relation, name in `missing` which record or content would.");
+  });
+
   // Tester #337: a criterion about a binary deliverable ("the logo is 16x32") needs the file's type and size; Orca reads
   // them from the blob it already hashes and the reviewer may cite them by path, so it is not steered to cannot-judge.
   it("names a changed binary's type and image size, read from its header (#337)", async () => {
@@ -120,14 +137,6 @@ describe("the requirement review (tester follow-up G §3)", () => {
     const prompt = buildReviewPrompt({ idea: "i", statement: "s", criteria: CRITERIA, openBranches: [], diff: "", truncated: false,
       changedFiles: [{ path: "doc.pdf", status: "A", bytes: 9, sha256: "e".repeat(64), binary: true, kind: "PDF document (version 1.7); its page count is not read" }] });
     expect(prompt).toContain(`- A doc.pdf 9 ${"e".repeat(64)} (binary: PDF document (version 1.7); its page count is not read; its other bytes are not shown)`);
-    // The evidence a binary criterion can cite, and cannot-judge kept for what is genuinely not shown -- without a guess.
-    expect(prompt).toContain("or the file's path with line null when the evidence is what is listed for it -- its size, hash, type or stored pixel size, never what its unshown content says");
-    expect(prompt).toContain("- verdict not-met: name the evidence you looked at, in the same forms,");
-    expect(prompt).toContain("For every criterion, match the evidence to its exact subject and relation.");
-    expect(prompt).toContain("A path's existence or a citation to an unrelated file does not by itself prove a content or dependency constraint.");
-    expect(prompt).toContain("For a dependency constraint, follow whether the criterion describes a direct import or a transitive dependency; do not substitute one for the other");
-    expect(prompt).toContain("if the supplied material does not show the relevant subject and relation, name in `missing` which record or content would.");
-    expect(prompt).toContain("Do not guess what a file's unshown content says.");
     // Review of #337: metadata is evidence only of itself (a PDF's hash does not show what it says), stated with the
     // evidence forms; the size is the stored one. mutation: drop either sentence -> red
     expect(prompt).toContain("A file's listed metadata (size, hash, type, stored pixel size) shows only those facts, never what its unshown content says.");

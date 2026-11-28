@@ -20,8 +20,8 @@
 
 ## Review Focus
 
-- A constraint names module A, but cited evidence is about module B: the prompt must require matching the evidence subject to the criterion; test the mismatched-file example in the prompt golden assertion.
-- A criterion says “imports” without specifying direct or transitive dependency: tell the reviewer to follow the criterion and surrounding requirement, and not silently substitute one relation for the other; pin the wording in the prompt test.
+- A constraint names module A, but cited evidence is about module B: the prompt must require matching the evidence subject to the criterion; a dedicated prompt test uses the #544 shape (`backoff.js` constrained, `explain.js` shown).
+- A criterion says “imports” without specifying direct or transitive dependency: tell the reviewer to use the criterion, original requirement and agreed statement together; if materially different readings remain and change the verdict, use `cannot-judge`; pin this wording in the prompt test.
 - The relevant file content is absent or the diff is truncated: use the existing `cannot-judge` path rather than claiming `met`; pin that instruction in the prompt test.
 - Ordinary path/content criteria have relevant evidence in the diff: retain the existing evidence instructions and ensure the new wording does not demand static proof; retain the existing ordinary prompt assertions.
 - Binary metadata is the only evidence available for a binary file: preserve the current boundary that metadata proves only metadata; retain the existing binary prompt assertions.
@@ -40,7 +40,7 @@
 
 - [ ] **Step 1: Add failing prompt assertions**
 
-  Add assertions in the existing prompt test for: (a) evidence must concern the subject and relation named by the criterion; (b) an unrelated file/path does not prove that relation; (c) distinguish direct import from transitive dependency when the criterion or requirement specifies it, without requiring static analysis; and (d) use `cannot-judge` when the review material does not show the relation. Keep the existing path-only metadata, binary, and ordinary evidence assertions.
+  Add assertions in a dedicated prompt test built from the #544 mismatch shape: AC1 says `backoff.js` must not import `policy.js`, while the supplied diff only shows `explain.js` importing `policy.js`. Assert the prompt preserves that mismatch, requires matching evidence to the criterion's subject/relation, uses the criterion plus original requirement and agreed statement to interpret direct versus transitive dependency, and says to use `cannot-judge` when material ambiguity would change the verdict or the relation is not shown. Keep existing path-only metadata, binary, and ordinary evidence assertions in their existing tests.
 
 - [ ] **Step 2: Run the prompt test and confirm the new assertions fail**
 
@@ -49,7 +49,7 @@
 
 - [ ] **Step 3: Update only `buildReviewPrompt` guidance**
 
-  Add concise instructions that require the reviewer to connect a criterion's subject and relation to relevant evidence, not infer dependency behavior from an unrelated path, and distinguish direct from transitive relations when the requirement does. Preserve the existing instructions that the reviewer should not guess unshown content and may use `cannot-judge` when evidence is unavailable. Do not change `outputSchema`, `classifyReviewOutput`, or review state transitions.
+  Add concise guidance that ties evidence to the criterion's subject and relation, uses the criterion, original requirement and agreed statement together to resolve direct-versus-transitive wording, and asks for `cannot-judge` only when a material ambiguity changes the verdict or the supplied evidence does not show the relation. Preserve the rule against guessing unshown content. Do not change `outputSchema`, `classifyReviewOutput`, or review state transitions.
 
 - [ ] **Step 4: Run the focused test and typecheck**
 
