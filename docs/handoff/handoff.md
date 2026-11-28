@@ -64,13 +64,14 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
-### 3.最新（2026-11-28，Orca 会话 `1cdb9811`）—— 验收完整性 #562/#564/#558/#580 合入本地 main
+### 3.最新（2026-11-28，Orca 会话 `1cdb9811`）—— 验收完整性 #562/#564/#558/#580 与 #544 证据对齐
 
 - 主题行 `feat(control): acceptance integrity -- test scope, cached suite counts, and visible failure identities (#562 #564 #558 #580)`。设计／计划在 `docs/superpowers/specs/2026-11-28-acceptance-integrity-design.md` 与 `docs/superpowers/plans/2026-11-28-acceptance-integrity.md`（含逐任务裁决与验证记录）。
 - **#562**：验收的既有测试变更扫描改用 `definesChecks`，把**既存** `package.json` 脚本键、CI workflow、已知测试配置纳入；新增测试文件或新增无关脚本仍 additive。脚本比较记录为 `script-changed:<path>#<name>`，不声称静态判定「变窄」。
 - **#564**：schema **27** 新表 `acceptance_suite_baselines`，键为 `{repo,base,command,setup_digest,reporter}`；一次完成的套件计数复用，unsupported 的完成输出缓存为 unavailable，基础设施失败不写行。全绿 tip 若任一观测到的套件调用少于基线一半即 `failed`；恰好一半不算。
 - **#558**：TAP 按段独立校验、跨段身份去重；绝对路径与 cwd 都 realpath 后比较（`/tmp` 与 `/private/tmp` 等价）。`new-failure`／`non-comparable`／`baseline-unavailable`／`base-green` 在 `group show`、`group brief`、Board、Web problem 渲染。
 - **#580**：一个共享的全套命令识别器服务拆分校验与需求提示（接受 `npx vitest run`、`pytest -q` 等；拒绝选择器、管道、恒成功包装）。`finalVerification` 仍只认直接全套命令，重跑由 Orca 自己做；普通 check 的精确同命令 `suite || suite` 按两段分别取证、共享一个时限，红段不能被后面的绿段掩盖。
+- **#544（部分解决）**：review prompt 要求证据对应 AC 的主体与关系，不以路径存在或无关文件作为约束证据；依赖范围由 criterion、原始需求和 agreed statement 一起解释。若这些上下文仍留下会改变结论的歧义，reviewer 用现有 `cannot-judge` 并点名需澄清内容。没有新增静态 import 分析、schema 或硬拒绝，仍是模型判断，不能承诺跨模型一定判对。设计／计划：`docs/superpowers/specs/2026-11-28-review-evidence-constraints-design.md`、`docs/superpowers/plans/2026-11-28-review-evidence-constraints.md`；主题行 `fix(review): require evidence aligned to constrained criteria (#544)` 与 `fix(review): resolve dependency scope from requirement context (#544)`。判据 `tests/control/requirementReview.test.ts` 增专用 `backoff.js`／`explain.js` 错配 fixture，旧码上缺失歧义提示时见红；最终聚焦测试 9/9。观察点为主题行 `fix(review): resolve dependency scope from requirement context (#544)`：合入改动门 `npm test` 退出 0，6 文件／39 项通过、0 跳过，11 个 ≥30 s 文件按规则延后至 `test:full`；`npm run build` 退出 0，Vite 有既有大 chunk 警告。全量与真实 provider 行为未测；issue 台账在仓库外，本轮未改，测试者可将 #544 更新为部分解决。
 - **控制器裁定（可逆，待人审）**：测量出的测试条数缺口**不可豁免**（group 与 D3 都拒绝 `waive-acceptance`，错误码 `group-acceptance-shortfall-not-waivable`），因为备注补不出缺失的测试；要交付须恢复覆盖或改检查合同。
 - **门（现测）**：受影响测试 `npm test` 304/305 文件绿；唯一红的 `controlShutdown` 两例是控制 socket 路径过长（126 B），`TMPDIR=/tmp` 单跑 7/7 绿；`npm run typecheck`、`npm run build` RC 0。全量 `test:full` 未跑。既有 schema 版本判据随 27 更新（含 `schema9`／`schema10` 的「未来版本」夹具改为 28，以及一次迁移不可重入的回归改为 `CREATE TABLE IF NOT EXISTS`）。
 - **诚实边界**：失败身份比对仍只支持 node:test TAP；其它 runner 的计数／身份按 unavailable 展示，不伪造成通过。本轮未动 ccloop 契约。
