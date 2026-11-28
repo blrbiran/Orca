@@ -64,7 +64,18 @@ node_modules/.bin/tsx src/cli.ts resume           # 从最近的检查点接手
 
 > 2026-11-11 压缩：当时的 `3.最新`（会话 `3153bf70`，现为 `3.上一轮`）原样保留；其下 40 余个历轮小节（会话 `9179cdad` 回溯到 `a3b2a7a7`，2026-10-18 → 11-10）压成 §3.A「仍成立的结论」。那些轮次的分支都已合入 main、三仓 main 已推（2026-11-11 `/usr/bin/git ls-remote` 现核：Orca／ccloop／ccmem 本地 main＝`origin/main`），删去的是过程（门的计数、变异清单、付费明细、push／repin／清理请求），出处指到 spec／plan／台账或提交主题行；原文按 §十 取回。§3.1–§3.3 是 2026-10-18 会话 `a3b2a7a7` 压出的结论（2026-11-11 按现状改掉了过期处：profile 版本、schema、Codex 模型、指向已删小节的引用；§3.2 表补上后来几次真 agent 跑通），§3.4 只留门的规则。
 
-### 3.最新（2026-11-27，Orca 会话 `ed65fdb8`）—— 测试者台账复核与首批修复
+### 3.最新（2026-11-28，Orca 会话 `1cdb9811`）—— 验收完整性 #562/#564/#558/#580 合入本地 main
+
+- 主题行 `feat(control): acceptance integrity -- test scope, cached suite counts, and visible failure identities (#562 #564 #558 #580)`。设计／计划在 `docs/superpowers/specs/2026-11-28-acceptance-integrity-design.md` 与 `docs/superpowers/plans/2026-11-28-acceptance-integrity.md`（含逐任务裁决与验证记录）。
+- **#562**：验收的既有测试变更扫描改用 `definesChecks`，把**既存** `package.json` 脚本键、CI workflow、已知测试配置纳入；新增测试文件或新增无关脚本仍 additive。脚本比较记录为 `script-changed:<path>#<name>`，不声称静态判定「变窄」。
+- **#564**：schema **27** 新表 `acceptance_suite_baselines`，键为 `{repo,base,command,setup_digest,reporter}`；一次完成的套件计数复用，unsupported 的完成输出缓存为 unavailable，基础设施失败不写行。全绿 tip 若任一观测到的套件调用少于基线一半即 `failed`；恰好一半不算。
+- **#558**：TAP 按段独立校验、跨段身份去重；绝对路径与 cwd 都 realpath 后比较（`/tmp` 与 `/private/tmp` 等价）。`new-failure`／`non-comparable`／`baseline-unavailable`／`base-green` 在 `group show`、`group brief`、Board、Web problem 渲染。
+- **#580**：一个共享的全套命令识别器服务拆分校验与需求提示（接受 `npx vitest run`、`pytest -q` 等；拒绝选择器、管道、恒成功包装）。`finalVerification` 仍只认直接全套命令，重跑由 Orca 自己做；普通 check 的精确同命令 `suite || suite` 按两段分别取证、共享一个时限，红段不能被后面的绿段掩盖。
+- **控制器裁定（可逆，待人审）**：测量出的测试条数缺口**不可豁免**（group 与 D3 都拒绝 `waive-acceptance`，错误码 `group-acceptance-shortfall-not-waivable`），因为备注补不出缺失的测试；要交付须恢复覆盖或改检查合同。
+- **门（现测）**：受影响测试 `npm test` 304/305 文件绿；唯一红的 `controlShutdown` 两例是控制 socket 路径过长（126 B），`TMPDIR=/tmp` 单跑 7/7 绿；`npm run typecheck`、`npm run build` RC 0。全量 `test:full` 未跑。既有 schema 版本判据随 27 更新（含 `schema9`／`schema10` 的「未来版本」夹具改为 28，以及一次迁移不可重入的回归改为 `CREATE TABLE IF NOT EXISTS`）。
+- **诚实边界**：失败身份比对仍只支持 node:test TAP；其它 runner 的计数／身份按 unavailable 展示，不伪造成通过。本轮未动 ccloop 契约。
+
+### 3.上一轮（2026-11-27，Orca 会话 `ed65fdb8`）—— 测试者台账复核与首批修复
 
 - **拆分 #534/#548/#516/#551/#515**：每个任务必须等到草稿声明的前置单元全部任务完成。即使 `independent` 为空也检查。写集相交造成的实际串行与独立声明冲突时交回具名理由。补了 v9 提示与原因解释。需求原文遗漏的边、AC 与澄清答案不一致、接受冲突后的持久证据仍归 #501/#542/#557 的设计。以 `docs/superpowers/specs/2026-11-23-split-instruction-v9-design.md` 最新 Correction 为准。
 - **#565/#541**：CLI 在组与交付验收中显示测试改动扫描的错误。父组的 ladder 与 criteria-review 查询使用索引前缀。核对 ladder 测试时确认 #547 派生 blocked 会误把仍在自动修复的任务交给人，修正该投影。源码观测提交 `133340d0` 的 `env -u ORCA_CCMEM_BIN -u CCMEM_CONFIG_PATH TMPDIR=/tmp npm test -- --base main --maxWorkers=3` 退出 0，247 文件／2649 项通过、0 跳过、19 文件延后。日志 `/tmp/orca-batch-gate.GnK6Yt`。
