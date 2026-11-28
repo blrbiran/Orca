@@ -138,6 +138,19 @@ describe("a not-passed requirement review is a group problem (#359)", { timeout:
     } finally { await t.h.dispose(); }
   });
 
+  it("a measured shortfall's group problem offers recheck but no waiver", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const shortfall = { tip: "a".repeat(40), result: "failed", commands: [{ command: "npm test", exit: "0", ms: 1 }], at: 1,
+        evidence: { cwd: null, head: "a".repeat(40), trackedFiles: 4, testFiles: 2, tests: 79, suiteTests: [79], baselineTests: 552,
+          baselineCount: { state: "counted", tests: 552, source: "base-suite" }, shortfall: { tests: 79, baselineTests: 552 } } };
+      const row = t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!;
+      t.h.store.db.prepare("UPDATE groups SET body=? WHERE id='g'").run(JSON.stringify({ ...JSON.parse(String(row.body)), status: "review", acceptance: shortfall }));
+      expect(readGroupSummary(t.h.store, "g").groupProblem).toEqual({
+        code: "group-acceptance-failed:npm test", why: "group-acceptance-failed", next: ["orca group recheck g"],
+      });
+    } finally { await t.h.dispose(); }
+  });
+
   it("shows changed test paths and the person-only acceptance disposition", async () => {
     const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
       const groupBody = JSON.parse(String(t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));

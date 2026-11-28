@@ -12,6 +12,7 @@ import { buildGraph } from "../scheduler/graph.js";
 import { loadPlan, schedulerControlPlanSourceOf, type PlanFile } from "../scheduler/planFile.js";
 import { contains } from "../scheduler/pathTrie.js";
 import { normalizeClaim, qualifiedWriteSetOf } from "../scheduler/writeSet.js";
+import { recognizeFullSuiteCommand } from "./fullSuiteRecognition.js";
 
 export const SPLIT_PROMPT_HEAD = "Orca requirement split, instruction version 5.";
 /** Multi-directory projects spec §6.4: the multi instruction's own head line. */
@@ -832,12 +833,12 @@ export function deliveryGraphProblems(output: SplitOutput): string[] {
       }
     }
   }
-  // Count recognized whole-suite invocations. A shell list or quoted mention is not evidence that the suite controls
-  // the exit code. An optional trailing `&& true` preserves that exit on failure.
-  const fullSuiteCheck = /^(?:(?:npm|pnpm|yarn)[ \t]+(?:(?:run[ \t]+)?test|run[ \t]+test:full)|(?:node[ \t]+--test)|pytest|go[ \t]+test[ \t]+\.\/\.\.\.|cargo[ \t]+test|make[ \t]+test)(?:[ \t]*&&[ \t]*true)?$/;
-  const runsSuite = (taskId: string): boolean => (output.tasks.find((task) => task.taskId === taskId)?.checks ?? []).some((check) => fullSuiteCheck.test(check.trim()));
+  // A final-verification claim is accepted only for a bounded direct suite invocation. A retry wrapper is rejected here;
+  // Orca itself reruns a red suite and preserves each attempt, while arbitrary shell wrappers can hide failures.
+  const runsSuite = (taskId: string): boolean => (output.tasks.find((task) => task.taskId === taskId)?.checks ?? [])
+    .some((check) => recognizeFullSuiteCommand(check) !== null);
   if (graph.finalVerification !== null && graph.finalVerification !== undefined && !runsSuite(graph.finalVerification)) {
-    reasons.push(`delivery-graph-final-verification:${graph.finalVerification}`);
+    reasons.push(`delivery-graph-final-verification:${graph.finalVerification}:command-not-recognized`);
   }
   return reasons;
 }
@@ -1057,7 +1058,7 @@ function deliveryGraphMeaning(code: string, parts: readonly string[]): string | 
     case "task-order": return `task \`${at(1)}\` must wait for all tasks in its declared predecessor unit \`${parts.slice(2).join(":")}\`. Add the missing task dependencies`;
     case "predecessor-without-tasks": return `task \`${at(1)}\` names a missing or empty predecessor unit \`${parts.slice(2).join(":")}\`. Give that unit a task or correct its name`;
     case "scheduled-order": return `task \`${at(1)}\` must follow \`${at(2)}\` in the effective schedule, but their units are declared independent. Separate overlapping writes or correct the independent groups`;
-    case "final-verification": return `\`finalVerification\` names task \`${at(1)}\`, whose \`checks\` run no whole-suite command (\`npm test\`, \`node --test\`, \`pytest\`, \`cargo test\`, \`make test\`, …); point it at the task that runs the requirement's overall verification, or null when the requirement names none`;
+    case "final-verification": return `\`finalVerification\` names task \`${at(1)}\`, whose \`checks\` do not use a recognized direct full-suite command. Use a direct command such as \`npm test\`, \`npx vitest run\`, or \`pytest\`; Orca retries a red full-suite check and preserves both results. Keep lint or other checks as separate entries.`;
     default: return null;
   }
 }

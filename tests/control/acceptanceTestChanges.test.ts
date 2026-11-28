@@ -72,6 +72,45 @@ describe("existing acceptance test changes", () => {
     });
   });
 
+  it("gates edits to existing package test scripts but not a newly added script", async () => {
+    const repo = await repository({ "package.json": JSON.stringify({ scripts: { test: "node --test", docs: "node docs.js" } }) });
+    const narrowed = await repo.tip({ "package.json": JSON.stringify({ scripts: { test: "node --test --test-name-pattern=no-match", docs: "node docs.js" } }) });
+    expect(await existingTestChanges(repo.root, repo.base, narrowed, { checks: ["npm test"], setupCommands: [] })).toMatchObject({
+      paths: ["package.json"], weakeningSignals: ["script-changed:package.json#test"],
+    });
+
+    const additiveRepo = await repository({ "package.json": JSON.stringify({ scripts: { test: "node --test" } }) });
+    const addedScript = await additiveRepo.tip({ "package.json": JSON.stringify({ scripts: { test: "node --test", lint: "eslint ." } }) });
+    expect(await existingTestChanges(additiveRepo.root, additiveRepo.base, addedScript, { checks: ["npm test"], setupCommands: [] }))
+      .toMatchObject({ paths: [], weakeningSignals: [] });
+  });
+
+  it("gates test-discovery config, existing workflows, and scripts invoked by acceptance checks", async () => {
+    const repo = await repository({
+      "vitest.config.ts": "export default { test: { include: ['tests/**/*.test.ts'] } };\n",
+      ".github/workflows/ci.yml": "name: CI\n",
+      "scripts/check-tests.mjs": "console.log('tests');\n",
+    });
+    const tip = await repo.tip({
+      "vitest.config.ts": "export default { test: { include: [] } };\n",
+      ".github/workflows/ci.yml": "name: CI\n# changed\n",
+      "scripts/check-tests.mjs": "console.log('less tests');\n",
+    });
+    const changes = await existingTestChanges(repo.root, repo.base, tip, { checks: ["node scripts/check-tests.mjs"], setupCommands: [] });
+    expect(changes.paths).toEqual([".github/workflows/ci.yml", "scripts/check-tests.mjs", "vitest.config.ts"]);
+    expect(changes.weakeningSignals).toEqual(expect.arrayContaining([
+      "check-script-changed:scripts/check-tests.mjs", "test-config-changed:vitest.config.ts", "workflow-changed:.github/workflows/ci.yml",
+    ]));
+  });
+
+  it("gates a newly added auto-discovered test config but not a new ordinary test file", async () => {
+    const repo = await repository({ "src/add.ts": "export const add = 1;\n" });
+    const tip = await repo.tip({ "playwright.config.ts": "export default { testDir: './none' };\n" });
+    expect(await existingTestChanges(repo.root, repo.base, tip)).toMatchObject({
+      paths: ["playwright.config.ts"], weakeningSignals: ["test-config-added:playwright.config.ts"],
+    });
+  });
+
   it("sorts affected paths before hashing them and binds the digest to the checked tip", async () => {
     const repo = await repository({ "tests/a.test.ts": TEST, "tests/b.test.ts": TEST });
     const tip = await repo.tip({ "tests/b.test.ts": `${TEST}it('two', () => { expect(2).toBe(2); });\n`, "tests/a.test.ts": `${TEST}it('two', () => { expect(2).toBe(2); });\n` });

@@ -4,7 +4,8 @@
  * it without pulling in the acceptance runner (groupAcceptance.ts).
  */
 import { fullSuiteCommand } from "./fullSuite.js";
-import type { AcceptanceFailureIdentity } from "./acceptanceFailureIdentity.js";
+import type { AcceptanceFailureAttempt, AcceptanceFailureIdentity } from "./acceptanceFailureIdentity.js";
+import type { SuiteCountBaseline } from "./acceptanceSuiteBaseline.js";
 import type { ControlStore } from "./store.js";
 
 export type GroupAcceptanceResult = "passed" | "failed" | "passed-relative" | "not-needed" | "not-run" | "waived" | "test-change-pending";
@@ -25,11 +26,7 @@ export interface AcceptanceTestChanges {
   pendingResult?: Exclude<GroupAcceptanceResult, "test-change-pending">;
   disposition?: AcceptanceTestChangeDisposition;
 }
-export interface AcceptanceIdentityAttempt {
-  exit: string;
-  failureIdentityStatus?: "complete" | "unsupported" | "ambiguous";
-  failureIdentities?: AcceptanceFailureIdentity[];
-}
+export interface AcceptanceIdentityAttempt extends AcceptanceFailureAttempt {}
 export interface AcceptanceIdentityComparison {
   command: string;
   base: string | null;
@@ -78,6 +75,8 @@ export interface AcceptanceEvidence {
   trackedFiles: number | null; testFiles: number | null;
   tests: number | null;
   baselineTrackedFiles?: number | null; baselineTestFiles?: number | null; baselineTests?: number | null;
+  suiteTests?: Array<number | null>;
+  baselineCount?: Pick<SuiteCountBaseline, "state" | "tests"> & Partial<Pick<SuiteCountBaseline, "source">>;
   shortfall?: { tests: number; baselineTests: number };
 }
 export interface FullSuiteRecord {
@@ -93,8 +92,9 @@ export interface FullSuiteRecord {
    * discovered only some files (79); the exits alone cannot.
    */
   tests?: number | null;
-  /**
-   * Tester #383 (2026-11-20): how many task runs in this group had already reported this same command red before the
+  invocationTests?: Array<number | null>;
+  baselineCount?: Pick<SuiteCountBaseline, "state" | "tests"> & Partial<Pick<SuiteCountBaseline, "source">>;
+  /** Tester #383 (2026-11-20): how many task runs in this group had already reported this same command red before the
    * acceptance ran. Above zero, the suite ran twice even when the first run was green, the record is `flaky`, and the
    * warning says so.
    */
@@ -205,6 +205,7 @@ export interface DeliveredAcceptance {
   tail?: string;
   identityComparisons?: AcceptanceIdentityComparison[];
   testChanges?: AcceptanceTestChanges;
+  evidence?: AcceptanceEvidence;
   at: number;
   waived?: { by: string; note: string; at: number };
 }

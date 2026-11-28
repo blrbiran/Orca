@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { realpathSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { ControlStore } from "./store.js";
 
 export interface AcceptanceFailureIdentity {
@@ -13,6 +14,17 @@ export type FailureIdentityParseStatus = "complete" | "unsupported" | "ambiguous
 export interface FailureIdentityParse {
   identities: AcceptanceFailureIdentity[];
   parseStatus: FailureIdentityParseStatus;
+  reportedFailures: number | null;
+  blockCount: number;
+}
+export interface AcceptanceFailureAttempt {
+  exit: string;
+  failureIdentityStatus?: FailureIdentityParseStatus;
+  failureIdentities?: AcceptanceFailureIdentity[];
+  reportedFailures?: number | null;
+  blockCount?: number;
+  tests?: number | null;
+  tail?: string;
 }
 
 interface SubtestFrame { indent: number; name: string }
@@ -38,11 +50,31 @@ function fileName(value: string): boolean {
   return TEST_DIRECTORY.test(value) || FAILURE_SUFFIX.test(value);
 }
 
+function realpathAllowMissing(value: string): string | null {
+  let current = resolve(value);
+  const suffix: string[] = [];
+  while (true) {
+    try { return join(realpathSync(current), ...suffix); }
+    catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "ENOENT" && code !== "ENOTDIR") return null;
+      const parent = dirname(current);
+      if (parent === current) return null;
+      suffix.unshift(basename(current));
+      current = parent;
+    }
+  }
+}
+
 function repoPath(value: string, cwd: string): string | null {
   const slash = value.trim().replaceAll("\\", "/");
   if (slash === "" || slash.startsWith("file://")) return null;
-  const candidate = isAbsolute(value) ? relative(resolve(cwd), resolve(value)) : slash.replace(/^\.\//, "");
-  const normalized = candidate.split(sep).join("/").replaceAll("\\", "/");
+  const canonicalCwd = realpathAllowMissing(cwd);
+  if (canonicalCwd === null) return null;
+  const candidate = isAbsolute(value) ? value : join(canonicalCwd, slash.replace(/^\.\//, ""));
+  const canonicalCandidate = realpathAllowMissing(candidate);
+  if (canonicalCandidate === null) return null;
+  const normalized = relative(canonicalCwd, canonicalCandidate).split(sep).join("/").replaceAll("\\", "/");
   if (normalized === "" || normalized === "." || normalized === ".." || normalized.startsWith("../") || normalized.startsWith("/")) return null;
   return normalized;
 }
@@ -68,7 +100,10 @@ function normalizedDiagnostic(lines: readonly string[], cwd: string): string | n
       value = body.join("\n").trim();
     }
     if (value === "" || value === "subtestsFailed") continue;
-    value = value.replaceAll(resolve(cwd), "<cwd>").replaceAll("\\", "/");
+    value = value.replaceAll(resolve(cwd), "<cwd>");
+    const canonicalCwd = realpathAllowMissing(cwd);
+    if (canonicalCwd !== null) value = value.replaceAll(canonicalCwd, "<cwd>");
+    value = value.replaceAll("\\", "/");
     value = value.replace(/:\d+(?::\d+)?(?=['"\s]|$)/g, ":<position>");
     value = value.replace(/\b\d+(?:\.\d+)?\s*ms\b/gi, "<duration>");
     selected.push(`${match[1]}:${value}`);
@@ -89,10 +124,9 @@ function locationFile(lines: readonly string[], cwd: string): string | null {
 }
 
 /** Parse only the node:test TAP structure used for failure identity comparison. */
-export function failureIdentitiesOf(output: string, reporter: "node-test-tap-v1", cwd: string): FailureIdentityParse {
-  void reporter;
+function failureIdentitiesInBlock(output: string, cwd: string): FailureIdentityParse {
   const text = output.replace(ANSI, "");
-  if (!/^TAP version \d+\s*$/m.test(text)) return { identities: [], parseStatus: "unsupported" };
+  if (!/^TAP version \d+\s*$/m.test(text)) return { identities: [], parseStatus: "unsupported", reportedFailures: null, blockCount: 1 };
 
   const frames: SubtestFrame[] = [];
   const childFiles = new Set<string>();
@@ -167,7 +201,32 @@ export function failureIdentitiesOf(output: string, reporter: "node-test-tap-v1"
   finishFailure();
   if (reportedFailures === null || reportedFailures !== identities.length) malformed = true;
   identities.sort((a, b) => a.file.localeCompare(b.file) || a.testPath.join("\0").localeCompare(b.testPath.join("\0")) || a.key.localeCompare(b.key));
-  return { identities, parseStatus: malformed ? "ambiguous" : "complete" };
+  return { identities, parseStatus: malformed ? "ambiguous" : "complete", reportedFailures, blockCount: 1 };
+}
+
+export function failureIdentitiesOf(output: string, reporter: "node-test-tap-v1", cwd: string): FailureIdentityParse {
+  void reporter;
+  const text = output.replace(ANSI, "");
+  const starts = [...text.matchAll(/^TAP version \d+\s*$/gm)];
+  if (starts.length === 0) return { identities: [], parseStatus: "unsupported", reportedFailures: null, blockCount: 0 };
+  const blocks = starts.map((match, index) => {
+    const begin = match.index ?? 0;
+    const end = starts[index + 1]?.index ?? text.length;
+    return failureIdentitiesInBlock(text.slice(begin, end), cwd);
+  });
+  const identities = new Map<string, AcceptanceFailureIdentity>();
+  for (const block of blocks) for (const identity of block.identities) identities.set(identity.key, identity);
+  const reportedFailures = blocks.every((block) => block.reportedFailures !== null)
+    ? blocks.reduce((total, block) => total + block.reportedFailures!, 0)
+    : null;
+  const ordered = [...identities.values()].sort((a, b) => a.file.localeCompare(b.file)
+    || a.testPath.join("\0").localeCompare(b.testPath.join("\0")) || a.key.localeCompare(b.key));
+  return {
+    identities: ordered,
+    parseStatus: blocks.some((block) => block.parseStatus !== "complete") ? "ambiguous" : "complete",
+    reportedFailures,
+    blockCount: blocks.length,
+  };
 }
 
 export function acceptanceSetupDigest(setup: readonly string[]): string {

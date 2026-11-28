@@ -50,6 +50,27 @@ async function deliver(onMain: string | null, until: (t: Harness) => boolean, op
 }
 
 describe("acceptance on the delivered commit (delivery tail D3)", { timeout: 240_000 }, () => {
+  it("does not let a tip waiver cover a measured delivered-tree shortfall", async () => {
+    const module = await import("../../src/control/deliveredAcceptance.js");
+    const classify = (module as unknown as { classifyDeliveredAcceptance?: (...args: unknown[]) => unknown }).classifyDeliveredAcceptance;
+    expect(typeof classify).toBe("function");
+    if (classify === undefined) return;
+    const identity = { key: "k", file: "tests/test.js", testPath: ["known flaky test"], diagnosticHash: "d" };
+    const outcome = {
+      failure: { command: "npm test", exit: "1", tail: "known flaky test" },
+      commands: [{ command: "npm test", exit: "1", ms: 1 }],
+      suiteExits: ["1"], tests: 79,
+      evidence: { cwd: null, head: null, trackedFiles: null, testFiles: null, tests: 79, baselineTests: 552,
+        baselineCount: { state: "counted", tests: 552, source: "base-suite" }, shortfall: { tests: 79, baselineTests: 552 } },
+      identityComparisons: [{ command: "npm test", base: "base", setupDigest: "setup", reporter: "node-test-tap-v1",
+        baselineSource: "stored", tipAttempts: [{ exit: "1", failureIdentityStatus: "complete", failureIdentities: [identity] }],
+        baseIdentities: [identity], tipIdentities: [identity] }],
+    };
+    const accepted = { tip: "tip", result: "waived", waived: { by: "owner", note: "known flake", at: 1 } };
+    const result = classify({ tip: "tip", commit: "commit" }, outcome, accepted, 2, { paths: [], weakeningSignals: [], digest: "digest" }) as { result: string; evidence?: unknown };
+    expect(result).toMatchObject({ result: "failed", evidence: { shortfall: { tests: 79, baselineTests: 552 } } });
+  });
+
   it("runs the configured commands on a merge whose tree differs, and the group is done when they pass", async () => {
     const t = await deliver("notes.txt", (x) => body(x).status === "done");
     try {

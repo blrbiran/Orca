@@ -19,8 +19,9 @@ import { QUIET_GIT } from "./workspace.js";
 export type CriteriaChangeKind = "none" | "additive" | "modified" | "weakening";
 export interface CriteriaChange { kind: CriteriaChangeKind; files: string[]; signals: string[] }
 
-/** Test files by shape (spec §3.2's defaults; no repository's own test configuration is read in this version). */
+/** Test files by shape (spec §3.2's defaults; discovery configuration is classified separately below). */
 const TEST_PATH = /(^|\/)(tests?|__tests__|spec)\/|\.(test|spec)\.[^/]+$|(^|\/)test_[^/]+\.py$|_test\.[^/]+$/;
+const TEST_CONFIG_PATH = /(^|\/)(?:vitest|jest|playwright|karma)\.config\.[^/]+$|(^|\/)\.mocharc(?:\.[^/]+)?$|(^|\/)(?:pytest\.ini|tox\.ini|conftest\.py)$/i;
 const WORKFLOW = /^\.github\/workflows\//;
 /** An assertion call in JS/TS (and the common Python/Node `assert` forms); the count is per file, base vs attempt. */
 const ASSERTION = /\bexpect\s*\(|\bassert(?:\.\w+)?\s*\(|\bassert\s+\S/g;
@@ -126,10 +127,12 @@ export function checkPaths(requiredChecks: readonly string[], setupCommands: rea
 }
 
 export function isTestFilePath(path: string): boolean { return TEST_PATH.test(path); }
+export function isTestConfigurationPath(path: string): boolean { return TEST_CONFIG_PATH.test(path); }
 
-/** §3: the check-defining files -- a required check's own file, a test file, `package.json`, a CI workflow. */
+/** §3: the check-defining files -- a required check's own file, a test file/config, `package.json`, a CI workflow. */
 export function definesChecks(path: string, fromChecks: ReadonlySet<string>): boolean {
-  return fromChecks.has(path) || isTestFilePath(path) || path === "package.json" || path.endsWith("/package.json") || WORKFLOW.test(path);
+  return fromChecks.has(path) || isTestFilePath(path) || isTestConfigurationPath(path)
+    || path === "package.json" || path.endsWith("/package.json") || WORKFLOW.test(path);
 }
 
 async function show(repo: string, rev: string, path: string): Promise<string> {

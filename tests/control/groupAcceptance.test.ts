@@ -174,6 +174,29 @@ describe("a group is accepted on its final tip before it is done (tester follow-
     } finally { await t.h.dispose(); }
   });
 
+  it("requires a disposition when a required check's existing script changes", async () => {
+    const before = "process.stdout.write('base\\n');\n";
+    const after = "process.stdout.write('tip\\n');\n";
+    const t = await driverHarness([{ taskId: "a", targetPaths: ["a", "scripts/**"] }, { taskId: "b" }], {
+      requiredChecks: ["node scripts/check-tests.mjs"],
+      files: (taskId) => taskId === "a"
+        ? { a: "a\\n", "scripts/check-tests.mjs": after }
+        : { [taskId]: `${taskId}\\n` },
+    });
+    try {
+      mkdirSync(join(t.repo, "scripts"), { recursive: true });
+      writeFileSync(join(t.repo, "scripts", "check-tests.mjs"), before);
+      git(t.repo, "add", "scripts/check-tests.mjs"); git(t.repo, "commit", "-qm", "check script baseline");
+      await t.claim(); await t.claim();
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).acceptance !== undefined || group(t).status === "done");
+      expect(group(t).acceptance).toMatchObject({
+        result: "test-change-pending",
+        testChanges: { paths: ["scripts/check-tests.mjs"], weakeningSignals: ["check-script-changed:scripts/check-tests.mjs"], pendingResult: "passed" },
+      });
+    } finally { await t.h.dispose(); }
+  });
+
   it("a group with one landed task records not-needed, runs nothing, writes no acceptance row, and is done", async () => {
     const { log, flag, check } = scratch();
     writeFileSync(flag, "red\n");

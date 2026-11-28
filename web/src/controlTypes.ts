@@ -158,7 +158,7 @@ export type GroupSummaryV1 = {
   /** Delivery tail spec D3: the acceptance on a local delivery's commit; `problem` is set when it failed. */
   deliveredAcceptance?: { tip: string; commit: string; result: "passed" | "passed-relative" | "failed" | "not-needed" | "waived" | "test-change-pending"; why?: "same-tree" | "already-in-target" | "before-record";
     commands: CheckRunCommandV1[]; tail?: string; at: number; waived?: { by: string; note: string; at: number }; problem?: string;
-    identityComparisons?: AcceptanceIdentityComparisonV1[]; testChanges?: AcceptanceTestChangesV1 };
+    identityComparisons?: AcceptanceIdentityComparisonV1[]; testChanges?: AcceptanceTestChangesV1; evidence?: AcceptanceEvidenceV1 };
   /** Tester follow-up G spec §3.3: the requirement review record; `problem` is set when it did not pass. */
   requirementReview?: RequirementReviewV1;
   /** Tester follow-up G §6.2 (#269): the landing watch's last record; each regression is a problem. */
@@ -803,7 +803,7 @@ export type RequirementReviewV1 = {
 export type AcceptanceFailureIdentityV1 = { key: string; file: string; testPath: string[]; diagnosticHash: string };
 export type AcceptanceIdentityComparisonV1 = {
   command: string; base: string | null; setupDigest: string; reporter: "node-test-tap-v1"; baselineSource: "stored" | "collected" | "unavailable";
-  tipAttempts: Array<{ exit: string; failureIdentityStatus?: "complete" | "unsupported" | "ambiguous"; failureIdentities?: AcceptanceFailureIdentityV1[] }>;
+  tipAttempts: Array<{ exit: string; failureIdentityStatus?: "complete" | "unsupported" | "ambiguous"; failureIdentities?: AcceptanceFailureIdentityV1[]; reportedFailures?: number | null; blockCount?: number; tests?: number | null; tail?: string }>;
   baseIdentities: AcceptanceFailureIdentityV1[]; tipIdentities: AcceptanceFailureIdentityV1[];
   reason?: "new-failure" | "non-comparable" | "baseline-unavailable" | "base-green";
 };
@@ -812,12 +812,21 @@ export type AcceptanceTestChangesV1 = {
   pendingResult?: "passed" | "failed" | "passed-relative" | "not-needed" | "not-run" | "waived";
   disposition?: { tip: string; digest: string; by: string; note: string; at: number };
 };
+export type SuiteCountBaselineV1 = { state: "counted" | "unavailable"; tests: number | null; source?: "base-suite" | "failure-baseline" };
+export type AcceptanceEvidenceV1 = {
+  cwd: string | null; head: string | null; trackedFiles: number | null; testFiles: number | null; tests: number | null;
+  baselineTrackedFiles?: number | null; baselineTestFiles?: number | null; baselineTests?: number | null; suiteTests?: Array<number | null>;
+  baselineCount?: SuiteCountBaselineV1; shortfall?: { tests: number; baselineTests: number };
+};
 export type GroupAcceptanceV1 = {
   tip: string | null; result: "passed" | "passed-relative" | "failed" | "not-needed" | "not-run" | "waived" | "test-change-pending"; why?: "single-landing" | "multi-repo" | "dir" | "work-branch-missing"; landings?: number;
   commands: CheckRunCommandV1[]; tail?: string; at: number; waived?: { by: string; note: string; at: number }; problem?: string;
   identityComparisons?: AcceptanceIdentityComparisonV1[]; testChanges?: AcceptanceTestChangesV1;
   /** Full suite spec 2026-11-12 §4-§5 (#279): the full-suite command and its runs' exits; `warning` never blocks. */
-  fullSuite?: { command: string | null; suggestion: string | null; exits: string[]; flaky: boolean; baseline?: { tip: string; exits: string[]; tail?: string } }; warning?: string;
+  fullSuite?: { command: string | null; suggestion: string | null; exits: string[]; flaky: boolean; baseline?: { tip: string; exits: string[]; tail?: string; tests?: number | null };
+    tests?: number | null; invocationTests?: Array<number | null>; baselineCount?: SuiteCountBaselineV1 };
+  evidence?: AcceptanceEvidenceV1;
+  warning?: string;
   /** Tester follow-up K, item 2: true only on a `passed` acceptance that ran no full suite (none adopted). */
   passedWithoutFullSuite?: true;
 };

@@ -59,6 +59,40 @@ describe("group brief (issue 199)", () => {
     expect(out.stdout).toContain("test changes: accepted by user:owner on aaaaaaaaaaaa");
   });
 
+  it("group brief prints acceptance comparison reasons and red retry evidence", async () => {
+    const acceptance = { tip: "a".repeat(40), result: "failed", commands: [{ command: "npm test || npm test", exit: "0", ms: 1 }], at: 1,
+      problem: "group-acceptance-failed:npm test || npm test",
+      fullSuite: { command: "npm test || npm test", suggestion: null, exits: ["1", "0"], flaky: true,
+        invocationTests: [79, 79], baselineCount: { state: "unavailable", tests: null, source: "base-suite" } },
+      evidence: { cwd: null, head: "a".repeat(40), trackedFiles: 3, testFiles: 1, tests: 79, suiteTests: [79, 79], baselineTests: null,
+        baselineCount: { state: "unavailable", tests: null, source: "base-suite" } },
+      identityComparisons: [{ command: "npm test || npm test", base: "b".repeat(40), setupDigest: "s".repeat(64), reporter: "node-test-tap-v1", baselineSource: "unavailable",
+        tipAttempts: [{ exit: "1", failureIdentityStatus: "ambiguous", failureIdentities: [], reportedFailures: 1, blockCount: 1, tests: 79, tail: "malformed TAP" },
+          { exit: "0", reportedFailures: 0, blockCount: 1, tests: 79, tail: "green retry" }], baseIdentities: [], tipIdentities: [], reason: "non-comparable" }] };
+    const p = await fakePanel({ ...routes, "GET groups/g-alpha/brief": { status: 200, body: { schema: "orca-group-brief-v1", ...VIEW.summary,
+      acceptance, groupProblem: { code: acceptance.problem, why: "group-acceptance-failed", next: ["orca group recheck g-alpha"] } } } });
+    const out = await cli(["group", "brief", "g-alpha"], p.dir);
+    expect(out.code, out.stderr).toBe(0);
+    expect(out.stdout).toContain("comparison: npm test || npm test — non-comparable: the red output could not be parsed");
+    expect(out.stdout).toContain("npm test || npm test invocation exits: 1, 0; red branch reported 1 failure in 1 TAP block");
+    expect(out.stdout).toContain("full-suite count comparison unavailable at the base");
+  });
+
+  it("group brief retains delivered shortfall counts and withholds a waiver command", async () => {
+    const deliveredAcceptance = { tip: "a".repeat(40), commit: "c".repeat(40), result: "failed", commands: [{ command: "npm test", exit: "0", ms: 1 }], at: 1,
+      problem: "delivered-acceptance-failed:npm test",
+      evidence: { cwd: null, head: "c".repeat(40), trackedFiles: 4, testFiles: 2, tests: 79, suiteTests: [79], baselineTests: 552,
+        baselineCount: { state: "counted", tests: 552, source: "base-suite" }, shortfall: { tests: 79, baselineTests: 552 } } };
+    const p = await fakePanel({ ...routes, "GET groups/g-alpha/brief": { status: 200, body: { schema: "orca-group-brief-v1", ...VIEW.summary,
+      deliveredAcceptance, groupProblem: { code: deliveredAcceptance.problem, why: "delivered-acceptance-failed", next: ["orca group recheck-acceptance g-alpha"] } } } });
+    const out = await cli(["group", "brief", "g-alpha"], p.dir);
+    expect(out.code, out.stderr).toBe(0);
+    expect(out.stdout).toContain("  suite counts: tip 79 tests, base 552 tests");
+    expect(out.stdout).toContain("  the tip's suite ran 79 tests; the base ran 552");
+    expect(out.stdout).toContain("next: orca group recheck-acceptance g-alpha");
+    expect(out.stdout).not.toContain("waive-acceptance");
+  });
+
   it("group brief shows a pending test change, its paths, and the person command", async () => {
     const acceptance = { tip: "a".repeat(40), result: "test-change-pending", commands: [], at: 1, problem: "test-change-pending",
       testChanges: { base: "b".repeat(40), paths: ["tests/a.test.ts"], weakeningSignals: [], digest: "d".repeat(64), pendingResult: "passed" } };

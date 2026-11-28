@@ -32,6 +32,46 @@ describe("group show names the group acceptance (tester follow-up E §5)", () =>
     ]);
   });
 
+  it("shows every comparison reason, both retry exits, and unavailable baseline counts", async () => {
+    const comparison = (command: string, reason: string, attempts: Array<{ exit: string; failureIdentityStatus?: "complete" | "unsupported" | "ambiguous"; reportedFailures?: number | null; blockCount?: number; tests?: number | null; tail?: string }> = [
+      { exit: "1", failureIdentityStatus: "ambiguous", reportedFailures: 2, blockCount: 2, tests: 79, tail: "red branch" },
+    ]) => ({
+      command, base: "b".repeat(40), setupDigest: "s".repeat(64), reporter: "node-test-tap-v1", baselineSource: "unavailable",
+      tipAttempts: attempts, baseIdentities: [], tipIdentities: [], reason,
+    });
+    const lines = await show({
+      tip: TIP, result: "failed", commands: [{ command: "npm test || npm test", exit: "0", ms: 1 }], at: 1,
+      problem: "group-acceptance-failed:npm test || npm test",
+      fullSuite: { command: "npm test || npm test", suggestion: null, exits: ["1", "0"], flaky: true,
+        invocationTests: [79, 79], baselineCount: { state: "unavailable", tests: null, source: "base-suite" } },
+      evidence: { cwd: "/tmp", head: TIP, trackedFiles: 4, testFiles: 1, tests: 79, suiteTests: [79, 79], baselineTests: null,
+        baselineCount: { state: "unavailable", tests: null, source: "base-suite" } },
+      identityComparisons: [
+        comparison("npm test || npm test", "new-failure", [
+          { exit: "1", failureIdentityStatus: "complete", reportedFailures: 1, blockCount: 1, tests: 79, tail: "red" },
+          { exit: "0", reportedFailures: 0, blockCount: 1, tests: 79, tail: "green" },
+        ]),
+        comparison("pytest -q", "non-comparable"),
+        comparison("npx vitest run", "baseline-unavailable"),
+        comparison("go test ./...", "base-green"),
+      ],
+    });
+    expect(lines).toContain("comparison: npm test || npm test — new-failure: the tip introduced a failing test identity");
+    expect(lines).toContain("comparison: pytest -q — non-comparable: the red output could not be parsed");
+    expect(lines).toContain("comparison: npx vitest run — baseline-unavailable: no base result is available");
+    expect(lines).toContain("comparison: go test ./... — base-green: the suite passed at the base");
+    expect(lines).toContain("  npm test || npm test invocation exits: 1, 0; red branch reported 1 failure in 1 TAP block");
+    expect(lines).toContain("  full-suite count comparison unavailable at the base");
+  });
+
+  it("keeps the measured suite shortfall counts visible", async () => {
+    const lines = await show({ tip: TIP, result: "failed", commands: [{ command: "npm test", exit: "0", ms: 1 }], at: 1,
+      evidence: { cwd: "/tmp", head: TIP, trackedFiles: 4, testFiles: 1, tests: 79, suiteTests: [79], baselineTests: 552,
+        baselineCount: { state: "counted", tests: 552, source: "base-suite" }, shortfall: { tests: 79, baselineTests: 552 } } });
+    expect(lines).toContain("  suite counts: tip 79 tests, base 552 tests");
+    expect(lines).toContain("  the tip's suite ran 79 tests; the base ran 552");
+  });
+
   it("a pending test change shows the paths and the tip-bound person command", async () => {
     const lines = await show({ tip: TIP, result: "test-change-pending", commands: [], at: 1,
       testChanges: { base: "b".repeat(40), paths: ["tests/a.test.ts"], weakeningSignals: [], digest: "d".repeat(64), pendingResult: "passed" },

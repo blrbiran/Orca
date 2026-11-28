@@ -85,7 +85,7 @@ describe("a draft is checked against the delivery graph it claims (#385)", () =>
       units: [{ unit: "T1", taskIds: ["a"], dependsOn: [] }], independent: [], finalVerification: "a",
     });
     // mutation: accept any finalVerification task -> red
-    expect(deliveryGraphProblems(bad)).toContain("delivery-graph-final-verification:a");
+    expect(deliveryGraphProblems(bad)).toContain("delivery-graph-final-verification:a:command-not-recognized");
     const good = draft([task("a", [], ["npm test"])], {
       units: [{ unit: "T1", taskIds: ["a"], dependsOn: [] }], independent: [], finalVerification: "a",
     });
@@ -96,7 +96,9 @@ describe("a draft is checked against the delivery graph it claims (#385)", () =>
     const output = draft([task("a", [], [check])], {
       units: [{ unit: "T1", taskIds: ["a"], dependsOn: [] }], independent: [], finalVerification: "a",
     });
-    expect(deliveryGraphProblems(output)).toContain("delivery-graph-final-verification:a");
+    const reason = deliveryGraphProblems(output)[0]!;
+    expect(reason).toBe("delivery-graph-final-verification:a:command-not-recognized");
+    expect(explainSplitReason(reason)).toContain("Orca retries a red full-suite check");
   });
 
   it.each(["node --test", "go test ./...", "npm test && true", "npm run test:full"])("recognizes %s without masking a failing suite (#536)", (check) => {

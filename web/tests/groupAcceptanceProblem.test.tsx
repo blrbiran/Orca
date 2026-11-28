@@ -27,6 +27,39 @@ describe("the Problems row of a failed group acceptance (tester follow-up E §5)
     expect(view.container.querySelector("pre")?.textContent).toBe("FAIL a.test.ts");
   });
 
+  it("shows the comparison reason and shortfall, and does not offer a waiver for a shortfall", () => {
+    const acceptance: GroupAcceptanceV1 = { ...FAILED,
+      commands: [{ command: "npm test || npm test", exit: "0", ms: 5 }],
+      identityComparisons: [
+        { command: "npm test || npm test", base: "b".repeat(40), setupDigest: "s".repeat(64), reporter: "node-test-tap-v1", baselineSource: "stored",
+          tipAttempts: [
+            { exit: "1", failureIdentityStatus: "complete", failureIdentities: [], reportedFailures: 1, blockCount: 1, tests: 79, tail: "red" },
+            { exit: "0", reportedFailures: 0, blockCount: 1, tests: 79, tail: "green" },
+          ], baseIdentities: [], tipIdentities: [], reason: "new-failure" },
+        ...(["non-comparable", "baseline-unavailable", "base-green"] as const).map((reason, index) => ({
+          command: ["pytest -q", "npx vitest run", "go test ./..."][index]!, base: "b".repeat(40), setupDigest: "s".repeat(64),
+          reporter: "node-test-tap-v1" as const, baselineSource: "unavailable" as const,
+          tipAttempts: [{ exit: "1", failureIdentityStatus: "ambiguous" as const, failureIdentities: [], reportedFailures: 1, blockCount: 1, tests: 1, tail: "red" }],
+          baseIdentities: [], tipIdentities: [], reason,
+        })),
+      ],
+      evidence: { cwd: null, head: "c".repeat(40), trackedFiles: 4, testFiles: 2, tests: 79, suiteTests: [79, 79], baselineTests: 552,
+        baselineCount: { state: "counted", tests: 552, source: "base-suite" }, shortfall: { tests: 79, baselineTests: 552 } },
+    };
+    show(acceptance, ["owner"]);
+    expect(screen.getByText("The group's final tree failed npm test || npm test (exit 1) at cccccccccccc; the group is not done.")).toBeTruthy();
+    const diagnostics = screen.getByTestId("group-acceptance-diagnostics").textContent ?? "";
+    expect(diagnostics).toContain("The tip introduced a failing test identity in npm test || npm test.");
+    expect(diagnostics).toContain("The red output from pytest -q could not be compared with the base.");
+    expect(diagnostics).toContain("No base result is available to compare npx vitest run.");
+    expect(diagnostics).toContain("go test ./... passed on the base; the tip's failure is new.");
+    expect(diagnostics).toContain("npm test || npm test invocation exits: 1, 0");
+    expect(diagnostics).toContain("Suite counts: 79 tests on the tip; 552 on the base.");
+    expect(diagnostics).toContain("A measured test-count shortfall cannot be waived.");
+    expect(screen.getByRole("button", { name: "Recheck" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Waive…" })).toBeNull();
+  });
+
   it("offers Recheck to a member, which sends recheck-acceptance; no Waive", () => {
     const { onCommand } = show(FAILED, ["member"]);
     expect(screen.queryByRole("button", { name: "Waive…" })).toBeNull();

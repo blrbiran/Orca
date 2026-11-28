@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -34,7 +34,7 @@ function tapFailure(input: { ordinal: number; duration: string; location: string
     "not ok 1 - tests/login.test.mjs",
     "  ---",
     "  error: 1 subtest failed",
-    "  failureType: subtestsFailed",
+    "  type: 'suite'", "  failureType: 'subtestsFailed'",
     "  ...",
     "# tests 1",
     "# pass 0",
@@ -79,9 +79,20 @@ describe("acceptance failure identities", () => {
     ]);
   });
 
-  it("marks duplicate failure paths as ambiguous instead of collapsing them", async () => {
+  it("marks duplicate failure paths inside one TAP block as ambiguous instead of collapsing them", async () => {
     const dir = await workdir();
-    const output = `${tapFailure({ ordinal: 1, duration: "3.4", location: "/private/tmp/run-1/tests/login.test.mjs:3:4" })}${tapFailure({ ordinal: 2, duration: "4", location: "/private/tmp/run-1/tests/login.test.mjs:8:4" })}`;
+    const output = [
+      "TAP version 13", "# Subtest: tests/login.test.mjs", "    # Subtest: authentication",
+      "        # Subtest: rejects invalid input", "        not ok 1 - rejects invalid input", "          ---",
+      "          error: AssertionError", "          actual: 1", "          expected: 2", "          operator: strictEqual",
+      "          location: '/private/tmp/run-1/tests/login.test.mjs:3:4'", "          ...",
+      "        # Subtest: rejects invalid input", "        not ok 2 - rejects invalid input", "          ---",
+      "          error: AssertionError", "          actual: 1", "          expected: 2", "          operator: strictEqual",
+      "          location: '/private/tmp/run-1/tests/login.test.mjs:8:4'", "          ...", "      1..2", "    1..1",
+      "not ok 1 - tests/login.test.mjs", "  ---", "  error: 1 subtest failed", "  type: 'suite'",
+      "  failureType: 'subtestsFailed'", "  location: '/private/tmp/run-1/tests/login.test.mjs:1:1'", "  ...",
+      "# tests 1", "# pass 0", "# fail 1", "",
+    ].join("\n");
     const result = await runCheckRecorded(dir, commandFor(output), 10_000, { runId: "run-identity" });
     expect(result.failureIdentityStatus).toBe("ambiguous");
   });
@@ -116,7 +127,7 @@ describe("acceptance failure identities", () => {
       "      failureType: 'testCodeFailure'", "      error: |-", "        first line", "        second line", "",
       "        1 !== 2", "      code: 'ERR_ASSERTION'", "      expected: 2", "      actual: 1", "      operator: 'strictEqual'",
       "      ...", "    1..1", "not ok 1 - auth", "  ---", "  duration_ms: 1.1", "  type: 'suite'",
-      "  location: '/tmp/repo/tests/sample.test.mjs:3:1'", "  failureType: 'subtestsFailed'", "  error: '1 subtest failed'", "  code: 'ERR_TEST_FAILURE'", "  ...",
+      "  location: '/tmp/repo/tests/sample.test.mjs:3:1'", "  type: 'suite'", "  failureType: 'subtestsFailed'", "  error: '1 subtest failed'", "  code: 'ERR_TEST_FAILURE'", "  ...",
       "# Subtest: top level fails", "not ok 2 - top level fails", "  ---", "  duration_ms: 0.1", "  type: 'test'",
       "  location: '/tmp/repo/tests/sample.test.mjs:8:1'", "  failureType: 'testCodeFailure'", "  error: 'top failure'", "  code: 'ERR_ASSERTION'",
       "  operator: 'fail'", "  ...", "1..2", "# tests 2", "# suites 1", "# pass 0", "# fail 2", "",
@@ -129,10 +140,114 @@ describe("acceptance failure identities", () => {
     ]);
   });
 
+  it("parses repeated TAP blocks independently and de-duplicates the same failure across retries", () => {
+    const block = tapFailure({ ordinal: 1, duration: "3.4", location: "/private/tmp/run-1/tests/login.test.mjs:3:4" });
+    const parsed = failureIdentitiesOf(`${block}${block}`, "node-test-tap-v1", "/private/tmp/run-1");
+    expect(parsed).toMatchObject({ parseStatus: "complete", reportedFailures: 2, blockCount: 2 });
+    expect(parsed.identities).toHaveLength(1);
+  });
+
+  it("keeps a malformed repeated TAP block non-comparable", () => {
+    const good = tapFailure({ ordinal: 1, duration: "3.4", location: "/private/tmp/run-1/tests/login.test.mjs:3:4" });
+    const malformed = "TAP version 13\nnot ok 1 - missing context\n# fail 1\n";
+    const parsed = failureIdentitiesOf(`${good}${malformed}`, "node-test-tap-v1", "/private/tmp/run-1");
+    expect(parsed.parseStatus).toBe("ambiguous");
+    expect(parsed.blockCount).toBe(2);
+  });
+
+  it("normalizes absolute TAP locations through a symlinked cwd and rejects unresolved paths", async () => {
+    const dir = await workdir();
+    await mkdir(join(dir, "tests"));
+    const alias = `${dir}-alias`;
+    await symlink(dir, alias, "dir");
+    dirs.push(alias);
+    const tapAt = (location: string) => [
+      "TAP version 13", "# Subtest: application", "    not ok 1 - fails", "      ---", "      error: AssertionError",
+      "      actual: 1", "      expected: 2", `      location: '${location}:3:4'`, "      ...", "not ok 1 - application",
+      "  ---", "  error: 1 subtest failed", "  type: 'suite'", `  location: '${location}:3:1'`, "  failureType: 'subtestsFailed'", "  ...", "# tests 1", "# pass 0", "# fail 1", "",
+    ].join("\n");
+    const real = failureIdentitiesOf(tapAt(join(dir, "tests", "missing.test.js")), "node-test-tap-v1", dir);
+    const linked = failureIdentitiesOf(tapAt(join(alias, "tests", "missing.test.js")), "node-test-tap-v1", dir);
+    expect(real).toMatchObject({ reportedFailures: 1, blockCount: 1, identities: [{ file: "tests/missing.test.js" }] });
+    expect(linked).toMatchObject({ reportedFailures: 1, blockCount: 1, identities: [{ file: "tests/missing.test.js" }] });
+    expect(real.parseStatus).toBe("complete");
+    expect(linked.parseStatus).toBe("complete");
+    expect(linked.identities.map((item) => item.key)).toEqual(real.identities.map((item) => item.key));
+    const unresolved = failureIdentitiesOf(tapAt("/path/that/does/not/exist/missing.test.js"), "node-test-tap-v1", dir);
+    expect(unresolved.parseStatus).toBe("ambiguous");
+  });
+
+  it("executes an exact same-suite retry as two separately evidenced branches", async () => {
+    const dir = await workdir();
+    const counter = join(dir, "count");
+    const failed = tapFailure({ ordinal: 1, duration: "3.4", location: join(dir, "tests", "login.test.mjs") + ":3:4" });
+    const passed = "TAP version 13\n1..1\n# tests 1\n# pass 1\n# fail 0\n";
+    const runner = [
+      `import { readFileSync, writeFileSync } from "node:fs";`,
+      `const counter = ${JSON.stringify(counter)};`,
+      `let count = 0; try { count = Number(readFileSync(counter, "utf8")); } catch {}`,
+      `writeFileSync(counter, String(count + 1));`,
+      `if (count === 0) { process.stdout.write(${JSON.stringify(failed)}); process.exitCode = 1; }`,
+      `else process.stdout.write(${JSON.stringify(passed)});`,
+    ].join("\n");
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "node runner.mjs" } }));
+    await writeFile(join(dir, "runner.mjs"), runner);
+
+    const answer = await runCheckRecorded(dir, "npm test || npm test", 10_000, { runId: "run-retry" });
+    const recorded = answer as typeof answer & { identityAttempts?: Array<{ exit: string; failureIdentityStatus?: string; failureIdentities?: unknown[]; reportedFailures?: number | null; blockCount?: number; tests?: number | null }> };
+    expect(answer.exit).toBe("0");
+    expect(recorded.identityAttempts).toMatchObject([
+      { exit: "1", failureIdentityStatus: "complete", reportedFailures: 1, blockCount: 1, tests: 1, tail: expect.stringContaining("rejects invalid input"), failureIdentities: [{ testPath: ["authentication", "rejects invalid input"] }] },
+      { exit: "0", reportedFailures: 0, blockCount: 1, tests: 1 },
+    ]);
+  });
+
+  it("keeps an unsupported red branch visible after a later green retry branch", async () => {
+    const dir = await workdir();
+    const counter = join(dir, "count");
+    const runner = [
+      `import { readFileSync, writeFileSync } from "node:fs";`,
+      `const counter = ${JSON.stringify(counter)};`,
+      `let count = 0; try { count = Number(readFileSync(counter, "utf8")); } catch {}`,
+      `writeFileSync(counter, String(count + 1));`,
+      `if (count === 0) { process.stdout.write("plain runner failure\\n"); process.exitCode = 1; }`,
+      `else process.stdout.write("TAP version 13\\n1..1\\n# tests 1\\n# pass 1\\n# fail 0\\n");`,
+    ].join("\n");
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "node runner.mjs" } }));
+    await writeFile(join(dir, "runner.mjs"), runner);
+
+    const answer = await runCheckRecorded(dir, "npm test || npm test", 10_000, { runId: "run-retry-unsupported" });
+    expect(answer.exit).toBe("0");
+    expect(answer.failureIdentityStatus).toBe("unsupported");
+    expect(answer.identityAttempts?.map((attempt) => attempt.exit)).toEqual(["1", "0"]);
+    expect(answer.identityAttempts?.[0]?.failureIdentityStatus).toBe("unsupported");
+  });
+
+  it("shares one timeout budget across retry branches", async () => {
+    const dir = await workdir();
+    const counter = join(dir, "count");
+    const runner = [
+      `import { readFileSync, writeFileSync } from "node:fs";`,
+      `const counter = ${JSON.stringify(counter)};`,
+      `let count = 0; try { count = Number(readFileSync(counter, "utf8")); } catch {}`,
+      `writeFileSync(counter, String(count + 1));`,
+      `if (count === 0) { await new Promise((resolve) => setTimeout(resolve, 250)); process.stdout.write("TAP version 13\\n# tests 1\\n# pass 0\\n# fail 1\\n"); process.exitCode = 1; }`,
+      `else await new Promise((resolve) => setTimeout(resolve, 1500));`,
+    ].join("\n");
+    await writeFile(join(dir, "package.json"), JSON.stringify({ scripts: { test: "node runner.mjs" } }));
+    await writeFile(join(dir, "runner.mjs"), runner);
+
+    const answer = await runCheckRecorded(dir, "npm test || npm test", 1000, { runId: "run-retry-budget" });
+    expect(answer.identityAttempts?.[0]?.exit).toBe("1");
+    const timedOut = /^timeout (\d+) ms$/.exec(answer.identityAttempts?.[1]?.exit ?? "");
+    expect(timedOut).not.toBeNull();
+    expect(Number(timedOut![1])).toBeLessThan(1000);
+  });
+
   it("hashes the body of a block-scalar diagnostic, so two different messages are different identities", () => {
     const tap = (message: string) => ["TAP version 13", "# Subtest: tests/a.test.mjs", "    not ok 1 - one", "      ---",
       "      failureType: 'testCodeFailure'", "      error: |-", `        ${message}`, "      code: 'ERR_ASSERTION'", "      ...",
-      "    1..1", "not ok 1 - tests/a.test.mjs", "  ---", "  failureType: 'subtestsFailed'", "  error: '1 subtest failed'", "  ...",
+      "    1..1", "not ok 1 - tests/a.test.mjs", "  ---", "  type: 'suite'", "  failureType: 'subtestsFailed'", "  error: '1 subtest failed'", "  ...",
       "# tests 1", "# pass 0", "# fail 1", ""].join("\n");
     const first = failureIdentitiesOf(tap("first message"), "node-test-tap-v1", "/repo");
     const second = failureIdentitiesOf(tap("second message"), "node-test-tap-v1", "/repo");

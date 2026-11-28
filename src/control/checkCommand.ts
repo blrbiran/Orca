@@ -3,8 +3,9 @@ import { ChildTimeout, spawnRunChild } from "./integrationGit.js";
 import type { CheckRunCommand } from "./driveRecord.js";
 import { parseFailureSummary } from "./failureNames.js";
 import { cutUtf8 } from "./noChange.js";
-import type { AcceptanceFailureIdentity, FailureIdentityParseStatus } from "./acceptanceFailureIdentity.js";
+import type { AcceptanceFailureAttempt, AcceptanceFailureIdentity, FailureIdentityParseStatus } from "./acceptanceFailureIdentity.js";
 import { failureIdentitiesOf } from "./acceptanceFailureIdentity.js";
+import { sameSuiteRetryBranches } from "./fullSuiteRecognition.js";
 
 /**
  * One command Orca runs itself the way ccloop runs a contract's required checks (runLoop.js runRequiredChecks): `sh -lc` in
@@ -23,37 +24,92 @@ export interface CheckFailure {
   /** Parsed only from complete, supported TAP output; never from the bounded display tail. */
   failureIdentities?: AcceptanceFailureIdentity[];
   failureIdentityStatus?: FailureIdentityParseStatus;
+  identityAttempts?: AcceptanceFailureAttempt[];
 }
 
 const TAIL_CHARS = 2048;
 const tail = (text: string): string => text.length <= TAIL_CHARS ? text : text.slice(text.length - TAIL_CHARS);
 
-/** Null when the command exits 0. A timeout kills its process group and is a failure; an abort is thrown, never read as an exit. */
-export async function runAsCheck(cwd: string, command: string, timeoutMs: number, as: DispatchedAs, signal?: AbortSignal): Promise<CheckFailure | null> {
-  const outcome = await runCheckRecorded(cwd, command, timeoutMs, as, signal);
-  return outcome.exit === "0" ? null : outcome;
+/**
+ * Reviewed acceptance (spec 2026-11-11 §7): the same run, answering every command's exit and output tail -- a passing one
+ * too, because an operator-reviewed acceptance records what each setup and check command printed. `exit` is "0" on a pass.
+ */
+async function executeCheck(cwd: string, command: string, timeoutMs: number, as: DispatchedAs, signal?: AbortSignal): Promise<ExecutedCommand> {
+  try {
+    const child = await spawnRunChild("sh", ["-lc", command], { cwd, timeoutMs, inheritEnv: true, env: dispatchedEnv(as), ...(signal ? { signal } : {}) });
+    const output = `${child.stdout}\n${child.stderr}`.trim();
+    const exit = String(child.code);
+    const parsed = failureIdentitiesOf(output, "node-test-tap-v1", cwd);
+    const attempt: AcceptanceFailureAttempt = {
+      exit, reportedFailures: parsed.reportedFailures, blockCount: parsed.blockCount, tests: testsReported(output), tail: tail(output),
+      ...(exit === "0" ? {} : { failureIdentityStatus: parsed.parseStatus, failureIdentities: parsed.identities }),
+    };
+    const failures = exit === "0" ? [] : parseFailureSummary(output).failures.slice(0, 20).map((name) => cutUtf8(name, 240));
+    return { output, answer: { command, exit, tail: tail(output), ...(failures.length === 0 ? {} : { failures }),
+      ...(exit === "0" ? {} : { failureIdentities: parsed.identities, failureIdentityStatus: parsed.parseStatus }), identityAttempts: [attempt] } };
+  } catch (error) {
+    if (!(error instanceof ChildTimeout)) throw error;
+    const exit = `timeout ${timeoutMs} ms`;
+    const attempt: AcceptanceFailureAttempt = { exit, failureIdentityStatus: "unsupported", failureIdentities: [], reportedFailures: null, blockCount: 0, tests: null };
+    return { output: "", answer: { command, exit, tail: "", identityAttempts: [attempt] } };
+  }
 }
+
+function testsReported(output: string): number | null {
+  const matches = [...output.matchAll(/^# tests (\d+)$/gm)];
+  return matches.length === 0 ? null : Number(matches[matches.length - 1]![1]);
+}
+
+interface ExecutedCommand { answer: CheckFailure; output: string }
 
 /**
  * Reviewed acceptance (spec 2026-11-11 §7): the same run, answering every command's exit and output tail -- a passing one
  * too, because an operator-reviewed acceptance records what each setup and check command printed. `exit` is "0" on a pass.
  */
 export async function runCheckRecorded(cwd: string, command: string, timeoutMs: number, as: DispatchedAs, signal?: AbortSignal): Promise<CheckFailure> {
-  try {
-    const answer = await spawnRunChild("sh", ["-lc", command], { cwd, timeoutMs, inheritEnv: true, env: dispatchedEnv(as), ...(signal ? { signal } : {}) });
-    const completeOutput = `${answer.stdout}\n${answer.stderr}`.trim();
-    const output = tail(completeOutput), exit = String(answer.code);
-    // Tester #391: name the failing tests beside the tail; a runner other than node:test simply gives none.
-    const failures = exit === "0" ? [] : parseFailureSummary(completeOutput).failures.slice(0, 20).map((name) => cutUtf8(name, 240));
-    const identity = exit === "0" ? undefined : failureIdentitiesOf(completeOutput, "node-test-tap-v1", cwd);
-    return { command, exit, tail: output, ...(failures.length === 0 ? {} : { failures }), ...(identity === undefined ? {} : { failureIdentities: identity.identities, failureIdentityStatus: identity.parseStatus }) };
-  } catch (error) {
-    if (!(error instanceof ChildTimeout)) throw error;
-    return { command, exit: `timeout ${timeoutMs} ms`, tail: "" };
+  const branches = sameSuiteRetryBranches(command);
+  if (branches === null) {
+    const { answer } = await executeCheck(cwd, command, timeoutMs, as, signal);
+    const { identityAttempts: _internalAttempts, ...recorded } = answer;
+    return recorded;
   }
+
+  const started = performance.now();
+  const executions: ExecutedCommand[] = [];
+  for (const branch of branches) {
+    const remaining = timeoutMs - Math.ceil(performance.now() - started);
+    if (remaining <= 0) {
+      const exit = `timeout ${timeoutMs} ms`;
+      executions.push({ output: "", answer: { command: branch, exit, tail: "", identityAttempts: [{ exit, failureIdentityStatus: "unsupported", failureIdentities: [], reportedFailures: null, blockCount: 0, tests: null }] } });
+      break;
+    }
+    const execution = await executeCheck(cwd, branch, remaining, as, signal);
+    executions.push(execution);
+    if (execution.answer.exit === "0") break;
+  }
+  const attempts = executions.flatMap((execution) => execution.answer.identityAttempts ?? []);
+  const red = attempts.filter((attempt) => attempt.exit !== "0");
+  const identities = new Map<string, AcceptanceFailureIdentity>();
+  for (const attempt of red) for (const identity of attempt.failureIdentities ?? []) identities.set(identity.key, identity);
+  const bad = red.find((attempt) => attempt.failureIdentityStatus !== "complete" || (attempt.failureIdentities?.length ?? 0) === 0);
+  const status = red.length === 0 ? undefined : bad?.failureIdentityStatus === "unsupported" ? "unsupported" : bad ? "ambiguous" : "complete";
+  const failures = [...new Set(executions.filter((execution) => execution.answer.exit !== "0").flatMap((execution) => execution.answer.failures ?? []))].slice(0, 20);
+  const final = executions.at(-1)!.answer;
+  return {
+    command, exit: final.exit, tail: tail(executions.map((execution) => execution.output).filter(Boolean).join("\n")), identityAttempts: attempts,
+    ...(failures.length === 0 ? {} : { failures }),
+    ...(red.length === 0 ? {} : { failureIdentities: [...identities.values()], failureIdentityStatus: status }),
+  };
+}
+
+/** Null when the command exits 0; a timeout is a failure and an abort is thrown. */
+export async function runAsCheck(cwd: string, command: string, timeoutMs: number, as: DispatchedAs, signal?: AbortSignal): Promise<CheckFailure | null> {
+  const outcome = await runCheckRecorded(cwd, command, timeoutMs, as, signal);
+  return outcome.exit === "0" ? null : outcome;
 }
 
 /** Task setup spec 2026-11-04 §4.6: a task's setup commands, in order, each as a check runs; the first that fails, or null. */
+
 export async function firstFailingSetup(cwd: string, commands: readonly string[], timeoutMs: number, as: DispatchedAs, signal?: AbortSignal): Promise<CheckFailure | null> {
   for (const command of commands) {
     const failure = await runAsCheck(cwd, command, timeoutMs, as, signal);

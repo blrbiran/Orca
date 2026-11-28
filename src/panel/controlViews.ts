@@ -758,7 +758,7 @@ function groupProblemOf(store: ControlStore, groupId: string, body: unknown, acc
     const next = acceptanceTestChangeAnswers(groupId);
     if (review?.why === "test-change-only") next.push(...reviewAnswers(groupId, review.why, leftToPerson(review.rounds.at(-1))));
     if (acceptance?.result === "test-change-pending") return { code: acceptanceProblemCode, why: review?.why === "test-change-only" ? "test-change-review" : "test-change-pending", next };
-    return { code: acceptanceProblemCode, why: "group-acceptance-failed", next: acceptanceAnswers(groupId) };
+    return { code: acceptanceProblemCode, why: "group-acceptance-failed", next: acceptanceAnswers(groupId, acceptance?.evidence?.shortfall !== undefined) };
   }
   const delivered = deliveredAcceptanceProblem(body);
   if (delivered !== null) {
@@ -767,7 +767,7 @@ function groupProblemOf(store: ControlStore, groupId: string, body: unknown, acc
       if (review?.why === "test-change-only") next.push(...reviewAnswers(groupId, review.why, leftToPerson(review.rounds.at(-1))));
       return { code: delivered, why: review?.why === "test-change-only" ? "test-change-review" : "test-change-pending", next };
     }
-    return { code: delivered, why: "delivered-acceptance-failed", next: deliveredAcceptanceAnswers(groupId) };
+    return { code: delivered, why: "delivered-acceptance-failed", next: deliveredAcceptanceAnswers(groupId, deliveredAcceptanceOf(body)?.evidence?.shortfall !== undefined) };
   }
   const review = reviewOf(body);
   const exhaustedFix = terminalExhaustedReviewFix(store, groupId, review);

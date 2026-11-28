@@ -1703,7 +1703,12 @@ const acceptanceFailureIdentitySchema = z.object({ key: hashSchema, file: nonemp
 const acceptanceIdentityComparisonSchema = z.object({
   command: nonemptyString, base: commitShaSchema.nullable(), setupDigest: hashSchema, reporter: z.literal("node-test-tap-v1"),
   baselineSource: z.enum(["stored", "collected", "unavailable"]),
-  tipAttempts: z.array(z.object({ exit: nonemptyString, failureIdentityStatus: z.enum(["complete", "unsupported", "ambiguous"]).optional(), failureIdentities: z.array(acceptanceFailureIdentitySchema).optional() }).strict()),
+  tipAttempts: z.array(z.object({
+    exit: nonemptyString,
+    failureIdentityStatus: z.enum(["complete", "unsupported", "ambiguous"]).optional(),
+    failureIdentities: z.array(acceptanceFailureIdentitySchema).optional(),
+    reportedFailures: safeInteger.nullable().optional(), blockCount: safeInteger.optional(), tests: safeInteger.nullable().optional(), tail: z.string().max(2048).optional(),
+  }).strict()),
   baseIdentities: z.array(acceptanceFailureIdentitySchema), tipIdentities: z.array(acceptanceFailureIdentitySchema),
   reason: z.enum(["new-failure", "non-comparable", "baseline-unavailable", "base-green"]).optional(),
 }).strict();
@@ -1839,13 +1844,17 @@ export const groupSummarySchema = z
       // the suggestion code detected); `warning` is `full-suite-not-set` or `full-suite-flaky:<command>`, never blocking.
       fullSuite: z.object({ command: nonemptyString.nullable(), suggestion: nonemptyString.nullable(), exits: z.array(nonemptyString).max(2), flaky: z.boolean(),
         baseline: z.object({ tip: commitShaSchema, exits: z.array(nonemptyString).max(2), tail: z.string().max(2048).optional(), tests: safeInteger.nullable().optional() }).strict().optional(),
-        tests: safeInteger.nullable().optional(), reported: safeInteger.optional() }).strict().optional(),
+        tests: safeInteger.nullable().optional(), invocationTests: z.array(safeInteger.nullable()).optional(),
+        baselineCount: z.object({ state: z.enum(["counted", "unavailable"]), tests: safeInteger.nullable(), source: z.enum(["base-suite", "failure-baseline"]).optional() }).strict().optional(),
+        reported: safeInteger.optional() }).strict().optional(),
       warning: nonemptyString.optional(),
       // Tester #387: where the suite ran and what the tree held there (tip and, once it runs, base counts); absent on older rows.
       evidence: z.object({
         cwd: nonemptyString.nullable(), head: nonemptyString.nullable(),
         trackedFiles: safeInteger.nullable(), testFiles: safeInteger.nullable(), tests: safeInteger.nullable(),
         baselineTrackedFiles: safeInteger.nullable().optional(), baselineTestFiles: safeInteger.nullable().optional(), baselineTests: safeInteger.nullable().optional(),
+        suiteTests: z.array(safeInteger.nullable()).optional(),
+        baselineCount: z.object({ state: z.enum(["counted", "unavailable"]), tests: safeInteger.nullable(), source: z.enum(["base-suite", "failure-baseline"]).optional() }).strict().optional(),
         shortfall: z.object({ tests: safeInteger, baselineTests: safeInteger }).strict().optional(),
       }).strict().optional(),
       // Tester follow-up K, item 2: present (true) only on a `passed` acceptance that ran no full suite (none adopted).
@@ -1861,6 +1870,14 @@ export const groupSummarySchema = z
       waived: z.object({ by: nonemptyString, note: z.string(), at: safeInteger }).strict().optional(),
       identityComparisons: z.array(acceptanceIdentityComparisonSchema).optional(),
       testChanges: acceptanceTestChangesSchema.optional(),
+      evidence: z.object({
+        cwd: nonemptyString.nullable(), head: nonemptyString.nullable(),
+        trackedFiles: safeInteger.nullable(), testFiles: safeInteger.nullable(), tests: safeInteger.nullable(),
+        baselineTrackedFiles: safeInteger.nullable().optional(), baselineTestFiles: safeInteger.nullable().optional(), baselineTests: safeInteger.nullable().optional(),
+        suiteTests: z.array(safeInteger.nullable()).optional(),
+        baselineCount: z.object({ state: z.enum(["counted", "unavailable"]), tests: safeInteger.nullable(), source: z.enum(["base-suite", "failure-baseline"]).optional() }).strict().optional(),
+        shortfall: z.object({ tests: safeInteger, baselineTests: safeInteger }).strict().optional(),
+      }).strict().optional(),
       problem: nonemptyString.optional(),
     }).strict().optional(),
     // Tester follow-up G spec §3.3: the requirement review record (requirementReviewRecord.ts); `problem` is

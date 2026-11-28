@@ -326,9 +326,10 @@ export function contextHandoffLines(threshold: number | null): string[] {
 /** Human text of a group view or a proposal document, with the unestimated-default lines (D3). */
 interface AcceptanceView { tip: string | null; result: string; why?: string; commands: Array<{ command: string; exit: string; ms: number }>; tail?: string; waived?: { by: string; note: string };
   testChanges?: { base?: string; paths: string[]; weakeningSignals: string[]; digest: string; error?: string; disposition?: { tip: string; digest: string; by: string; note: string } };
-  warning?: string; passedWithoutFullSuite?: true; fullSuite?: { command?: string | null; suggestion: string | null; baseline?: { tip: string; exits: string[]; tests?: number | null }; tests?: number | null };
+  warning?: string; passedWithoutFullSuite?: true;
+  fullSuite?: { command?: string | null; suggestion: string | null; baseline?: { tip: string; exits: string[]; tests?: number | null }; tests?: number | null; invocationTests?: Array<number | null>; baselineCount?: { state: "counted" | "unavailable"; tests: number | null; source?: "base-suite" | "failure-baseline" } };
   identityComparisons?: AcceptanceIdentityComparison[];
-  evidence?: { shortfall?: { tests: number; baselineTests: number }; trackedFiles?: number | null; testFiles?: number | null; cwd?: string | null } }
+  evidence?: { shortfall?: { tests: number; baselineTests: number }; tests?: number | null; baselineTests?: number | null; suiteTests?: Array<number | null>; baselineCount?: { state: "counted" | "unavailable"; tests: number | null; source?: "base-suite" | "failure-baseline" }; trackedFiles?: number | null; testFiles?: number | null; cwd?: string | null } }
 
 /**
  * Tester follow-up K, item 2 (human ruling ①: Orca runs no suite a person did not set): the words for an acceptance with
@@ -337,6 +338,38 @@ interface AcceptanceView { tip: string | null; result: string; why?: string; com
 export const FULL_SUITE_NOT_SET = "this project has no full-suite command";
 export function adoptFullSuiteLine(suggestion: string | null | undefined): string[] {
   return typeof suggestion === "string" ? [`  Orca detected ${suggestion}; it runs only once adopted: orca check adopt --as-person`] : [];
+}
+
+const ACCEPTANCE_REASON_TEXT: Record<NonNullable<AcceptanceIdentityComparison["reason"]>, string> = {
+  "new-failure": "the tip introduced a failing test identity",
+  "non-comparable": "the red output could not be parsed",
+  "baseline-unavailable": "no base result is available",
+  "base-green": "the suite passed at the base",
+};
+
+function acceptanceDiagnosticLines(a: Pick<AcceptanceView, "identityComparisons" | "evidence" | "fullSuite">): string[] {
+  const lines: string[] = [];
+  for (const comparison of a.identityComparisons ?? []) {
+    if (comparison.reason !== undefined) lines.push(`comparison: ${comparison.command} — ${comparison.reason}: ${ACCEPTANCE_REASON_TEXT[comparison.reason]}`);
+    if (comparison.tipAttempts.length > 1) {
+      const red = comparison.tipAttempts.filter((attempt) => attempt.exit !== "0");
+      const observed = red.map((attempt) => attempt.reportedFailures === undefined || attempt.reportedFailures === null
+        ? "red branch had no complete TAP summary"
+        : `red branch reported ${attempt.reportedFailures} ${attempt.reportedFailures === 1 ? "failure" : "failures"} in ${attempt.blockCount ?? 0} ${(attempt.blockCount ?? 0) === 1 ? "TAP block" : "TAP blocks"}`);
+      lines.push(`  ${comparison.command} invocation exits: ${comparison.tipAttempts.map((attempt) => attempt.exit).join(", ")}${observed.length === 0 ? "" : `; ${observed.join("; ")}`}`);
+    }
+  }
+  const count = a.evidence?.baselineCount ?? a.fullSuite?.baselineCount;
+  if (count?.state === "unavailable") lines.push("  full-suite count comparison unavailable at the base");
+  else if (count?.state === "counted" && count.tests !== null) {
+    const tipTests = a.evidence?.tests ?? a.fullSuite?.tests;
+    if (tipTests !== undefined && tipTests !== null) lines.push(`  suite counts: tip ${tipTests} tests, base ${count.tests} tests`);
+  }
+  if (a.evidence?.shortfall !== undefined) {
+    lines.push(`  the tip's suite ran ${a.evidence.shortfall.tests} tests; the base ran ${a.evidence.shortfall.baselineTests}`);
+    lines.push("  a measured suite-count shortfall cannot be waived");
+  }
+  return lines;
 }
 
 /**
@@ -368,12 +401,12 @@ export function acceptanceLines(groupId: string, a: AcceptanceView | undefined, 
       ...(changes === undefined ? [] : [`  or restore the paths from base ${changes.base?.slice(0, 12) ?? "?"} on orca/${groupId}, commit the restored tip, and Orca checks it again`]),
     ];
   }
-  if (a.result === "passed") return [`acceptance: passed${a.passedWithoutFullSuite === true ? " without a full suite" : ""}${tip} ${ran}`, ...acceptedTestChange, ...independentReview, ...notSet];
+  if (a.result === "passed") return [`acceptance: passed${a.passedWithoutFullSuite === true ? " without a full suite" : ""}${tip} ${ran}`, ...acceptanceDiagnosticLines(a), ...acceptedTestChange, ...independentReview, ...notSet];
   if (a.result === "not-needed") return [`acceptance: not needed (${a.why ?? "?"})`, ...acceptedTestChange, ...independentReview, ...notSet];
   // #278: a work branch that no longer exists is recorded, not retried; a new landing checks it again.
   if (a.result === "not-run" && a.why === "work-branch-missing") return [`acceptance: not run (work-branch-missing: orca/${groupId} does not exist; checked again after a new landing)`];
   if (a.result === "not-run") return [`acceptance: not run (${a.why ?? "?"})`];
-  if (a.result === "waived") return [`acceptance: waived${tip} by ${a.waived?.by ?? "?"}: ${a.waived?.note ?? ""}`, ...acceptedTestChange, ...independentReview];
+  if (a.result === "waived") return [`acceptance: waived${tip} by ${a.waived?.by ?? "?"}: ${a.waived?.note ?? ""}`, ...acceptanceDiagnosticLines(a), ...acceptedTestChange, ...independentReview];
   // #493 review: passed-relative can come from a required-check union, not only the configured full suite. Name each actual comparison.
   if (a.result === "passed-relative") {
     const relative = (a.identityComparisons ?? []).filter((comparison) => comparison.reason === undefined
@@ -385,7 +418,7 @@ export function acceptanceLines(groupId: string, a: AcceptanceView | undefined, 
       return `${kind} \`${comparison.command}\` matched a known failure identity in the ${source} baseline${comparison.base === null ? "" : ` ${comparison.base.slice(0, 12)}`}`;
     }).join("; ") : a.fullSuite?.baseline !== undefined
       ? `${a.fullSuite.command ?? "full suite"} was already red there` : "the previous relative-pass evidence did not identify its command";
-    return [`acceptance: passed relative to the base${base === undefined || base === null ? "" : ` ${base.slice(0, 12)}`}${tip} ${ran}: ${evidence}`, ...acceptedTestChange, ...independentReview];
+    return [`acceptance: passed relative to the base${base === undefined || base === null ? "" : ` ${base.slice(0, 12)}`}${tip} ${ran}: ${evidence}`, ...acceptanceDiagnosticLines(a), ...acceptedTestChange, ...independentReview];
   }
   const failing = a.identityComparisons?.find((comparison) => comparison.reason !== undefined)
     ?? a.identityComparisons?.find((comparison) => comparison.tipAttempts.some((attempt) => attempt.exit !== "0"));
@@ -394,11 +427,11 @@ export function acceptanceLines(groupId: string, a: AcceptanceView | undefined, 
   return [
     `problem: group-acceptance-failed:${failing?.command ?? last?.command ?? "?"} (exited ${redAttempt?.exit ?? last?.exit ?? "?"} on orca/${groupId}${a.tip === null ? "" : ` at ${a.tip.slice(0, 12)}`})`,
     ...acceptedTestChange,
-    // Tester #387: what the suite said it ran on each side, when it said anything.
-    ...(a.evidence?.shortfall === undefined ? [] : [`  the tip's suite ran ${a.evidence.shortfall.tests} tests; the base ran ${a.evidence.shortfall.baselineTests}`]),
+    ...acceptanceDiagnosticLines(a),
     ...(a.tail ?? "").split("\n").filter((line) => line !== "").map((line) => `  ${line}`),
     // Tester #359 review (M2): the commands are the summary's groupProblem.next (groupProblemAnswers.ts).
-    ...((next) => [`next: ${next[0]}  (a flaky check: run it again on this tip)`, `  or: ${next[1]}  (a person accepts this tip anyway)`])(acceptanceAnswers(groupId)),
+    ...answerLines(acceptanceAnswers(groupId, a.evidence?.shortfall !== undefined), (command) =>
+      command.startsWith("orca group recheck ") ? "  (a flaky check: run it again on this tip)" : "  (a person accepts this tip anyway)"),
   ];
 }
 
@@ -435,6 +468,8 @@ function notFixableLines(groupId: string, left: ReadonlyArray<LeftCriterion>): s
  * problem code, each criterion of its last round, and the three commands that answer it.
  */
 interface DeliveredView { tip: string; commit: string; result: string; why?: string; commands: Array<{ command: string; exit: string; ms: number }>; tail?: string; waived?: { by: string; note: string };
+  identityComparisons?: AcceptanceIdentityComparison[];
+  evidence?: { tests?: number | null; baselineTests?: number | null; baselineCount?: { state: "counted" | "unavailable"; tests: number | null; source?: "base-suite" | "failure-baseline" }; shortfall?: { tests: number; baselineTests: number } };
   testChanges?: { base?: string; paths: string[]; weakeningSignals: string[]; digest: string; error?: string; disposition?: { tip: string; digest: string; by: string; note: string } }; problem?: string }
 /** Delivery tail spec D3/D5: the acceptance on the delivered commit, and a delivery backing off -- with what answers each. */
 export function deliveryLines(groupId: string, delivered: DeliveredView | undefined, integration: { retryAfter?: number; transient?: number; transientReason?: string | null } | undefined): string[] {
@@ -457,7 +492,8 @@ export function deliveryLines(groupId: string, delivered: DeliveredView | undefi
     lines.push(`delivered acceptance: ${delivered.result} ${on}`);
     if (delivered.testChanges?.disposition !== undefined) lines.push(`  delivered test changes accepted by ${delivered.testChanges.disposition.by}: ${delivered.testChanges.paths.join(", ")} (paths digest ${delivered.testChanges.disposition.digest.slice(0, 12)})`);
   } else lines.push(`problem: ${delivered.problem ?? "delivered-acceptance-failed"} ${on}`, ...(delivered.tail ? [`  ${delivered.tail.split("\n").slice(-3).join(" | ")}`] : []),
-    ...answerLines(deliveredAcceptanceAnswers(groupId), (command) => command.startsWith("orca group recheck-acceptance") ? "   (a flaky check)" : ""));
+    ...acceptanceDiagnosticLines({ identityComparisons: delivered.identityComparisons, evidence: delivered.evidence }),
+    ...answerLines(deliveredAcceptanceAnswers(groupId, delivered.evidence?.shortfall !== undefined), (command) => command.startsWith("orca group recheck-acceptance") ? "   (a flaky check)" : ""));
   return lines;
 }
 

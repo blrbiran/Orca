@@ -44,4 +44,22 @@ describe("a failed group acceptance needs you (tester follow-up E §5)", () => {
     render(<BoardView groups={[g({ ...FAILED, result: "passed", problem: undefined })]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
     expect(screen.queryByTestId("board-card-acceptance")).toBeNull();
   });
+  it("the Board shows comparison reasons, retry branches, and unavailable suite counts", () => {
+    const acceptance: GroupAcceptanceV1 = { ...FAILED,
+      identityComparisons: [{ command: "npm test || npm test", base: "b".repeat(40), setupDigest: "s".repeat(64), reporter: "node-test-tap-v1", baselineSource: "unavailable",
+        tipAttempts: [
+          { exit: "1", failureIdentityStatus: "ambiguous", reportedFailures: 1, blockCount: 1, tests: 79, tail: "malformed" },
+          { exit: "0", reportedFailures: 0, blockCount: 1, tests: 79, tail: "green" },
+        ], baseIdentities: [], tipIdentities: [], reason: "non-comparable" }],
+      evidence: { cwd: null, head: "c".repeat(40), trackedFiles: 4, testFiles: 2, tests: 79, suiteTests: [79, 79], baselineTests: null,
+        baselineCount: { state: "unavailable", tests: null, source: "base-suite" } },
+    };
+    const problem = { code: acceptance.problem!, why: "group-acceptance-failed", next: ["orca group recheck g"] };
+    render(<BoardView groups={[{ ...g(acceptance), groupProblem: problem }]} scope={{ kind: "all" }} onOpen={vi.fn()} onCommand={vi.fn()} />);
+    const details = screen.getAllByTestId("board-card-acceptance-diagnostics")[0]!.textContent ?? "";
+    expect(details).toContain("The red output from npm test || npm test could not be compared with the base.");
+    expect(details).toContain("npm test || npm test invocation exits: 1, 0");
+    expect(details).toContain("Full-suite test count comparison is unavailable at the base.");
+    expect(screen.getByTestId("board-card-group-problem").textContent).not.toContain("waive-acceptance");
+  });
 });

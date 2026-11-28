@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { ExecutionDriver } from "../../src/control/executionDriver.js";
 import { readGroupActivity } from "../../src/control/activity.js";
 import { acceptanceProblem, acceptanceSatisfied, fullSuiteWarning } from "../../src/control/groupAcceptanceRecord.js";
+import { acceptanceResultOf } from "../../src/control/groupAcceptance.js";
 import { landingWatchOf } from "../../src/control/landingWatchRecord.js";
 import { deliverSchedulerWakes } from "../../src/control/dispatch.js";
 import { createWebWakeHandlers } from "../../src/control/webDispatch.js";
@@ -38,7 +39,42 @@ async function untilDeadline(driver: ExecutionDriver, predicate: () => boolean, 
   if (!predicate()) throw new Error("the driver did not reach the expected state before the deadline");
 }
 
+describe("acceptance shortfall classification", () => {
+  it.each([[79, "failed"], [0, "failed"], [276, "passed"]] as const)(
+    "classifies a green tip with %i tests against a 552-test base as %s",
+    (tests, result) => {
+      expect(acceptanceResultOf({
+        failure: null,
+        commands: [],
+        suiteExits: ["0"],
+        tests,
+        evidence: { cwd: null, head: null, trackedFiles: null, testFiles: null, tests, baselineTests: 552 },
+      })).toBe(result);
+    },
+  );
+  it("classifies a same-suite retry from every red branch even when its final exit is green", () => {
+    const known = { key: "known", file: "tests/a.test.js", testPath: ["known"], diagnosticHash: "d1" };
+    const changed = { key: "changed", file: "tests/a.test.js", testPath: ["changed"], diagnosticHash: "d2" };
+    const makeOutcome = (identity: typeof known, reason?: "new-failure" | "non-comparable") => ({
+      failure: null,
+      commands: [{ command: "npm test || npm test", exit: "0", ms: 1 }],
+      suiteExits: ["1", "0"], tests: 1,
+      identityComparisons: [{ command: "npm test || npm test", base: "base", setupDigest: "setup", reporter: "node-test-tap-v1" as const,
+        baselineSource: "stored" as const,
+        tipAttempts: [
+          { exit: "1", failureIdentityStatus: "complete" as const, failureIdentities: [identity], reportedFailures: 1, blockCount: 1, tests: 1 },
+          { exit: "0", reportedFailures: 0, blockCount: 1, tests: 1 },
+        ],
+        baseIdentities: [known], tipIdentities: [identity], ...(reason === undefined ? {} : { reason }) }],
+    });
+    expect(acceptanceResultOf(makeOutcome(known))).toBe("passed-relative");
+    expect(acceptanceResultOf(makeOutcome(changed, "new-failure"))).toBe("failed");
+    expect(acceptanceResultOf(makeOutcome(known, "non-comparable"))).toBe("failed");
+  });
+});
+
 /** A suite command that logs where it ran and exits as `script` says; `runs` counts its runs (shell arithmetic). */
+
 function suite(script: string): { command: string; log: string; runs: () => string[] } {
   const dir = mkdtempSync(join(tmpdir(), "orca-suite-"));
   const log = join(dir, "calls"), counter = join(dir, "n");
@@ -97,7 +133,7 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
       // Ruling: human approval, 2026-11-20 (P1) -- task runs reported this suite red, so two greens after that are a
       // flaky suite, not a stable one. The old `flaky: false` here recorded exactly the state #383 reported.
       expect(record.fullSuite).toMatchObject({ exits: ["0", "0"], flaky: true, reported: 1 });
-      expect(s.runs()).toHaveLength(2);
+      expect(s.runs()).toHaveLength(3); // two green tip confirmations and one base count
       expect(fullSuiteWarning(record)).toBe(`full-suite-reported-flaky:${s.command}`);
     } finally { await t.h.dispose(); }
   });
@@ -111,8 +147,9 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
       await untilDeadline(driver, () => group(t).status === "done");
       const record = group(t).acceptance;
       // No report behind it: one green suffices, and the record carries no `reported` field.
-      expect(record.fullSuite).toEqual({ command: s.command, suggestion: null, exits: ["0"], flaky: false });
-      expect(s.runs()).toHaveLength(1);
+      expect(record.fullSuite).toMatchObject({ command: s.command, suggestion: null, exits: ["0"], flaky: false,
+        invocationTests: [null], baselineCount: { state: "unavailable", tests: null, source: "base-suite" } });
+      expect(s.runs()).toHaveLength(2);
     } finally { await t.h.dispose(); }
   });
 
@@ -141,10 +178,84 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
       await untilDeadline(driver, () => group(t).status === "done");
       const record = group(t).acceptance;
       expect(record.result).toBe("passed");
-      expect(commandsOf(t)).toEqual([["true", "0"], [s.command, "0"]]);
-      expect(record.fullSuite).toEqual({ command: s.command, suggestion: null, exits: ["0"], flaky: false });
-      expect(s.runs().map((path) => isGroupAcceptancePathOf(basename(path), "g"))).toEqual([true]);
+      expect(commandsOf(t)).toEqual([["true", "0"], [s.command, "0"], [`baseline: ${s.command}`, "0"]]);
+      expect(record.fullSuite).toMatchObject({ command: s.command, suggestion: null, exits: ["0"], flaky: false,
+        invocationTests: [null], baselineCount: { state: "unavailable", tests: null, source: "base-suite" } });
+      expect(s.runs().map((path) => isGroupAcceptancePathOf(basename(path), "g"))).toEqual([true, true]);
       expect(fullSuiteWarning(record)).toBeNull();
+    } finally { await t.h.dispose(); }
+  });
+
+  it("collects and caches a base suite count after a green tip run, then fails a measured shortfall", async () => {
+    const s = suiteAtBase(`if [ -f a ]; then echo '# tests 79'; else echo '# tests 552'; fi; true`);
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
+      await t.claim(); await t.claim();
+      setSuite(t, s.command);
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).acceptance !== undefined);
+      const record = group(t).acceptance;
+      expect(record.fullSuite).toMatchObject({
+        tests: 79,
+        invocationTests: [79],
+        baselineCount: { state: "counted", tests: 552, source: "base-suite" },
+      });
+      expect(record.evidence).toMatchObject({
+        tests: 79,
+        suiteTests: [79],
+        baselineTests: 552,
+        baselineCount: { state: "counted", tests: 552, source: "base-suite" },
+        shortfall: { tests: 79, baselineTests: 552 },
+      });
+      expect(record.result).toBe("failed");
+      expect(s.runs()).toEqual(["tip", "base"]);
+      expect(group(t).status).not.toBe("done");
+    } finally { await t.h.dispose(); }
+  });
+
+  it("reuses a durable exact-key count without rerunning the base suite", async () => {
+    const s = suiteAtBase(`if [ -f a ]; then echo '# tests 79'; else echo '# tests 552'; fi; true`);
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
+      const base = git(t.repo, "rev-parse", "main");
+      setSuite(t, s.command);
+      t.h.store.db.prepare(`INSERT INTO acceptance_suite_baselines
+        (repo_id,base,command,setup_digest,reporter,state,tests,exit,source,observed_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?)`).run("repo", base, s.command, acceptanceSetupDigest([]), "node-test-tap-v1", "counted", 552, "0", "base-suite", 1);
+      await t.claim(); await t.claim();
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).acceptance !== undefined);
+      const record = group(t).acceptance;
+      expect(record.result).toBe("failed");
+      expect(record.evidence).toMatchObject({ baselineTests: 552, shortfall: { tests: 79, baselineTests: 552 } });
+      expect(record.fullSuite.baselineCount).toMatchObject({ state: "counted", tests: 552 });
+      expect(s.runs()).toEqual(["tip"]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("an unsupported completed base count is visible as unavailable", async () => {
+    const s = suiteAtBase("true");
+    const t = await driverHarness([{ taskId: "a" }, { taskId: "b" }]); try {
+      await t.claim(); await t.claim();
+      setSuite(t, s.command);
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).acceptance !== undefined);
+      const record = group(t).acceptance;
+      expect(record.result).toBe("passed");
+      expect(record.fullSuite).toMatchObject({ baselineCount: { state: "unavailable", tests: null } });
+      expect(record.evidence).toMatchObject({ baselineCount: { state: "unavailable", tests: null }, baselineTests: null });
+      expect(s.runs()).toEqual(["tip", "base"]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a timed-out base suite does not cache an unavailable count", async () => {
+    const s = suiteAtBase(`if [ -f a ]; then echo '# tests 552'; else sleep 2; fi; true`);
+    const t = await driverHarness([{ taskId: "a", perAttemptTimeoutMs: 1000 }, { taskId: "b", perAttemptTimeoutMs: 1000 }]); try {
+      await t.claim(); await t.claim();
+      setSuite(t, s.command);
+      const driver = t.driver();
+      await untilDeadline(driver, () => group(t).acceptance !== undefined);
+      const key = { repoId: "repo", base: git(t.repo, "rev-parse", "main"), command: s.command, setupDigest: acceptanceSetupDigest([]), reporter: "node-test-tap-v1" as const };
+      expect(t.h.store.db.prepare(`SELECT count(*) AS n FROM acceptance_suite_baselines WHERE repo_id=? AND base=? AND command=? AND setup_digest=? AND reporter=?`)
+        .get(key.repoId, key.base, key.command, key.setupDigest, key.reporter)!.n).toBe(0);
     } finally { await t.h.dispose(); }
   });
 
@@ -158,8 +269,8 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
       const record = group(t).acceptance;
       expect(record.result).toBe("failed");
       expect(record.fullSuite).toMatchObject({ exits: ["1", "0"], flaky: true });
-      expect(record.identityComparisons).toMatchObject([{ command: s.command, baselineSource: "unavailable", reason: "non-comparable" }]);
-      expect(s.runs()).toHaveLength(2);
+      expect(record.identityComparisons).toMatchObject([{ command: s.command, baselineSource: "collected", reason: "non-comparable" }]);
+      expect(s.runs()).toHaveLength(3);
       expect(group(t).status).not.toBe("done");
     } finally { await t.h.dispose(); }
   });
@@ -208,7 +319,7 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
       const record = group(t).acceptance;
       expect(record.result).toBe("failed");
       const comparison = record.identityComparisons[0];
-      expect(comparison).toMatchObject({ command, base, baselineSource: "stored", reason: "new-failure" });
+      expect(comparison).toMatchObject({ command, base, baselineSource: "collected", reason: "new-failure" });
       expect(comparison.baseIdentities.map((identity: { file: string; testPath: string[] }) => [identity.file, identity.testPath])).toEqual([["tests/acceptance.test.js", ["known flaky check"]]]);
       expect(comparison.tipIdentities.map((identity: { file: string; testPath: string[] }) => [identity.file, identity.testPath])).toEqual([["tests/acceptance.test.js", ["new regression"]]]);
     } finally { await t.h.dispose(); }
@@ -260,9 +371,9 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
         const record = group(t).acceptance;
         expect(record.result).toBe(expectedResult);
         expect(record.fullSuite).toMatchObject({ exits: ["1", "0"], flaky: true });
-        expect(record.identityComparisons[0]).toMatchObject({ baselineSource: "stored", tipIdentities: [{ testPath: [tipName] }], baseIdentities: [{ testPath: ["known flaky check"] }] });
+        expect(record.identityComparisons[0]).toMatchObject({ baselineSource: "collected", tipIdentities: [{ testPath: [tipName] }], baseIdentities: [{ testPath: ["known flaky check"] }] });
         expect(record.identityComparisons[0].reason).toBe(expectedResult === "failed" ? "new-failure" : undefined);
-        expect(s.runs()).toHaveLength(2);
+        expect(s.runs()).toHaveLength(3);
       } finally { await t.h.dispose(); }
     },
   );
@@ -278,7 +389,8 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
       const record = group(t).acceptance;
       expect(record.result).toBe("failed");
       expect(commandsOf(t)).toEqual([["true", "0"], [s.command, "1"], [s.command, "1"], [`baseline: ${s.command}`, "0"]]);
-      expect(record.fullSuite).toEqual({ command: s.command, suggestion: null, exits: ["1", "1"], flaky: false, tests: 1 });
+      expect(record.fullSuite).toMatchObject({ command: s.command, suggestion: null, exits: ["1", "1"], flaky: false, tests: 1,
+        invocationTests: [1, 1], baselineCount: { state: "unavailable", tests: null, source: "base-suite" } });
       expect(record.fullSuite.baseline).toBeUndefined();
       expect(acceptanceProblem(record)).toBe(`group-acceptance-failed:${s.command}`);
       // The baseline was still measured, once green at the base (so no retry there).
@@ -358,7 +470,7 @@ describe("group acceptance and the project's full suite (spec §4)", { timeout: 
       const driver = t.driver();
       await untilDeadline(driver, () => group(t).status === "done");
       expect(group(t).acceptance).toMatchObject({ result: "passed", fullSuite: { command: s.command, exits: ["0"] } });
-      expect(s.runs()).toHaveLength(1);
+      expect(s.runs()).toHaveLength(2);
       // The group waited for it: done is recorded after the acceptance, never before (the gate reads the setting).
       const rows = readGroupActivity(t.h.store, "g", 200);
       const accepted = rows.find((row) => row.kind === "group-acceptance"), done = rows.find((row) => row.kind === "group-done");

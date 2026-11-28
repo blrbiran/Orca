@@ -3,7 +3,7 @@ import { canonicalBytes } from "./canonicalJson.js";
 import { mirrorWebAuthority, reopenProposalBodies, type Body } from "./proposalReopen.js";
 import { overGrantBlockRuns } from "./overGrantBlock.js";
 
-export const schemaVersion = "26";
+export const schemaVersion = "27";
 export const legacySchema = `CREATE TABLE meta(key TEXT PRIMARY KEY, value TEXT NOT NULL) STRICT;
 CREATE TABLE groups(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, graph_version INTEGER NOT NULL, body TEXT NOT NULL) STRICT;
 CREATE TABLE work_items(group_id TEXT NOT NULL REFERENCES groups(id), id TEXT NOT NULL, target_version INTEGER NOT NULL, body TEXT NOT NULL, PRIMARY KEY(group_id,id)) STRICT;
@@ -290,7 +290,26 @@ export const schema25To26 = `CREATE TABLE IF NOT EXISTS acceptance_failure_basel
 CREATE INDEX IF NOT EXISTS acceptance_failure_baselines_by_base ON acceptance_failure_baselines(repo_id,base,command,setup_digest,reporter);
 `;
 
+// Acceptance suite-count design 2026-11-28 (#564): one completed observation per exact suite identity. Unsupported completed
+// output is cached as unavailable; an infrastructure failure does not write a row.
+export const schema26To27 = `CREATE TABLE IF NOT EXISTS acceptance_suite_baselines(
+  repo_id TEXT NOT NULL,
+  base TEXT NOT NULL,
+  command TEXT NOT NULL,
+  setup_digest TEXT NOT NULL,
+  reporter TEXT NOT NULL CHECK(reporter IN ('node-test-tap-v1')),
+  state TEXT NOT NULL CHECK(state IN ('counted','unavailable')),
+  tests INTEGER CHECK(tests IS NULL OR tests >= 0),
+  exit TEXT NOT NULL,
+  source TEXT NOT NULL CHECK(source IN ('base-suite','failure-baseline')),
+  observed_at INTEGER NOT NULL,
+  PRIMARY KEY(repo_id,base,command,setup_digest,reporter),
+  CHECK((state='counted' AND tests IS NOT NULL) OR (state='unavailable' AND tests IS NULL))
+) STRICT;
+`;
+
 /** 23 → 24: idempotent per column (see usageDetailColumns). */
+
 function migrate23To24(store: DatabaseSync): void {
   const present = new Set(store.prepare("PRAGMA table_info(usage_ledger)").all().map((row) => String(row.name)));
   for (const [name, type] of usageDetailColumns) if (!present.has(name)) store.exec(`ALTER TABLE usage_ledger ADD COLUMN ${name} ${type}`);
@@ -309,7 +328,7 @@ function rekeyRequirementRounds(store: DatabaseSync): void {
 
 // A fresh store has no groups, so the pre-ledger insert adds nothing.
 export const initialSchema = legacySchema + schema1To2 + schema2To3 + schema3To4 + schema4To5 + schema5To6 + schema6To7 + schema7To8 + schema8To9 + schema10To11 + schema12To13 + schema13To14 + schema14To15 + schema15To16
-  + requirementRoundsKeyed + schema16To17 + schema17To18 + schema19To20 + schema20To21 + schema22To23WorkTopUps + schema23To24 + schema24To25 + schema25To26;
+  + requirementRoundsKeyed + schema16To17 + schema17To18 + schema19To20 + schema20To21 + schema22To23WorkTopUps + schema23To24 + schema24To25 + schema25To26 + schema26To27;
 
 /**
  * Checks spec 2026-10-22 §4.1 "Migration (no aliases, P1)": each repository settings body's `integrationCheck
@@ -450,6 +469,7 @@ function finishMigration(store: DatabaseSync, now: () => number): void {
   migrate23To24(store);
   store.exec(schema24To25);
   store.exec(schema25To26);
+    store.exec(schema26To27);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
 }
 
@@ -468,14 +488,21 @@ function migrate7To8(store: DatabaseSync): boolean {
 }
 
 export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () => number = Date.now): void {
+  if (fromVersion === "26") {
+    store.exec(schema26To27);
+    store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
+    return;
+  }
   if (fromVersion === "25") {
     store.exec(schema25To26);
+    store.exec(schema26To27);
     store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
   if (fromVersion === "24") {
     store.exec(schema24To25);
     store.exec(schema25To26);
+    store.exec(schema26To27);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -483,6 +510,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate23To24(store);
     store.exec(schema24To25);
     store.exec(schema25To26);
+    store.exec(schema26To27);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -491,6 +519,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate23To24(store);
     store.exec(schema24To25);
     store.exec(schema25To26);
+    store.exec(schema26To27);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -500,6 +529,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate23To24(store);
     store.exec(schema24To25);
     store.exec(schema25To26);
+    store.exec(schema26To27);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -512,6 +542,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate23To24(store);
     store.exec(schema24To25);
     store.exec(schema25To26);
+    store.exec(schema26To27);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -523,6 +554,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate23To24(store);
     store.exec(schema24To25);
     store.exec(schema25To26);
+    store.exec(schema26To27);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -535,6 +567,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate23To24(store);
     store.exec(schema24To25);
     store.exec(schema25To26);
+    store.exec(schema26To27);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -548,6 +581,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate23To24(store);
     store.exec(schema24To25);
     store.exec(schema25To26);
+    store.exec(schema26To27);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }
@@ -562,6 +596,7 @@ export function migrateSchema(store: DatabaseSync, fromVersion: string, now: () 
     migrate23To24(store);
     store.exec(schema24To25);
     store.exec(schema25To26);
+    store.exec(schema26To27);
   store.prepare("UPDATE meta SET value=? WHERE key='schemaVersion'").run(schemaVersion);
     return;
   }

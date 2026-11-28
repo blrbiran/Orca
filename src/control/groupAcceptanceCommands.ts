@@ -12,9 +12,9 @@ import type { CommandErrorBodyV1, CommandSuccessV1, RawAuthorityCommandV1 } from
  * acceptance pass checks again by itself). Both answer a failed record only (`group-acceptance-not-failed` otherwise).
  * - `recheck-acceptance` (any principal): a flaky check -- the failed record is removed, so the next round checks the same
  *   tip again (groupAcceptance.ts acceptGroup: no record for the tip, more than one landing).
- * - `waive-acceptance` (human only, socket tier token): a person accepts the failed tip anyway; the record becomes
- *   `waived` with who and why, and a `group-acceptance` activity row names them. It holds for that tip only: a tip that
- *   moves is checked again.
+ * - `waive-acceptance` (human only, socket tier token): a person accepts a failed command check anyway; a measured suite-count
+ *   shortfall is not waivable because it proves the intended test coverage did not run. A normal waiver records who accepted the
+ *   failed tip and why, and a `group-acceptance` activity row names them. It holds for that tip only: a tip that moves is checked again.
  */
 export type RecheckAcceptanceCommand = Extract<RawAuthorityCommandV1, { verb: "recheck-acceptance" }>;
 export type WaiveAcceptanceCommand = Extract<RawAuthorityCommandV1, { verb: "waive-acceptance" }>;
@@ -58,6 +58,7 @@ export function applyWaiveAcceptance(deps: { store: ControlStore }, command: Wai
     apply: (context) => {
       const groupId = command.target.groupId;
       const { body, field, record } = failedRecord(deps.store, groupId);
+      if (record.evidence?.shortfall !== undefined) throw new ControlError("group-acceptance-shortfall-not-waivable");
       const by = settlingPersonFor(command.commandId);
       if (by === null) throw new ControlError("group-acceptance-person-required");
       const at = deps.store.now();

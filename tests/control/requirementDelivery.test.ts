@@ -15,10 +15,10 @@ describe("a requirement that asks for the full suite (#385)", () => {
     expect(deliveryProblems(DOC, { tasks: [task("a", ["node src/check.js"])], notes: "" })).toEqual([{ problem: "missing-full-suite", command: "npm test" }]);
   });
 
-  it("stays quiet when a task's checks run it, or its success condition names it", () => {
-    // mutation: check only checks (drop successCondition) -> red
+  it("stays quiet only when a task's executable checks run the suite", () => {
+    // mutation: inspect task prose instead of checks -> the second assertion goes green incorrectly
     expect(deliveryProblems(DOC, { tasks: [task("a", ["node src/check.js"]), task("final", ["npm test"])], notes: "" })).toEqual([]);
-    expect(deliveryProblems(DOC, { tasks: [task("a", ["node src/check.js"], "npm test passes")], notes: "" })).toEqual([]);
+    expect(deliveryProblems(DOC, { tasks: [task("a", ["node src/check.js"], "npm test passes")], notes: "" })).toEqual([{ problem: "missing-full-suite", command: "npm test" }]);
   });
 
   it("says nothing when the requirement asks for no full suite, or the draft is multi-directory", () => {

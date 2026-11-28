@@ -17,6 +17,7 @@ import type { AdmissionGate } from "./admissionGate.js";
 import { acceptanceOf, groupBaseCommit, landedRunCount, landedTaskCount, maxLandingsWithoutAcceptance, type AcceptanceEvidence, type AcceptanceIdentityComparison, type FullSuiteRecord, type GroupAcceptance } from "./groupAcceptanceRecord.js";
 import { fullSuiteCommand, suggestFullSuiteCommand } from "./fullSuite.js";
 import { readPreexistingFailures } from "./preexistingFailure.js";
+import { loadSuiteCountBaselineOnce, type SuiteCountBaseline, type SuiteCountBaselineKey } from "./acceptanceSuiteBaseline.js";
 import type { ControlStore } from "./store.js";
 
 /**
@@ -97,7 +98,49 @@ const inUse = new Set<string>();
  * #278: per owner (a driver's checks map, or the store for a pass without one) and pass, the failure last logged for each
  * group; a round without one clears it, so the same failure coming back later is logged again.
  */
+interface SuiteBaselineLoad { baseline: SuiteCountBaseline | null; commands: PostMergeOutcome["commands"] }
+
+async function loadSuiteBaseline(
+  deps: GroupAcceptanceDeps, repo: string, groupId: string, key: SuiteCountBaselineKey, setup: string[], timeoutMs: number, signal: AbortSignal,
+  as: { runId: string; personDir?: string },
+): Promise<SuiteBaselineLoad> {
+  const commands: PostMergeOutcome["commands"] = [];
+  const loaded = await loadSuiteCountBaselineOnce(deps.store, key, async () => runOnScratchTip(
+    deps, repo, groupAcceptancePathOf(deps.roots, groupId, ++checkSeq),
+    (name) => isGroupAcceptancePathOf(name, groupId), key.base, async (tree) => {
+      for (const command of setup) {
+        const started = performance.now();
+        const answer = await runCheckRecorded(tree, command, timeoutMs, as, signal);
+        commands.push({ command: `baseline setup: ${command}`, exit: answer.exit, ms: Math.round(performance.now() - started) });
+        if (answer.exit !== "0") return null;
+      }
+      const started = performance.now();
+      const answer = await runCheckRecorded(tree, key.command, timeoutMs, as, signal);
+      commands.push({ command: `baseline: ${key.command}`, exit: answer.exit, ms: Math.round(performance.now() - started) });
+      if (!/^\d+$/.test(answer.exit)) return null;
+
+      const tests = testsRan(answer.tail);
+      if (answer.exit !== "0" && answer.failureIdentityStatus === "complete" && (answer.failureIdentities?.length ?? 0) > 0) {
+        deps.write(() => recordAcceptanceFailureIdentities(deps.store, {
+          ...key, identities: answer.failureIdentities!, source: "group-acceptance", groupId,
+          runId: as.runId, at: deps.store.now(), tests, exit: answer.exit,
+        }));
+      }
+      return {
+        state: tests === null ? "unavailable" : "counted", tests, exit: answer.exit,
+        source: "base-suite", observedAt: deps.store.now(),
+      };
+    },
+  ));
+  return { baseline: loaded.baseline, commands: loaded.loaded ? commands : [] };
+}
+
+/**
+ * #278: per owner (a driver's checks map, or the store for a pass without one) and pass, the failure last logged for each
+ * group; a round without one clears it, so the same failure coming back later is logged again.
+ */
 const logged = new WeakMap<object, Map<string, string>>();
+
 export function logGroupFailureOnce(owner: object, pass: string, groupId: string, error: unknown): void {
   const last = logged.get(owner) ?? new Map<string, string>();
   logged.set(owner, last);
@@ -182,8 +225,12 @@ export function acceptanceResultOf(outcome: AcceptanceOutcome): "passed" | "pass
   const comparisons = outcome.identityComparisons ?? [];
   const redTipCommands = comparisons.filter((comparison) => comparison.tipAttempts.some((attempt) => attempt.exit !== "0"));
   const hadComparableTipRed = redTipCommands.length > 0;
-  const shortfall = shortfallOf({ tests: outcome.tests, baseline: outcome.baseline });
-  const relative = hadComparableTipRed && redTipCommands.length === comparisons.length && redTipCommands.every((comparison) => comparison.reason === undefined) && shortfall === null;
+  const shortfall = outcome.evidence?.shortfall ?? shortfallOf({
+    tests: outcome.tests ?? outcome.evidence?.tests,
+    baseline: { tests: outcome.evidence?.baselineTests ?? outcome.baseline?.tests },
+  });
+  if (shortfall !== null) return "failed";
+  const relative = hadComparableTipRed && redTipCommands.length === comparisons.length && redTipCommands.every((comparison) => comparison.reason === undefined);
   return outcome.failure === null && !hadComparableTipRed ? "passed" : relative ? "passed-relative" : "failed";
 }
 
@@ -248,9 +295,11 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
   if (recorded !== null && recorded.tip === tip && recorded.testChanges === undefined) return false;
   const base = groupBaseCommit(store, groupId);
   if (base === null) throw new Error(`acceptance-base-unavailable:${groupId}`);
+  const { setup, checks: commands, timeoutMs } = acceptanceCommands(store, groupId);
+  const suite = fullSuiteCommand(store, groupRepoId(store, groupId));
   let testChanges: ExistingTestChanges;
   try {
-    testChanges = await existingTestChanges(repo, base, tip);
+    testChanges = await existingTestChanges(repo, base, tip, { checks: [...commands, ...(suite === null ? [] : [suite])], setupCommands: setup });
   } catch (error) {
     // Fail closed: a tree whose test changes cannot be read is not accepted, in any path including a single landing.
     const record = { tip, result: "failed" as const, commands: [], at: store.now(),
@@ -260,13 +309,11 @@ async function acceptGroup(deps: GroupAcceptanceDeps, checks: Map<string, GroupA
   }
   if (recorded !== null && recorded.tip === tip && recorded.testChanges?.digest === testChanges.digest) return false;
   // Full suite spec §4: the project's full-suite command as this check starts; with one set, a single landing is checked too.
-  const suite = fullSuiteCommand(store, groupRepoId(store, groupId));
   if (landedTaskCount(store, groupId) <= maxLandingsWithoutAcceptance(suite)) {
     const record = gateTestChanges({ tip, result: "not-needed", why: "single-landing", commands: [], at: store.now(), fullSuite: fullSuiteRecord(suite, repo, []) }, testChanges, base);
     deps.write(() => saveAcceptance(store, groupId, record));
     return true;
   }
-  const { setup, checks: commands, timeoutMs } = acceptanceCommands(store, groupId);
   const baselineTip = base;
   // A record for an earlier tip says nothing about this one: removed before the check starts, so nothing reads it as current.
   if (recorded !== null) deps.write(() => saveAcceptance(store, groupId, null));
@@ -304,6 +351,8 @@ function fullSuiteRecord(suite: string | null, repo: string, exits: string[], ou
     command: suite, suggestion: suite === null ? suggestFullSuiteCommand(repo) : null, exits,
     flaky: exits.length === 2 && exits[1] === "0" && (exits[0] !== "0" || reported > 0),
     ...(outcome?.tests === undefined || outcome.tests === null ? {} : { tests: outcome.tests }),
+    ...(outcome?.evidence?.suiteTests === undefined ? {} : { invocationTests: outcome.evidence.suiteTests }),
+    ...(outcome?.evidence?.baselineCount === undefined ? {} : { baselineCount: outcome.evidence.baselineCount }),
     ...(reported === 0 ? {} : { reported }),
     ...(outcome?.baseline === undefined ? {} : { baseline: { tip: outcome.baseline.tip, exits: outcome.baseline.exits, ...(outcome.baseline.failure?.tail ? { tail: outcome.baseline.failure.tail } : {}), ...(outcome.baseline.tests === undefined || outcome.baseline.tests === null ? {} : { tests: outcome.baseline.tests }) } }),
   };
@@ -344,10 +393,11 @@ export async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, gro
       const started = performance.now();
       const answer = await runCheckRecorded(tree, command, timeoutMs, as, signal);
       commands.push({ command, exit: answer.exit, ms: Math.round(performance.now() - started) });
-      attemptsByCommand.set(command, [{ exit: answer.exit, tail: answer.tail,
+      const attempts = answer.identityAttempts ?? [{ exit: answer.exit,
         ...(answer.failureIdentityStatus === undefined ? {} : { failureIdentityStatus: answer.failureIdentityStatus }),
         ...(answer.failureIdentities === undefined ? {} : { failureIdentities: answer.failureIdentities }),
-      }]);
+      }];
+      attemptsByCommand.set(command, attempts.map((attempt) => ({ ...attempt, tail: answer.tail })));
       if (answer.exit !== "0" && failure === null) failure = answer;
     }
 
@@ -356,35 +406,57 @@ export async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, gro
     if (!setupFailed && suite !== null && (failure === null || attemptsByCommand.has(suite))) {
       let suiteAttempts = attemptsByCommand.get(suite);
       if (suiteAttempts === undefined) {
-        suiteAttempts = [];
-        attemptsByCommand.set(suite, suiteAttempts);
         const started = performance.now();
         const answer = await runCheckRecorded(tree, suite, timeoutMs, as, signal);
         commands.push({ command: suite, exit: answer.exit, ms: Math.round(performance.now() - started) });
-        suiteAttempts.push({ exit: answer.exit, tail: answer.tail,
+        const attempts = answer.identityAttempts ?? [{ exit: answer.exit,
           ...(answer.failureIdentityStatus === undefined ? {} : { failureIdentityStatus: answer.failureIdentityStatus }),
           ...(answer.failureIdentities === undefined ? {} : { failureIdentities: answer.failureIdentities }),
-        });
+        }];
+        suiteAttempts = attempts.map((attempt) => ({ ...attempt, tail: answer.tail }));
+        attemptsByCommand.set(suite, suiteAttempts);
         if (answer.exit !== "0" && failure === null) failure = answer;
       }
-      const first = suiteAttempts[0]!;
-      suiteExits.push(first.exit);
-      tests = testsRan(first.tail);
-      if (first.exit !== "0" || reported > 0) {
+      suiteExits.push(...suiteAttempts.map((attempt) => attempt.exit));
+      const suiteTests = (): number | null => {
+        const counts = suiteAttempts!.map((attempt) => attempt.tests ?? testsRan(attempt.tail)).filter((count): count is number => count !== null);
+        return counts.length === 0 ? null : Math.min(...counts);
+      };
+      tests = suiteTests();
+      if (suiteAttempts.length === 1 && (suiteAttempts[0]!.exit !== "0" || reported > 0)) {
         const started = performance.now();
         const answer = await runCheckRecorded(tree, suite, timeoutMs, as, signal);
         commands.push({ command: suite, exit: answer.exit, ms: Math.round(performance.now() - started) });
-        suiteExits.push(answer.exit);
-        tests = testsRan(answer.tail) ?? tests;
-        suiteAttempts.push({ exit: answer.exit, tail: answer.tail,
+        const attempts = answer.identityAttempts ?? [{ exit: answer.exit,
           ...(answer.failureIdentityStatus === undefined ? {} : { failureIdentityStatus: answer.failureIdentityStatus }),
           ...(answer.failureIdentities === undefined ? {} : { failureIdentities: answer.failureIdentities }),
-        });
+        }];
+        const confirmationAttempts = attempts.map((attempt) => ({ ...attempt, tail: answer.tail }));
+        suiteAttempts.push(...confirmationAttempts);
+        suiteExits.push(...confirmationAttempts.map((attempt) => attempt.exit));
+        tests = suiteTests();
       }
     }
     return { failure, commands, suiteExits, tests, evidence };
   }), ...(reported === 0 ? {} : { reported }) };
-  if (outcome.evidence !== undefined) outcome.evidence.tests = outcome.tests ?? null;
+  let suiteBaselineLoad: SuiteBaselineLoad | null = null;
+  if (suite !== null && baselineTip !== null && attemptsByCommand.has(suite)) {
+    try {
+      suiteBaselineLoad = await loadSuiteBaseline(deps, repo, groupId,
+        { repoId, base: baselineTip, command: suite, setupDigest, reporter: "node-test-tap-v1" }, setup, timeoutMs, signal, as);
+      outcome.commands.push(...suiteBaselineLoad.commands);
+      if (suiteBaselineLoad.baseline !== null) {
+        baseRuns.set(suite, { exit: suiteBaselineLoad.baseline.exit, tail: "", tests: suiteBaselineLoad.baseline.tests });
+      }
+    } catch { suiteBaselineLoad = null; }
+  }
+  const suiteBaseline = suiteBaselineLoad?.baseline ?? null;
+  const suiteAttempts = suite === null ? [] : attemptsByCommand.get(suite) ?? [];
+  const invocationTests = suiteAttempts.map((attempt) => attempt.tests ?? testsRan(attempt.tail));
+  const knownInvocationTests = invocationTests.filter((tests): tests is number => tests !== null);
+  outcome.tests = knownInvocationTests.length === 0 ? null : Math.min(...knownInvocationTests);
+  if (outcome.evidence !== undefined && suite !== null) outcome.evidence.suiteTests = invocationTests;
+  if (outcome.evidence !== undefined) outcome.evidence.tests = outcome.tests;
 
   const redCommands = [...attemptsByCommand.entries()].filter(([, attempts]) => attempts.some((attempt) => attempt.exit !== "0"));
   const comparisons: AcceptanceIdentityComparison[] = [];
@@ -396,17 +468,28 @@ export async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, gro
     }
     const malformedTip = attempts.some((attempt) => attempt.exit !== "0" && (attempt.failureIdentityStatus !== "complete" || (attempt.failureIdentities?.length ?? 0) === 0));
     const baseIdentities = baselineTip === null ? [] : readAcceptanceFailureIdentities(deps.store, { repoId, base: baselineTip, command, setupDigest, reporter: "node-test-tap-v1" });
-    if (baselineTip !== null && baseIdentities.length > 0) {
+    if (baselineTip !== null && command !== suite && baseIdentities.length > 0) {
       const shape = readAcceptanceBaselineShape(deps.store, { repoId, base: baselineTip, command, setupDigest, reporter: "node-test-tap-v1" });
       if (shape?.tests !== null && shape?.tests !== undefined) baseRuns.set(command, { exit: shape.exit ?? "1", tail: "", tests: shape.tests });
     }
-    comparisons.push({ command, base: baselineTip, setupDigest, reporter: "node-test-tap-v1", baselineSource: baseIdentities.length > 0 ? "stored" : "unavailable",
-      tipAttempts: attempts.map(({ exit, failureIdentityStatus, failureIdentities }) => ({ exit,
+    const suiteComparisonBaseline = command === suite ? suiteBaseline : null;
+    const baselineSource: AcceptanceIdentityComparison["baselineSource"] = baseIdentities.length > 0
+      ? command === suite && suiteBaselineLoad?.commands.length ? "collected" : "stored"
+      : suiteComparisonBaseline !== null
+        ? suiteBaselineLoad?.commands.length ? "collected" : "stored"
+        : "unavailable";
+    const reason = malformedTip ? "non-comparable"
+      : baselineTip === null || (command === suite && suiteComparisonBaseline === null) ? "baseline-unavailable"
+        : command === suite && baseIdentities.length === 0
+          ? suiteComparisonBaseline!.exit === "0" ? "base-green" : "non-comparable"
+          : undefined;
+    comparisons.push({ command, base: baselineTip, setupDigest, reporter: "node-test-tap-v1", baselineSource,
+      tipAttempts: attempts.map(({ exit, failureIdentityStatus, failureIdentities, reportedFailures, blockCount, tests, tail }) => ({ exit,
         ...(failureIdentityStatus === undefined ? {} : { failureIdentityStatus }), ...(failureIdentities === undefined ? {} : { failureIdentities }),
-      })), baseIdentities, tipIdentities: [...tipIdentities.values()],
-      ...(malformedTip ? { reason: "non-comparable" } : baselineTip === null ? { reason: "baseline-unavailable" } : {}),
+        ...(reportedFailures === undefined ? {} : { reportedFailures }), ...(blockCount === undefined ? {} : { blockCount }), ...(tests === undefined ? {} : { tests }), ...(tail === undefined ? {} : { tail }),
+      })), baseIdentities, tipIdentities: [...tipIdentities.values()], ...(reason === undefined ? {} : { reason }),
     });
-    if (baselineTip !== null && baseIdentities.length === 0 && !malformedTip) missingBaselines.push(command);
+    if (baselineTip !== null && command !== suite && baseIdentities.length === 0 && !malformedTip) missingBaselines.push(command);
   }
 
   if (missingBaselines.length > 0 && baselineTip !== null) {
@@ -468,15 +551,20 @@ export async function runAcceptance(deps: GroupAcceptanceDeps, repo: string, gro
 
   const suiteComparison = suite === null ? undefined : comparisons.find((comparison) => comparison.command === suite);
   const suiteBaseRun = suite === null ? undefined : baseRuns.get(suite);
+  if (outcome.evidence !== undefined && suite !== null && attemptsByCommand.has(suite)) {
+    outcome.evidence.baselineCount = suiteBaseline === null
+      ? { state: "unavailable", tests: null }
+      : { state: suiteBaseline.state, tests: suiteBaseline.tests, source: suiteBaseline.source };
+    outcome.evidence.baselineTests = suiteBaseline?.tests ?? null;
+    const shortfall = shortfallOf({ tests: outcome.tests, baseline: { tests: suiteBaseline?.tests ?? null } });
+    if (shortfall !== null) outcome.evidence.shortfall = shortfall;
+  }
   if (baselineTip !== null && suiteComparison !== undefined && suiteBaseRun !== undefined && outcome.evidence !== undefined) {
     try {
       const listed = (await git(repo, ["ls-tree", "-r", "--name-only", baselineTip])).split("\n").filter((line) => line.length > 0);
       outcome.evidence.baselineTrackedFiles = listed.length;
       outcome.evidence.baselineTestFiles = listed.filter(isTestPath).length;
     } catch { /* the counts stay unknown */ }
-    outcome.evidence.baselineTests = suiteBaseRun.tests;
-    const shortfall = shortfallOf({ tests: outcome.tests, baseline: { tests: suiteBaseRun.tests } });
-    if (shortfall !== null) outcome.evidence.shortfall = shortfall;
     if (suiteBaseRun.exit !== "0") outcome.baseline = {
       tip: baselineTip, exits: [suiteBaseRun.exit], failure: { command: `baseline: ${suite}`, exit: suiteBaseRun.exit, tail: suiteBaseRun.tail }, tests: suiteBaseRun.tests,
     };

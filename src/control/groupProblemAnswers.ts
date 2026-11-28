@@ -30,9 +30,10 @@ export function reviewAnswers(groupId: string, why: string | undefined, left: Re
   return [...plan, accept, rerun];
 }
 
-/** Follow-up E §5 (#241): a failed group acceptance -- run it again (a flaky check), or a person waives it. */
-export function acceptanceAnswers(groupId: string): string[] {
-  return [`orca group recheck ${groupId}`, `orca group waive-acceptance ${groupId} --note '<why>'`];
+/** Follow-up E §5 (#241): a failed acceptance is rechecked; only command failures are waivable, never a measured test-count shortfall. */
+export function acceptanceAnswers(groupId: string, shortfall = false): string[] {
+  const recheck = `orca group recheck ${groupId}`;
+  return shortfall ? [recheck] : [recheck, `orca group waive-acceptance ${groupId} --note '<why>'`];
 }
 
 export function acceptanceTestChangeAnswers(groupId: string): string[] {
@@ -40,6 +41,7 @@ export function acceptanceTestChangeAnswers(groupId: string): string[] {
 }
 
 /** Delivery tail spec D3: a failed acceptance on the delivered commit -- recheck it, or a person waives it. */
-export function deliveredAcceptanceAnswers(groupId: string): string[] {
-  return [`orca group recheck-acceptance ${groupId}`, `orca group waive-acceptance ${groupId} --note '<why the delivered tree is accepted>'`];
+export function deliveredAcceptanceAnswers(groupId: string, shortfall = false): string[] {
+  const recheck = `orca group recheck-acceptance ${groupId}`;
+  return shortfall ? [recheck] : [recheck, `orca group waive-acceptance ${groupId} --note '<why the delivered tree is accepted>'`];
 }

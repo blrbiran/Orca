@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readGroupActivity } from "../../src/control/activity.js";
 import { withCommandContext } from "../../src/control/commandClient.js";
+import { acceptanceAnswers, deliveredAcceptanceAnswers } from "../../src/control/groupProblemAnswers.js";
 import { acceptanceSatisfied } from "../../src/control/groupAcceptanceRecord.js";
 import { readGroupSummary } from "../../src/panel/controlViews.js";
 import { driverHarness, git } from "./fixtures/driverHarness.js";
@@ -24,6 +25,11 @@ function setAcceptance(t: Harness, acceptance: unknown): void {
 }
 const rows = (t: Harness) => readGroupActivity(t.h.store, "g", 200).filter((entry) => entry.kind === "group-acceptance");
 const asOwner = <T>(commandId: string, action: () => T): T => withCommandContext(commandId, { client: "web", principal: "user:owner" }, action);
+
+it("a measured suite-count shortfall offers a recheck but no waiver", () => {
+  expect(acceptanceAnswers("g", true)).toEqual(["orca group recheck g"]);
+  expect(deliveredAcceptanceAnswers("g", true)).toEqual(["orca group recheck-acceptance g"]);
+});
 
 async function pendingTestChange() {
   const before = "it('works', () => { expect(1).toBe(1); });\n";
@@ -123,6 +129,18 @@ describe("recheck and waive a failed group acceptance (tester follow-up E §5)",
       const waived = body(t).acceptance as Record<string, unknown>;
       expect(waived).toMatchObject({ ...FAILED, result: "waived", waived: { by: "user:owner", note: "the red test is a known flake" } });
       expect(rows(t).map((row) => row.body)).toEqual([waived]);
+    } finally { await t.h.dispose(); }
+  });
+
+  it("a person cannot waive a measured suite-count shortfall", async () => {
+    const t = await driverHarness([{ taskId: "a" }]); try {
+      const shortfall = { ...FAILED, evidence: { cwd: null, head: TIP, trackedFiles: 1, testFiles: 1, tests: 79, baselineTests: 552,
+        baselineCount: { state: "counted", tests: 552, source: "base-suite" }, shortfall: { tests: 79, baselineTests: 552 } } };
+      setAcceptance(t, shortfall);
+      const command = t.h.command("waive-acceptance", { note: "accept despite missing tests" });
+      expect(asOwner(command.commandId, () => t.service.waiveAcceptance(command))).toMatchObject({ error: { code: "group-acceptance-shortfall-not-waivable" } });
+      expect(body(t).acceptance).toEqual(shortfall);
+      expect(rows(t)).toEqual([]);
     } finally { await t.h.dispose(); }
   });
 

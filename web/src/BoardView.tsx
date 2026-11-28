@@ -163,6 +163,48 @@ function BoardCard(props: { group: GroupSummaryV1; repoText: string; now: number
           <button type="button" className="btn-quiet" onClick={() => { void navigator.clipboard?.writeText(group.groupProblem!.next[0]!); }}>{t("board.card.copyCommand")}</button>
         </p>
       )}
+      {group.acceptance?.result === "failed" && (
+        <div className="detail-note" data-testid="board-card-acceptance-diagnostics">
+          {(group.acceptance.identityComparisons ?? []).map((comparison, index) => <div key={`${comparison.command}:${index}`}>
+            {comparison.reason !== undefined && <p>{t(`control.groupAcceptance.diagnostics.reason.${comparison.reason}` as const, { command: comparison.command })}</p>}
+            {comparison.tipAttempts.length > 1 && (() => {
+              const red = comparison.tipAttempts.filter((attempt) => attempt.exit !== "0");
+              const details = red.map((attempt) => attempt.reportedFailures == null
+                ? t("control.groupAcceptance.diagnostics.retryUnparsed")
+                : t("control.groupAcceptance.diagnostics.retryFailure", { failures: attempt.reportedFailures, blocks: attempt.blockCount ?? 0 })).join("; ");
+              return <p>{t("control.groupAcceptance.diagnostics.retry", { command: comparison.command,
+                exits: comparison.tipAttempts.map((attempt) => attempt.exit).join(", "), details })}</p>;
+            })()}
+          </div>)}
+          {group.acceptance.evidence?.baselineCount?.state === "unavailable" && <p>{t("control.groupAcceptance.diagnostics.countUnavailable")}</p>}
+          {group.acceptance.evidence?.baselineCount?.state === "counted" && group.acceptance.evidence.baselineCount.tests !== null
+            && group.acceptance.evidence.tests !== null && <p>{t("control.groupAcceptance.diagnostics.counts", { tip: group.acceptance.evidence.tests, base: group.acceptance.evidence.baselineCount.tests })}</p>}
+          {group.acceptance.evidence?.shortfall !== undefined && <p>{t("control.groupAcceptance.diagnostics.shortfall", {
+            tip: group.acceptance.evidence.shortfall.tests, base: group.acceptance.evidence.shortfall.baselineTests,
+          })}</p>}
+        </div>
+      )}
+      {group.acceptance?.result === "failed" && (
+        <div className="detail-note" data-testid="board-card-acceptance-diagnostics">
+          {(group.acceptance.identityComparisons ?? []).map((comparison, index) => <div key={`${comparison.command}:${index}`}>
+            {comparison.reason !== undefined && <p>{t(`control.groupAcceptance.diagnostics.reason.${comparison.reason}` as const, { command: comparison.command })}</p>}
+            {comparison.tipAttempts.length > 1 && (() => {
+              const red = comparison.tipAttempts.filter((attempt) => attempt.exit !== "0");
+              const details = red.map((attempt) => attempt.reportedFailures == null
+                ? t("control.groupAcceptance.diagnostics.retryUnparsed")
+                : t("control.groupAcceptance.diagnostics.retryFailure", { failures: attempt.reportedFailures, blocks: attempt.blockCount ?? 0 })).join("; ");
+              return <p>{t("control.groupAcceptance.diagnostics.retry", { command: comparison.command,
+                exits: comparison.tipAttempts.map((attempt) => attempt.exit).join(", "), details })}</p>;
+            })()}
+          </div>)}
+          {group.acceptance.evidence?.baselineCount?.state === "unavailable" && <p>{t("control.groupAcceptance.diagnostics.countUnavailable")}</p>}
+          {group.acceptance.evidence?.baselineCount?.state === "counted" && group.acceptance.evidence.baselineCount.tests !== null
+            && group.acceptance.evidence.tests !== null && <p>{t("control.groupAcceptance.diagnostics.counts", { tip: group.acceptance.evidence.tests, base: group.acceptance.evidence.baselineCount.tests })}</p>}
+          {group.acceptance.evidence?.shortfall !== undefined && <p>{t("control.groupAcceptance.diagnostics.shortfall", {
+            tip: group.acceptance.evidence.shortfall.tests, base: group.acceptance.evidence.shortfall.baselineTests,
+          })}</p>}
+        </div>
+      )}
       {group.stopState !== null && <span className={`badge ${cardBadge}`}>{enumText("stopState", group.stopState)}</span>}
       {waiting !== null && <p className="detail-note">{waiting}</p>}
       {reason !== null && <p className="detail-note" data-testid="board-card-reason">{t(`board.card.reason.${reason}` as const)}</p>}

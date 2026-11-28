@@ -77,7 +77,7 @@ async function acceptDelivery(deps: GroupAcceptanceDeps, checks: Map<string, Gro
     if (inFlight.settled === null) return false;
     checks.delete(keyOf(groupId));
     if ("error" in inFlight.settled) throw inFlight.settled.error;
-    const record = classify(target, inFlight.settled.outcome, accepted, store.now(), inFlight.testChanges);
+    const record = classifyDeliveredAcceptance(target, inFlight.settled.outcome, accepted, store.now(), inFlight.testChanges);
     deps.write(() => save(store, groupId, record, true));
     return true;
   }
@@ -104,7 +104,7 @@ async function acceptDelivery(deps: GroupAcceptanceDeps, checks: Map<string, Gro
   const baselineTip = groupBaseCommit(store, groupId);
   if (baselineTip === null) throw new Error(`acceptance-base-unavailable:${groupId}`);
   let scan: ExistingTestChanges;
-  try { scan = await existingTestChanges(repo, baselineTip, target.commit); }
+  try { scan = await existingTestChanges(repo, baselineTip, target.commit, { checks: [...commands, ...(suite === null ? [] : [suite])], setupCommands: setup }); }
   catch (error) {
     deps.write(() => save(store, groupId, { tip: target.tip, commit: target.commit, result: "failed", commands: [], at,
       testChanges: { base: baselineTip, paths: [], weakeningSignals: [], digest: "", error: `test-change-scan-failed: ${(error as Error).message}` } }, false));
@@ -124,7 +124,7 @@ async function acceptDelivery(deps: GroupAcceptanceDeps, checks: Map<string, Gro
  * already red at the group's base (spec D3); waived when the tip's acceptance was waived and the same command fails here
  * (Correction 1.6: the person already accepted that failure); failed otherwise.
  */
-function classify(target: { tip: string; commit: string }, outcome: AcceptanceOutcome, accepted: ReturnType<typeof acceptanceOf>, at: number, changes: ExistingTestChanges): DeliveredAcceptance {
+export function classifyDeliveredAcceptance(target: { tip: string; commit: string }, outcome: AcceptanceOutcome, accepted: ReturnType<typeof acceptanceOf>, at: number, changes: ExistingTestChanges): DeliveredAcceptance {
   const comparisons = outcome.identityComparisons ?? [];
   const comparison = comparisons.find((item) => item.reason !== undefined) ?? comparisons[0];
   const failing = comparison?.command ?? outcome.commands.find((item) => item.exit !== "0" && !item.command.startsWith("baseline:"))?.command ?? null;
@@ -132,7 +132,7 @@ function classify(target: { tip: string; commit: string }, outcome: AcceptanceOu
   let waived: DeliveredAcceptance["waived"];
   const unresolved = comparisons.filter((item) => item.reason !== undefined || item.tipAttempts.some((attempt) => attempt.exit !== "0"));
   // A tip waiver covers only the same failed command, and only when nothing else on the delivered tree is unresolved.
-  const covered = accepted?.result === "waived" && accepted.waived !== undefined && failing !== null && failing === failedCommandOf(accepted)
+  const covered = outcome.evidence?.shortfall === undefined && accepted?.result === "waived" && accepted.waived !== undefined && failing !== null && failing === failedCommandOf(accepted)
     && (comparisons.length === 0 || (unresolved.length === 1 && unresolved[0]!.command === failing && unresolved[0]!.reason === undefined));
   if (covered) {
     result = "waived";
@@ -142,6 +142,7 @@ function classify(target: { tip: string; commit: string }, outcome: AcceptanceOu
     tip: target.tip, commit: target.commit, result, commands: outcome.commands, at,
     ...(outcome.failure === null || outcome.failure.tail === "" ? {} : { tail: outcome.failure.tail }),
     ...(comparisons.length === 0 ? {} : { identityComparisons: comparisons }),
+    ...(outcome.evidence === undefined ? {} : { evidence: outcome.evidence }),
     ...(waived === undefined ? {} : { waived }),
   };
   if (changes.paths.length === 0) return { ...record, testChanges: changes };

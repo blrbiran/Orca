@@ -356,8 +356,8 @@ describe("schema 24 -> 26: the base check table", () => {
       raw.close();
       const store = await openControlStore({ stateDir: dir, now: () => 2000 });
       try {
-        expect(schemaVersion).toBe("26");
-        expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("26");
+        expect(schemaVersion).toBe("27");
+        expect(store.db.prepare("SELECT value FROM meta WHERE key='schemaVersion'").get()!.value).toBe("27");
         expect(store.db.prepare("SELECT COUNT(*) AS n FROM base_check_results").get()).toMatchObject({ n: 0 });
         const insert = (result: string) => () => store.db.prepare("INSERT INTO base_check_results(repo_id,base,command,result,group_id,task_id,run_id,requested_at) VALUES ('r',?,'c',?,'g','a','run-1',1)").run(result, result);
         for (const result of ["pending", "red", "green", "unknown"]) expect(insert(result)).not.toThrow();
