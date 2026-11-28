@@ -208,6 +208,9 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
     // Tester #392 (human ruling: 「review 按最终 diff 判归属，越界写入只作参考」): an off-plan write is a fact, not a verdict.
     "An off-plan write (a line under \"What Orca recorded beyond the diff\") is information, not a failed criterion: judge ownership from the final changed files and diff above only. A write that the owning task's final content replaced is not part of the delivery, so it is no reason to fail a criterion.",
     "Treat the person's explicit restrictions in the original requirement as binding, even if a check cannot pass without violating them. Never silently repair a forbidden pre-existing failure just to turn a check green.",
+    "For every criterion, match the evidence to its exact subject and relation. A path's existence or a citation to an unrelated file does not by itself prove a content or dependency constraint.",
+    "For a dependency constraint, follow whether the criterion describes a direct import or a transitive dependency; do not substitute one for the other, and do not claim a relation is traced unless the supplied material shows it.",
+    "Use judgment for the evidence provided; this guidance does not require static analysis.",
     "Compare what the group changed with each acceptance criterion and answer for every criterion, by its id.",
     "",
     `Requirement (as first said): ${input.idea}`,
@@ -241,7 +244,7 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
     // #337 §4.2: a multi-directory group's evidence names its directory; code checks the key (classifyReviewOutput).
     ...(multi ? [`- In this group a file's path is always written <key>:<path> -- its directory's key, a colon, then its path in that directory (for example "${input.directories![0]?.key ?? "key"}:README.md"); a record above keeps its own name.`] : []),
     "- verdict not-met: name the evidence you looked at, in the same forms, and say in `missing` what is still needed.",
-    "- verdict cannot-judge: only when neither the diff, the files listed nor Orca's records above can show it; say in `missing` which record or content would. Do not guess what a file's unshown content says.",
+    "- verdict cannot-judge: only when neither the diff, the files listed nor Orca's records above can show it; if the supplied material does not show the relevant subject and relation, name in `missing` which record or content would. Do not guess what a file's unshown content says.",
     "- fixableBy, for every criterion, says who could meet it: \"work\" when changing files in the repository (or, for a folder group, the folder) can meet it; \"plan\" when it is about the accepted plan itself (its tasks, their targetPaths, dependsOn or order), which no change to files alters; \"person\" when only the person can decide (their instructions contradict each other, or it depends on a fact outside the repository). Orca opens an automatic fix task only for not-met criteria that are \"work\".",
     "If a not-met criterion asks for a change that contradicts an explicit human restriction and a required check, add checkConflict: {criterionId, requiredCheck, because}; \"checkConflict\": null when there is none. Name the exact check and the person's instruction; do not assume that two red test runs have the same cause. Orca will stop automatic repair for review, not waive the check.",
     "Every criterion id above must appear exactly once.",

@@ -123,6 +123,10 @@ describe("the requirement review (tester follow-up G §3)", () => {
     // The evidence a binary criterion can cite, and cannot-judge kept for what is genuinely not shown -- without a guess.
     expect(prompt).toContain("or the file's path with line null when the evidence is what is listed for it -- its size, hash, type or stored pixel size, never what its unshown content says");
     expect(prompt).toContain("- verdict not-met: name the evidence you looked at, in the same forms,");
+    expect(prompt).toContain("For every criterion, match the evidence to its exact subject and relation.");
+    expect(prompt).toContain("A path's existence or a citation to an unrelated file does not by itself prove a content or dependency constraint.");
+    expect(prompt).toContain("For a dependency constraint, follow whether the criterion describes a direct import or a transitive dependency; do not substitute one for the other");
+    expect(prompt).toContain("if the supplied material does not show the relevant subject and relation, name in `missing` which record or content would.");
     expect(prompt).toContain("Do not guess what a file's unshown content says.");
     // Review of #337: metadata is evidence only of itself (a PDF's hash does not show what it says), stated with the
     // evidence forms; the size is the stored one. mutation: drop either sentence -> red
