@@ -1696,6 +1696,10 @@ export const requirementSummarySchema = z.object({
   // Dogfood finding (1) (session 3ba26002): present only when the current round or draft ended `requirement-agent-quota`
   // -- its call's provider text, the reset that text names (epoch ms, null when none) and what to do next.
   agentQuota: z.object({ detail: nonemptyString.nullable(), resetAt: safeInteger.nullable(), next: nonemptyString }).strict().optional(),
+  // #557: the conflicts the accepted draft reported and the person accepted anyway, with who and when. Absent for
+  // conflict-free acceptance and for groups written before this record existed.
+  acceptedConflicts: z.object({ draftNo: positiveSafeInteger, acceptedAt: nonemptyString, acceptedBy: nonemptyString,
+    entries: z.array(z.object({ criterion: nonemptyString, feedback: nonemptyString.optional(), why: nonemptyString }).strict()).min(1) }).strict().optional(),
 }).strict();
 export type RequirementSummaryV1 = z.infer<typeof requirementSummarySchema>;
 
@@ -2016,6 +2020,9 @@ export const requirementViewSchema = z.object({
     // Tester #379: present only on a requirement re-split as a new group (requirementRecords.ts), each naming the other.
     resplitOf: z.object({ groupId: idSchema, draftNo: positiveSafeInteger }).strict().optional(),
     resplitAs: z.object({ groupId: idSchema, at: canonicalTimestampSchema }).strict().optional(),
+    // #557: the conflicts the accepted draft reported, with who accepted them and when; absent when none were accepted.
+    acceptedConflicts: z.object({ draftNo: positiveSafeInteger, acceptedAt: canonicalTimestampSchema, acceptedBy: nonemptyString,
+      entries: z.array(z.object({ criterion: nonemptyString, feedback: nonemptyString.optional(), why: nonemptyString }).strict()).min(1) }).strict().optional(),
   }).strict(),
   ledger: z.object({ limit: budgetAmountSchema, used: amountSchema, reserved: amountSchema, usageUnknown: z.boolean(), approximateRuns: safeInteger.nonnegative().optional() }).strict(),
   rounds: z.array(roundBodySchema),

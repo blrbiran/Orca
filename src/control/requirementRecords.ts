@@ -30,6 +30,12 @@ export const requirementBlockSchema = z.object({
   maxOutputTokens: safeInteger.positive(),
   consensus: z.object({ roundNo: safeInteger.positive(), at: canonicalTimestampSchema, openBranches: z.array(z.string().min(1)), openQuestions: z.array(questionIdSchema) }).strict().nullable(),
   acceptedDraftNo: safeInteger.positive().nullable(),
+  /**
+   * #557: the conflicts the accepted draft reported, kept beside the draft's number so the reason the person accepted it
+   * is readable after the draft history moves on. Absent on conflict-free acceptance and on records written before it.
+   */
+  acceptedConflicts: z.object({ draftNo: safeInteger.positive(), acceptedAt: canonicalTimestampSchema, acceptedBy: z.string().min(1),
+    entries: z.array(z.object({ criterion: z.string().min(1), feedback: z.string().min(1).optional(), why: z.string().min(1) }).strict()).min(1) }).strict().optional(),
   document: z.object({ sha256: z.string().regex(/^[a-f0-9]{64}$/), recordHash: z.string().regex(/^[a-f0-9]{64}$/), frozenAt: canonicalTimestampSchema }).strict().nullable(),
   export: requirementExportSchema,
   /** Clarify caps spec 2026-10-21 §3.1, §3.3: the person's class, and the round number "one more round" granted up to. Absent on older blocks (§3.4). */

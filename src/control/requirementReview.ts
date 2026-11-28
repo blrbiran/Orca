@@ -187,6 +187,10 @@ function acceptanceBaselineLines(baseline: AcceptanceBaseline): string[] {
   ];
 }
 export function buildReviewPrompt(input: { idea: string; statement: string; criteria: ReadonlyArray<{ id: string; text: string }>; openBranches: readonly string[];
+  /** #542: the person's own text answers from the active clarification chain. */
+  humanAnswers?: ReadonlyArray<{ id: string; question: string; answer: string; recommendedAnswer: string }>;
+  /** #557: the conflicts the person accepted with the plan. */
+  acceptedConflicts?: { draftNo: number; acceptedAt: string; acceptedBy: string; entries: ReadonlyArray<{ criterion: string; feedback?: string; why: string }> };
   changedFiles: readonly ChangedFile[]; diff: string; truncated: boolean; note?: string; acceptanceFailed?: boolean;
   acceptanceBaseline?: AcceptanceBaseline; plan?: ReviewPlan | null; facts?: readonly string[];
   /** #337: a folder group's heading (§4.1); a multi-directory group's sections, in place of the one diff (§4.2). */
@@ -218,6 +222,14 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
     ...(input.openBranches.length === 0 ? [] : [`Left open on purpose (not part of this requirement): ${input.openBranches.join("; ")}`]),
     "Acceptance criteria:",
     ...input.criteria.map((c) => `- ${c.id}: ${c.text}`),
+    // #542: the person's own text answers are decisions the review must not silently replace with the model's recommendation.
+    ...(input.humanAnswers === undefined || input.humanAnswers.length === 0 ? [] : ["",
+      "Human answers from clarification (the person's own decisions; they outrank the model's recommendation when they conflict):",
+      ...input.humanAnswers.flatMap((a) => [`- ${a.id}: ${a.question}`, `  answer: ${a.answer}`, `  recommended: ${a.recommendedAnswer}`])]),
+    // #557: what the person accepted knowing the draft does not meet the requirement as written.
+    ...(input.acceptedConflicts === undefined ? [] : ["",
+      `Conflicts accepted with draft ${input.acceptedConflicts.draftNo} by ${input.acceptedConflicts.acceptedBy} (already known: judge the delivered work with them in mind; do not rediscover them as new findings):`,
+      ...input.acceptedConflicts.entries.flatMap((entry) => [`- ${entry.criterion}: ${entry.why}${entry.feedback === undefined ? "" : ` (feedback: "${entry.feedback}")`}`])]),
     ...(input.note === undefined ? [] : ["", `A person or agent asked this review to look at: ${input.note}`]),
     ...(input.plan === undefined || input.plan === null ? [] : [
       "",
@@ -252,13 +264,26 @@ export function buildReviewPrompt(input: { idea: string; statement: string; crit
 }
 
 /** §3.2: the requirement's words and its acceptance criteria -- the newest round of the clarification chain that has a result. */
-export function reviewInputsOf(store: ControlStore, groupId: string, body: unknown): { idea: string; statement: string; criteria: Array<{ id: string; text: string }>; openBranches: string[]; plan: ReviewPlan | null } {
-  const requirement = (body as { requirement?: { idea?: unknown; consensus?: { openBranches?: unknown } | null } }).requirement;
-  const latest = chainRounds(readRounds(store, groupId)).filter((round) => round.result !== null).at(-1)?.result ?? null;
+export function reviewInputsOf(store: ControlStore, groupId: string, body: unknown): { idea: string; statement: string; criteria: Array<{ id: string; text: string }>; openBranches: string[];
+  plan: ReviewPlan | null; humanAnswers: Array<{ id: string; question: string; answer: string; recommendedAnswer: string }>;
+  acceptedConflicts?: { draftNo: number; acceptedAt: string; acceptedBy: string; entries: Array<{ criterion: string; feedback?: string; why: string }> } } {
+  const requirement = (body as { requirement?: { idea?: unknown; consensus?: { openBranches?: unknown } | null; acceptedConflicts?: unknown } }).requirement;
+  const rounds = chainRounds(readRounds(store, groupId));
+  const latest = rounds.filter((round) => round.result !== null).at(-1)?.result ?? null;
   if (latest === null || latest.acceptanceCriteria.length === 0) throw new ControlError("recovery-blocked", "requirement-review-criteria-missing");
   const openBranches = Array.isArray(requirement?.consensus?.openBranches) ? requirement!.consensus!.openBranches as string[] : latest.openBranches;
+  // #542: only the active chain's rounds reach here, so a superseded round's answer never masquerades as current intent.
+  const humanAnswers = rounds.flatMap((round) => {
+    if (round.result === null) return [];
+    const answers = new Map((round.answers ?? []).map((answer) => [answer.id, answer]));
+    return round.result.questions.flatMap((question) => {
+      const answer = answers.get(question.id);
+      return answer === undefined || answer.kind !== "text" ? [] : [{ id: question.id, question: question.question, answer: answer.text, recommendedAnswer: question.recommendedAnswer }];
+    });
+  });
+  const accepted = requirement?.acceptedConflicts as { draftNo: number; acceptedAt: string; acceptedBy: string; entries: Array<{ criterion: string; feedback?: string; why: string }> } | undefined;
   return { idea: typeof requirement?.idea === "string" ? requirement.idea : latest.statement, statement: latest.statement,
-    criteria: latest.acceptanceCriteria.map((c) => ({ id: c.id, text: c.text })), openBranches, plan: reviewPlanOf(store, groupId, body) };
+    criteria: latest.acceptanceCriteria.map((c) => ({ id: c.id, text: c.text })), openBranches, plan: reviewPlanOf(store, groupId, body), humanAnswers, ...(accepted === undefined ? {} : { acceptedConflicts: accepted }) };
 }
 
 /** The accepted split's tasks as data (its draft when stored, else the archived contracts), in dependency order. */

@@ -73,6 +73,8 @@ export type RequirementSummaryV1 = {
   stopRetryable?: boolean;
   /** Dogfood finding (1): only when the current step ended requirement-agent-quota -- the provider's text, its reset (epoch ms), the next step. */
   agentQuota?: { detail: string | null; resetAt: number | null; next: string };
+  /** #557: the conflicts the accepted draft reported, with who accepted them and when; absent when none were accepted. */
+  acceptedConflicts?: { draftNo: number; acceptedAt: string; acceptedBy: string; entries: Array<{ criterion: string; feedback?: string; why: string }> };
 };
 
 export type GroupSummaryV1 = {
@@ -378,6 +380,8 @@ export type RequirementViewV1 = {
     /** Tester #379: a requirement re-split as a new group names the group it came from, and the old one the new group. */
     resplitOf?: { groupId: string; draftNo: number };
     resplitAs?: { groupId: string; at: string };
+    /** #557: the conflicts the accepted draft reported, with who accepted them and when; absent when none were accepted. */
+    acceptedConflicts?: { draftNo: number; acceptedAt: string; acceptedBy: string; entries: Array<{ criterion: string; feedback?: string; why: string }> };
   };
   /** approximateRuns: spec 2026-11-03 soft-mode approximate usage -- runs whose usage is a booked floor; absent from older servers. */
   ledger: { limit: BudgetAmount; used: Amount; reserved: Amount; usageUnknown: boolean; approximateRuns?: number };

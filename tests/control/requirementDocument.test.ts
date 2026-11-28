@@ -66,6 +66,19 @@ describe("the requirement document (N1 spec §10)", () => {
     expect(text).toContain("- R1.Q2: Are images exported?\n  - answer: As links (recommended)\n");
   });
 
+  // #557: what the person accepted knowing it contradicts the requirement as written stays in the frozen document.
+  it("lists accepted conflicts and marks only an exactly named criterion provisional (#557)", () => {
+    const accepted = { draftNo: 2, acceptedAt: "2026-10-02T09:00:00.000Z", acceptedBy: "user:owner", entries: [
+      { criterion: "AC1", why: "exporter no longer runs beside images" },
+      { criterion: "\"a cli/ module\"", why: "no task writes cli/" },
+    ] };
+    const text = renderRequirementDocument({ groupId: "r", requirement: { ...requirement, acceptedConflicts: accepted }, rounds: rounds(), acceptedSplit: null });
+    // mutation: mark every criterion provisional (or none) -> red
+    expect(text).toContain("- AC1: An exported note opens as CommonMark. (provisional: the accepted split reported a conflict with this criterion)\n");
+    expect(text).toContain("- AC2: Images in the note are links in the file.\n");
+    expect(text).toContain("## Accepted conflicts\n\n- accepted draft: 2\n- accepted by: user:owner\n- at: 2026-10-02T09:00:00.000Z\n- AC1: exporter no longer runs beside images\n- \"a cli/ module\": no task writes cli/\n");
+  });
+
   it("names the document path, with a suffix only when one is needed", () => {
     expect(documentPathOf("2026-10-02", "markdown-export", 1)).toBe(".orca/requirements/2026-10-02-markdown-export.md");
     expect(documentPathOf("2026-10-02", "markdown-export", 3)).toBe(".orca/requirements/2026-10-02-markdown-export-3.md");

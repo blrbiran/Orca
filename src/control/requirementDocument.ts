@@ -6,15 +6,18 @@ const WORDS = {
   en: { statement: "Statement", criteria: "Acceptance criteria", glossary: "Glossary", decisions: "Decisions (ADRs)", rounds: "Rounds", round: "Round",
     consensus: "Consensus", split: "Split", recommended: "- recommended: ", answer: "- answer: ", recommendedMark: " (recommended)", unanswered: "(not answered)", noQuestions: "(no questions)",
     none: "(none)", roundLine: "- round: ", atLine: "- at: ", openBranches: "- open branches:", openQuestions: "- open questions:", criterion: "Criterion", tasks: "Tasks",
+    acceptedConflicts: "Accepted conflicts", acceptedDraft: "- accepted draft: ", acceptedBy: "- accepted by: ", provisional: " (provisional: the accepted split reported a conflict with this criterion)",
     context: "- context: ", decision: "- decision: ", consequences: "- consequences: " },
   zh: { statement: "陈述", criteria: "验收标准", glossary: "术语", decisions: "决策（ADR）", rounds: "问答轮次", round: "轮次", consensus: "共识", split: "拆分",
     recommended: "- 推荐：", answer: "- 回答：", recommendedMark: "（推荐）", unanswered: "（未回答）", noQuestions: "（本轮无问题）", none: "（无）", roundLine: "- 轮次：", atLine: "- 时间：",
-    openBranches: "- 暂缓的分支：", openQuestions: "- 未回答的问题：", criterion: "标准", tasks: "任务", context: "- 背景：", decision: "- 决定：", consequences: "- 后果：" },
+    openBranches: "- 暂缓的分支：", openQuestions: "- 未回答的问题：", criterion: "标准", tasks: "任务",
+    acceptedConflicts: "已接受的冲突", acceptedDraft: "- 接受的草稿：", acceptedBy: "- 接受人：", provisional: "（暂定：已接受的拆分报告了与这条标准的冲突）",
+    context: "- 背景：", decision: "- 决定：", consequences: "- 后果：" },
 } as const;
 
 export interface RequirementDocumentInput {
   groupId: string;
-  requirement: Pick<RequirementBlock, "requirementId" | "repoId" | "slug" | "contentLanguage" | "createdOn" | "consensus">;
+  requirement: Pick<RequirementBlock, "requirementId" | "repoId" | "slug" | "contentLanguage" | "createdOn" | "consensus"> & Pick<Partial<RequirementBlock>, "acceptedConflicts">;
   rounds: readonly RoundBody[];
   acceptedSplit: SplitOutput | MultiSplitOutput | null;
 }
@@ -47,8 +50,12 @@ export function renderRequirementDocument(input: RequirementDocumentInput): stri
     `# ${input.requirement.slug ?? `requirement-${input.requirement.requirementId.slice(0, 8)}`}`, "",
   ];
   const section = (title: string, body: string[]) => { out.push(`## ${title}`, "", ...(body.length === 0 ? [w.none] : body), ""); };
+  // #557: a criterion the accepted draft reported as not met is marked provisional; a conflict naming a quoted sentence
+  // instead of a criterion id is listed, never guessed onto an id.
+  const acceptedConflicts = input.requirement.acceptedConflicts;
+  const provisional = new Set((acceptedConflicts?.entries ?? []).map((entry) => entry.criterion));
   section(w.statement, latest === null ? [] : [latest.statement]);
-  section(w.criteria, (latest?.acceptanceCriteria ?? []).map((c) => item("- ", `${c.id}: ${c.text}`)));
+  section(w.criteria, (latest?.acceptanceCriteria ?? []).map((c) => item("- ", `${c.id}: ${c.text}${provisional.has(c.id) ? w.provisional : ""}`)));
   section(w.glossary, glossary.map((entry) => item("- ", `**${oneLine(entry.term)}**: ${entry.definition}`)));
   section(w.decisions, adrs.flatMap((adr) => [`### ${adr.id} ${oneLine(adr.title)}`, "", item(w.context, adr.context), item(w.decision, adr.decision), item(w.consequences, adr.consequences), ""]).slice(0, -1));
   out.push(`## ${w.rounds}`, "");
@@ -75,6 +82,14 @@ export function renderRequirementDocument(input: RequirementDocumentInput): stri
     ...(consensus.openBranches.length === 0 ? [] : [w.openBranches, ...consensus.openBranches.map((branch) => item("  - ", branch))]),
     ...(consensus.openQuestions.length === 0 ? [] : [w.openQuestions, ...consensus.openQuestions.map((question) => `  - ${question}`)]),
   ]);
+  if (acceptedConflicts !== undefined) {
+    // #557: the frozen record of what the person accepted knowing it contradicts the requirement as written.
+    out.push(`## ${w.acceptedConflicts}`, "", `${w.acceptedDraft}${acceptedConflicts.draftNo}`, `${w.acceptedBy}${acceptedConflicts.acceptedBy}`, `${w.atLine}${acceptedConflicts.acceptedAt}`);
+    for (const entry of acceptedConflicts.entries) {
+      out.push(item("- ", `${entry.criterion}: ${entry.why}${entry.feedback === undefined ? "" : ` (feedback: "${entry.feedback}")`}`));
+    }
+    out.push("");
+  }
   if (input.acceptedSplit !== null) {
     const rows = (latest?.acceptanceCriteria ?? []).map((c) => {
       const tasks = input.acceptedSplit!.tasks.filter((task) => task.traces.includes(c.id)).map((task) => task.taskId);

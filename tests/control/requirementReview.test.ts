@@ -148,6 +148,27 @@ describe("the requirement review (tester follow-up G §3)", () => {
     expect(text).toContain(`- A notes.txt 5 ${"d".repeat(64)}\n`);
   }, 180000);
 
+  // #542/#557: the reviewer is told the person's own text answers and the conflicts accepted with the plan, so it judges
+  // the delivery against what the person decided rather than rediscovering an already-accepted conflict.
+  it("carries accepted conflicts and human text answers into the review prompt (#542 #557)", () => {
+    const prompt = buildReviewPrompt({
+      idea: "i", statement: "s", criteria: CRITERIA, openBranches: [], diff: "", truncated: false, changedFiles: [],
+      humanAnswers: [{ id: "R1.Q1", question: "Keep rb-json parallel?", answer: "Keep Layer 4 fully parallel and give rb-json its own file.", recommendedAnswer: "Serialize rb-json after rb-report." }],
+      acceptedConflicts: { draftNo: 2, acceptedAt: "2026-01-01T00:00:00.000Z", acceptedBy: "user:owner", entries: [{ criterion: "AC1", why: "AC1 says rb-json is serialized" }] },
+    });
+    // mutation: drop either section -> red
+    expect(prompt).toContain("Human answers from clarification (the person's own decisions; they outrank the model's recommendation when they conflict):");
+    expect(prompt).toContain("- R1.Q1: Keep rb-json parallel?");
+    expect(prompt).toContain("answer: Keep Layer 4 fully parallel and give rb-json its own file.");
+    expect(prompt).toContain("recommended: Serialize rb-json after rb-report.");
+    expect(prompt).toContain("Conflicts accepted with draft 2 by user:owner (already known: judge the delivered work with them in mind; do not rediscover them as new findings):");
+    expect(prompt).toContain("- AC1: AC1 says rb-json is serialized");
+    // No such section for a group that has neither.
+    const plain = buildReviewPrompt({ idea: "i", statement: "s", criteria: CRITERIA, openBranches: [], diff: "", truncated: false, changedFiles: [] });
+    expect(plain).not.toContain("Human answers from clarification");
+    expect(plain).not.toContain("Conflicts accepted with draft");
+  });
+
   it("an unfunded review is named and does not pass", async () => {
     let capped = false;
     const holder: { w?: ReviewWorld } = {};

@@ -612,6 +612,8 @@ function requirementSummaryFromSnapshot(store: ControlStore, groupId: string, sn
     // Issue 91 review fix: only on a handoff-unresolved stop -- whether recovery-retry can act on it.
     ...(groupStopState(store, groupId) === "handoff-unresolved" ? { stopRetryable: unresolvedStopRetryable(store, groupId) } : {}),
     ...agentQuotaOf(groupId, group.requirement.consensus === null ? round : draft),
+    // #557: the conflicts the person accepted with the plan, so a brief or card shows them without the draft history.
+    ...(group.requirement.acceptedConflicts === undefined ? {} : { acceptedConflicts: group.requirement.acceptedConflicts }),
   };
 }
 
@@ -2114,7 +2116,9 @@ export function readRequirementView(store: ControlStore, epoch: string, groupId:
       createdOn: requirement.createdOn, idea: requirement.idea, consensus: requirement.consensus, acceptedDraftNo: requirement.acceptedDraftNo,
       document: requirement.document === null ? null : { sha256: requirement.document.sha256, frozenAt: requirement.document.frozenAt }, export: requirement.export,
       // Tester #379: the link both ways between a requirement and the group it was re-split as.
-      ...(requirement.resplitOf === undefined ? {} : { resplitOf: requirement.resplitOf }), ...(requirement.resplitAs === undefined ? {} : { resplitAs: requirement.resplitAs }) },
+      ...(requirement.resplitOf === undefined ? {} : { resplitOf: requirement.resplitOf }), ...(requirement.resplitAs === undefined ? {} : { resplitAs: requirement.resplitAs }),
+      // #557: the conflicts the person accepted with the plan.
+      ...(requirement.acceptedConflicts === undefined ? {} : { acceptedConflicts: requirement.acceptedConflicts }) },
     // Spec 2026-11-03 soft-mode approximate usage: how many of the group's runs count a booked floor, not a reported figure.
     ledger: { limit: group.limit, used: group.used, reserved: group.reserved, usageUnknown: group.ledger.usageUnknown,
       approximateRuns: Number(store.db.prepare("SELECT count(*) AS n FROM runs WHERE group_id=? AND json_extract(body,'$.usageApproximate') IS NOT NULL").get(groupId)!.n) },

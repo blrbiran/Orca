@@ -251,6 +251,14 @@ function feedbackAfterRedraftLine(draftNo: number, carry: FeedbackAfterRedraft):
   return `draft ${draftNo} came from Orca re-drafting draft ${first}, which answered your feedback on draft ${carry.feedbackDraftNo} ("${carry.feedback}")${again.length === 0 ? "" : ` (then re-drafting ${again.length === 1 ? "draft" : "drafts"} ${again.join(", ")})`}; draft ${draftNo} reports no conflict with that feedback, so check that it still follows it${before}. If it does not, send the feedback again: orca requirement feedback <group> --text "..."`;
 }
 
+/** #557: the conflicts the person accepted with the plan, as one brief line (absent when none were accepted). */
+function acceptedConflictLines(requirement: unknown): string[] {
+  const accepted = (requirement as { acceptedConflicts?: { draftNo?: unknown; acceptedBy?: unknown; entries?: Array<{ criterion?: unknown }> } } | undefined)?.acceptedConflicts;
+  if (accepted === undefined || !Array.isArray(accepted.entries) || accepted.entries.length === 0) return [];
+  const ids = accepted.entries.map((entry) => String(entry.criterion ?? "?"));
+  return [`accepted conflicts: ${accepted.entries.length} (draft ${String(accepted.draftNo ?? "?")}, accepted by ${String(accepted.acceptedBy ?? "?")}): ${ids.join(", ")}`];
+}
+
 function requirementRecoveryLines(body: unknown): string[] {
   const summary = field(body, "summary") as { groupId?: unknown; requirement?: { roundNo?: unknown; draftNo?: unknown; draftState?: unknown; reasonCode?: unknown } } | undefined;
   const briefRequirement = field(body, "requirement") as { roundNo?: unknown; draftNo?: unknown; draftState?: unknown; reasonCode?: unknown } | undefined;
@@ -735,7 +743,7 @@ export const READ_ROWS: CommandDef[] = [
     format: (body) => { const note = field(body, "phaseEndUsage") as { runIds: string[]; asOf: number | null } | undefined;
       const groupId = field(body, "groupId"), acceptance = field(body, "acceptance") as Parameters<typeof acceptanceLines>[1];
       const costs = (field(body, "costOutliers") as TaskCost[] | undefined) ?? [];
-      return [...firstFailureLines(body), ...reviewFixProblemLines(body), text(body), ...requirementRecoveryLines(body), ...budgetHeadroomLines(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf)),
+      return [...firstFailureLines(body), ...reviewFixProblemLines(body), text(body), ...requirementRecoveryLines(body), ...acceptedConflictLines(field(body, "requirement")), ...budgetHeadroomLines(body), ...(note === undefined ? [] : phaseEndBudgetLines(note.runIds, note.asOf)),
         // Tester follow-up K, item 2: the acceptance line show prints, with its full-suite warning.
         ...(typeof groupId === "string" ? acceptanceLines(groupId, acceptance, (field(body, "requirementReview") as { state?: string } | undefined)?.state) : []),
         ...(typeof groupId === "string" ? deliveryLines(groupId, field(body, "deliveredAcceptance") as Parameters<typeof deliveryLines>[1], field(body, "integration") as { retryAfter?: number; transient?: number; transientReason?: string | null } | undefined) : []),

@@ -508,6 +508,15 @@ export async function applyRequirementDraftAccept(
         // stored output, because accept rebuilds secondary directory contracts from that output.
         if (requirementDraftHash(draft.plan, draft.output) !== command.payload.draftHash) throw new ControlError("plan-version-conflict", "draft-hash");
         if (deps.store.db.prepare("SELECT id FROM runs WHERE group_id=? AND active=1").get(id) || dimensions.some((d) => group.reserved[d] !== 0)) invalid("call-in-flight");
+        // #557: the accepted draft's own report that it does not meet the requirement as written is kept beside the
+        // accepted draft number and actor, so the person's decision stays readable after acceptance.
+        const conflicts = draft.output.requirementConflicts ?? [];
+        if (conflicts.length > 0) {
+          group.requirement = { ...group.requirement, acceptedConflicts: {
+            draftNo: draft.draftNo, acceptedAt: now.toISOString(), acceptedBy: command.actorId,
+            entries: conflicts.map((entry) => ({ criterion: entry.criterion, ...(entry.feedback === undefined ? {} : { feedback: entry.feedback }), why: entry.why })),
+          } };
+        }
         // 1. Freeze the document: rendered from the records now, stored once, named by its hash (spec §4.3, §10).
         const text = renderRequirementDocument({ groupId: id, requirement: group.requirement, rounds: chainRounds(readRounds(deps.store, id)), acceptedSplit: draft.output });
         const record = { schema: "orca-requirement-document-v1", text }, recordHash = sha256Canonical(record);

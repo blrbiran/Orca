@@ -27,6 +27,36 @@ const accept = (x: Awaited<ReturnType<typeof reviewed>>, draftHash = readDraft(x
 const bodyOf = (x: Awaited<ReturnType<typeof reviewed>>) => JSON.parse(String(x.store.db.prepare("SELECT body FROM groups WHERE id='r'").get()!.body));
 
 describe("requirement-draft-accept (N1 spec §9.1)", () => {
+  // #557: the conflicts the accepted draft itself reported stay readable after acceptance, with who accepted them and when.
+  it("keeps the accepted draft's reported conflicts as an immutable record; a conflict-free draft adds nothing", async () => {
+    const conflicts = [
+      { criterion: "AC1", feedback: "make exporter wait for images", why: "exporter and images no longer run concurrently" },
+      { criterion: "\"a cli/ module\"", why: "no task writes cli/" },
+    ];
+    const x = await requirementHarness({ answers: [{ purpose: "split", output: { ...VALID_SPLIT, requirementConflicts: conflicts } }], startAt: "split" });
+    try {
+      await x.until(() => readDraft(x.store, "r", 1).state === "awaiting-review");
+      // The split path stores the key on the draft; the fake's answer carries it.
+      writeDraft(x.store, "r", { ...readDraft(x.store, "r", 1), output: { ...readDraft(x.store, "r", 1).output!, requirementConflicts: conflicts } });
+      expect(await accept(x)).toMatchObject({ result: { kind: "requirement-draft-accepted" } });
+      const requirement = readRequirementGroup(x.store, "r").requirement;
+      // mutation: drop the acceptedConflicts copy -> red
+      expect(requirement.acceptedConflicts).toEqual({ draftNo: 1, acceptedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/), acceptedBy: expect.any(String), entries: conflicts });
+      // The record is a snapshot: editing the draft afterwards does not change it.
+      writeDraft(x.store, "r", { ...readDraft(x.store, "r", 1), output: { ...readDraft(x.store, "r", 1).output!, requirementConflicts: [{ criterion: "AC2", why: "changed later" }] } });
+      expect(readRequirementGroup(x.store, "r").requirement.acceptedConflicts!.entries).toEqual(conflicts);
+    } finally { await x.dispose(); }
+  });
+
+  it("a conflict-free accepted draft carries no acceptedConflicts key", async () => {
+    const x = await reviewed();
+    try {
+      await accept(x);
+      // mutation: always write the key (with []) -> red
+      expect(Object.hasOwn(readRequirementGroup(x.store, "r").requirement, "acceptedConflicts")).toBe(false);
+    } finally { await x.dispose(); }
+  });
+
   it("imports the stored plan into the same group, with a proposal, work items carrying their traces, and an estimate", async () => {
     const x = await reviewed();
     try {

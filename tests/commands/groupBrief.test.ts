@@ -125,6 +125,23 @@ describe("group brief (issue 199)", () => {
     expect(out.stdout).toContain(`next: ${next}`);
   });
 
+  // #557: the conflicts the person accepted with --despite-conflicts stay visible on the group, not only in the draft history.
+  it("group brief warns about conflicts the person accepted, and says nothing without them", async () => {
+    const acceptedConflicts = { draftNo: 1, acceptedAt: "2026-01-01T00:00:00.000Z", acceptedBy: "user:owner",
+      entries: [{ criterion: "AC1", why: "exporter no longer runs beside images" }, { criterion: "\"a cli/ module\"", why: "no task writes cli/" }] };
+    const withConflicts = await fakePanel({ ...routes, "GET groups/g-alpha/brief": { status: 200, body: { schema: "orca-group-brief-v1", ...VIEW.summary,
+      requirement: { roundNo: 1, acceptedConflicts } } } });
+    const shown = await cli(["group", "brief", "g-alpha"], withConflicts.dir);
+    expect(shown.code, shown.stderr).toBe(0);
+    // mutation: drop the requirement projection or the warning line -> red
+    expect(shown.stdout).toContain("accepted conflicts: 2 (draft 1, accepted by user:owner): AC1, \"a cli/ module\"");
+    const clean = await fakePanel({ ...routes, "GET groups/g-alpha/brief": { status: 200, body: { schema: "orca-group-brief-v1", ...VIEW.summary,
+      requirement: { roundNo: 1 } } } });
+    const plain = await cli(["group", "brief", "g-alpha"], clean.dir);
+    expect(plain.code, plain.stderr).toBe(0);
+    expect(plain.stdout).not.toContain("accepted conflicts");
+  });
+
   it("keeps group show's full body unchanged", async () => {
     const p = await fakePanel(routes);
     const out = await cli(["group", "show", "g-alpha", "--json"], p.dir);
