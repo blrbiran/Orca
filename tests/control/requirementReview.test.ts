@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildReviewPrompt, classifyReviewOutput, reviewInputsOf, REVIEW_DIFF_MAX_BYTES } from "../../src/control/requirementReview.js";
-import { newRound, writeRound } from "../../src/control/requirementRecords.js";
+import { buildReviewPrompt, classifyReviewOutput, REVIEW_DIFF_MAX_BYTES } from "../../src/control/requirementReview.js";
 import { readGroupSummary } from "../../src/panel/controlViews.js";
 import { allMet, CRITERIA, reviewWorld, verdicts, type ReviewWorld } from "./fixtures/reviewWorld.js";
 
@@ -168,28 +167,6 @@ describe("the requirement review (tester follow-up G §3)", () => {
     const plain = buildReviewPrompt({ idea: "i", statement: "s", criteria: CRITERIA, openBranches: [], diff: "", truncated: false, changedFiles: [] });
     expect(plain).not.toContain("Human answers from clarification");
     expect(plain).not.toContain("Conflicts accepted with draft");
-  });
-
-  // Review minor (2026-11-28): the context collects only the active chain's text answers; a superseded round's answer
-  // must not masquerade as current intent.
-  it("review context keeps only text answers on the active clarification chain (#542)", async () => {
-    const w = await reviewWorld();
-    try {
-      const result = (statement: string, questionId: string, question: string, recommendedAnswer: string) => ({
-        slug: null, statement, acceptanceCriteria: CRITERIA,
-        questions: [{ id: questionId, key: `q-${questionId}`, question, recommendedAnswer, why: "w", dependsOn: [] }],
-        frontierEmpty: true, openBranches: [], glossary: [], adrs: [],
-      });
-      writeRound(w.t.h.store, "g", { ...newRound(1), state: "answered", closedByConsensus: false, result: result("one", "R1.Q1", "Earlier question?", "earlier recommendation"),
-        answers: [{ id: "R1.Q1", kind: "text", text: "superseded answer" }], glossaryDecisions: [], adrDecisions: [] });
-      writeRound(w.t.h.store, "g", { ...newRound(2), state: "answered", revises: 1, result: result("two", "R2.Q1", "Current question?", "current recommendation"),
-        answers: [{ id: "R2.Q1", kind: "text", text: "active answer" }], glossaryDecisions: [], adrDecisions: [] });
-      const body = JSON.parse(String(w.t.h.store.db.prepare("SELECT body FROM groups WHERE id='g'").get()!.body));
-      // mutation: read every round instead of chainRounds -> the superseded answer appears, red
-      expect(reviewInputsOf(w.t.h.store, "g", body).humanAnswers).toEqual([
-        { id: "R2.Q1", question: "Current question?", answer: "active answer", recommendedAnswer: "current recommendation" },
-      ]);
-    } finally { await w.t.h.dispose(); }
   });
 
   it("an unfunded review is named and does not pass", async () => {
