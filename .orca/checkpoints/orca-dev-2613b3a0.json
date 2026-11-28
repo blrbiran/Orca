@@ -1,0 +1,55 @@
+{
+  "v": 1,
+  "runId": "orca-dev-2613b3a0",
+  "runtime": "claude-code",
+  "sessionRef": "2613b3a0-fefe-47ac-8ca7-c4cc689aa818",
+  "writtenAt": "2026-11-28T01:50:19.823Z",
+  "head": "4ff991ed5765f4811b653bac0960fe511d38472f",
+  "level": {
+    "kind": "reading",
+    "level": 549361,
+    "windowTokens": 1000000,
+    "t1": 330000,
+    "t2": 450000,
+    "band": 2
+  },
+  "next": [
+    "Finish Orca acceptance-integrity Tasks 3-7 in the existing worktree and rerun focused tests/typecheck/build.",
+    "Review and integrate ccmem #569 branch and syncskill #533/#555 branch; resolve remaining diagnostics.",
+    "Complete final review, merge and push authorized repository branches, then update Orca/ccloop/ccmem handoffs and the <=10-line executive summary."
+  ],
+  "open": [
+    "Orca Tasks 3-7 are not yet implemented.",
+    "ccmem #569 and syncskill #533/#555 are in isolated worktrees and not integrated.",
+    "ccloop handoff and final cross-repo verification/push remain pending."
+  ],
+  "awaitingHuman": [
+    {
+      "kind": "named-authorization",
+      "what": "Permission gate may reject the required Orca dev checkpoint write; if rejected, run the exact command from the hook in the user's terminal."
+    }
+  ],
+  "measurements": [
+    {
+      "command": "npm test -- --maxWorkers=3",
+      "exitCode": 0,
+      "commit": "4ff991ed5765f4811b653bac0960fe511d38472f",
+      "observedAt": "2026-11-28T01:49:32.204Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-2613b3a0-v7AsGw/1.txt"
+    },
+    {
+      "command": "npm run typecheck",
+      "exitCode": 0,
+      "commit": "4ff991ed5765f4811b653bac0960fe511d38472f",
+      "observedAt": "2026-11-28T01:50:04.143Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-2613b3a0-v7AsGw/2.txt"
+    },
+    {
+      "command": "npm run build",
+      "exitCode": 0,
+      "commit": "4ff991ed5765f4811b653bac0960fe511d38472f",
+      "observedAt": "2026-11-28T01:50:19.762Z",
+      "outputPath": "/var/folders/nb/068k_scs4gzgclcp66f9hys40000gn/T/orca-checkpoint-orca-dev-2613b3a0-v7AsGw/3.txt"
+    }
+  ]
+}
